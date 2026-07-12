@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -45,35 +46,52 @@ fun DashboardScreen(
     val recentJobs by viewModel.recentJobs.collectAsState()
     val reminders by viewModel.pendingReminders.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val colorScheme = MaterialTheme.colorScheme
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Wildlife FieldOps", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        "FieldOps",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = BackgroundDark,
-                    titleContentColor = TextPrimary
+                    containerColor = colorScheme.background,
+                    titleContentColor = colorScheme.onBackground
                 ),
                 actions = {
                     IconButton(onClick = onNavigateToAI) {
-                        Icon(Icons.Default.Psychology, contentDescription = "AI Assistant", tint = AccentPurple)
+                        Icon(
+                            Icons.Default.Psychology,
+                            contentDescription = "AI Assistant",
+                            tint = colorScheme.tertiary
+                        )
                     }
                     IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = TextSecondary)
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
+            ExtendedFloatingActionButton(
                 onClick = onNavigateToJobForm,
-                containerColor = PrimaryGreen,
-                contentColor = Color.Black
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "New Job")
-            }
+                containerColor = colorScheme.primary,
+                contentColor = colorScheme.onPrimary,
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                text = { Text("New Job", fontWeight = FontWeight.SemiBold) },
+                shape = ShapePill,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
         },
-        containerColor = BackgroundDark
+        containerColor = colorScheme.background
     ) { padding ->
         if (isLoading) {
             DashboardShimmer(
@@ -88,79 +106,57 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Stats Cards Row
             item {
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ScaleIn(delayMillis = 0) {
-                        StatCard(
-                            title = "Active",
-                            value = stats.inProgressJobs,
-                            icon = Icons.Default.PlayCircle,
-                            color = AccentBlue,
-                            modifier = Modifier.weight(1f),
-                            onClick = onNavigateToJobs
-                        )
-                    }
-                    ScaleIn(delayMillis = 100) {
-                        StatCard(
-                            title = "Pending",
-                            value = stats.pendingJobs,
-                            icon = Icons.Default.Schedule,
-                            color = StatusPending,
-                            modifier = Modifier.weight(1f),
-                            onClick = onNavigateToJobs
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.height(4.dp))
+                HeroCard(
+                    title = "Wildlife FieldOps",
+                    subtitle = "Ready for the field",
+                    stats = listOf(
+                        HeroStat("Active", stats.inProgressJobs),
+                        HeroStat("Pending", stats.pendingJobs)
+                    )
+                )
             }
 
+            // Stats row
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    ScaleIn(delayMillis = 200) {
-                        StatCard(
-                            title = "Completed",
-                            value = stats.completedJobs,
-                            icon = Icons.Default.CheckCircle,
-                            color = SuccessGreen,
-                            modifier = Modifier.weight(1f),
-                            onClick = onNavigateToJobs
-                        )
-                    }
-                    ScaleIn(delayMillis = 300) {
-                        StatCard(
-                            title = "Revenue",
-                            value = stats.totalRevenue.toInt(),
-                            valuePrefix = "$",
-                            icon = Icons.Default.AttachMoney,
-                            color = PrimaryGreen,
-                            modifier = Modifier.weight(1f),
-                            onClick = {}
-                        )
-                    }
+                    StatCard(
+                        title = "Completed",
+                        value = stats.completedJobs,
+                        icon = Icons.Default.CheckCircle,
+                        color = colorScheme.primary,
+                        modifier = Modifier.weight(1f),
+                        onClick = onNavigateToJobs
+                    )
+                    StatCard(
+                        title = "Revenue",
+                        value = stats.totalRevenue.toInt(),
+                        valuePrefix = "$",
+                        icon = Icons.Default.AttachMoney,
+                        color = colorScheme.tertiary,
+                        modifier = Modifier.weight(1f),
+                        onClick = {}
+                    )
                 }
             }
 
             // Today's Overview
             item {
-                Spacer(modifier = Modifier.height(4.dp))
                 OverviewCard(
                     title = "Today's Overview",
                     items = listOf(
-                        OverviewItem("Jobs Today", stats.todayJobs.toString(), Icons.Default.Work, AccentBlue),
+                        OverviewItem("Jobs Today", stats.todayJobs.toString(), Icons.Default.Work, colorScheme.secondary),
                         OverviewItem("Overdue", stats.overdueJobs.toString(), Icons.Default.Warning, StatusUrgent),
-                        OverviewItem("Customers", stats.totalCustomers.toString(), Icons.Default.People, AccentPurple),
+                        OverviewItem("Customers", stats.totalCustomers.toString(), Icons.Default.People, colorScheme.tertiary),
                         OverviewItem("Inspections", stats.totalInspections.toString(), Icons.Default.Search, AccentCyan),
                         OverviewItem("Follow-ups", stats.followUpRequired.toString(), Icons.Default.FollowTheSigns, AccentOrange),
-                        OverviewItem("Revenue", "$${String.format("%.0f", stats.totalRevenue)}", Icons.Default.AttachMoney, PrimaryGreen)
+                        OverviewItem("Revenue", "$${String.format("%.0f", stats.totalRevenue)}", Icons.Default.AttachMoney, colorScheme.primary)
                     )
                 )
             }
@@ -170,32 +166,59 @@ fun DashboardScreen(
                 Text(
                     "Quick Actions",
                     style = MaterialTheme.typography.titleMedium,
-                    color = TextPrimary,
-                    modifier = Modifier.padding(top = 8.dp)
+                    color = colorScheme.onBackground,
+                    modifier = Modifier.padding(top = 4.dp)
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    QuickActionButton("New Job", Icons.Default.AddBox, PrimaryGreen, Modifier.weight(1f), onNavigateToJobForm)
-                    QuickActionButton("Customers", Icons.Default.People, AccentPurple, Modifier.weight(1f), onNavigateToCustomers)
-                    QuickActionButton("Map", Icons.Default.Map, AccentBlue, Modifier.weight(1f), onNavigateToMap)
-                    QuickActionButton("Schedule", Icons.Default.CalendarMonth, AccentOrange, Modifier.weight(1f), onNavigateToSchedule)
+                    QuickActionButton(
+                        label = "New Job",
+                        icon = Icons.Default.AddBox,
+                        color = colorScheme.primary,
+                        Modifier.weight(1f),
+                        onNavigateToJobForm
+                    )
+                    QuickActionButton(
+                        label = "Customers",
+                        icon = Icons.Default.People,
+                        color = colorScheme.tertiary,
+                        Modifier.weight(1f),
+                        onNavigateToCustomers
+                    )
+                    QuickActionButton(
+                        label = "Map",
+                        icon = Icons.Default.Map,
+                        color = colorScheme.secondary,
+                        Modifier.weight(1f),
+                        onNavigateToMap
+                    )
+                    QuickActionButton(
+                        label = "Schedule",
+                        icon = Icons.Default.CalendarMonth,
+                        color = AccentOrange,
+                        Modifier.weight(1f),
+                        onNavigateToSchedule
+                    )
                 }
             }
 
             // Recent Jobs
             item {
-                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Recent Jobs", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                    Text(
+                        "Recent Jobs",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = colorScheme.onBackground
+                    )
                     TextButton(onClick = onNavigateToJobs) {
-                        Text("View All", color = PrimaryGreen)
+                        Text("View All", color = colorScheme.primary)
                     }
                 }
             }
@@ -207,7 +230,7 @@ fun DashboardScreen(
                             Icon(
                                 Icons.Default.WorkOutline,
                                 contentDescription = null,
-                                tint = TextSecondary,
+                                tint = colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(36.dp)
                             )
                         },
@@ -230,8 +253,12 @@ fun DashboardScreen(
             // Pending Reminders
             if (reminders.isNotEmpty()) {
                 item {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Reminders", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                    Text(
+                        "Reminders",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = colorScheme.onBackground,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
                 items(reminders) { reminder ->
@@ -245,6 +272,75 @@ fun DashboardScreen(
 }
 
 @Composable
+private fun HeroCard(
+    title: String,
+    subtitle: String,
+    stats: List<HeroStat>
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(160.dp),
+        shape = ShapeCard,
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            colorScheme.primary,
+                            colorScheme.secondary
+                        )
+                    ),
+                    shape = ShapeCard
+                )
+                .padding(20.dp)
+        ) {
+            Column(
+                modifier = Modifier.align(Alignment.TopStart)
+            ) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.85f)
+                )
+            }
+            Row(
+                modifier = Modifier.align(Alignment.BottomStart),
+                horizontalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                stats.forEach { stat ->
+                    Column {
+                        Text(
+                            stat.value.toString(),
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            stat.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class HeroStat(val label: String, val value: Int)
+
+@Composable
 private fun StatCard(
     title: String,
     value: Int,
@@ -254,30 +350,32 @@ private fun StatCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     Card(
         modifier = modifier
-            .height(90.dp)
+            .height(96.dp)
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = BackgroundCard),
-        shape = RoundedCornerShape(12.dp)
+        colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
+        shape = ShapeCardSmall,
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(12.dp),
+                .padding(16.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(title, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(title, style = MaterialTheme.typography.labelSmall, color = colorScheme.onSurfaceVariant)
             }
             Row(verticalAlignment = Alignment.Bottom) {
                 if (valuePrefix.isNotBlank()) {
                     Text(
                         valuePrefix,
                         style = MaterialTheme.typography.titleLarge,
-                        color = TextPrimary,
+                        color = colorScheme.onSurface,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -293,27 +391,42 @@ private fun StatCard(
 
 @Composable
 private fun OverviewCard(title: String, items: List<OverviewItem>) {
+    val colorScheme = MaterialTheme.colorScheme
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = BackgroundCard),
-        shape = RoundedCornerShape(12.dp)
+        colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
+        shape = ShapeCard,
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, color = TextPrimary)
-            Spacer(modifier = Modifier.height(12.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, color = colorScheme.onBackground)
+            Spacer(modifier = Modifier.height(16.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 items.chunked(2).forEach { rowItems ->
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         rowItems.forEach { item ->
                             Row(
                                 modifier = Modifier.weight(1f),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(item.icon, contentDescription = null, tint = item.color, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(item.color.copy(alpha = 0.12f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(item.icon, contentDescription = null, tint = item.color, modifier = Modifier.size(20.dp))
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
                                 Column {
-                                    Text(item.label, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                                    Text(item.value, style = MaterialTheme.typography.titleMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
+                                    Text(item.label, style = MaterialTheme.typography.labelSmall, color = colorScheme.onSurfaceVariant)
+                                    Text(
+                                        item.value,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = colorScheme.onSurface,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
                                 }
                             }
                         }
@@ -339,77 +452,98 @@ private fun QuickActionButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(BackgroundCard)
+            .clip(ShapeCardSmall)
+            .background(colorScheme.surface)
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
+            .padding(vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(icon, contentDescription = label, tint = color, modifier = Modifier.size(28.dp))
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(color.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = label, tint = color, modifier = Modifier.size(24.dp))
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
 fun JobCard(job: Job, onClick: () -> Unit) {
+    val colorScheme = MaterialTheme.colorScheme
     val statusColor = when (job.status) {
         JobStatus.PENDING -> StatusPending
-        JobStatus.IN_PROGRESS -> AccentBlue
+        JobStatus.IN_PROGRESS -> colorScheme.secondary
         JobStatus.COMPLETED -> SuccessGreen
         JobStatus.CANCELLED -> ErrorRed
-        JobStatus.INVOICED -> AccentPurple
-        JobStatus.PAID -> PrimaryGreen
+        JobStatus.INVOICED -> StatusInvoiced
+        JobStatus.PAID -> colorScheme.primary
     }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = BackgroundCard),
-        shape = RoundedCornerShape(12.dp)
+        colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
+        shape = ShapeCardSmall,
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     job.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextPrimary,
-                    fontWeight = FontWeight.Medium
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold
                 )
                 if (job.customerName.isNotBlank()) {
                     Text(
                         job.customerName,
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
+                        color = colorScheme.onSurfaceVariant
                     )
                 }
                 if (job.address.isNotBlank()) {
-                    Text(
-                        job.address,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextTertiary
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            job.address,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(statusColor.copy(alpha = 0.15f))
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                    .clip(ShapeChip)
+                    .background(statusColor.copy(alpha = 0.12f))
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Text(
                     job.status.name.replace("_", " "),
                     style = MaterialTheme.typography.labelSmall,
-                    color = statusColor
+                    color = statusColor,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
         }
@@ -418,30 +552,45 @@ fun JobCard(job: Job, onClick: () -> Unit) {
 
 @Composable
 private fun ReminderCard(reminder: com.strobingn.wildlifefieldops.data.model.Reminder) {
+    val colorScheme = MaterialTheme.colorScheme
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = BackgroundCard),
-        shape = RoundedCornerShape(8.dp)
+        colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
+        shape = ShapeCardSmall,
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.Default.Notifications,
-                contentDescription = null,
-                tint = AccentOrange,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colorScheme.tertiary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Notifications,
+                    contentDescription = null,
+                    tint = colorScheme.tertiary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(reminder.title, style = MaterialTheme.typography.bodySmall, color = TextPrimary)
+                Text(
+                    reminder.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colorScheme.onSurface,
+                    fontWeight = FontWeight.Medium
+                )
                 Text(
                     SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(reminder.dueDate)),
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextSecondary
+                    color = colorScheme.onSurfaceVariant
                 )
             }
         }

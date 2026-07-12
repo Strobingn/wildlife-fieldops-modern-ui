@@ -9,11 +9,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -26,7 +23,7 @@ import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.strobingn.wildlifefieldops.navigation.Screen
 import com.strobingn.wildlifefieldops.ui.screens.*
-import com.strobingn.wildlifefieldops.ui.theme.WildlifeFieldOpsTheme
+import com.strobingn.wildlifefieldops.ui.theme.*
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.hilt.navigation.compose.hiltViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -102,6 +99,7 @@ fun WildlifeFieldOpsNavHost() {
     // PROPERLY WIRED drawer state — controls open/close programmatically
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val colorScheme = MaterialTheme.colorScheme
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -129,8 +127,9 @@ fun WildlifeFieldOpsNavHost() {
                             Text(
                                 text = Screen.bottomNavItems.find { it.route == currentRoute }?.title
                                     ?: "FieldOps",
-                                color = Color(0xFFf0f0f5),
-                                fontWeight = FontWeight.SemiBold
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = colorScheme.onBackground
                             )
                         },
                         navigationIcon = {
@@ -140,12 +139,14 @@ fun WildlifeFieldOpsNavHost() {
                                 Icon(
                                     imageVector = Icons.Default.Menu,
                                     contentDescription = "Open menu",
-                                    tint = Color(0xFF22c55e)
+                                    tint = colorScheme.primary
                                 )
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color(0xFF0a0a0f)
+                            containerColor = colorScheme.background.copy(alpha = 0.95f),
+                            titleContentColor = colorScheme.onBackground,
+                            navigationIconContentColor = colorScheme.primary
                         )
                     )
                 }
@@ -371,110 +372,121 @@ private fun BottomNavigationBar(
     currentRoute: String,
     onNavigate: (String) -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     NavigationBar(
-        containerColor = Color(0xFF0f0f1a),
-        tonalElevation = 0.dp
+        containerColor = colorScheme.surface.copy(alpha = 0.96f),
+        tonalElevation = 0.dp,
+        contentColor = colorScheme.onSurface
     ) {
         Screen.bottomNavItems.forEach { screen ->
             val selected = currentRoute == screen.route
-            val color = if (selected) Color(0xFF22c55e) else Color(0xFF6b6b80)
+            val iconColor = if (selected) colorScheme.primary else colorScheme.onSurfaceVariant
 
             NavigationBarItem(
                 icon = {
                     screen.icon?.let {
-                        Icon(it, contentDescription = screen.title, tint = color)
+                        Icon(it, contentDescription = screen.title, tint = iconColor)
                     }
                 },
                 label = {
                     Text(
                         screen.title,
-                        color = color,
+                        color = iconColor,
                         style = MaterialTheme.typography.labelSmall,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                     )
                 },
                 selected = selected,
                 onClick = { onNavigate(screen.route) },
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = Color(0xFF22c55e),
-                    selectedTextColor = Color(0xFF22c55e),
-                    indicatorColor = Color(0xFF22c55e).copy(alpha = 0.15f),
-                    unselectedIconColor = Color(0xFF6b6b80),
-                    unselectedTextColor = Color(0xFF6b6b80)
+                    selectedIconColor = colorScheme.primary,
+                    selectedTextColor = colorScheme.primary,
+                    indicatorColor = colorScheme.primary.copy(alpha = 0.12f),
+                    unselectedIconColor = colorScheme.onSurfaceVariant,
+                    unselectedTextColor = colorScheme.onSurfaceVariant
                 )
             )
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AppDrawer(
     onNavigate: (String) -> Unit,
     onClose: () -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     ModalDrawerSheet(
-        drawerContainerColor = Color(0xFF13131f),
-        drawerContentColor = Color(0xFFf0f0f5)
+        drawerContainerColor = colorScheme.surface,
+        drawerContentColor = colorScheme.onSurface
     ) {
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(28.dp))
 
         // Drawer Header
-        Text(
-            "Wildlife FieldOps",
-            style = MaterialTheme.typography.headlineSmall,
-            color = Color(0xFF22c55e),
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
-        Text(
-            "Field Operations Center",
-            style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF6b6b80),
-            modifier = Modifier.padding(horizontal = 16.dp)
+        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Text(
+                "Wildlife FieldOps",
+                style = MaterialTheme.typography.headlineSmall,
+                color = colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Field Operations Center",
+                style = MaterialTheme.typography.bodySmall,
+                color = colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            color = colorScheme.outlineVariant
         )
 
-        Divider(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            color = Color(0xFF2a2a3f)
-        )
+        Spacer(modifier = Modifier.height(12.dp))
 
         // Drawer Items
         Screen.drawerItems.forEach { screen ->
             NavigationDrawerItem(
                 icon = {
                     screen.icon?.let {
-                        Icon(it, contentDescription = screen.title, tint = Color(0xFFa0a0b0))
+                        Icon(it, contentDescription = screen.title, tint = colorScheme.onSurfaceVariant)
                     }
                 },
                 label = {
                     Text(
                         screen.title,
-                        color = Color(0xFFf0f0f5)
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colorScheme.onSurface
                     )
                 },
                 selected = false,
                 onClick = { onNavigate(screen.route) },
-                modifier = Modifier.padding(horizontal = 8.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                shape = MaterialTheme.shapes.medium,
                 colors = NavigationDrawerItemDefaults.colors(
                     unselectedContainerColor = Color.Transparent,
-                    unselectedTextColor = Color(0xFFf0f0f5),
-                    unselectedIconColor = Color(0xFFa0a0b0)
+                    unselectedTextColor = colorScheme.onSurface,
+                    unselectedIconColor = colorScheme.onSurfaceVariant
                 )
             )
         }
 
         Spacer(modifier = Modifier.weight(1f))
 
-        Divider(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            color = Color(0xFF2a2a3f)
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            color = colorScheme.outlineVariant
         )
 
         Text(
-            "v1.1 - Rockstar Edition",
+            "v1.3 — Modern UI",
             style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFF6b6b80),
-            modifier = Modifier.padding(16.dp)
+            color = colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(20.dp)
         )
     }
 }

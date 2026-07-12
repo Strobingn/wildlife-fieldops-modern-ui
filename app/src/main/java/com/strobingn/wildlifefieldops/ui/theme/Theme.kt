@@ -19,49 +19,50 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = PrimaryGreen,
-    onPrimary = Color(0xFF000000),
-    primaryContainer = PrimaryGreenDark,
-    onPrimaryContainer = Color(0xFFffffff),
-    secondary = AccentBlue,
-    onSecondary = Color(0xFFffffff),
-    secondaryContainer = Color(0xFF1e3a5f),
-    onSecondaryContainer = Color(0xFFbfdbfe),
-    tertiary = AccentPurple,
-    onTertiary = Color(0xFFffffff),
-    tertiaryContainer = Color(0xFF2d1b69),
-    onTertiaryContainer = Color(0xFFddd6fe),
+    primary = PrimaryBlue,
+    onPrimary = OnPrimary,
+    primaryContainer = PrimaryBlueDark,
+    onPrimaryContainer = Color(0xFFdbeafe),
+    secondary = SecondaryCyan,
+    onSecondary = OnSecondary,
+    secondaryContainer = Color(0xFF164e63),
+    onSecondaryContainer = Color(0xFFcffafe),
+    tertiary = TertiaryAmber,
+    onTertiary = OnTertiary,
+    tertiaryContainer = Color(0xFF78350f),
+    onTertiaryContainer = Color(0xFFfef3c7),
     background = BackgroundDark,
     onBackground = TextPrimary,
     surface = SurfaceDark,
     onSurface = TextPrimary,
     surfaceVariant = SurfaceVariant,
     onSurfaceVariant = TextSecondary,
+    surfaceTint = PrimaryBlue.copy(alpha = 0.05f),
     error = ErrorRed,
     onError = Color(0xFFffffff),
     errorContainer = Color(0xFF450a0a),
     onErrorContainer = Color(0xFFfecaca),
     outline = BorderDark,
     outlineVariant = DividerDark,
-    scrim = Color(0xFF000000),
-    inverseSurface = Color(0xFFe4e4e7),
-    inverseOnSurface = Color(0xFF1a1a1a),
-    inversePrimary = PrimaryGreenLight
+    scrim = Color(0xFF000000).copy(alpha = 0.72f),
+    inverseSurface = Color(0xFFf4f4f5),
+    inverseOnSurface = Color(0xFF18181b),
+    inversePrimary = PrimaryBlueLight
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = PrimaryGreenDark,
+    primary = PrimaryBlueDark,
     onPrimary = Color(0xFFffffff),
-    primaryContainer = PrimaryGreenLight,
-    onPrimaryContainer = Color(0xFF052e16),
-    secondary = AccentBlue,
+    primaryContainer = PrimaryBlueLight,
+    onPrimaryContainer = Color(0xFF172554),
+    secondary = SecondaryCyanDark,
     onSecondary = Color(0xFFffffff),
-    secondaryContainer = Color(0xFFdbeafe),
-    onSecondaryContainer = Color(0xFF1e3a5f),
-    tertiary = AccentPurple,
-    onTertiary = Color(0xFFffffff),
-    tertiaryContainer = Color(0xFFede9fe),
-    onTertiaryContainer = Color(0xFF2d1b69),
+    secondaryContainer = Color(0xFFcffafe),
+    onSecondaryContainer = Color(0xFF164e63),
+    tertiary = TertiaryAmberDark,
+    onTertiary = Color(0xFF000000),
+    tertiaryContainer = Color(0xFFfef3c7),
+    onTertiaryContainer = Color(0xFF78350f),
     background = Color(0xFFfafafa),
     onBackground = Color(0xFF18181b),
     surface = Color(0xFFffffff),
@@ -74,10 +75,10 @@ private val LightColorScheme = lightColorScheme(
     onErrorContainer = Color(0xFF450a0a),
     outline = Color(0xFFd4d4d8),
     outlineVariant = Color(0xFFe4e4e7),
-    scrim = Color(0xFF000000),
+    scrim = Color(0xFF000000).copy(alpha = 0.5f),
     inverseSurface = Color(0xFF27272a),
     inverseOnSurface = Color(0xFFf4f4f5),
-    inversePrimary = PrimaryGreen
+    inversePrimary = PrimaryBlue
 )
 
 private fun Context.findActivity(): Activity? {
@@ -91,8 +92,8 @@ private fun Context.findActivity(): Activity? {
 
 @Composable
 fun WildlifeFieldOpsTheme(
-    darkTheme: Boolean = true, // Field ops is dark by default; avoid light flash
-    dynamicColor: Boolean = false,
+    darkTheme: Boolean = true, // Field ops stays dark by default to avoid light flash outdoors
+    dynamicColor: Boolean = true, // Enable Material You on Android 12+
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -121,6 +122,7 @@ fun WildlifeFieldOpsTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = AppTypography,
+        shapes = AppShapes,
         content = content
     )
 }
