@@ -3,6 +3,8 @@ name: Build Native Android APK (Debug)
 on:
   push:
     branches: [ main, Field_Opps_V2.5 ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
