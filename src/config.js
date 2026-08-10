@@ -27,7 +27,7 @@ const SUPABASE_URL = env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = env.VITE_SUPABASE_ANON_KEY || '';
 
 /** @type {string} Google Maps JavaScript API key */
-const GOOGLE_MAPS_API_KEY = env.VITE_GOOGLE_MAPS_API_KEY || '';
+const GOOGLE_MAPS_API = env.VITE_GOOGLE_MAPS_API || env.VITE_GOOGLE_MAPS_API_KEY || '';
 
 /** @type {string} Google Calendar OAuth client ID */
 const GOOGLE_CALENDAR_CLIENT_ID = env.VITE_GOOGLE_CALENDAR_CLIENT_ID || '';
@@ -66,7 +66,8 @@ export const config = Object.freeze({
   // ── API Keys (from env only) ──
   SUPABASE_URL,
   SUPABASE_ANON_KEY,
-  GOOGLE_MAPS_API_KEY,
+  GOOGLE_MAPS_API,
+  GOOGLE_MAPS_API_KEY: GOOGLE_MAPS_API,
   GOOGLE_CALENDAR_CLIENT_ID,
   OPENWEATHER_API_KEY,
 
@@ -74,7 +75,7 @@ export const config = Object.freeze({
   /** Whether Supabase sync is configured */
   hasSupabase: isValidKey(SUPABASE_URL, 10) && isValidKey(SUPABASE_ANON_KEY, 10),
   /** Whether Google Maps is configured */
-  hasGoogleMaps: isValidKey(GOOGLE_MAPS_API_KEY),
+  hasGoogleMaps: isValidKey(GOOGLE_MAPS_API),
   /** Whether Google Calendar is configured */
   hasGoogleCalendar: isValidKey(GOOGLE_CALENDAR_CLIENT_ID, 10),
   /** Whether Weather API is configured */
