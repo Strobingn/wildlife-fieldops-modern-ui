@@ -23,7 +23,16 @@ android {
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseKey\"")
 
-        val mapsKey = System.getenv("GOOGLE_MAPS_API")?.trim().orEmpty()
+        // Normalize the repository secret into the native build variable. The
+        // VITE name is supported because it is the existing documented secret;
+        // GOOGLE_MAPS_API remains the preferred native/local name.
+        val mapsKey = sequenceOf(
+            "GOOGLE_MAPS_API",
+            "VITE_GOOGLE_MAPS_API_KEY",
+            "VITE_GOOGLE_MAPS_API"
+        ).mapNotNull { name ->
+            System.getenv(name)?.trim()?.takeIf { it.isNotEmpty() }
+        }.firstOrNull().orEmpty()
         buildConfigField("String", "GOOGLE_MAPS_API_KEY", "\"$mapsKey\"")
         buildConfigField("String", "GOOGLE_MAPS_API", "\"$mapsKey\"")
         val weatherKey = System.getenv("OPENWEATHER_API_KEY") ?: ""
