@@ -1,6 +1,11 @@
 package com.strobingn.wildlifefieldops.ui.screens
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,16 +24,32 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.*
+import com.strobingn.wildlifefieldops.BuildConfig
+import com.strobingn.wildlifefieldops.R
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.MapProperty
 import com.strobingn.wildlifefieldops.ui.viewmodel.MapViewModel
 import com.google.maps.android.compose.MapType
+
+
+private fun createMonochromeMarkerIcon(): com.google.android.gms.maps.model.BitmapDescriptor {
+    val size = 48
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.rgb(45, 45, 45)
+    }
+    canvas.drawCircle(size / 2f, size / 2f, size * 0.32f, paint)
+    return com.google.android.gms.maps.model.BitmapDescriptorFactory.fromBitmap(bitmap)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +63,17 @@ fun MapScreen(
     val isDrawing by viewModel.isDrawingBoundary.collectAsState()
     val boundaryPoints by viewModel.boundaryPoints.collectAsState()
     val context = LocalContext.current
+    val mapApiKeyConfigured = BuildConfig.GOOGLE_MAPS_API_KEY.trim().let { key ->
+        key.isNotEmpty() && !key.contains("YOUR_", ignoreCase = true)
+    }
+    val hasLocationPermission = remember(context) {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    }
+    val mapStyleOptions = remember(context) {
+        runCatching { MapStyleOptions.loadRawResourceStyle(context, R.raw.map_style_grayscale) }.getOrNull()
+    }
+    val markerIcon = remember { createMonochromeMarkerIcon() }
 
     var showSearch by remember { mutableStateOf(false) }
     var showControls by remember { mutableStateOf(true) }
@@ -83,8 +115,9 @@ fun MapScreen(
                 modifier = Modifier.fillMaxSize(),
                 cameraPositionState = cameraPositionState,
                 properties = MapProperties(
-                    isMyLocationEnabled = true,
-                    mapType = MapType.HYBRID
+                    isMyLocationEnabled = hasLocationPermission,
+                    mapType = MapType.NORMAL,
+                    mapStyleOptions = mapStyleOptions
                 ),
                 uiSettings = MapUiSettings(
                     zoomControlsEnabled = true,
@@ -100,20 +133,11 @@ fun MapScreen(
             ) {
                 // Property markers
                 properties.forEach { property ->
-                    val markerColor = when (property.status) {
-                        JobStatus.PENDING -> BitmapDescriptorFactory.HUE_YELLOW
-                        JobStatus.IN_PROGRESS -> BitmapDescriptorFactory.HUE_BLUE
-                        JobStatus.COMPLETED -> BitmapDescriptorFactory.HUE_GREEN
-                        JobStatus.CANCELLED -> BitmapDescriptorFactory.HUE_RED
-                        JobStatus.INVOICED -> BitmapDescriptorFactory.HUE_VIOLET
-                        JobStatus.PAID -> BitmapDescriptorFactory.HUE_GREEN
-                    }
-
                     Marker(
                         state = MarkerState(position = LatLng(property.latitude, property.longitude)),
                         title = property.name,
                         snippet = "${property.address} (${property.type})",
-                        icon = BitmapDescriptorFactory.defaultMarker(markerColor),
+                        icon = markerIcon,
                         onClick = {
                             onNavigateToJobDetail(property.id)
                             true
@@ -137,8 +161,24 @@ fun MapScreen(
                         Marker(
                             state = MarkerState(position = point),
                             title = "Point ${index + 1}",
-                            icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)
+                            icon = markerIcon
                         )
+                    }
+                }
+            }
+
+            if (!mapApiKeyConfigured) {
+                Card(
+                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = BackgroundCard),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.Map, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(36.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text("Google Maps is not configured", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text("Add the GOOGLE_MAPS_API repository secret and rebuild this branch.", color = TextSecondary)
                     }
                 }
             }
