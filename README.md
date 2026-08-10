@@ -23,11 +23,11 @@ Field operations app for wildlife removal:
 |--------|----------|
 | `VITE_SUPABASE_URL` | Supabase project URL → `SUPABASE_URL` in Gradle |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon key → `SUPABASE_ANON_KEY` |
-| `VITE_GOOGLE_MAPS_API_KEY` | Maps + GPS screens |
+| `GOOGLE_MAPS_API` | Maps + GPS screens |
 | `VITE_OPENWEATHER_API_KEY` | Weather on inspections / field |
 | `VITE_GOOGLE_CALENDAR_CLIENT_ID` | Optional calendar (future) |
 
-> Names still start with `VITE_` for history; the **native** workflow maps them into Android `BuildConfig`.
+> `GOOGLE_MAPS_API` is the native secret/build variable. The workflow also accepts the older `VITE_GOOGLE_MAPS_API_KEY` secret name.
 
 2. Push to `main` or run **Build Native Android APK (Debug)** in Actions.
 3. Download artifact **wildlife-field-ops-debug-apk**.
@@ -38,7 +38,7 @@ Field operations app for wildlife removal:
 # Windows / macOS / Linux with Android SDK
 export SUPABASE_URL="https://YOUR_PROJECT.supabase.co"
 export SUPABASE_ANON_KEY="your-anon-key"
-export GOOGLE_MAPS_API_KEY="AIza..."
+export GOOGLE_MAPS_API="AIza..."
 export OPENWEATHER_API_KEY="..."
 
 ./gradlew :app:assembleDebug
