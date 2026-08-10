@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -20,17 +19,17 @@ import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
     primary = PrimaryGreen,
-    onPrimary = Color(0xFF001833),
+    onPrimary = Color(0xFF111318),
     primaryContainer = PrimaryContainer,
     onPrimaryContainer = OnPrimaryContainer,
-    secondary = AccentCyan,
-    onSecondary = Color(0xFF00263A),
-    secondaryContainer = Color(0xFF0C2A40),
-    onSecondaryContainer = Color(0xFFCFEFFF),
+    secondary = AccentBlue,
+    onSecondary = Color(0xFF111318),
+    secondaryContainer = SurfaceVariant,
+    onSecondaryContainer = TextPrimary,
     tertiary = AccentAmber,
-    onTertiary = Color(0xFF3D2A00),
-    tertiaryContainer = Color(0xFF3D2E0A),
-    onTertiaryContainer = Color(0xFFFFE08A),
+    onTertiary = Color(0xFF111318),
+    tertiaryContainer = SurfaceVariant,
+    onTertiaryContainer = TextPrimary,
     background = BackgroundDark,
     onBackground = TextPrimary,
     surface = SurfaceDark,
@@ -44,51 +43,51 @@ private val DarkColorScheme = darkColorScheme(
     surfaceContainerHigh = SurfaceVariant,
     surfaceContainerHighest = SurfaceBright,
     error = ErrorRed,
-    onError = Color(0xFF3B0000),
-    errorContainer = Color(0xFF5C1010),
-    onErrorContainer = Color(0xFFFFDAD6),
+    onError = Color(0xFF111318),
+    errorContainer = SurfaceVariant,
+    onErrorContainer = TextPrimary,
     outline = BorderDark,
     outlineVariant = DividerDark,
     scrim = ScrimDark,
-    inverseSurface = Color(0xFFE4E8F0),
-    inverseOnSurface = Color(0xFF1A1E26),
+    inverseSurface = Color(0xFFE5E7EB),
+    inverseOnSurface = Color(0xFF111318),
     inversePrimary = PrimaryGreenDark
 )
 
 private val LightColorScheme = lightColorScheme(
     primary = PrimaryGreenDark,
-    onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFD6E6FF),
-    onPrimaryContainer = Color(0xFF001833),
-    secondary = Color(0xFF0369A1),
-    onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFE0F2FE),
-    onSecondaryContainer = Color(0xFF0C4A6E),
-    tertiary = Color(0xFFB45309),
-    onTertiary = Color(0xFFFFFFFF),
-    tertiaryContainer = Color(0xFFFFE8C2),
-    onTertiaryContainer = Color(0xFF2A1700),
-    background = Color(0xFFF6F8FB),
-    onBackground = Color(0xFF12161C),
-    surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF12161C),
-    surfaceVariant = Color(0xFFE6EAF0),
-    onSurfaceVariant = Color(0xFF424850),
-    surfaceBright = Color(0xFFFFFFFF),
-    surfaceContainerLowest = Color(0xFFFFFFFF),
-    surfaceContainerLow = Color(0xFFF0F3F8),
-    surfaceContainer = Color(0xFFEAEFF5),
-    surfaceContainerHigh = Color(0xFFE4E9F0),
-    surfaceContainerHighest = Color(0xFFDEE4EC),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFE5E7EB),
+    onPrimaryContainer = Color(0xFF111318),
+    secondary = Color(0xFF4B5563),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFE5E7EB),
+    onSecondaryContainer = Color(0xFF111318),
+    tertiary = Color(0xFF6B7280),
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFE5E7EB),
+    onTertiaryContainer = Color(0xFF111318),
+    background = Color(0xFFF5F6F7),
+    onBackground = Color(0xFF111318),
+    surface = Color.White,
+    onSurface = Color(0xFF111318),
+    surfaceVariant = Color(0xFFE5E7EB),
+    onSurfaceVariant = Color(0xFF4B5563),
+    surfaceBright = Color.White,
+    surfaceContainerLowest = Color.White,
+    surfaceContainerLow = Color(0xFFF0F1F2),
+    surfaceContainer = Color(0xFFE8EAED),
+    surfaceContainerHigh = Color(0xFFE1E4E8),
+    surfaceContainerHighest = Color(0xFFD7DBE0),
     error = ErrorRedDark,
-    onError = Color(0xFFFFFFFF),
-    errorContainer = Color(0xFFFFDAD6),
-    onErrorContainer = Color(0xFF410002),
-    outline = Color(0xFFC5CCD6),
-    outlineVariant = Color(0xFFDCE2EA),
-    scrim = Color(0xFF000000),
-    inverseSurface = Color(0xFF272C34),
-    inverseOnSurface = Color(0xFFEFF2F6),
+    onError = Color.White,
+    errorContainer = Color(0xFFE5E7EB),
+    onErrorContainer = Color(0xFF111318),
+    outline = Color(0xFFB8BEC7),
+    outlineVariant = Color(0xFFD7DBE0),
+    scrim = Color.Black,
+    inverseSurface = Color(0xFF272B31),
+    inverseOnSurface = Color(0xFFF7F7F5),
     inversePrimary = PrimaryGreen
 )
 
@@ -103,7 +102,7 @@ private fun Context.findActivity(): Activity? {
 
 @Composable
 fun WildlifeFieldOpsTheme(
-    darkTheme: Boolean = true, // Field ops prefers dark; avoid light flash on launch
+    darkTheme: Boolean = true,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
