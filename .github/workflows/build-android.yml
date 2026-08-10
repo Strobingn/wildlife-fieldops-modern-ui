@@ -13,7 +13,8 @@ jobs:
     env:
       SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-      GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+      GOOGLE_MAPS_API: ${{ secrets.GOOGLE_MAPS_API }}
+      VITE_GOOGLE_MAPS_API: ${{ secrets.GOOGLE_MAPS_API }}
       OPENWEATHER_API_KEY: ${{ secrets.VITE_OPENWEATHER_API_KEY }}
       # SpaceXAI (xAI Grok). Prefer secret XAI_API_KEY; LLM_API_KEY still accepted by Gradle.
       XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
