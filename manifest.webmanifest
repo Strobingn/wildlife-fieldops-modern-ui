@@ -16,25 +16,25 @@
   "icons": [
     {
       "src": "assets/fieldops-icon.svg",
-      "sizes": "192x192",
+      "sizes": "any",
       "type": "image/png",
       "purpose": "any"
     },
     {
       "src": "assets/fieldops-icon.svg",
-      "sizes": "192x192",
+      "sizes": "any",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
       "src": "assets/fieldops-icon.svg",
-      "sizes": "512x512",
+      "sizes": "any",
       "type": "image/png",
       "purpose": "any"
     },
     {
       "src": "assets/fieldops-icon.svg",
-      "sizes": "512x512",
+      "sizes": "any",
       "type": "image/png",
       "purpose": "maskable"
     }
@@ -71,7 +71,7 @@
       "icons": [
         {
           "src": "assets/fieldops-icon.svg",
-          "sizes": "96x96",
+          "sizes": "any",
           "type": "image/png"
         }
       ]
@@ -84,7 +84,7 @@
       "icons": [
         {
           "src": "assets/fieldops-icon.svg",
-          "sizes": "96x96",
+          "sizes": "any",
           "type": "image/png"
         }
       ]
@@ -97,7 +97,7 @@
       "icons": [
         {
           "src": "assets/fieldops-icon.svg",
-          "sizes": "96x96",
+          "sizes": "any",
           "type": "image/png"
         }
       ]
@@ -110,7 +110,7 @@
       "icons": [
         {
           "src": "assets/fieldops-icon.svg",
-          "sizes": "96x96",
+          "sizes": "any",
           "type": "image/png"
         }
       ]
