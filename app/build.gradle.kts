@@ -23,8 +23,9 @@ android {
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseKey\"")
 
-        val mapsKey = System.getenv("GOOGLE_MAPS_API_KEY") ?: "YOUR_GOOGLE_MAPS_API_KEY_HERE"
+        val mapsKey = System.getenv("GOOGLE_MAPS_API")?.trim().orEmpty()
         buildConfigField("String", "GOOGLE_MAPS_API_KEY", "\"$mapsKey\"")
+        buildConfigField("String", "GOOGLE_MAPS_API", "\"$mapsKey\"")
         val weatherKey = System.getenv("OPENWEATHER_API_KEY") ?: ""
         buildConfigField("String", "OPENWEATHER_API_KEY", "\"$weatherKey\"")
 
@@ -60,8 +61,7 @@ android {
         buildConfigField("int", "LLM_KEY_LENGTH", "${llmKey.length}")
 
         // Manifest placeholder for Google Maps meta-data
-        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] =
-            System.getenv("GOOGLE_MAPS_API_KEY") ?: "YOUR_GOOGLE_MAPS_API_KEY_HERE"
+        manifestPlaceholders["GOOGLE_MAPS_API"] = mapsKey
 
         // Help 16 KB page-size devices (Android 15 / many S24 Ultra builds)
         ndk {
