@@ -37,6 +37,14 @@ jobs:
       - name: Grant execute permission for Gradle wrapper
         run: chmod +x ./gradlew
 
+      - name: Verify Maps secret (no value printed)
+        run: |
+          if [ -z "${GOOGLE_MAPS_API}" ]; then
+            echo "::warning::GOOGLE_MAPS_API is not configured; Maps will show the in-app configuration message."
+          else
+            echo "GOOGLE_MAPS_API present (length ${#GOOGLE_MAPS_API})"
+          fi
+
       - name: Verify AI secrets (no values printed)
         run: |
           set -e
