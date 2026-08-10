@@ -2,55 +2,58 @@ package com.strobingn.wildlifefieldops.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ── Brand (cool field blue — no green accents) ────────────────────────────
-// Kept names PrimaryGreen / SuccessGreen for call-site compatibility; values are blue.
-val PrimaryGreen = Color(0xFF5B9DFF)
-val PrimaryGreenDark = Color(0xFF3B7AE8)
-val PrimaryGreenLight = Color(0xFF93C5FD)
-val PrimaryContainer = Color(0xFF1A2F4A)
-val OnPrimaryContainer = Color(0xFFD6E6FF)
+// ── Grok_Field_App_V2.5 pure greyscale modern palette ─────────────────────
+// Strict greyscale. No chromatic accents. High contrast field-ops readability.
+// Names retained for call-site compatibility; all values are neutral greys.
 
-// ── Surfaces (neutral cool slate, not moss) ───────────────────────────────
-val BackgroundDark = Color(0xFF0B0D12)
-val BackgroundCard = Color(0xFF141820)
-val BackgroundElevated = Color(0xFF1B212B)
-val SurfaceDark = Color(0xFF141820)
-val SurfaceVariant = Color(0xFF222833)
-val SurfaceBright = Color(0xFF2A3140)
+// Primary action / brand (light grey on dark)
+val PrimaryGreen = Color(0xFFE8E8E8)
+val PrimaryGreenDark = Color(0xFFBDBDBD)
+val PrimaryGreenLight = Color(0xFFF5F5F5)
+val PrimaryContainer = Color(0xFF1C1C1C)
+val OnPrimaryContainer = Color(0xFFE0E0E0)
 
-// ── Text ──────────────────────────────────────────────────────────────────
-val TextPrimary = Color(0xFFF2F4F8)
-val TextSecondary = Color(0xFFA8B0BD)
-val TextTertiary = Color(0xFF6F7888)
+// Surfaces (deep black → elevated charcoal)
+val BackgroundDark = Color(0xFF0A0A0A)
+val BackgroundCard = Color(0xFF121212)
+val BackgroundElevated = Color(0xFF1A1A1A)
+val SurfaceDark = Color(0xFF121212)
+val SurfaceVariant = Color(0xFF1E1E1E)
+val SurfaceBright = Color(0xFF2A2A2A)
 
-// ── Status ────────────────────────────────────────────────────────────────
-val StatusPending = Color(0xFFF5B942)
-val StatusInProgress = Color(0xFF5B9DFF)
-val StatusCompleted = Color(0xFF60A5FA) // blue, not green
-val StatusCancelled = Color(0xFFFF6B6B)
-val StatusUrgent = Color(0xFFFF4D4D)
+// Text
+val TextPrimary = Color(0xFFF5F5F5)
+val TextSecondary = Color(0xFFB0B0B0)
+val TextTertiary = Color(0xFF757575)
 
-// ── Accents ───────────────────────────────────────────────────────────────
-val AccentBlue = Color(0xFF5B9DFF)
-val AccentPurple = Color(0xFFB794F6)
-val AccentOrange = Color(0xFFFF9F43)
-val AccentCyan = Color(0xFF38BDF8) // sky, not teal-green
-val AccentPink = Color(0xFFF472B6)
-val AccentAmber = Color(0xFFFBBF24)
+// Status (greyscale with subtle luminance differentiation)
+val StatusPending = Color(0xFF9E9E9E)
+val StatusInProgress = Color(0xFFE0E0E0)
+val StatusCompleted = Color(0xFFBDBDBD)
+val StatusCancelled = Color(0xFF616161)
+val StatusUrgent = Color(0xFFEEEEEE)
 
-// ── Borders / chrome ──────────────────────────────────────────────────────
-val BorderDark = Color(0xFF2E3644)
-val DividerDark = Color(0xFF1F2530)
+// Accents (all neutral greys)
+val AccentBlue = Color(0xFFD0D0D0)
+val AccentPurple = Color(0xFFC0C0C0)
+val AccentOrange = Color(0xFFA8A8A8)
+val AccentCyan = Color(0xFFE0E0E0)
+val AccentPink = Color(0xFFBDBDBD)
+val AccentAmber = Color(0xFFCFCFCF)
+
+// Borders / chrome
+val BorderDark = Color(0xFF2C2C2C)
+val DividerDark = Color(0xFF1F1F1F)
 val ScrimDark = Color(0xCC000000)
 
-// ── Semantic ──────────────────────────────────────────────────────────────
-val ErrorRed = Color(0xFFFF6B6B)
-val ErrorRedDark = Color(0xFFE54848)
-val SuccessGreen = Color(0xFF60A5FA) // success = blue (no green)
-val WarningYellow = Color(0xFFF5B942)
-val InfoBlue = Color(0xFF5B9DFF)
+// Semantic
+val ErrorRed = Color(0xFF9E9E9E)
+val ErrorRedDark = Color(0xFF757575)
+val SuccessGreen = Color(0xFFE0E0E0)
+val WarningYellow = Color(0xFFBDBDBD)
+val InfoBlue = Color(0xFFD0D0D0)
 
-// ── Gradients (hero / brand marks) ────────────────────────────────────────
-val GradientStart = Color(0xFF0F1B33)
-val GradientMid = Color(0xFF1E3A6E)
-val GradientEnd = Color(0xFF5B9DFF)
+// Gradients (greyscale)
+val GradientStart = Color(0xFF0A0A0A)
+val GradientMid = Color(0xFF1A1A1A)
+val GradientEnd = Color(0xFF2A2A2A)

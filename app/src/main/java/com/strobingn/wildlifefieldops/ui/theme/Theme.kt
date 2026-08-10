@@ -18,19 +18,20 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
+// Grok_Field_App_V2.5 — forced greyscale dark-first theme
 private val DarkColorScheme = darkColorScheme(
     primary = PrimaryGreen,
-    onPrimary = Color(0xFF001833),
+    onPrimary = Color(0xFF0A0A0A),
     primaryContainer = PrimaryContainer,
     onPrimaryContainer = OnPrimaryContainer,
     secondary = AccentCyan,
-    onSecondary = Color(0xFF00263A),
-    secondaryContainer = Color(0xFF0C2A40),
-    onSecondaryContainer = Color(0xFFCFEFFF),
+    onSecondary = Color(0xFF0A0A0A),
+    secondaryContainer = Color(0xFF1A1A1A),
+    onSecondaryContainer = Color(0xFFE0E0E0),
     tertiary = AccentAmber,
-    onTertiary = Color(0xFF3D2A00),
-    tertiaryContainer = Color(0xFF3D2E0A),
-    onTertiaryContainer = Color(0xFFFFE08A),
+    onTertiary = Color(0xFF0A0A0A),
+    tertiaryContainer = Color(0xFF1E1E1E),
+    onTertiaryContainer = Color(0xFFCFCFCF),
     background = BackgroundDark,
     onBackground = TextPrimary,
     surface = SurfaceDark,
@@ -44,52 +45,52 @@ private val DarkColorScheme = darkColorScheme(
     surfaceContainerHigh = SurfaceVariant,
     surfaceContainerHighest = SurfaceBright,
     error = ErrorRed,
-    onError = Color(0xFF3B0000),
-    errorContainer = Color(0xFF5C1010),
-    onErrorContainer = Color(0xFFFFDAD6),
+    onError = Color(0xFF0A0A0A),
+    errorContainer = Color(0xFF1A1A1A),
+    onErrorContainer = Color(0xFFE0E0E0),
     outline = BorderDark,
     outlineVariant = DividerDark,
     scrim = ScrimDark,
-    inverseSurface = Color(0xFFE4E8F0),
-    inverseOnSurface = Color(0xFF1A1E26),
+    inverseSurface = Color(0xFFE8E8E8),
+    inverseOnSurface = Color(0xFF121212),
     inversePrimary = PrimaryGreenDark
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = PrimaryGreenDark,
+    primary = Color(0xFF1A1A1A),
     onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFD6E6FF),
-    onPrimaryContainer = Color(0xFF001833),
-    secondary = Color(0xFF0369A1),
+    primaryContainer = Color(0xFFE0E0E0),
+    onPrimaryContainer = Color(0xFF0A0A0A),
+    secondary = Color(0xFF424242),
     onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFE0F2FE),
-    onSecondaryContainer = Color(0xFF0C4A6E),
-    tertiary = Color(0xFFB45309),
+    secondaryContainer = Color(0xFFF5F5F5),
+    onSecondaryContainer = Color(0xFF1A1A1A),
+    tertiary = Color(0xFF616161),
     onTertiary = Color(0xFFFFFFFF),
-    tertiaryContainer = Color(0xFFFFE8C2),
-    onTertiaryContainer = Color(0xFF2A1700),
-    background = Color(0xFFF6F8FB),
-    onBackground = Color(0xFF12161C),
+    tertiaryContainer = Color(0xFFEEEEEE),
+    onTertiaryContainer = Color(0xFF212121),
+    background = Color(0xFFFAFAFA),
+    onBackground = Color(0xFF0A0A0A),
     surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF12161C),
-    surfaceVariant = Color(0xFFE6EAF0),
-    onSurfaceVariant = Color(0xFF424850),
+    onSurface = Color(0xFF0A0A0A),
+    surfaceVariant = Color(0xFFEEEEEE),
+    onSurfaceVariant = Color(0xFF424242),
     surfaceBright = Color(0xFFFFFFFF),
     surfaceContainerLowest = Color(0xFFFFFFFF),
-    surfaceContainerLow = Color(0xFFF0F3F8),
-    surfaceContainer = Color(0xFFEAEFF5),
-    surfaceContainerHigh = Color(0xFFE4E9F0),
-    surfaceContainerHighest = Color(0xFFDEE4EC),
-    error = ErrorRedDark,
+    surfaceContainerLow = Color(0xFFF5F5F5),
+    surfaceContainer = Color(0xFFEEEEEE),
+    surfaceContainerHigh = Color(0xFFE0E0E0),
+    surfaceContainerHighest = Color(0xFFBDBDBD),
+    error = Color(0xFF616161),
     onError = Color(0xFFFFFFFF),
-    errorContainer = Color(0xFFFFDAD6),
-    onErrorContainer = Color(0xFF410002),
-    outline = Color(0xFFC5CCD6),
-    outlineVariant = Color(0xFFDCE2EA),
+    errorContainer = Color(0xFFEEEEEE),
+    onErrorContainer = Color(0xFF212121),
+    outline = Color(0xFFBDBDBD),
+    outlineVariant = Color(0xFFE0E0E0),
     scrim = Color(0xFF000000),
-    inverseSurface = Color(0xFF272C34),
-    inverseOnSurface = Color(0xFFEFF2F6),
-    inversePrimary = PrimaryGreen
+    inverseSurface = Color(0xFF212121),
+    inverseOnSurface = Color(0xFFF5F5F5),
+    inversePrimary = Color(0xFFBDBDBD)
 )
 
 private fun Context.findActivity(): Activity? {
@@ -103,8 +104,8 @@ private fun Context.findActivity(): Activity? {
 
 @Composable
 fun WildlifeFieldOpsTheme(
-    darkTheme: Boolean = true, // Field ops prefers dark; avoid light flash on launch
-    dynamicColor: Boolean = false,
+    darkTheme: Boolean = true, // Field ops prefers dark; greyscale V2.5 forces high-contrast dark
+    dynamicColor: Boolean = false, // disabled — pure greyscale only
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
