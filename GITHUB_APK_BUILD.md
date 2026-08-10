@@ -21,7 +21,7 @@ This repo builds a **native** debug APK only (Gradle `:app:assembleDebug`).
 
 No Node / Vite / Capacitor steps. Pure Android.
 
-The workflow also accepts the legacy `VITE_GOOGLE_MAPS_API_KEY` secret name and normalizes it to `GOOGLE_MAPS_API` before Gradle runs.
+The workflow also accepts the legacy `GOOGLE_MAPS_API_KEY`, `VITE_GOOGLE_MAPS_API_KEY`, and `VITE_GOOGLE_MAPS_API` names and normalizes them to `GOOGLE_MAPS_API` before Gradle runs.
 
 ## Install on phone
 
