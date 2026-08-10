@@ -5,6 +5,6 @@
         android:width="72dp"
         android:height="72dp"
         android:gravity="center">
-        <bitmap android:src="@drawable/ic_fieldops_mark" />
+        <item android:drawable="@drawable/ic_fieldops_mark" />
     </item>
 </layer-list>
