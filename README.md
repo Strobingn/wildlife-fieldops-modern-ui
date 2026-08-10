@@ -27,7 +27,7 @@ Field operations app for wildlife removal:
 | `VITE_OPENWEATHER_API_KEY` | Weather on inspections / field |
 | `VITE_GOOGLE_CALENDAR_CLIENT_ID` | Optional calendar (future) |
 
-> `GOOGLE_MAPS_API` is the native secret/build variable. The workflow also accepts the older `VITE_GOOGLE_MAPS_API_KEY` secret name.
+> `GOOGLE_MAPS_API` is the native secret/build variable. The workflow also accepts older `GOOGLE_MAPS_API_KEY`, `VITE_GOOGLE_MAPS_API_KEY`, and `VITE_GOOGLE_MAPS_API` secret names.
 
 2. Push to `main` or run **Build Native Android APK (Debug)** in Actions.
 3. Download artifact **wildlife-field-ops-debug-apk**.
