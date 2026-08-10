@@ -28,6 +28,7 @@ android {
         // GOOGLE_MAPS_API remains the preferred native/local name.
         val mapsKey = sequenceOf(
             "GOOGLE_MAPS_API",
+            "GOOGLE_MAPS_API_KEY",
             "VITE_GOOGLE_MAPS_API_KEY",
             "VITE_GOOGLE_MAPS_API"
         ).mapNotNull { name ->
