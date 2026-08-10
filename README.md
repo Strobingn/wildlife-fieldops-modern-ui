@@ -71,3 +71,12 @@ Legacy web / Capacitor folders may still exist in the repo history for reference
 
 - Prefer Supabase function `ai-assistant` (set LLM keys in Supabase Edge Function secrets).
 - If the function is offline, the app uses built-in field knowledge so the chat still works.
+
+
+## V2.5 route planner and visual system
+
+- The Routes screen now reads active jobs from Room and uses only jobs with saved latitude/longitude.
+- Route ordering runs locally with nearest-neighbor plus 2-opt improvement; no paid routing API is required.
+- The planner reports stops, estimated travel/service time, optional return-to-start distance, and can hand the ordered stops to Google Maps.
+- The app-wide Material palette is grayscale for a cleaner field-operations UI. Legacy color names remain only for source compatibility.
+- See [docs/FIELD_OPPS_V2_5_FEATURE_ROADMAP.md](docs/FIELD_OPPS_V2_5_FEATURE_ROADMAP.md) for the next ten feature proposals.
