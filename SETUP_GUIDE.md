@@ -52,7 +52,7 @@ You now have:
 | 10 | Search for **"Places API"** → Tap **Enable** | Enabled confirmation |
 
 You now have:
-- `VITE_GOOGLE_MAPS_API_KEY=AIzaSyC...`
+- `GOOGLE_MAPS_API=AIzaSyC...`
 
 ---
 
@@ -86,7 +86,7 @@ This is the **ONLY time** you paste your keys. GitHub stores them encrypted and 
 | 6 | Tap **New repository secret** again | New form |
 | 7 | Name: **`VITE_SUPABASE_ANON_KEY`** / Value: *your Supabase anon key* → **Add secret** | Secret added |
 | 8 | Tap **New repository secret** | New form |
-| 9 | Name: **`VITE_GOOGLE_MAPS_API_KEY`** / Value: *your Google Maps key* → **Add secret** | Secret added |
+| 9 | Name: **`GOOGLE_MAPS_API`** / Value: *your Google Maps key* → **Add secret** | Secret added |
 | 10 | (Optional) Name: **`VITE_OPENWEATHER_API_KEY`** / Value: *your weather key* → **Add secret** | Secret added |
 
 Your secrets page should now look like this:
@@ -96,7 +96,7 @@ Repository secrets
 ------------------
 VITE_SUPABASE_URL          ********
 VITE_SUPABASE_ANON_KEY     ********
-VITE_GOOGLE_MAPS_API_KEY   ********
+GOOGLE_MAPS_API             ********
 VITE_OPENWEATHER_API_KEY   ********  (optional)
 ```
 
