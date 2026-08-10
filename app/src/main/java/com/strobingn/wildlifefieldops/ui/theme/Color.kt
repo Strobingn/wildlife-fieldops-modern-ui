@@ -2,55 +2,55 @@ package com.strobingn.wildlifefieldops.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ── Brand (cool field blue — no green accents) ────────────────────────────
-// Kept names PrimaryGreen / SuccessGreen for call-site compatibility; values are blue.
-val PrimaryGreen = Color(0xFF5B9DFF)
-val PrimaryGreenDark = Color(0xFF3B7AE8)
-val PrimaryGreenLight = Color(0xFF93C5FD)
-val PrimaryContainer = Color(0xFF1A2F4A)
-val OnPrimaryContainer = Color(0xFFD6E6FF)
+// Grayscale field-operations palette.
+// Legacy names remain for source compatibility; every value is intentionally neutral.
+val PrimaryGreen = Color(0xFFE5E7EB)
+val PrimaryGreenDark = Color(0xFF111827)
+val PrimaryGreenLight = Color(0xFFF3F4F6)
+val PrimaryContainer = Color(0xFF30343B)
+val OnPrimaryContainer = Color(0xFFF9FAFB)
 
-// ── Surfaces (neutral cool slate, not moss) ───────────────────────────────
-val BackgroundDark = Color(0xFF0B0D12)
-val BackgroundCard = Color(0xFF141820)
-val BackgroundElevated = Color(0xFF1B212B)
-val SurfaceDark = Color(0xFF141820)
-val SurfaceVariant = Color(0xFF222833)
-val SurfaceBright = Color(0xFF2A3140)
+// Surfaces
+val BackgroundDark = Color(0xFF0B0D10)
+val BackgroundCard = Color(0xFF15181D)
+val BackgroundElevated = Color(0xFF1E2229)
+val SurfaceDark = Color(0xFF15181D)
+val SurfaceVariant = Color(0xFF252A31)
+val SurfaceBright = Color(0xFF313740)
 
-// ── Text ──────────────────────────────────────────────────────────────────
-val TextPrimary = Color(0xFFF2F4F8)
-val TextSecondary = Color(0xFFA8B0BD)
-val TextTertiary = Color(0xFF6F7888)
+// Text
+val TextPrimary = Color(0xFFF7F7F5)
+val TextSecondary = Color(0xFFB7BCC4)
+val TextTertiary = Color(0xFF818894)
 
-// ── Status ────────────────────────────────────────────────────────────────
-val StatusPending = Color(0xFFF5B942)
-val StatusInProgress = Color(0xFF5B9DFF)
-val StatusCompleted = Color(0xFF60A5FA) // blue, not green
-val StatusCancelled = Color(0xFFFF6B6B)
-val StatusUrgent = Color(0xFFFF4D4D)
+// Status — neutral contrast levels instead of semantic colors
+val StatusPending = Color(0xFFD6D9DE)
+val StatusInProgress = Color(0xFFB8BEC7)
+val StatusCompleted = Color(0xFFF0F1F2)
+val StatusCancelled = Color(0xFF8E949D)
+val StatusUrgent = Color(0xFFF8F8F8)
 
-// ── Accents ───────────────────────────────────────────────────────────────
-val AccentBlue = Color(0xFF5B9DFF)
-val AccentPurple = Color(0xFFB794F6)
-val AccentOrange = Color(0xFFFF9F43)
-val AccentCyan = Color(0xFF38BDF8) // sky, not teal-green
-val AccentPink = Color(0xFFF472B6)
-val AccentAmber = Color(0xFFFBBF24)
+// Accents — grayscale contrast levels kept under existing names
+val AccentBlue = Color(0xFFC6CBD2)
+val AccentPurple = Color(0xFFAEB4BD)
+val AccentOrange = Color(0xFFD9DCE1)
+val AccentCyan = Color(0xFF9DA4AE)
+val AccentPink = Color(0xFFE7E9EC)
+val AccentAmber = Color(0xFFCED2D8)
 
-// ── Borders / chrome ──────────────────────────────────────────────────────
-val BorderDark = Color(0xFF2E3644)
-val DividerDark = Color(0xFF1F2530)
+// Borders / chrome
+val BorderDark = Color(0xFF3A4049)
+val DividerDark = Color(0xFF252A31)
 val ScrimDark = Color(0xCC000000)
 
-// ── Semantic ──────────────────────────────────────────────────────────────
-val ErrorRed = Color(0xFFFF6B6B)
-val ErrorRedDark = Color(0xFFE54848)
-val SuccessGreen = Color(0xFF60A5FA) // success = blue (no green)
-val WarningYellow = Color(0xFFF5B942)
-val InfoBlue = Color(0xFF5B9DFF)
+// Semantic
+val ErrorRed = Color(0xFFF0F1F2)
+val ErrorRedDark = Color(0xFF5B616B)
+val SuccessGreen = Color(0xFFF0F1F2)
+val WarningYellow = Color(0xFFD6D9DE)
+val InfoBlue = Color(0xFFB8BEC7)
 
-// ── Gradients (hero / brand marks) ────────────────────────────────────────
-val GradientStart = Color(0xFF0F1B33)
-val GradientMid = Color(0xFF1E3A6E)
-val GradientEnd = Color(0xFF5B9DFF)
+// Grayscale gradients
+val GradientStart = Color(0xFF111318)
+val GradientMid = Color(0xFF2A2F36)
+val GradientEnd = Color(0xFF5D646E)
