@@ -2,7 +2,7 @@ name: Build Native Android APK (Debug)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, redesign/modern-ui ]
   workflow_dispatch:
 
 jobs:
