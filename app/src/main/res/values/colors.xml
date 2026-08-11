@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary_green">#FF22c55e</color>
-    <color name="background_dark">#FF0a0a0f</color>
-    <color name="surface_dark">#FF13131f</color>
-    <color name="text_primary">#FFf0f0f5</color>
-    <color name="text_secondary">#FFa0a0b0</color>
-    <color name="ic_launcher_background">#FF0a0a0f</color>
-    <color name="splash_background">#FF0a0a0f</color>
-    <color name="accent_purple">#FF8b5cf6</color>
-    <color name="accent_blue">#FF3b82f6</color>
+    <color name="primary_green">#FF6B7280</color>
+    <color name="background_dark">#FF0A0A0A</color>
+    <color name="surface_dark">#FF121212</color>
+    <color name="text_primary">#FFFAFAFA</color>
+    <color name="text_secondary">#FFA3A3A3</color>
+    <color name="ic_launcher_background">#FF0A0A0A</color>
+    <color name="splash_background">#FF0A0A0A</color>
+    <color name="accent_purple">#FFA3A3A3</color>
+    <color name="accent_blue">#FF9CA3AF</color>
 </resources>
