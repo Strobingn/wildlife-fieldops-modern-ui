@@ -102,7 +102,7 @@ fun MapScreen(
     fun fitVisibleJobs() {
         if (visibleProperties.isEmpty()) return
         val bounds = LatLngBounds.Builder().apply {
-            visibleProperties.forEach { add(LatLng(it.latitude, it.longitude)) }
+            visibleProperties.forEach { include(LatLng(it.latitude, it.longitude)) }
         }.build()
         runCatching {
             cameraPositionState.move(CameraUpdateFactory.newLatLngBounds(bounds, 96))
