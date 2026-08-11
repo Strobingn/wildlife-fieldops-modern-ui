@@ -52,6 +52,11 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
         fun createRoute(jobId: String) = "estimate/$jobId"
     }
 
+    // AR / v2 features (ported)
+    object ARMeasure : Screen("ar_measure/{jobId}", "AR Measure") {
+        fun createRoute(jobId: String) = "ar_measure/$jobId"
+    }
+
     companion object {
         val bottomNavItems = listOf(Dashboard, JobList, InspectionList, Schedule, GPS)
         val drawerItems = listOf(
