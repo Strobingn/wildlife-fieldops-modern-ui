@@ -8,7 +8,9 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -26,9 +28,10 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.*
 import com.strobingn.wildlifefieldops.BuildConfig
@@ -40,12 +43,19 @@ import com.strobingn.wildlifefieldops.ui.viewmodel.MapViewModel
 import com.google.maps.android.compose.MapType
 
 
-private fun createMonochromeMarkerIcon(): com.google.android.gms.maps.model.BitmapDescriptor {
+private fun createMonochromeMarkerIcon(status: JobStatus): com.google.android.gms.maps.model.BitmapDescriptor {
     val size = 48
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.rgb(45, 45, 45)
+        color = when (status) {
+            JobStatus.PENDING -> android.graphics.Color.rgb(170, 170, 170)
+            JobStatus.IN_PROGRESS -> android.graphics.Color.rgb(115, 115, 115)
+            JobStatus.COMPLETED -> android.graphics.Color.rgb(55, 55, 55)
+            JobStatus.INVOICED -> android.graphics.Color.rgb(80, 80, 80)
+            JobStatus.PAID -> android.graphics.Color.rgb(25, 25, 25)
+            JobStatus.CANCELLED -> android.graphics.Color.rgb(145, 145, 145)
+        }
     }
     canvas.drawCircle(size / 2f, size / 2f, size * 0.32f, paint)
     return com.google.android.gms.maps.model.BitmapDescriptorFactory.fromBitmap(bitmap)
@@ -60,6 +70,7 @@ fun MapScreen(
 ) {
     val searchQuery by viewModel.searchQuery.collectAsState()
     val properties by viewModel.filteredProperties.collectAsState()
+    val unlocatedJobCount by viewModel.unlocatedJobCount.collectAsState()
     val isDrawing by viewModel.isDrawingBoundary.collectAsState()
     val boundaryPoints by viewModel.boundaryPoints.collectAsState()
     val context = LocalContext.current
@@ -73,13 +84,39 @@ fun MapScreen(
     val mapStyleOptions = remember(context) {
         runCatching { MapStyleOptions.loadRawResourceStyle(context, R.raw.map_style_grayscale) }.getOrNull()
     }
-    val markerIcon = remember { createMonochromeMarkerIcon() }
 
     var showSearch by remember { mutableStateOf(false) }
     var showControls by remember { mutableStateOf(true) }
+    var selectedStatus by remember { mutableStateOf<JobStatus?>(null) }
+    var mapLoaded by remember { mutableStateOf(false) }
+    var hasAutoFitted by remember { mutableStateOf(false) }
+
+    val visibleProperties = remember(properties, selectedStatus) {
+        properties.filter { selectedStatus == null || it.status == selectedStatus }
+    }
 
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(LatLng(41.45, -74.05), 12f)
+    }
+
+    fun fitVisibleJobs() {
+        if (visibleProperties.isEmpty()) return
+        val bounds = LatLngBounds.Builder().apply {
+            visibleProperties.forEach { add(LatLng(it.latitude, it.longitude)) }
+        }.build()
+        runCatching {
+            cameraPositionState.move(CameraUpdateFactory.newLatLngBounds(bounds, 96))
+        }
+    }
+
+    // Completed jobs may arrive after a sync. Fit once when the first complete
+    // set of located jobs is available so they are not hidden outside the
+    // default Hudson Valley camera position.
+    LaunchedEffect(mapLoaded, properties.size) {
+        if (mapLoaded && properties.isNotEmpty() && !hasAutoFitted) {
+            fitVisibleJobs()
+            hasAutoFitted = true
+        }
     }
 
     Scaffold(
@@ -103,6 +140,9 @@ fun MapScreen(
                                 tint = TextSecondary
                             )
                         }
+                        IconButton(onClick = { fitVisibleJobs() }) {
+                            Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit all jobs", tint = TextSecondary)
+                        }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = BackgroundDark.copy(alpha = 0.9f))
                 )
@@ -125,6 +165,7 @@ fun MapScreen(
                     compassEnabled = true,
                     mapToolbarEnabled = false
                 ),
+                onMapLoaded = { mapLoaded = true },
                 onMapClick = { latLng ->
                     if (isDrawing) {
                         viewModel.addBoundaryPoint(latLng)
@@ -132,12 +173,14 @@ fun MapScreen(
                 }
             ) {
                 // Property markers
-                properties.forEach { property ->
+                visibleProperties.forEach { property ->
                     Marker(
                         state = MarkerState(position = LatLng(property.latitude, property.longitude)),
-                        title = property.name,
+                        title = "${property.name} · ${property.status.name.replace('_', ' ')}",
                         snippet = "${property.address} (${property.type})",
-                        icon = markerIcon,
+                        icon = remember(property.id, property.status) {
+                            createMonochromeMarkerIcon(property.status)
+                        },
                         onClick = {
                             onNavigateToJobDetail(property.id)
                             true
@@ -161,7 +204,7 @@ fun MapScreen(
                         Marker(
                             state = MarkerState(position = point),
                             title = "Point ${index + 1}",
-                            icon = markerIcon
+                            icon = createMonochromeMarkerIcon(JobStatus.IN_PROGRESS)
                         )
                     }
                 }
@@ -237,11 +280,31 @@ fun MapScreen(
                     Column(modifier = Modifier.padding(12.dp)) {
                         // Property count
                         Text(
-                            "${properties.size} properties shown",
+                            "${visibleProperties.size} jobs shown · ${unlocatedJobCount} without coordinates",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextTertiary,
                             modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
                         )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            FilterChip(
+                                selected = selectedStatus == null,
+                                onClick = { selectedStatus = null },
+                                label = { Text("All") }
+                            )
+                            JobStatus.entries.forEach { status ->
+                                FilterChip(
+                                    selected = selectedStatus == status,
+                                    onClick = { selectedStatus = if (selectedStatus == status) null else status },
+                                    label = { Text(status.name.replace('_', ' ')) }
+                                )
+                            }
+                        }
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -269,6 +332,14 @@ fun MapScreen(
                                 active = false,
                                 modifier = Modifier.weight(1f),
                                 onClick = { viewModel.clearBoundary() }
+                            )
+
+                            MapControlButton(
+                                label = "Fit Jobs",
+                                icon = Icons.Default.CenterFocusStrong,
+                                active = false,
+                                modifier = Modifier.weight(1f),
+                                onClick = { fitVisibleJobs() }
                             )
 
                             MapControlButton(
