@@ -47,12 +47,18 @@ You now have:
 | 5 | Tap the **hamburger menu** (3 lines) → **APIs & Services** → **Credentials** | Credentials page |
 | 6 | Tap **+ CREATE CREDENTIALS** → **API key** | A long key appears (like `AIzaSyC...`) |
 | 7 | **Copy the key** to your Notes app | Save it |
-| 8 | Tap **Library** (left side) → Search for **"Maps JavaScript API"** | API details page |
+| 8 | Tap **Library** (left side) → Search for **"Maps SDK for Android"** | API details page |
 | 9 | Tap **Enable** | Enabled confirmation |
-| 10 | Search for **"Places API"** → Tap **Enable** | Enabled confirmation |
+| 10 | Optional: enable **"Places API"** only if you use address/place search | Enabled confirmation |
 
 You now have:
 - `GOOGLE_MAPS_API=AIzaSyC...`
+
+For Android key restrictions, use this application ID:
+
+`com.strobingn.wildlifefieldops`
+
+The key must allow **Maps SDK for Android**. A key restricted only to browser/JavaScript APIs will build successfully but the native map will remain blank.
 
 ---
 
