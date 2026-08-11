@@ -4,14 +4,14 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Wildlife FieldOps logo mark - centered for adaptive safe zone -->
+    <!-- Wildlife FieldOps logo mark - grayscale, centered for adaptive safe zone -->
     <path
-        android:fillColor="#22C55E"
+        android:fillColor="#9CA3AF"
         android:pathData="M54,22c-17.7,0 -32,14.3 -32,32s14.3,32 32,32 32,-14.3 32,-32 -14.3,-32 -32,-32zM54,30c13.2,0 24,10.8 24,24s-10.8,24 -24,24 -24,-10.8 -24,-24 10.8,-24 24,-24z" />
     <path
-        android:fillColor="#22C55E"
+        android:fillColor="#9CA3AF"
         android:pathData="M40,40h10v28h-10zM58,40h10v28h-10z" />
     <path
-        android:fillColor="#22C55E"
+        android:fillColor="#9CA3AF"
         android:pathData="M34,54h40v8h-40z" />
 </vector>
