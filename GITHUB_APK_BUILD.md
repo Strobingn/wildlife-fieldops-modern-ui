@@ -23,6 +23,8 @@ No Node / Vite / Capacitor steps. Pure Android.
 
 The workflow also accepts the legacy `GOOGLE_MAPS_API_KEY`, `VITE_GOOGLE_MAPS_API_KEY`, and `VITE_GOOGLE_MAPS_API` names and normalizes them to `GOOGLE_MAPS_API` before Gradle runs.
 
+This is a native Android map. The Google Cloud key must have **Maps SDK for Android** enabled and, when application restrictions are used, must include package `com.strobingn.wildlifefieldops`.
+
 ## Install on phone
 
 Allow install from unknown sources if asked. Open the APK after unzipping the artifact.
