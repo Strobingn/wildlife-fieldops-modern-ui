@@ -218,6 +218,7 @@ private fun AppNavHost(
                 onNavigateToInvoice = { navController.navigate(Screen.Invoice.createRoute(jobId)) },
                 onNavigateToEstimate = { navController.navigate(Screen.Estimate.createRoute(jobId)) },
                 onNavigateToInspectionForm = { navController.navigate(Screen.InspectionForm.createRoute()) },
+                onNavigateToARMeasure = { navController.navigate(Screen.ARMeasure.createRoute(jobId)) },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -364,6 +365,18 @@ private fun AppNavHost(
                 onBack = { navController.popBackStack() }
             )
         }
+
+        // AR Measure (ported from fieldops-v2-features)
+        composable(
+            route = Screen.ARMeasure.route,
+            arguments = listOf(navArgument("jobId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val jobId = backStackEntry.arguments?.getString("jobId") ?: ""
+            ARMeasureScreen(
+                jobId = jobId,
+                onBack = { navController.popBackStack() }
+            )
+        }
     }
 }
 
@@ -483,7 +496,7 @@ private fun AppDrawer(
         )
 
         Text(
-            "v1.3 — Modern UI",
+            "v1.4.0 — AR + ML + Modern UI",
             style = MaterialTheme.typography.labelSmall,
             color = colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(20.dp)
