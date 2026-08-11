@@ -34,6 +34,7 @@ fun JobDetailScreen(
     onNavigateToInvoice: (String) -> Unit,
     onNavigateToEstimate: (String) -> Unit,
     onNavigateToInspectionForm: (String) -> Unit,
+    onNavigateToARMeasure: (String) -> Unit = {},
     onBack: () -> Unit,
     viewModel: JobsViewModel = hiltViewModel()
 ) {
@@ -157,6 +158,17 @@ fun JobDetailScreen(
                         color = AccentCyan,
                         modifier = Modifier.weight(1f),
                         onClick = { onNavigateToInspectionForm(currentJob.id) }
+                    )
+                }
+
+                // AR Measure row
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionButton(
+                        label = "AR Measure",
+                        icon = Icons.Default.Straighten,
+                        color = AccentOrange,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onNavigateToARMeasure(currentJob.id) }
                     )
                 }
 
