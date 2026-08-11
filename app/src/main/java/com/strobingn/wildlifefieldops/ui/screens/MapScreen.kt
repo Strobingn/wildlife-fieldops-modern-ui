@@ -41,6 +41,7 @@ import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.MapProperty
 import com.strobingn.wildlifefieldops.ui.viewmodel.MapViewModel
 import com.google.maps.android.compose.MapType
+import kotlinx.coroutines.delay
 
 
 private fun createMonochromeMarkerIcon(status: JobStatus): com.google.android.gms.maps.model.BitmapDescriptor {
@@ -90,6 +91,7 @@ fun MapScreen(
     var selectedStatus by remember { mutableStateOf<JobStatus?>(null) }
     var mapLoaded by remember { mutableStateOf(false) }
     var hasAutoFitted by remember { mutableStateOf(false) }
+    var mapInitializationTimedOut by remember { mutableStateOf(false) }
 
     val visibleProperties = remember(properties, selectedStatus) {
         properties.filter { selectedStatus == null || it.status == selectedStatus }
@@ -117,6 +119,12 @@ fun MapScreen(
             fitVisibleJobs()
             hasAutoFitted = true
         }
+    }
+
+    LaunchedEffect(mapApiKeyConfigured, mapLoaded) {
+        if (!mapApiKeyConfigured || mapLoaded) return@LaunchedEffect
+        delay(12_000)
+        if (!mapLoaded) mapInitializationTimedOut = true
     }
 
     Scaffold(
@@ -165,7 +173,10 @@ fun MapScreen(
                     compassEnabled = true,
                     mapToolbarEnabled = false
                 ),
-                onMapLoaded = { mapLoaded = true },
+                onMapLoaded = {
+                    mapLoaded = true
+                    mapInitializationTimedOut = false
+                },
                 onMapClick = { latLng ->
                     if (isDrawing) {
                         viewModel.addBoundaryPoint(latLng)
@@ -210,7 +221,7 @@ fun MapScreen(
                 }
             }
 
-            if (!mapApiKeyConfigured) {
+            if (!mapApiKeyConfigured || mapInitializationTimedOut) {
                 Card(
                     modifier = Modifier.align(Alignment.Center).padding(24.dp),
                     colors = CardDefaults.cardColors(containerColor = BackgroundCard),
@@ -219,9 +230,20 @@ fun MapScreen(
                     Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.Map, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(36.dp))
                         Spacer(modifier = Modifier.height(10.dp))
-                        Text("Google Maps is not configured", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (!mapApiKeyConfigured) "Google Maps is not configured" else "Google Maps did not initialize",
+                            color = TextPrimary,
+                            fontWeight = FontWeight.SemiBold
+                        )
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text("Add the GOOGLE_MAPS_API repository secret and rebuild this branch.", color = TextSecondary)
+                        Text(
+                            if (!mapApiKeyConfigured) {
+                                "Add the GOOGLE_MAPS_API repository secret and rebuild this branch."
+                            } else {
+                                "The key is present, but Android Maps did not initialize. Enable Maps SDK for Android and allow package com.strobingn.wildlifefieldops in Google Cloud."
+                            },
+                            color = TextSecondary
+                        )
                     }
                 }
             }
