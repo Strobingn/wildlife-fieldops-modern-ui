@@ -30,9 +30,12 @@ android {
 
         // LLM API key for AI Assistant (xAI, OpenAI, etc.)
         val llmKey = System.getenv("LLM_API_KEY") ?: ""
-        val llmBase = System.getenv("LLM_BASE_URL") ?: "https://api.openai.com/v1"
+        val llmBase = System.getenv("LLM_BASE_URL") ?: "https://api.x.ai/v1"
+        val llmModel = System.getenv("LLM_MODEL") ?: "grok-4.5"
         buildConfigField("String", "LLM_API_KEY", "\"$llmKey\"")
         buildConfigField("String", "LLM_BASE_URL", "\"$llmBase\"")
+        buildConfigField("String", "LLM_MODEL", "\"$llmModel\"")
+        buildConfigField("int", "LLM_KEY_LENGTH", "${llmKey.length}")
 
         // Manifest placeholder for Google Maps meta-data
         manifestPlaceholders["GOOGLE_MAPS_API_KEY"] =
