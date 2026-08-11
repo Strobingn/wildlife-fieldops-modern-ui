@@ -14,8 +14,8 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.3.2-s24"
+        versionCode = 7
+        versionName = "1.4.0-ar-ml"
 
         // Real keys from env/secrets (Supabase + Maps hooked)
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
@@ -116,6 +116,7 @@ android {
 
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 
     implementation("androidx.core:core-ktx:1.12.0")
@@ -149,7 +150,13 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
     implementation("com.google.android.gms:play-services-maps:18.2.0")
-    implementation("com.google.maps.android:maps-compose:4.3.0")
+    implementation("com.google.android.gms:play-services-location:21.2.0")
+    implementation("com.google.maps.android:maps-compose:4.3.3")
+
+    // ARCore + on-device ML Kit (same stack as feature/fieldops-v2-features → ~44 MB APK)
+    implementation("com.google.ar:core:1.45.0")
+    implementation("com.google.mlkit:image-labeling:17.0.9")
+    implementation("com.google.mlkit:object-detection:17.0.2")
 
     implementation("io.coil-kt:coil-compose:2.5.0")
 
@@ -162,7 +169,7 @@ dependencies {
     implementation("io.github.jan-tennert.supabase:storage-kt:$supabaseVersion")
     implementation("io.ktor:ktor-client-android:2.3.12")
 
-    implementation("com.google.code.gson:gson:2.10.1")
+    implementation("com.google.code.gson:gson:2.11.0")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
