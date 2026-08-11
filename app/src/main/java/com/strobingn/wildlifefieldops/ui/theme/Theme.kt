@@ -22,15 +22,15 @@ private val DarkColorScheme = darkColorScheme(
     primary = PrimaryBlue,
     onPrimary = OnPrimary,
     primaryContainer = PrimaryBlueDark,
-    onPrimaryContainer = Color(0xFFdbeafe),
+    onPrimaryContainer = Color(0xFFE5E5E5),
     secondary = SecondaryCyan,
     onSecondary = OnSecondary,
-    secondaryContainer = Color(0xFF164e63),
-    onSecondaryContainer = Color(0xFFcffafe),
+    secondaryContainer = Color(0xFF262626),
+    onSecondaryContainer = Color(0xFFE5E5E5),
     tertiary = TertiaryAmber,
     onTertiary = OnTertiary,
-    tertiaryContainer = Color(0xFF78350f),
-    onTertiaryContainer = Color(0xFFfef3c7),
+    tertiaryContainer = Color(0xFF404040),
+    onTertiaryContainer = Color(0xFFFAFAFA),
     background = BackgroundDark,
     onBackground = TextPrimary,
     surface = SurfaceDark,
@@ -39,45 +39,45 @@ private val DarkColorScheme = darkColorScheme(
     onSurfaceVariant = TextSecondary,
     surfaceTint = PrimaryBlue.copy(alpha = 0.05f),
     error = ErrorRed,
-    onError = Color(0xFFffffff),
-    errorContainer = Color(0xFF450a0a),
-    onErrorContainer = Color(0xFFfecaca),
+    onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFF262626),
+    onErrorContainer = Color(0xFFE5E5E5),
     outline = BorderDark,
     outlineVariant = DividerDark,
     scrim = Color(0xFF000000).copy(alpha = 0.72f),
-    inverseSurface = Color(0xFFf4f4f5),
-    inverseOnSurface = Color(0xFF18181b),
+    inverseSurface = Color(0xFFE5E5E5),
+    inverseOnSurface = Color(0xFF121212),
     inversePrimary = PrimaryBlueLight
 )
 
 private val LightColorScheme = lightColorScheme(
     primary = PrimaryBlueDark,
-    onPrimary = Color(0xFFffffff),
+    onPrimary = Color(0xFFFFFFFF),
     primaryContainer = PrimaryBlueLight,
-    onPrimaryContainer = Color(0xFF172554),
+    onPrimaryContainer = Color(0xFF171717),
     secondary = SecondaryCyanDark,
-    onSecondary = Color(0xFFffffff),
-    secondaryContainer = Color(0xFFcffafe),
-    onSecondaryContainer = Color(0xFF164e63),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFE5E5E5),
+    onSecondaryContainer = Color(0xFF262626),
     tertiary = TertiaryAmberDark,
     onTertiary = Color(0xFF000000),
-    tertiaryContainer = Color(0xFFfef3c7),
-    onTertiaryContainer = Color(0xFF78350f),
-    background = Color(0xFFfafafa),
-    onBackground = Color(0xFF18181b),
-    surface = Color(0xFFffffff),
-    onSurface = Color(0xFF18181b),
-    surfaceVariant = Color(0xFFf4f4f5),
-    onSurfaceVariant = Color(0xFF52525b),
+    tertiaryContainer = Color(0xFFF5F5F5),
+    onTertiaryContainer = Color(0xFF404040),
+    background = Color(0xFFFAFAFA),
+    onBackground = Color(0xFF171717),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF171717),
+    surfaceVariant = Color(0xFFF5F5F5),
+    onSurfaceVariant = Color(0xFF525252),
     error = ErrorRed,
-    onError = Color(0xFFffffff),
-    errorContainer = Color(0xFFfee2e2),
-    onErrorContainer = Color(0xFF450a0a),
-    outline = Color(0xFFd4d4d8),
-    outlineVariant = Color(0xFFe4e4e7),
+    onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFE5E5E5),
+    onErrorContainer = Color(0xFF171717),
+    outline = Color(0xFFD4D4D4),
+    outlineVariant = Color(0xFFE5E5E5),
     scrim = Color(0xFF000000).copy(alpha = 0.5f),
-    inverseSurface = Color(0xFF27272a),
-    inverseOnSurface = Color(0xFFf4f4f5),
+    inverseSurface = Color(0xFF262626),
+    inverseOnSurface = Color(0xFFF5F5F5),
     inversePrimary = PrimaryBlue
 )
 
@@ -92,8 +92,8 @@ private fun Context.findActivity(): Activity? {
 
 @Composable
 fun WildlifeFieldOpsTheme(
-    darkTheme: Boolean = true, // Field ops stays dark by default to avoid light flash outdoors
-    dynamicColor: Boolean = true, // Enable Material You on Android 12+
+    darkTheme: Boolean = true, // Field ops stays dark by default
+    dynamicColor: Boolean = false, // FORCED OFF — pure grayscale, no Material You color injection
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
