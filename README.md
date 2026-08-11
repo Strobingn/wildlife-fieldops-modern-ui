@@ -80,3 +80,4 @@ Legacy web / Capacitor folders may still exist in the repo history for reference
 - The planner reports stops, estimated travel/service time, optional return-to-start distance, and can hand the ordered stops to Google Maps.
 - The app-wide Material palette is grayscale for a cleaner field-operations UI. Legacy color names remain only for source compatibility.
 - See [docs/FIELD_OPPS_V2_5_FEATURE_ROADMAP.md](docs/FIELD_OPPS_V2_5_FEATURE_ROADMAP.md) for the next ten feature proposals.
+- See [docs/FIELD_OPPS_V2_5_FEATURE_ROADMAP_20.md](docs/FIELD_OPPS_V2_5_FEATURE_ROADMAP_20.md) for the 20-feature expansion backlog.
