@@ -182,6 +182,9 @@ dependencies {
 
     implementation("com.google.android.gms:play-services-maps:18.2.0")
     implementation("com.google.maps.android:maps-compose:4.3.0")
+    implementation("com.google.ar:core:1.45.0")
+    implementation("com.google.mlkit:image-labeling:17.0.9")
+    implementation("com.google.mlkit:object-detection:17.0.2")
 
     implementation("io.coil-kt:coil-compose:2.5.0")
 

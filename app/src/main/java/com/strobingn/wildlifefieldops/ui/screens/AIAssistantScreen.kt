@@ -69,6 +69,7 @@ fun AIAssistantScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .imePadding()
         ) {
             Row(
                 modifier = Modifier
