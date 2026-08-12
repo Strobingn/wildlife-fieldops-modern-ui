@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.strobingn.wildlifefieldops.data.local.JobDao
 import com.strobingn.wildlifefieldops.data.local.ReminderDao
+import com.strobingn.wildlifefieldops.data.local.VisitDao
+import com.strobingn.wildlifefieldops.data.local.InspectionDao
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.Reminder
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,7 +23,9 @@ data class DaySchedule(
 @HiltViewModel
 class ScheduleViewModel @Inject constructor(
     private val jobDao: JobDao,
-    private val reminderDao: ReminderDao
+    private val reminderDao: ReminderDao,
+    private val visitDao: VisitDao,
+    private val inspectionDao: InspectionDao
 ) : ViewModel() {
 
     private val _selectedDate = MutableStateFlow(System.currentTimeMillis())
@@ -31,6 +35,12 @@ class ScheduleViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val allReminders = reminderDao.getAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allVisits = visitDao.getAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allInspections = inspectionDao.getAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun setSelectedDate(date: Long) {

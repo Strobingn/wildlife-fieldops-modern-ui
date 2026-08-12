@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.model.*
 import com.strobingn.wildlifefieldops.ui.theme.*
+import com.strobingn.wildlifefieldops.ui.components.ScheduleDateTimeField
+import com.strobingn.wildlifefieldops.ui.components.defaultAppointmentTime
 import com.strobingn.wildlifefieldops.ui.viewmodel.InspectionsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,6 +44,7 @@ fun InspectionFormScreen(
     var notes by remember { mutableStateOf("") }
     var showTypeDropdown by remember { mutableStateOf(false) }
     var showSeverityDropdown by remember { mutableStateOf(false) }
+    var scheduledAt by remember { mutableStateOf(defaultAppointmentTime()) }
     val existing by viewModel.getInspectionById(inspectionId.orEmpty())
         .collectAsState(initial = null)
 
@@ -59,6 +62,7 @@ fun InspectionFormScreen(
         followUpRequired = insp.followUpRequired
         weatherConditions = insp.weatherConditions
         notes = insp.notes
+        scheduledAt = insp.inspectionDate
     }
 
     Scaffold(
@@ -108,6 +112,17 @@ fun InspectionFormScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 singleLine = true
+            )
+
+            Text(
+                "Inspection date and time",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold
+            )
+            ScheduleDateTimeField(
+                value = scheduledAt,
+                onValueChange = { scheduledAt = it }
             )
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -268,6 +283,7 @@ fun InspectionFormScreen(
                                 customerName = customerName,
                                 inspectorName = inspectorName,
                                 inspectionType = selectedType,
+                                inspectionDate = scheduledAt,
                                 findings = findings,
                                 recommendations = recommendations,
                                 severity = selectedSeverity,
@@ -290,6 +306,7 @@ fun InspectionFormScreen(
                             customerName = customerName,
                             inspectorName = inspectorName,
                             inspectionType = selectedType,
+                            inspectionDate = scheduledAt,
                             findings = findings,
                             recommendations = recommendations,
                             severity = selectedSeverity,

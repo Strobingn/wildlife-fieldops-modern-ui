@@ -12,6 +12,12 @@ interface VisitDao {
     @Query("SELECT * FROM visits WHERE jobId = :jobId ORDER BY visitDate DESC")
     fun getByJob(jobId: String): Flow<List<Visit>>
 
+    @Query("SELECT * FROM visits WHERE jobId = :jobId ORDER BY visitDate ASC")
+    suspend fun getByJobOnce(jobId: String): List<Visit>
+
+    @Query("DELETE FROM visits WHERE jobId = :jobId AND isCompleted = 0")
+    suspend fun deletePendingForJob(jobId: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(visit: Visit)
 

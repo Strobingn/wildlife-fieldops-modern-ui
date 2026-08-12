@@ -3,8 +3,10 @@ package com.strobingn.wildlifefieldops.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.strobingn.wildlifefieldops.data.local.JobDao
+import com.strobingn.wildlifefieldops.data.local.VisitDao
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobStatus
+import com.strobingn.wildlifefieldops.data.model.Visit
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -12,7 +14,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class JobsViewModel @Inject constructor(
-    private val jobDao: JobDao
+    private val jobDao: JobDao,
+    private val visitDao: VisitDao
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -69,6 +72,9 @@ class JobsViewModel @Inject constructor(
         if (id.isBlank() || id == "new") return null
         return jobDao.getById(id)
     }
+
+    suspend fun loadScheduledVisits(jobId: String): List<Long> =
+        visitDao.getByJobOnce(jobId).filterNot { it.isCompleted }.map { it.visitDate }
 
     fun saveJob(job: Job) = viewModelScope.launch {
         jobDao.insert(job.copy(isSynced = false, updatedAt = System.currentTimeMillis()))
@@ -160,5 +166,50 @@ class JobsViewModel @Inject constructor(
             notes = notes
         )
         jobDao.insert(job)
+    }
+
+    fun saveJobWithSchedule(
+        existingJob: Job?,
+        title: String,
+        description: String,
+        customerId: String,
+        customerName: String,
+        address: String,
+        type: String,
+        priority: com.strobingn.wildlifefieldops.data.model.JobPriority,
+        estimatedValue: Double,
+        notes: String,
+        appointmentTimes: List<Long>,
+        onSaved: () -> Unit
+    ) = viewModelScope.launch {
+        val job = (existingJob ?: Job()).copy(
+            title = title,
+            description = description,
+            customerId = customerId,
+            customerName = customerName,
+            address = address,
+            type = com.strobingn.wildlifefieldops.data.model.DefaultServiceTypes.display(type),
+            priority = priority,
+            estimatedValue = estimatedValue,
+            notes = notes,
+            scheduledDate = appointmentTimes.minOrNull(),
+            updatedAt = System.currentTimeMillis(),
+            isSynced = false
+        )
+        jobDao.insert(job)
+        visitDao.deletePendingForJob(job.id)
+        appointmentTimes.distinct().sorted().forEach { scheduledAt ->
+            visitDao.insert(
+                Visit(
+                    jobId = job.id,
+                    customerId = job.customerId,
+                    customerName = job.customerName,
+                    technicianName = job.assignedTo,
+                    visitDate = scheduledAt,
+                    startTime = scheduledAt
+                )
+            )
+        }
+        onSaved()
     }
 }
