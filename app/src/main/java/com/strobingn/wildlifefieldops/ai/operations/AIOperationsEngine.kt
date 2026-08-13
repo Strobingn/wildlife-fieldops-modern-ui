@@ -72,7 +72,7 @@ object AIOperationsEngine {
         val exclusionNote: String
     )
 
-    /** One production AI module backed by the current Room job history. */
+    /** One production intelligence module backed by the current Room job history. */
     data class AdvancedInsight(
         val name: String,
         val score: Int,
@@ -111,7 +111,7 @@ object AIOperationsEngine {
     }
 
     /**
-     * Twenty offline-safe AI features. Every signal is recalculated from real job
+     * Forty-five offline-safe AI features. Every signal is recalculated from real job
      * records; the live Grok service can later enrich the wording without changing
      * the underlying operational facts.
      */
@@ -142,6 +142,44 @@ object AIOperationsEngine {
             val text = "${job.title} ${job.description} ${job.notes} ${job.type}".lowercase(Locale.US)
             listOf("bat", "rabies", "ladder", "roof", "chimney", "skunk", "bite").any(text::contains)
         }
+        val cancelled = jobs.count { it.status == JobStatus.CANCELLED }
+        val invoiced = jobs.count { it.status == JobStatus.INVOICED }
+        val unassigned = open.count { it.assignedTo.isBlank() }
+        val missingCoordinates = open.count { it.latitude == null || it.longitude == null }
+        val unsynced = jobs.count { !it.isSynced }
+        val syncFailures = jobs.count { !it.syncError.isNullOrBlank() }
+        val staleRecords = jobs.count { now - it.updatedAt > 30L * 86_400_000L && it.status != JobStatus.PAID && it.status != JobStatus.CANCELLED }
+        val futureScheduled = open.filter { (it.scheduledDate ?: Long.MIN_VALUE) >= now }
+        val nextSevenDays = futureScheduled.count { (it.scheduledDate ?: Long.MAX_VALUE) < now + 7L * 86_400_000L }
+        val crowdedDays = futureScheduled.groupingBy { (it.scheduledDate ?: 0L) / 86_400_000L }.eachCount().count { it.value >= 5 }
+        val completionLagHours = completed.mapNotNull { job ->
+            job.completedDate?.let { ((it - job.createdAt).coerceAtLeast(0L) / 3_600_000L).toInt() }
+        }
+        val averageCompletionHours = completionLagHours.average().takeUnless { it.isNaN() }?.toInt() ?: 0
+        val negativeVariance = completed.count { it.actualCost > it.estimatedValue && it.estimatedValue > 0.0 }
+        val zeroValueCompleted = completed.count { it.estimatedValue <= 0.0 }
+        val photoRich = completed.count { it.photos.size >= 3 }
+        val noTechnicianCloseout = completed.count { it.assignedTo.isBlank() }
+        val duplicateCustomers = jobs.filter { it.customerName.isNotBlank() }
+            .groupingBy { it.customerName.trim().lowercase(Locale.US) }.eachCount().count { it.value > 1 }
+        val serviceConcentration = serviceCounts.maxOfOrNull { it.value }
+            ?.let { min(100, (it * 100) / max(1, jobs.size)) } ?: 0
+        val afterHoursTerms = jobs.count { job ->
+            val text = "${job.title} ${job.description} ${job.notes}".lowercase(Locale.US)
+            listOf("after hours", "overnight", "emergency", "inside bedroom", "living space").any(text::contains)
+        }
+        val accessTerms = jobs.count { job ->
+            val text = "${job.title} ${job.description} ${job.notes}".lowercase(Locale.US)
+            listOf("attic", "crawlspace", "roof", "chimney", "confined", "steep").any(text::contains)
+        }
+        val youngTerms = jobs.count { job ->
+            val text = "${job.title} ${job.description} ${job.notes}".lowercase(Locale.US)
+            listOf("young", "babies", "pups", "kits", "nest", "maternity").any(text::contains)
+        }
+        val sanitationTerms = jobs.count { job ->
+            val text = "${job.title} ${job.description} ${job.notes} ${job.type}".lowercase(Locale.US)
+            listOf("guano", "feces", "urine", "odor", "carcass", "cleanup", "sanitation").any(text::contains)
+        }
         fun risk(count: Int, total: Int = max(1, jobs.size)): Int = min(100, (count * 100) / max(1, total))
         fun insight(name: String, score: Int, signal: String, action: String) =
             AdvancedInsight(name, score.coerceIn(0, 100), signal, action)
@@ -166,7 +204,34 @@ object AIOperationsEngine {
             insight("Completion readiness", risk(incomplete), "$incomplete jobs score below 75 for record quality", "Resolve missing customer, address, estimate, notes, cost, or photo fields."),
             insight("Material demand predictor", min(100, jobs.size * 4), "${serviceCounts.size} service categories drive stock", "Use the inventory forecast before ordering traps and exclusion materials."),
             insight("Emergency triage engine", risk(urgent, open.size), "$urgent high or urgent jobs", "Move health/safety and active-entry calls ahead of routine follow-ups."),
-            insight("Customer update drafter", risk(unscheduled, open.size), "$unscheduled open jobs are not scheduled", "Draft appointment, arrival, completion, and follow-up messages from verified job facts.")
+            insight("Customer update drafter", risk(unscheduled, open.size), "$unscheduled open jobs are not scheduled", "Draft appointment, arrival, completion, and follow-up messages from verified job facts."),
+
+            // 21-45: additional production signals requested for field operations.
+            insight("Technician assignment gap", risk(unassigned, open.size), "$unassigned open jobs have no technician", "Assign ownership before dispatch so urgent work cannot sit unnoticed."),
+            insight("Seven-day capacity forecast", min(100, nextSevenDays * 12), "$nextSevenDays appointments fall in the next 7 days", "Hold capacity for emergencies when the coming week is heavily booked."),
+            insight("Overloaded-day detector", min(100, crowdedDays * 30), "$crowdedDays days contain at least 5 stops", "Move flexible follow-ups away from overloaded dates."),
+            insight("Cancellation pattern monitor", risk(cancelled), "$cancelled of ${jobs.size} jobs are cancelled", "Review lead source, wait time, pricing clarity, and cancellation reasons."),
+            insight("Invoice backlog detector", risk(invoiced, completed.size + invoiced), "$invoiced jobs remain invoiced but unpaid", "Run a daily collection queue ordered by invoice age and value."),
+            insight("Geocode readiness auditor", risk(missingCoordinates, open.size), "$missingCoordinates open jobs lack map coordinates", "Validate addresses and coordinates before route planning."),
+            insight("Offline sync health", risk(unsynced), "$unsynced records are waiting to sync", "Sync on a reliable connection before relying on multi-device data."),
+            insight("Sync failure investigator", risk(syncFailures), "$syncFailures records contain a sync error", "Surface the error details and retry only after correcting authentication or data conflicts."),
+            insight("Stale work-order detector", risk(staleRecords, open.size), "$staleRecords active records were not updated for 30 days", "Confirm status with the customer and close, reschedule, or cancel each stale record."),
+            insight("Completion-time benchmark", min(100, averageCompletionHours / 2), "Average recorded lead-to-completion time is $averageCompletionHours hours", "Compare completion time by service type before changing appointment blocks."),
+            insight("Cost-overrun classifier", risk(negativeVariance, completed.size), "$negativeVariance completed jobs cost more than estimated", "Review material, labor, access, and return-visit drivers on overruns."),
+            insight("Unpriced closeout alert", risk(zeroValueCompleted, completed.size), "$zeroValueCompleted completed jobs have no estimate", "Correct missing financial records before reporting revenue or margins."),
+            insight("Evidence completeness model", risk(completed.size - photoRich, completed.size), "$photoRich completed jobs have at least 3 photos", "Capture overview, entry-point, and completed-repair evidence."),
+            insight("Closeout accountability", risk(noTechnicianCloseout, completed.size), "$noTechnicianCloseout completed jobs have no assigned technician", "Require technician attribution for warranty and quality review."),
+            insight("Customer history linker", min(100, duplicateCustomers * 12), "$duplicateCustomers customer names have multiple jobs", "Open prior property history before estimating or dispatching repeat customers."),
+            insight("Service concentration risk", serviceConcentration, "$topService represents $serviceConcentration% of recorded jobs", "Protect the core service while building capacity in adjacent profitable work."),
+            insight("After-hours demand detector", min(100, afterHoursTerms * 15), "$afterHoursTerms jobs mention urgent living-space or after-hours conditions", "Define an after-hours triage and pricing policy for genuine emergencies."),
+            insight("Difficult-access planner", min(100, accessTerms * 10), "$accessTerms jobs mention roofs, attics, chimneys, or confined access", "Pre-plan ladders, fall protection, lighting, PPE, and a second technician where required."),
+            insight("Dependent-young safeguard", min(100, youngTerms * 20), "$youngTerms jobs mention nests or dependent young", "Verify species, life stage, season, and legal method before exclusion."),
+            insight("Sanitation opportunity detector", min(100, sanitationTerms * 12), "$sanitationTerms jobs mention contamination, odor, carcasses, or cleanup", "Document contamination and quote only justified remediation with proper PPE."),
+            insight("Appointment data quality", risk(unscheduled + overdue, open.size), "${unscheduled + overdue} open jobs are unscheduled or overdue", "Give every accepted job a current appointment or explicit follow-up date."),
+            insight("High-value pipeline guard", risk(highValueOpen, open.size), "$highValueOpen open jobs exceed the adaptive high-value threshold", "Review high-value estimates daily for next action, schedule, and customer response."),
+            insight("Actual-cost capture coach", risk(missingActual, completed.size), "$missingActual completed jobs lack actual cost", "Record labor and material cost at closeout to improve future estimates."),
+            insight("Property prevention planner", min(100, repeatProperties * 16), "$repeatProperties properties have repeat work history", "Build a property-specific exclusion checklist from every prior visit and repair."),
+            insight("Operational data trust score", risk(incomplete + syncFailures, max(1, jobs.size)), "$incomplete incomplete records and $syncFailures sync failures reduce confidence", "Correct the lowest-quality and failed-sync records before using forecasts for decisions.")
         )
     }
 
