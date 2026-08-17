@@ -17,6 +17,16 @@ class AIOperationsEngineTest {
     }
 
     @Test
+    fun catalogExposesTwentyUniqueLaunchableTools() {
+        assertEquals(20, IndividualAIToolCatalog.tools.size)
+        assertEquals(20, IndividualAIToolCatalog.tools.map { it.id }.distinct().size)
+        assertEquals(20, IndividualAIToolCatalog.tools.map { it.title }.distinct().size)
+        val insightNames = AIOperationsEngine.analyze(emptyList()).advancedInsights.map { it.name }.toSet()
+        assertTrue(IndividualAIToolCatalog.tools.all { it.insightName in insightNames })
+        assertTrue(IndividualAIToolCatalog.tools.all { it.checklist.isNotEmpty() })
+    }
+
+    @Test
     fun newModulesUseRecordedJobSignals() {
         val now = System.currentTimeMillis()
         val job = Job(

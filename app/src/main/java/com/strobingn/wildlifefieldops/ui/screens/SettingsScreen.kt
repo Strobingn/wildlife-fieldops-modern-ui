@@ -100,7 +100,7 @@ fun SettingsScreen(
             SettingsSectionTitle("AI Command Center")
             SettingsCard {
                 Text(
-                    "Real job intelligence plus 65 advanced AI modules for scheduling, pricing, compliance, safety, revenue, customers, inventory, field quality, and data health.",
+                    "20 individually launchable AI tools plus 65 live intelligence modules for scheduling, pricing, compliance, safety, revenue, customers, inventory, field quality, and data health.",
                     color = TextSecondary,
                     style = MaterialTheme.typography.bodySmall
                 )

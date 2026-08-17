@@ -1,6 +1,7 @@
 package com.strobingn.wildlifefieldops.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -10,9 +11,14 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.strobingn.wildlifefieldops.ai.operations.AIOperationsEngine
+import com.strobingn.wildlifefieldops.ai.operations.IndividualAIToolCatalog
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.AIOperationsViewModel
 import java.util.Locale
@@ -24,6 +30,16 @@ fun AIOperationsScreen(
     viewModel: AIOperationsViewModel = hiltViewModel()
 ) {
     val data by viewModel.dashboard.collectAsState()
+    var selectedToolId by rememberSaveable { mutableStateOf<String?>(null) }
+    val selectedTool = IndividualAIToolCatalog.tools.firstOrNull { it.id == selectedToolId }
+    if (selectedTool != null) {
+        IndividualAIToolScreen(
+            tool = selectedTool,
+            dashboard = data,
+            onBack = { selectedToolId = null }
+        )
+        return
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -49,6 +65,47 @@ fun AIOperationsScreen(
                     Column {
                         Text("Live intelligence from your real jobs", color = TextPrimary, fontWeight = FontWeight.Bold)
                         Text("Offline analysis updates whenever job data changes.", color = TextSecondary)
+                    }
+                }
+            }
+
+            Text(
+                "20 Individual AI Tools",
+                style = MaterialTheme.typography.titleLarge,
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "Tap any tool to open its own live analysis and field action screen.",
+                color = TextSecondary
+            )
+            IndividualAIToolCatalog.tools.forEachIndexed { index, tool ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { selectedToolId = tool.id },
+                    colors = CardDefaults.cardColors(containerColor = BackgroundCard),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(16.dp)) {
+                        Surface(
+                            color = SurfaceBright,
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text(
+                                "${index + 1}",
+                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(tool.title, color = TextPrimary, fontWeight = FontWeight.Bold)
+                            Text(tool.purpose, color = TextSecondary)
+                            Spacer(Modifier.height(4.dp))
+                            Text("Open tool", color = PrimaryGreen, style = MaterialTheme.typography.labelMedium)
+                        }
                     }
                 }
             }
@@ -133,6 +190,88 @@ fun AIOperationsScreen(
                     HorizontalDivider()
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun IndividualAIToolScreen(
+    tool: IndividualAIToolCatalog.Tool,
+    dashboard: AIOperationsEngine.Dashboard,
+    onBack: () -> Unit
+) {
+    val insight = dashboard.advancedInsights.firstOrNull { it.name == tool.insightName }
+    val clipboard = LocalClipboardManager.current
+    var copied by rememberSaveable(tool.id) { mutableStateOf(false) }
+    val report = buildString {
+        appendLine(tool.title)
+        appendLine(tool.purpose)
+        appendLine("Score: ${insight?.score ?: 0}/100")
+        appendLine("Signal: ${insight?.signal ?: "No job data available"}")
+        appendLine("Action: ${insight?.action ?: "Add job records to run this analysis."}")
+        appendLine("Checklist:")
+        tool.checklist.forEach { appendLine("- $it") }
+    }.trim()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(tool.title, color = TextPrimary) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back to AI tools", tint = TextPrimary)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = BackgroundDark)
+            )
+        },
+        containerColor = BackgroundDark
+    ) { padding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Card(colors = CardDefaults.cardColors(containerColor = BackgroundCard)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Live analysis", color = TextPrimary, fontWeight = FontWeight.Bold)
+                    Text(tool.purpose, color = TextSecondary)
+                    HorizontalDivider()
+                    Metric("Priority score", "${insight?.score ?: 0}/100")
+                    Text(insight?.signal ?: "No job data available", color = PrimaryGreen)
+                }
+            }
+
+            Section("Recommended Action") {
+                Note(insight?.action ?: "Add real job records to run this tool.")
+            }
+
+            Section("Field Checklist") {
+                tool.checklist.forEachIndexed { index, item ->
+                    Text("${index + 1}. $item", color = TextPrimary)
+                }
+            }
+
+            Button(
+                onClick = {
+                    clipboard.setText(AnnotatedString(report))
+                    copied = true
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = BackgroundDark)
+            ) {
+                Text(if (copied) "Report Copied" else "Copy AI Report", fontWeight = FontWeight.Bold)
+            }
+
+            Text(
+                "This tool uses current job records and updates automatically when the database changes.",
+                color = TextTertiary,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }
