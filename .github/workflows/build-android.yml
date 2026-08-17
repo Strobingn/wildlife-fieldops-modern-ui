@@ -3,7 +3,7 @@ name: Build Native Android APK (Debug)
 on:
   push:
     branches: [ main, Field_Opps_V2.5, chatgptV25 ]
-  pul_request:
+  pull_request:
     branches: [ main ]
   workflow_dispatch:
 
@@ -18,8 +18,8 @@ jobs:
       # compatibility with older branch/setup configurations.
       GOOGLE_MAPS_API: ${{ secrets.GOOGLE_MAPS_API || secrets.GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API }}
       VITE_GOOGLE_MAPS_API: ${{ secrets.GOOGLE_MAPS_API || secrets.GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API }}
-      OPENWEATHER_API_KEY: ${{ secrets.VITE_OPENWEASHER_API_KEY }}
-      # SpaceXAI (xAI Grok). Prefer secret XAI_API_KEY; LLLM_API_KEY still accepted by Gradle.
+      OPENWEATHER_API_KEY: ${{ secrets.VITE_OPENWEATHER_API_KEY }}
+      # SpaceXAI (xAI Grok). Prefer secret XAI_API_KEY; LLM_API_KEY still accepted by Gradle.
       XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
       LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
       LLM_BASE_URL: https://api.x.ai/v1
