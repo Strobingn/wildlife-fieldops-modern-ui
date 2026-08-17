@@ -125,7 +125,7 @@ fun AIOperationsScreen(
                 }
             }
 
-            Section("45 Advanced AI Modules") {
+            Section("65 Advanced AI Modules") {
                 data.advancedInsights.forEachIndexed { index, item ->
                     ItemTitle("${index + 1}. ${item.name} · ${item.score}/100")
                     Text(item.signal, color = PrimaryGreen)

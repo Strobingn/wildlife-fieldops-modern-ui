@@ -2,7 +2,9 @@ package com.strobingn.wildlifefieldops.ai.operations
 
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobStatus
+import java.util.Calendar
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -111,7 +113,7 @@ object AIOperationsEngine {
     }
 
     /**
-     * Forty-five offline-safe AI features. Every signal is recalculated from real job
+     * Sixty-five offline-safe AI features. Every signal is recalculated from real job
      * records; the live Grok service can later enrich the wording without changing
      * the underlying operational facts.
      */
@@ -180,6 +182,48 @@ object AIOperationsEngine {
             val text = "${job.title} ${job.description} ${job.notes} ${job.type}".lowercase(Locale.US)
             listOf("guano", "feces", "urine", "odor", "carcass", "cleanup", "sanitation").any(text::contains)
         }
+        val scheduled = jobs.filter { it.scheduledDate != null }
+        val leadToScheduleHours = scheduled.mapNotNull { job ->
+            job.scheduledDate?.let { ((it - job.createdAt).coerceAtLeast(0L) / 3_600_000L).toInt() }
+        }
+        val averageLeadHours = leadToScheduleHours.average().takeUnless { it.isNaN() }?.toInt() ?: 0
+        val weekendAppointments = scheduled.count { job ->
+            val day = calendarField(job.scheduledDate, Calendar.DAY_OF_WEEK)
+            day == Calendar.SATURDAY || day == Calendar.SUNDAY
+        }
+        val morningAppointments = scheduled.count { calendarField(it.scheduledDate, Calendar.HOUR_OF_DAY) in 5..11 }
+        val lateAppointments = scheduled.count { calendarField(it.scheduledDate, Calendar.HOUR_OF_DAY) >= 16 }
+        val tomorrowAppointments = futureScheduled.count {
+            val date = it.scheduledDate ?: return@count false
+            date / 86_400_000L == (now / 86_400_000L) + 1L
+        }
+        val missingCustomers = jobs.count { it.customerName.isBlank() && it.customerId.isBlank() }
+        val missingServiceTypes = jobs.count { it.type.isBlank() || it.type.equals("unknown", true) }
+        val cancelledValue = jobs.filter { it.status == JobStatus.CANCELLED }.sumOf { it.estimatedValue }
+        val invoicedValue = jobs.filter { it.status == JobStatus.INVOICED }.sumOf { it.estimatedValue }
+        val pricedJobs = jobs.filter { it.estimatedValue > 0.0 }
+        val priceDeviationPercent = if (pricedJobs.size < 2 || average <= 0.0) 0 else {
+            val meanAbsoluteDeviation = pricedJobs.sumOf { abs(it.estimatedValue - average) } / pricedJobs.size
+            min(100, ((meanAbsoluteDeviation / average) * 100).toInt())
+        }
+        val topServiceJobs = completed.filter { it.type == topService && it.estimatedValue > 0.0 }
+        val topServiceMarginPercent = if (topServiceJobs.isEmpty()) 0 else {
+            val revenue = topServiceJobs.sumOf { it.estimatedValue }
+            val cost = topServiceJobs.sumOf { it.actualCost }
+            if (revenue <= 0.0) 0 else (((revenue - cost) / revenue) * 100).toInt().coerceIn(-100, 100)
+        }
+        val activeLastSevenDays = jobs.count { now - it.updatedAt in 0L..(7L * 86_400_000L) }
+        val followUpTerms = countTerms(jobs, "follow up", "follow-up", "call back", "callback", "recheck")
+        val structuralTerms = countTerms(jobs, "soffit", "fascia", "roof", "vent", "flashing", "foundation", "entry point", "hole")
+        val zoonoticTerms = countTerms(jobs, "rabies", "bite", "guano", "feces", "droppings", "roundworm", "histoplasmosis")
+        val weatherTerms = countTerms(jobs, "rain", "snow", "ice", "wind", "storm", "wet roof", "heat")
+        val equipmentTerms = countTerms(jobs, "ladder", "lift", "respirator", "trap", "one-way", "hardware cloth", "camera")
+        val accessBlockers = countTerms(jobs, "gate", "locked", "tenant", "permission", "key", "dog", "access code")
+        val warrantyMissing = completed.count { job ->
+            val text = "${job.description} ${job.notes}".lowercase(Locale.US)
+            !text.contains("warranty") && !text.contains("guarantee")
+        }
+        val forecastMaturity = min(100, jobs.size * 2 + completed.size * 2 + pricedJobs.size + scheduled.size)
         fun risk(count: Int, total: Int = max(1, jobs.size)): Int = min(100, (count * 100) / max(1, total))
         fun insight(name: String, score: Int, signal: String, action: String) =
             AdvancedInsight(name, score.coerceIn(0, 100), signal, action)
@@ -231,8 +275,40 @@ object AIOperationsEngine {
             insight("High-value pipeline guard", risk(highValueOpen, open.size), "$highValueOpen open jobs exceed the adaptive high-value threshold", "Review high-value estimates daily for next action, schedule, and customer response."),
             insight("Actual-cost capture coach", risk(missingActual, completed.size), "$missingActual completed jobs lack actual cost", "Record labor and material cost at closeout to improve future estimates."),
             insight("Property prevention planner", min(100, repeatProperties * 16), "$repeatProperties properties have repeat work history", "Build a property-specific exclusion checklist from every prior visit and repair."),
-            insight("Operational data trust score", risk(incomplete + syncFailures, max(1, jobs.size)), "$incomplete incomplete records and $syncFailures sync failures reduce confidence", "Correct the lowest-quality and failed-sync records before using forecasts for decisions.")
+            insight("Operational data trust score", risk(incomplete + syncFailures, max(1, jobs.size)), "$incomplete incomplete records and $syncFailures sync failures reduce confidence", "Correct the lowest-quality and failed-sync records before using forecasts for decisions."),
+
+            // 46-65: scheduling, financial, field-risk, and forecast intelligence.
+            insight("Lead-to-appointment speed", min(100, averageLeadHours / 2), "Average lead-to-appointment time is $averageLeadHours hours", "Shorten response time for urgent indoor wildlife calls and track delays by service type."),
+            insight("Weekend workload predictor", risk(weekendAppointments, scheduled.size), "$weekendAppointments of ${scheduled.size} scheduled jobs fall on weekends", "Set weekend coverage and pricing from recorded demand instead of guesswork."),
+            insight("Morning route load", risk(morningAppointments, scheduled.size), "$morningAppointments scheduled jobs start between 5 AM and noon", "Reserve morning capacity for species activity windows and longer exclusions."),
+            insight("Late-day route load", risk(lateAppointments, scheduled.size), "$lateAppointments scheduled jobs start at 4 PM or later", "Protect daylight-dependent inspection time and avoid unsafe rushed roof work."),
+            insight("Tomorrow readiness check", min(100, tomorrowAppointments * 18), "$tomorrowAppointments open appointments are scheduled tomorrow", "Verify addresses, assignments, access notes, equipment, and customer contact before dispatch."),
+            insight("Customer identity auditor", risk(missingCustomers), "$missingCustomers jobs have no customer name or linked customer", "Link a verified customer before messages, invoices, or property history are generated."),
+            insight("Service classification assistant", risk(missingServiceTypes), "$missingServiceTypes jobs have an unknown or blank service type", "Classify the wildlife service from verified notes so pricing and inventory forecasts remain useful."),
+            insight("Cancelled revenue leakage", min(100, cancelledValue.toInt() / 50), "${money(cancelledValue)} in estimates is attached to cancelled jobs", "Review cancellation causes and recover only appropriate, customer-approved opportunities."),
+            insight("Invoice value recovery", min(100, invoicedValue.toInt() / 50), "${money(invoicedValue)} remains in invoiced status", "Prioritize collection by age and value while preserving documented customer communication."),
+            insight("Price consistency monitor", priceDeviationPercent, "Recorded estimate variation is $priceDeviationPercent% around the average", "Compare like-for-like service scope before changing the price book."),
+            insight("Top-service margin analyzer", (100 - topServiceMarginPercent).coerceIn(0, 100), "$topService completed work has a recorded margin of $topServiceMarginPercent%", "Review labor, materials, callbacks, and scope on the highest-volume service."),
+            insight("Operational momentum", risk(activeLastSevenDays), "$activeLastSevenDays records changed during the last 7 days", "Use recent activity as the primary signal and treat older history as supporting context."),
+            insight("Follow-up commitment extractor", min(100, followUpTerms * 14), "$followUpTerms jobs mention a follow-up, callback, or recheck", "Turn every documented commitment into a dated visit or task."),
+            insight("Structural repair scope classifier", min(100, structuralTerms * 8), "$structuralTerms jobs mention structural entry or repair terms", "Verify dimensions, substrate, access, material, and secondary openings before estimating."),
+            insight("Zoonotic exposure warning", min(100, zoonoticTerms * 18), "$zoonoticTerms jobs mention possible disease or waste exposure", "Apply the correct PPE, containment, customer warning, and verified disposal procedure."),
+            insight("Weather-sensitive work planner", min(100, weatherTerms * 16), "$weatherTerms jobs mention weather-sensitive conditions", "Recheck the forecast and move unsafe roof, ladder, sealant, or trapping work when necessary."),
+            insight("Equipment cue extractor", min(100, equipmentTerms * 9), "$equipmentTerms jobs mention specialized equipment or materials", "Convert verified note cues into a pre-departure equipment checklist."),
+            insight("Property access blocker", min(100, accessBlockers * 18), "$accessBlockers jobs mention possible access restrictions", "Confirm keys, gates, tenants, pets, parking, and permission before travel."),
+            insight("Warranty record auditor", risk(warrantyMissing, completed.size), "$warrantyMissing completed jobs do not mention warranty or guarantee scope", "Record the exact covered repairs, exclusions, term, and customer responsibilities at closeout."),
+            insight("Forecast maturity score", 100 - forecastMaturity, "Current operational dataset supports $forecastMaturity% forecast maturity", "Improve history depth, scheduling, completion, and pricing data before trusting high-impact forecasts.")
         )
+    }
+
+    private fun calendarField(value: Long?, field: Int): Int {
+        if (value == null) return -1
+        return Calendar.getInstance().apply { timeInMillis = value }.get(field)
+    }
+
+    private fun countTerms(jobs: List<Job>, vararg terms: String): Int = jobs.count { job ->
+        val text = "${job.title} ${job.description} ${job.notes} ${job.type}".lowercase(Locale.US)
+        terms.any(text::contains)
     }
 
     private fun dateIsToday(value: Long?, now: Long): Boolean {
