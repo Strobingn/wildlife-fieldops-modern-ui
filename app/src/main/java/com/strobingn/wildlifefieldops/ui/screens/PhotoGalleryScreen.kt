@@ -1,6 +1,5 @@
 package com.strobingn.wildlifefieldops.ui.screens
 
-import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,13 +23,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.strobingn.wildlifefieldops.data.model.Photo
 import com.strobingn.wildlifefieldops.data.model.PhotoCategory
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
+import com.strobingn.wildlifefieldops.ui.utils.createCapturePhotoUri
 import com.strobingn.wildlifefieldops.ui.viewmodel.PhotosViewModel
 import java.io.File
 import java.text.SimpleDateFormat
@@ -89,7 +88,7 @@ fun PhotoGalleryScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
-                    val uri = createImageUri(context)
+                    val uri = createCapturePhotoUri(context, "photos", "IMG")
                     tempPhotoUri = uri
                     cameraLauncher.launch(uri)
                 },
@@ -300,16 +299,4 @@ private fun PhotoGridItem(photo: Photo, onDelete: () -> Unit) {
             }
         }
     }
-}
-
-private fun createImageUri(context: Context): Uri {
-    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-    val fileName = "IMG_${timeStamp}.jpg"
-    val storageDir = File(context.filesDir, "photos").apply { mkdirs() }
-    val file = File(storageDir, fileName)
-    return FileProvider.getUriForFile(
-        context,
-        "${context.packageName}.provider",
-        file
-    )
 }

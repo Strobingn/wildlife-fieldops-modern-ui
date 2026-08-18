@@ -2,7 +2,6 @@ package com.strobingn.wildlifefieldops.ui.screens
 
 import android.Manifest
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -32,7 +31,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.strobingn.wildlifefieldops.ai.HybridAIService
@@ -41,12 +39,11 @@ import com.strobingn.wildlifefieldops.data.model.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.components.ScheduleDateTimeField
 import com.strobingn.wildlifefieldops.ui.components.defaultAppointmentTime
+import com.strobingn.wildlifefieldops.ui.utils.createCapturePhotoUri
 import com.strobingn.wildlifefieldops.ui.viewmodel.InspectionsViewModel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,6 +78,8 @@ fun InspectionFormScreen(
     var isDrafting by remember { mutableStateOf(false) }
     var draftMessage by remember { mutableStateOf<String?>(null) }
     var dictationUnavailable by remember { mutableStateOf(false) }
+    var cameraPermissionDenied by remember { mutableStateOf(false) }
+    var showOverwriteConfirm by remember { mutableStateOf(false) }
 
     val existing by viewModel.getInspectionById(inspectionId.orEmpty())
         .collectAsState(initial = null)
@@ -134,9 +133,12 @@ fun InspectionFormScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            val uri = createInspectionPhotoUri(context)
+            cameraPermissionDenied = false
+            val uri = createCapturePhotoUri(context, "inspection_photos", "INSPECT")
             tempPhotoUri = uri
             cameraLauncher.launch(uri)
+        } else {
+            cameraPermissionDenied = true
         }
     }
 
@@ -151,11 +153,43 @@ fun InspectionFormScreen(
 
     fun launchCamera() {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            val uri = createInspectionPhotoUri(context)
+            cameraPermissionDenied = false
+            val uri = createCapturePhotoUri(context, "inspection_photos", "INSPECT")
             tempPhotoUri = uri
             cameraLauncher.launch(uri)
         } else {
             cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    fun runAiDraft() {
+        isDrafting = true
+        draftMessage = null
+        scope.launch {
+            val photoAnalyses = photoUris.take(5)
+                .map { uriString ->
+                    async {
+                        runCatching { PhotoAIHelper.analyzePhotoForFormFilling(context, Uri.parse(uriString)) }.getOrNull()
+                    }
+                }
+                .awaitAll()
+                .filterNotNull()
+            val draft = HybridAIService.draftInspectionReport(
+                fieldNotes = voiceFieldNotes,
+                photoAnalyses = photoAnalyses,
+                inspectionType = selectedType.name
+            )
+            findings = draft.findings
+            recommendations = draft.recommendations
+            selectedSeverity = FindingSeverity.entries
+                .firstOrNull { it.name.equals(draft.severity, ignoreCase = true) }
+                ?: selectedSeverity
+            speciesIdentified = draft.speciesIdentified
+            entryPoints = draft.entryPoints
+            damageAssessment = draft.damageAssessment
+            aiReportSource = draft.source
+            draftMessage = "AI draft ready (${if (draft.source == "grok") "live model" else "on-device"}). Review every field below before saving."
+            isDrafting = false
         }
     }
 
@@ -338,7 +372,7 @@ fun InspectionFormScreen(
                         Icon(Icons.Default.AddAPhoto, contentDescription = "Add photo", tint = PrimaryGreen)
                     }
                 }
-                items(photoUris) { uriString ->
+                items(photoUris, key = { it }) { uriString ->
                     Box(modifier = Modifier.size(84.dp)) {
                         AsyncImage(
                             model = Uri.parse(uriString),
@@ -363,6 +397,30 @@ fun InspectionFormScreen(
                     }
                 }
             }
+            if (cameraPermissionDenied) {
+                Text(
+                    "Camera permission was denied. Enable it in system settings to attach photos.",
+                    color = TextTertiary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            if (showOverwriteConfirm) {
+                AlertDialog(
+                    onDismissRequest = { showOverwriteConfirm = false },
+                    title = { Text("Replace current report fields?") },
+                    text = { Text("AI will overwrite Findings, Recommendations, Species, Entry Points, and Damage Assessment with a new draft. This can't be undone.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showOverwriteConfirm = false
+                            runAiDraft()
+                        }) { Text("Replace") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showOverwriteConfirm = false }) { Text("Cancel") }
+                    }
+                )
+            }
 
             Button(
                 onClick = {
@@ -370,30 +428,12 @@ fun InspectionFormScreen(
                         draftMessage = "Add field notes or a photo before drafting the report."
                         return@Button
                     }
-                    isDrafting = true
-                    draftMessage = null
-                    scope.launch {
-                        val photoAnalyses = photoUris.take(5).mapNotNull { uriString ->
-                            runCatching {
-                                PhotoAIHelper.analyzePhotoForFormFilling(context, Uri.parse(uriString))
-                            }.getOrNull()
-                        }
-                        val draft = HybridAIService.draftInspectionReport(
-                            fieldNotes = voiceFieldNotes,
-                            photoAnalyses = photoAnalyses,
-                            inspectionType = selectedType.name
-                        )
-                        findings = draft.findings
-                        recommendations = draft.recommendations
-                        selectedSeverity = FindingSeverity.entries
-                            .firstOrNull { it.name.equals(draft.severity, ignoreCase = true) }
-                            ?: selectedSeverity
-                        speciesIdentified = draft.speciesIdentified
-                        entryPoints = draft.entryPoints
-                        damageAssessment = draft.damageAssessment
-                        aiReportSource = draft.source
-                        draftMessage = "AI draft ready (${if (draft.source == "grok") "live model" else "on-device"}). Review every field below before saving."
-                        isDrafting = false
+                    val hasExistingContent = listOf(findings, recommendations, speciesIdentified, entryPoints, damageAssessment)
+                        .any { it.isNotBlank() }
+                    if (hasExistingContent) {
+                        showOverwriteConfirm = true
+                    } else {
+                        runAiDraft()
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -576,10 +616,3 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
     focusedContainerColor = BackgroundDark,
     unfocusedContainerColor = BackgroundDark
 )
-
-private fun createInspectionPhotoUri(context: Context): Uri {
-    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-    val storageDir = File(context.filesDir, "inspection_photos").apply { mkdirs() }
-    val file = File(storageDir, "INSPECT_${timeStamp}.jpg")
-    return FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-}
