@@ -8,19 +8,19 @@ import org.junit.Test
 
 class AIOperationsEngineTest {
     @Test
-    fun dashboardAlwaysExposesAllSixtyFiveModules() {
+    fun dashboardAlwaysExposesAllEightyFiveModules() {
         val dashboard = AIOperationsEngine.analyze(emptyList())
 
-        assertEquals(65, dashboard.advancedInsights.size)
-        assertEquals(65, dashboard.advancedInsights.map { it.name }.distinct().size)
+        assertEquals(85, dashboard.advancedInsights.size)
+        assertEquals(85, dashboard.advancedInsights.map { it.name }.distinct().size)
         assertTrue(dashboard.advancedInsights.all { it.score in 0..100 })
     }
 
     @Test
-    fun catalogExposesTwentyUniqueLaunchableTools() {
-        assertEquals(20, IndividualAIToolCatalog.tools.size)
-        assertEquals(20, IndividualAIToolCatalog.tools.map { it.id }.distinct().size)
-        assertEquals(20, IndividualAIToolCatalog.tools.map { it.title }.distinct().size)
+    fun catalogExposesFortyUniqueLaunchableTools() {
+        assertEquals(40, IndividualAIToolCatalog.tools.size)
+        assertEquals(40, IndividualAIToolCatalog.tools.map { it.id }.distinct().size)
+        assertEquals(40, IndividualAIToolCatalog.tools.map { it.title }.distinct().size)
         val insightNames = AIOperationsEngine.analyze(emptyList()).advancedInsights.map { it.name }.toSet()
         assertTrue(IndividualAIToolCatalog.tools.all { it.insightName in insightNames })
         assertTrue(IndividualAIToolCatalog.tools.all { it.checklist.isNotEmpty() })
@@ -48,5 +48,37 @@ class AIOperationsEngineTest {
         assertTrue(insights.getValue("Zoonotic exposure warning").signal.startsWith("1 job"))
         assertTrue(insights.getValue("Equipment cue extractor").signal.startsWith("1 job"))
         assertTrue(insights.getValue("Property access blocker").signal.startsWith("1 job"))
+        assertTrue(insights.getValue("Blank-title data hygiene").signal.startsWith("0 jobs"))
+        assertTrue(insights.getValue("Multi-species complexity flag").signal.startsWith("0 jobs"))
+        assertTrue(insights.getValue("Commercial-site complexity flag").signal.startsWith("0 jobs"))
+    }
+
+    @Test
+    fun newSchedulingAndHygieneModulesUseRecordedJobSignals() {
+        val now = System.currentTimeMillis()
+        val staleLead = Job(
+            title = "",
+            customerName = "SHOUTING CUSTOMER",
+            customerId = "cust-1",
+            address = "200 Main Street, Suite 400",
+            status = JobStatus.PENDING,
+            createdAt = now - 3 * 86_400_000L,
+            latitude = 0.0,
+            longitude = 0.0
+        )
+        val duplicateOpenJob = Job(
+            customerId = "cust-1",
+            status = JobStatus.IN_PROGRESS,
+            estimatedValue = 300.0
+        )
+
+        val insights = AIOperationsEngine.analyze(listOf(staleLead, duplicateOpenJob)).advancedInsights.associateBy { it.name }
+
+        assertTrue(insights.getValue("New lead aging alert").signal.startsWith("1 of"))
+        assertTrue(insights.getValue("Blank-title data hygiene").signal.startsWith("1 job"))
+        assertTrue(insights.getValue("Coordinate integrity checker").signal.startsWith("1 job"))
+        assertTrue(insights.getValue("Customer name formatting auditor").signal.startsWith("1 customer name"))
+        assertTrue(insights.getValue("Commercial-site complexity flag").signal.startsWith("1 job"))
+        assertTrue(insights.getValue("Concurrent-job customer alert").signal.startsWith("1 customer"))
     }
 }
