@@ -29,6 +29,10 @@ data class Inspection(
     val entryPoints: String = "",
     val damageAssessment: String = "",
     val photos: List<String> = emptyList(),
+    /** Raw voice-dictated (or typed) field notes captured before AI drafts the report. */
+    val voiceFieldNotes: String = "",
+    /** "grok", "offline_ai", or blank if the report was written by hand. */
+    val aiReportSource: String = "",
     val followUpRequired: Boolean = false,
     val followUpDate: Long? = null,
     val temperature: Float? = null,

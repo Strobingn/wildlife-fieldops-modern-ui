@@ -70,7 +70,7 @@ fun AIOperationsScreen(
             }
 
             Text(
-                "20 Individual AI Tools",
+                "40 Individual AI Tools",
                 style = MaterialTheme.typography.titleLarge,
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold
@@ -182,7 +182,7 @@ fun AIOperationsScreen(
                 }
             }
 
-            Section("65 Advanced AI Modules") {
+            Section("85 Advanced AI Modules") {
                 data.advancedInsights.forEachIndexed { index, item ->
                     ItemTitle("${index + 1}. ${item.name} · ${item.score}/100")
                     Text(item.signal, color = PrimaryGreen)

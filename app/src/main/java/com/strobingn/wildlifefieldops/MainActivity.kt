@@ -202,6 +202,7 @@ private fun AppNavHost(
                 onNavigateToRoutes = { navController.navigate(Screen.RouteOptimizer.route) },
                 onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                 onNavigateToAI = { navController.navigate(Screen.AIAssistant.route) },
+                onNavigateToAIOperations = { navController.navigate(Screen.AIOperations.route) },
                 onOpenDrawer = onOpenDrawer
             )
         }
@@ -334,12 +335,19 @@ private fun AppNavHost(
 
         composable(Screen.Settings.route) {
             SettingsScreen(
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onNavigateToAIOperations = { navController.navigate(Screen.AIOperations.route) }
             )
         }
 
         composable(Screen.AIAssistant.route) {
             AIAssistantScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.AIOperations.route) {
+            AIOperationsScreen(
                 onBack = { navController.popBackStack() }
             )
         }

@@ -41,6 +41,7 @@ fun DashboardScreen(
     onNavigateToRoutes: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToAI: () -> Unit,
+    onNavigateToAIOperations: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
@@ -336,7 +337,7 @@ fun DashboardScreen(
                     ) {
                         QuickActionTile("Inspect", Icons.Default.Search, AccentCyan, Modifier.weight(1f), onNavigateToInspections)
                         QuickActionTile("Routes", Icons.Default.Route, AccentBlue, Modifier.weight(1f), onNavigateToRoutes)
-                        Spacer(modifier = Modifier.weight(1f))
+                        QuickActionTile("AI Tools", Icons.Default.AutoAwesome, AccentAmber, Modifier.weight(1f), onNavigateToAIOperations)
                     }
                 }
             }

@@ -21,7 +21,67 @@ data class EstimateSuggestion(
     val notes: String
 )
 
+data class InspectionReportDraft(
+    val findings: String = "",
+    val recommendations: String = "",
+    val severity: String = "MODERATE",
+    val speciesIdentified: String = "",
+    val entryPoints: String = "",
+    val damageAssessment: String = "",
+    val source: String = "offline_ai"
+)
+
 object OnDeviceAIService {
+    private val KNOWN_SPECIES = listOf("bat", "raccoon", "squirrel", "skunk", "woodchuck", "bird", "snake", "opossum", "rodent", "mouse", "rat")
+    private val KNOWN_DAMAGE = listOf("chew", "gnaw", "droppings", "feces", "urine", "nest", "nesting", "insulation", "stain", "odor", "hole", "gap", "structural")
+    private val KNOWN_ENTRY_POINTS = listOf("soffit", "fascia", "vent", "ridge", "gable", "chimney", "roofline", "foundation", "crawlspace", "attic", "eave")
+
+    // Voice-dictated field notes + on-device photo analysis -> a draft inspection report.
+    // Fully deterministic and offline-safe; HybridAIService can enrich the wording with a live LLM call.
+    fun draftInspectionReport(
+        fieldNotes: String,
+        photoAnalyses: List<AiAnalysisResult>,
+        inspectionType: String
+    ): InspectionReportDraft {
+        val notesText = fieldNotes.trim()
+        val lowerNotes = notesText.lowercase()
+        val species = (photoAnalyses.flatMap { it.species } + KNOWN_SPECIES.filter { lowerNotes.contains(it) }).distinct()
+        val damage = (photoAnalyses.flatMap { it.damageTypes } + KNOWN_DAMAGE.filter { lowerNotes.contains(it) }).distinct()
+        val entryTerms = KNOWN_ENTRY_POINTS.filter { lowerNotes.contains(it) }
+
+        val findings = buildString {
+            append(notesText.ifBlank { "Technician recorded photo evidence with no dictated field notes." })
+            if (species.isNotEmpty()) append("\nSpecies observed: ${species.joinToString()}.")
+            if (damage.isNotEmpty()) append("\nDamage observed: ${damage.joinToString()}.")
+            append("\nInspection type: $inspectionType.")
+        }.trim()
+
+        val severity = when {
+            damage.size >= 2 && species.isNotEmpty() -> "HIGH"
+            damage.isNotEmpty() || species.isNotEmpty() -> "MODERATE"
+            notesText.isBlank() -> "NONE"
+            else -> "LOW"
+        }
+
+        val recommendations = buildString {
+            if (species.any { it.contains("bat") }) appendLine("Verify maternity season timing, then install one-way exclusion devices and seal secondary gaps.")
+            if (species.any { it.contains("raccoon") }) appendLine("Check for dependent young before exclusion; set traps at confirmed entry points.")
+            if (species.any { it.contains("squirrel") }) appendLine("Install one-way doors on active entries and seal adjacent gaps within 48 hours.")
+            if (species.any { it.contains("skunk") || it.contains("woodchuck") }) appendLine("Confirm den status and use low-stress exclusion before sealing burrow entries.")
+            if (damage.isNotEmpty()) appendLine("Photograph and repair identified damage; schedule a follow-up to confirm exclusion held.")
+            if (isEmpty()) append("Schedule a full walkthrough and photograph all elevations before quoting exclusion work.")
+        }.trim()
+
+        return InspectionReportDraft(
+            findings = findings,
+            recommendations = recommendations,
+            severity = severity,
+            speciesIdentified = species.joinToString(),
+            entryPoints = entryTerms.joinToString().ifBlank { "Not specified in field notes; confirm on next visit." },
+            damageAssessment = damage.joinToString().ifBlank { "No structural damage terms detected; verify visually." },
+            source = "offline_ai"
+        )
+    }
 
     // Heavy form filling from photo analysis + job history
     suspend fun generateFormSuggestions(analysis: AiAnalysisResult, recentJobs: List<Job> = emptyList()): FormSuggestions {

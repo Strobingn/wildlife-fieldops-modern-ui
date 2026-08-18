@@ -113,7 +113,7 @@ object AIOperationsEngine {
     }
 
     /**
-     * Sixty-five offline-safe AI features. Every signal is recalculated from real job
+     * Eighty-five offline-safe AI features. Every signal is recalculated from real job
      * records; the live Grok service can later enrich the wording without changing
      * the underlying operational facts.
      */
@@ -224,6 +224,57 @@ object AIOperationsEngine {
             !text.contains("warranty") && !text.contains("guarantee")
         }
         val forecastMaturity = min(100, jobs.size * 2 + completed.size * 2 + pricedJobs.size + scheduled.size)
+
+        // 66-85: scheduling discipline, technician load, data hygiene, and compliance-timing signals.
+        val pendingCount = jobs.count { it.status == JobStatus.PENDING }
+        val newLeadAging = jobs.count { it.status == JobStatus.PENDING && it.scheduledDate == null && now - it.createdAt > 48L * 3_600_000L }
+        val urgentUnscheduled = open.count { (it.priority.name == "URGENT" || it.priority.name == "HIGH") && it.scheduledDate == null }
+        val lowPriorityOpen = open.count { it.priority.name == "LOW" }
+        val idCustomerJobs = jobs.filter { it.customerId.isNotBlank() }
+        val distinctCustomerIds = idCustomerJobs.map { it.customerId }.distinct().size
+        val returningCustomerIds = idCustomerJobs.groupingBy { it.customerId }.eachCount().count { it.value > 1 }
+        val returningCustomerPercent = if (distinctCustomerIds == 0) 0 else (returningCustomerIds * 100) / distinctCustomerIds
+        val concurrentCustomerConflicts = open.filter { it.customerId.isNotBlank() }.groupingBy { it.customerId }.eachCount().count { it.value > 1 }
+        val technicianLoad = open.filter { it.assignedTo.isNotBlank() }.groupingBy { it.assignedTo }.eachCount()
+        val topTechnicianShare = technicianLoad.maxOfOrNull { it.value }?.let { min(100, (it * 100) / max(1, open.size)) } ?: 0
+        val blankTitles = jobs.count { val t = it.title.trim().lowercase(Locale.US); t.isBlank() || t == "job" || t == "untitled" || t == "new job" }
+        val invalidCoordinates = jobs.count { it.latitude == 0.0 && it.longitude == 0.0 }
+        val activeStatuses = jobs.filter { it.status == JobStatus.PENDING || it.status == JobStatus.IN_PROGRESS }
+        val preWorkNoPhotos = activeStatuses.count { it.photos.isEmpty() }
+        val undocumentedValueAtRisk = completed.filter { it.photos.isEmpty() }.sumOf { it.estimatedValue }
+        val speciesTerms = listOf("bat", "raccoon", "squirrel", "skunk", "woodchuck", "bird", "snake")
+        val multiSpeciesJobs = jobs.count { job ->
+            val text = "${job.title} ${job.description} ${job.notes} ${job.type}".lowercase(Locale.US)
+            speciesTerms.count(text::contains) >= 2
+        }
+        val batMaternityRisk = jobs.count { job ->
+            val text = "${job.title} ${job.description} ${job.notes} ${job.type}".lowercase(Locale.US)
+            text.contains("bat") && calendarField(job.scheduledDate, Calendar.MONTH) in Calendar.JUNE..Calendar.AUGUST
+        }
+        val urgentJobs2 = jobs.filter { it.priority.name == "URGENT" || it.priority.name == "HIGH" }
+        val urgentRespondedWithin24h = urgentJobs2.count { job ->
+            val jobScheduled = job.scheduledDate ?: return@count false
+            jobScheduled - job.createdAt in 0L..24L * 3_600_000L
+        }
+        val slaCompliancePercent = if (urgentJobs2.isEmpty()) 0 else (urgentRespondedWithin24h * 100) / urgentJobs2.size
+        val longCycleJobs = completed.count { job -> job.completedDate?.let { it - job.createdAt > 30L * 86_400_000L } == true }
+        val roundNumberEstimates = pricedJobs.count { it.estimatedValue.rem(100.0) < 0.005 }
+        val readinessReady = open.count { it.address.isNotBlank() && it.latitude != null && it.longitude != null && it.assignedTo.isNotBlank() && it.notes.isNotBlank() }
+        val readinessPercent = if (open.isEmpty()) 0 else (readinessReady * 100) / open.size
+        val technicianDayOverlap = scheduled.filter { it.assignedTo.isNotBlank() }
+            .groupingBy { "${it.assignedTo}|${(it.scheduledDate ?: 0L) / 86_400_000L}" }
+            .eachCount().count { it.value > 4 }
+        val escalatingProperties = jobs.filter { it.address.isNotBlank() }.groupBy { normalizeAddress(it.address) }
+            .count { (_, list) ->
+                list.size >= 2 &&
+                    (list.maxByOrNull { it.createdAt }?.estimatedValue ?: 0.0) > (list.minByOrNull { it.createdAt }?.estimatedValue ?: 0.0)
+            }
+        val shoutingCustomerNames = jobs.count { it.customerName.isNotBlank() && it.customerName == it.customerName.uppercase(Locale.US) && it.customerName.any { c -> c.isLetter() } }
+        val commercialSites = jobs.count { job ->
+            val text = job.address.lowercase(Locale.US)
+            listOf("suite", "unit", "floor", "bldg", "plaza", "mall").any(text::contains)
+        }
+
         fun risk(count: Int, total: Int = max(1, jobs.size)): Int = min(100, (count * 100) / max(1, total))
         fun insight(name: String, score: Int, signal: String, action: String) =
             AdvancedInsight(name, score.coerceIn(0, 100), signal, action)
@@ -297,7 +348,30 @@ object AIOperationsEngine {
             insight("Equipment cue extractor", min(100, equipmentTerms * 9), "$equipmentTerms jobs mention specialized equipment or materials", "Convert verified note cues into a pre-departure equipment checklist."),
             insight("Property access blocker", min(100, accessBlockers * 18), "$accessBlockers jobs mention possible access restrictions", "Confirm keys, gates, tenants, pets, parking, and permission before travel."),
             insight("Warranty record auditor", risk(warrantyMissing, completed.size), "$warrantyMissing completed jobs do not mention warranty or guarantee scope", "Record the exact covered repairs, exclusions, term, and customer responsibilities at closeout."),
-            insight("Forecast maturity score", 100 - forecastMaturity, "Current operational dataset supports $forecastMaturity% forecast maturity", "Improve history depth, scheduling, completion, and pricing data before trusting high-impact forecasts.")
+            insight("Forecast maturity score", 100 - forecastMaturity, "Current operational dataset supports $forecastMaturity% forecast maturity", "Improve history depth, scheduling, completion, and pricing data before trusting high-impact forecasts."),
+
+            // 66-85: twenty additional production signals for scheduling discipline, technician
+            // load, data hygiene, and compliance timing.
+            insight("New lead aging alert", risk(newLeadAging, max(1, pendingCount)), "$newLeadAging of $pendingCount pending leads are unscheduled after 48 hours", "Call or reschedule pending leads before they go cold."),
+            insight("Urgent-without-schedule alert", risk(urgentUnscheduled, open.size), "$urgentUnscheduled urgent or high-priority jobs have no scheduled date", "Book a firm appointment for every urgent or high-priority job today."),
+            insight("Priority mix auditor", risk(lowPriorityOpen, open.size), "$lowPriorityOpen of ${open.size} open jobs are marked low priority", "Re-check low-priority jobs for a missed urgency or safety signal."),
+            insight("Returning-customer ratio", returningCustomerPercent, "$returningCustomerIds of $distinctCustomerIds tracked customers have more than one job", "Route repeat customers to a consistent technician and reference prior visit history."),
+            insight("Concurrent-job customer alert", risk(concurrentCustomerConflicts, max(1, open.size)), "$concurrentCustomerConflicts customers have more than one simultaneous open job", "Confirm these are separate service needs and not duplicate entries."),
+            insight("Technician concentration risk", topTechnicianShare, "The busiest technician holds $topTechnicianShare% of open jobs", "Redistribute open jobs so no single technician is a scheduling single point of failure."),
+            insight("Blank-title data hygiene", risk(blankTitles), "$blankTitles jobs have a blank or generic title", "Rename jobs with the service type and address so lists stay searchable."),
+            insight("Coordinate integrity checker", risk(invalidCoordinates), "$invalidCoordinates jobs store 0,0 as their coordinates", "Re-capture GPS or re-geocode the address before routing these jobs."),
+            insight("Pre-work photo gap", risk(preWorkNoPhotos, max(1, activeStatuses.size)), "$preWorkNoPhotos active jobs have no photos yet", "Capture initial condition photos at or before the first visit."),
+            insight("Undocumented value at risk", min(100, (undocumentedValueAtRisk / 50.0).toInt()), "${money(undocumentedValueAtRisk)} in completed work has zero photo documentation", "Prioritize photo capture on the highest-value undocumented jobs first."),
+            insight("Multi-species complexity flag", min(100, multiSpeciesJobs * 14), "$multiSpeciesJobs jobs mention two or more species", "Plan extra time, equipment, and species-specific method review for multi-species jobs."),
+            insight("Bat-season compliance timing", min(100, batMaternityRisk * 22), "$batMaternityRisk bat jobs are scheduled during the June-August maternity window", "Verify maternity season rules and confirm young are not present before exclusion."),
+            insight("Service-level response compliance", slaCompliancePercent, "$urgentRespondedWithin24h of ${urgentJobs2.size} urgent/high jobs were scheduled within 24 hours", "Tighten dispatch timing for urgent and high-priority calls."),
+            insight("Long-cycle job detector", risk(longCycleJobs, max(1, completed.size)), "$longCycleJobs completed jobs took more than 30 days from creation to completion", "Review scheduling delays and material lead time on long-running jobs."),
+            insight("Round-number estimate detector", risk(roundNumberEstimates, max(1, pricedJobs.size)), "$roundNumberEstimates of ${pricedJobs.size} priced jobs use a flat round-number estimate", "Confirm round estimates reflect itemized labor and material, not a guess."),
+            insight("Field readiness composite index", readinessPercent, "$readinessReady of ${open.size} open jobs have address, coordinates, technician, and notes", "Complete the missing dispatch fields before the technician leaves for the stop."),
+            insight("Technician day-overlap detector", risk(technicianDayOverlap, max(1, scheduled.size)), "$technicianDayOverlap technician-days exceed 4 stops for one technician", "Rebalance same-day stops across technicians or extend the appointment window."),
+            insight("Repeat-property cost trend", min(100, escalatingProperties * 16), "$escalatingProperties repeat properties show a rising estimate from first to latest visit", "Investigate why cost is escalating: recurring entry points or scope creep."),
+            insight("Customer name formatting auditor", risk(shoutingCustomerNames), "$shoutingCustomerNames customer names are stored in all caps", "Normalize customer name formatting for cleaner invoices and messages."),
+            insight("Commercial-site complexity flag", risk(commercialSites), "$commercialSites jobs are at suite, unit, or multi-tenant addresses", "Confirm property-manager contact, access hours, and parking before dispatch.")
         )
     }
 
