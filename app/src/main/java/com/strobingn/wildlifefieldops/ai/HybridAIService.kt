@@ -89,6 +89,43 @@ object HybridAIService {
         }
     }
 
+    private data class GrokReportResponse(
+        val findings: String = "",
+        val recommendations: String = "",
+        val severity: String = "",
+        val speciesIdentified: String = "",
+        val entryPoints: String = "",
+        val damageAssessment: String = ""
+    )
+
+    /** Turns dictated field notes + on-device photo analysis into a draft inspection report. */
+    suspend fun draftInspectionReport(
+        fieldNotes: String,
+        photoAnalyses: List<AiAnalysisResult>,
+        inspectionType: String
+    ): OnDeviceAIService.InspectionReportDraft {
+        val offline = OnDeviceAIService.draftInspectionReport(fieldNotes, photoAnalyses, inspectionType)
+        if (!hasDirectKey()) return offline
+
+        return runCatching {
+            val species = photoAnalyses.flatMap { it.species }.distinct()
+            val damage = photoAnalyses.flatMap { it.damageTypes }.distinct()
+            val prompt = GrokPrompts.inspectionReportFromFieldNotes(fieldNotes, species, damage, inspectionType)
+            val content = callGrokText(prompt, jsonMode = true)
+                .trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+            val report = gson.fromJson(content, GrokReportResponse::class.java)
+            OnDeviceAIService.InspectionReportDraft(
+                findings = report.findings.ifBlank { offline.findings },
+                recommendations = report.recommendations.ifBlank { offline.recommendations },
+                severity = report.severity.ifBlank { offline.severity },
+                speciesIdentified = report.speciesIdentified.ifBlank { offline.speciesIdentified },
+                entryPoints = report.entryPoints.ifBlank { offline.entryPoints },
+                damageAssessment = report.damageAssessment.ifBlank { offline.damageAssessment },
+                source = "grok"
+            )
+        }.getOrElse { offline.copy(findings = offline.findings + "\nLive Grok enhancement unavailable: ${it.message}") }
+    }
+
     suspend fun analyzeFormForCompliance(formText: String): List<String> {
         if (!hasDirectKey()) return listOf("Offline mode: manually verify state rules, permits, protected species, and pesticide labels.")
         return runCatching {

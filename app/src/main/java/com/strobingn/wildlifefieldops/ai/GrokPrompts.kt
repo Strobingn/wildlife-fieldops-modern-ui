@@ -25,6 +25,20 @@ Return a bullet list of issues and recommendations.
 
     fun voiceToStructuredJob(voiceText: String, currentJobContext: String = ""): String = "Convert voice note to structured wildlife job JSON: $voiceText $currentJobContext"
 
+    fun inspectionReportFromFieldNotes(
+        fieldNotes: String,
+        species: List<String>,
+        damage: List<String>,
+        inspectionType: String
+    ): String = """
+Draft a professional wildlife inspection report from a technician's dictated field notes.
+Inspection type: $inspectionType
+Field notes (voice-to-text, may be informal or fragmented): $fieldNotes
+Species detected in attached photos: ${species.joinToString().ifBlank { "none detected" }}
+Damage detected in attached photos: ${damage.joinToString().ifBlank { "none detected" }}
+Return strict JSON with findings, recommendations, severity (one of NONE, LOW, MODERATE, HIGH, CRITICAL), speciesIdentified, entryPoints, damageAssessment.
+"""
+
     fun predictTrapCheckPriority(trapHistory: String, species: String, weather: String, season: String): String = "Predict trap check priority for $species based on $weather $season $trapHistory"
 
     fun arMeasurementToReport(measurements: String, species: String, damageType: String): String = "Create report from $measurements for $species $damageType"
