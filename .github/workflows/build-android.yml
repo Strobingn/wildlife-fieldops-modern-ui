@@ -5,6 +5,10 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+  actions: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -13,7 +17,6 @@ jobs:
       SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
       OPENWEATHER_API_KEY: ${{ secrets.VITE_OPENWEATHER_API_KEY }}
-      # SpaceXAI (xAI Grok). Prefer secret XAI_API_KEY; LLM_API_KEY still accepted by Gradle.
       XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
       LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
       LLM_BASE_URL: https://api.x.ai/v1
@@ -25,6 +28,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+          cache: 'gradle'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -37,12 +41,10 @@ jobs:
       - name: Verify AI secrets (no values printed)
         run: |
           set -e
-          # Prefer XAI; fall back to LLM_API_KEY so either secret name works.
           if [ -z "${XAI_API_KEY}" ] && [ -n "${LLM_API_KEY}" ]; then
             export XAI_API_KEY="${LLM_API_KEY}"
             echo "Using LLM_API_KEY as XAI_API_KEY fallback"
           fi
-          # Trim whitespace/newlines that break BuildConfig / Bearer tokens
           if [ -n "${XAI_API_KEY}" ]; then
             export XAI_API_KEY="$(printf '%s' "$XAI_API_KEY" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
           fi
@@ -58,7 +60,6 @@ jobs:
           else
             echo "AI key present for BuildConfig bake-in."
           fi
-          # Persist trimmed env for the next step
           echo "XAI_API_KEY=$XAI_API_KEY" >> "$GITHUB_ENV"
           echo "LLM_API_KEY=$LLM_API_KEY" >> "$GITHUB_ENV"
 
@@ -66,7 +67,6 @@ jobs:
         run: |
           set -o pipefail
           export GRADLE_OPTS="-Xmx6g -XX:MaxMetaspaceSize=512m -XX:+UseG1GC"
-          # Ensure Gradle sees the same vars
           export XAI_API_KEY="${XAI_API_KEY}"
           export LLM_API_KEY="${LLM_API_KEY}"
           export LLM_BASE_URL="${LLM_BASE_URL:-https://api.x.ai/v1}"
@@ -76,9 +76,11 @@ jobs:
 
       - name: Check for APK and list outputs
         run: |
+          set -e
           echo "=== Checking for debug APKs ==="
-          find app/build/outputs -name "*.apk" -type f || echo "No APK files found"
-          ls -la app/build/outputs/apk/debug/ || echo "debug dir not found or empty"
+          find app/build/outputs -name "*.apk" -type f
+          ls -la app/build/outputs/apk/debug/
+          test -n "$(ls -A app/build/outputs/apk/debug/*.apk 2>/dev/null)"
           echo "=== End check ==="
 
       - name: Upload Debug APK
@@ -87,7 +89,8 @@ jobs:
         with:
           name: wildlife-field-ops-debug-apk
           path: app/build/outputs/apk/debug/*.apk
-          retention-days: 7
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Upload build logs
         if: always()
@@ -95,8 +98,26 @@ jobs:
         with:
           name: build-logs
           path: build.log
-          retention-days: 7
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Publish APK on Releases (easy download)
+        if: success() && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: debug-latest
+          name: Wildlife Field Ops Debug APK
+          files: app/build/outputs/apk/debug/*.apk
+          fail_on_unmatched_files: true
+          make_latest: true
+          body: |
+            Native Kotlin / Jetpack Compose debug APK from `${{ github.sha }}` (run ${{ github.run_number }}).
+            Unzip is not needed here — download the `.apk` asset and install on device (unknown sources).
+            Actions artifact name remains `wildlife-field-ops-debug-apk`.
 
       - name: Summary
         if: success()
-        run: echo "Wildlife Field Ops Debug APK built successfully! Maps + Supabase + SpaceXAI (xAI Grok) via env/secrets."
+        run: |
+          echo "Wildlife Field Ops Debug APK built successfully."
+          echo "Download from this run: Artifacts → wildlife-field-ops-debug-apk"
+          echo "Or from repo Releases: tag debug-latest"
