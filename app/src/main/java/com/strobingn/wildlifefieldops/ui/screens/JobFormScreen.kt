@@ -18,9 +18,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.model.*
 import com.strobingn.wildlifefieldops.ui.theme.*
+import com.strobingn.wildlifefieldops.ui.components.ScheduleDateTimeField
+import com.strobingn.wildlifefieldops.ui.components.defaultAppointmentTime
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.ServiceTypesViewModel
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,7 +32,6 @@ fun JobFormScreen(
     serviceTypesViewModel: ServiceTypesViewModel = hiltViewModel()
 ) {
     val serviceTypes by serviceTypesViewModel.allTypes.collectAsState()
-    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var title by remember { mutableStateOf("") }
@@ -51,6 +51,7 @@ fun JobFormScreen(
     var loaded by remember { mutableStateOf(jobId == null) }
     var existingJob by remember { mutableStateOf<Job?>(null) }
     var isSaving by remember { mutableStateOf(false) }
+    val appointmentTimes = remember { mutableStateListOf(defaultAppointmentTime()) }
 
     // Load job once when editing so party-entered jobs can be revised later.
     LaunchedEffect(jobId) {
@@ -72,6 +73,12 @@ fun JobFormScreen(
             selectedPriority = job.priority
             estimatedValue = if (job.estimatedValue > 0) job.estimatedValue.toString() else ""
             notes = job.notes
+            val visits = viewModel.loadScheduledVisits(job.id)
+            appointmentTimes.clear()
+            appointmentTimes.addAll(
+                visits.ifEmpty { listOfNotNull(job.scheduledDate) }
+            )
+            if (appointmentTimes.isEmpty()) appointmentTimes.add(defaultAppointmentTime())
         }
         loaded = true
     }
@@ -303,6 +310,43 @@ fun JobFormScreen(
                 maxLines = 3
             )
 
+            Text(
+                "Scheduled visits",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "Add every day and time this job needs. Each visit appears separately on the daily schedule.",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary
+            )
+            appointmentTimes.forEachIndexed { index, scheduledAt ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    ScheduleDateTimeField(
+                        value = scheduledAt,
+                        onValueChange = { appointmentTimes[index] = it },
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (appointmentTimes.size > 1) {
+                        IconButton(onClick = { appointmentTimes.removeAt(index) }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Remove visit", tint = TextSecondary)
+                        }
+                    }
+                }
+            }
+            OutlinedButton(
+                onClick = { appointmentTimes.add(defaultAppointmentTime()) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Add another visit")
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
 
             Button(
@@ -311,42 +355,21 @@ fun JobFormScreen(
                     isSaving = true
                     val estVal = estimatedValue.toDoubleOrNull() ?: 0.0
                     val service = DefaultServiceTypes.display(selectedType)
-                    if (isEditing && jobId != null) {
-                        viewModel.updateJobDetails(
-                            jobId = jobId,
-                            title = title.trim(),
-                            description = description.trim(),
-                            customerId = customerId,
-                            customerName = customerName.trim(),
-                            address = address.trim(),
-                            type = service,
-                            priority = selectedPriority,
-                            estimatedValue = estVal,
-                            notes = notes.trim()
-                        )
-                        scope.launch {
-                            snackbarHostState.showSnackbar("Job updated")
-                            isSaving = false
-                            onBack()
-                        }
-                    } else {
-                        viewModel.createJob(
-                            title = title.trim(),
-                            description = description.trim(),
-                            customerId = customerId,
-                            customerName = customerName.trim(),
-                            address = address.trim(),
-                            type = service,
-                            priority = selectedPriority,
-                            estimatedValue = estVal,
-                            scheduledDate = null,
-                            notes = notes.trim()
-                        )
-                        scope.launch {
-                            snackbarHostState.showSnackbar("Job created")
-                            isSaving = false
-                            onBack()
-                        }
+                    viewModel.saveJobWithSchedule(
+                        existingJob = existingJob,
+                        title = title.trim(),
+                        description = description.trim(),
+                        customerId = customerId,
+                        customerName = customerName.trim(),
+                        address = address.trim(),
+                        type = service,
+                        priority = selectedPriority,
+                        estimatedValue = estVal,
+                        notes = notes.trim(),
+                        appointmentTimes = appointmentTimes.toList()
+                    ) {
+                        isSaving = false
+                        onBack()
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),

@@ -2,7 +2,9 @@ const KEY='ww_rockstar',PREF='ww_rockstar_pref';
 const S=['Raccoon','Grey Squirrel','Red Squirrel','Flying Squirrel','Bat','Skunk','Groundhog','Bird','Snake','Opossum','Rodent','Carpenter Bee','Other'],ST=['Active','Scheduled','Waiting On Customer','Trapping','Exclusion','Repair','Warranty','Closed'],VT=['Inspection','Trap Set','Trap check','Exclusion','Repair','Warranty Follow-Up','Other'],RS=['Open','Sealed','Needs Repair','Warranty Covered'],SV=['Low','Medium','High','Critical'],PT=['Before','Entry Point','Damage','Trap Placement','Droppings / Evidence','Repair During','After','Warranty'];
 const SPECIES_ICONS={'Raccoon':'🦝','Grey Squirrel':'🐿️','Red Squirrel':'🐿️','Flying Squirrel':'🦇','Bat':'🦇','Skunk':'🦨','Groundhog':'🦫','Bird':'🐦','Snake':'🐍','Opossum':'🦡','Rodent':'🐁','Carpenter Bee':'🐝','Other':'🐾'};
 const STATUS_CLASS={'Active':'active','Scheduled':'scheduled','Closed':'closed','Trapping':'trapping','Repair':'repair','Waiting On Customer':'scheduled','Exclusion':'active','Warranty':'active'};
-const GOOGLE_MAPS_API_KEY='AIzaSyBN-EAMW'+'f4GaWs6Y9S059RBUvrQCFXzBm0';
+// Legacy web shell only. Native Android builds receive the key through Gradle.
+// Never commit a Google API key to this legacy file.
+const GOOGLE_MAPS_API_KEY = window.__GOOGLE_MAPS_API_KEY || '';
 const OPENWEATHER_API_KEY='d205783471a05028'+'a6fb5cc310942ecb';
 const GOOGLE_CALENDAR_CLIENT_ID='356064233292'+'-'+'oels4e218s4dmbptt2daslq09ncp3tr0'+'.apps.googleusercontent.com';
 let db=JSON.parse(localStorage.getItem(KEY)||'{"jobs":[],"visits":[],"repairs":[],"photos":[],"signatures":[],"queue":[]}'),pref=JSON.parse(localStorage.getItem(PREF)||'{}'),sel=pref.sel||'',pendingGPS=null;

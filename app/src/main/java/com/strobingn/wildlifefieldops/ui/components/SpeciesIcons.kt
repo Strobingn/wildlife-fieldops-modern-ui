@@ -17,40 +17,38 @@ import androidx.compose.ui.unit.dp
 import com.strobingn.wildlifefieldops.ui.theme.*
 
 /**
- * Species icon and color mapping.
- * Each species gets a unique icon and themed color for visual identity.
+ * Species icon and grayscale tone mapping.
+ * Shape and luminance distinguish species without introducing color.
  */
 object SpeciesTheme {
 
     data class SpeciesStyle(
         val icon: ImageVector,
-        val color: Color,
-        val emoji: String
+        val color: Color
     )
 
     private val styles = mapOf(
-        "Raccoon" to SpeciesStyle(Icons.Default.Pets, Color(0xFF8B5CF6), "🦝"),
-        "Grey Squirrel" to SpeciesStyle(Icons.Default.Forest, Color(0xFFf59e0b), "🐿️"),
-        "Red Squirrel" to SpeciesStyle(Icons.Default.Forest, Color(0xFFef4444), "🐿️"),
-        "Flying Squirrel" to SpeciesStyle(Icons.Default.Air, Color(0xFF8b5cf6), "🦇"),
-        "Bat" to SpeciesStyle(Icons.Default.NightsStay, Color(0xFF6366f1), "🦇"),
-        "Skunk" to SpeciesStyle(Icons.Default.Warning, Color(0xFFa855f7), "🦨"),
-        "Groundhog" to SpeciesStyle(Icons.Default.Grass, Color(0xFFD97706), "🦫"),
-        "Bird" to SpeciesStyle(Icons.Default.Flight, Color(0xFF3b82f6), "🐦"),
-        "Snake" to SpeciesStyle(Icons.Default.LinearScale, Color(0xFF8B5CF6), "🐍"),
-        "Opossum" to SpeciesStyle(Icons.Default.Pets, Color(0xFF6b7280), "🦡"),
-        "Rodent" to SpeciesStyle(Icons.Default.PestControl, Color(0xFF78716c), "🐁"),
-        "Mouse" to SpeciesStyle(Icons.Default.PestControl, Color(0xFF78716c), "🐁"),
-        "Rat" to SpeciesStyle(Icons.Default.PestControl, Color(0xFF57534e), "🐀"),
-        "Carpenter Bee" to SpeciesStyle(Icons.Default.BugReport, Color(0xFFeab308), "🐝"),
-        "Other" to SpeciesStyle(Icons.Default.HelpOutline, Color(0xFF9ca3af), "🐾"),
+        "Raccoon" to SpeciesStyle(Icons.Default.Pets, Color(0xFFD8D8D8)),
+        "Grey Squirrel" to SpeciesStyle(Icons.Default.Forest, Color(0xFFBEBEBE)),
+        "Red Squirrel" to SpeciesStyle(Icons.Default.Forest, Color(0xFFA8A8A8)),
+        "Flying Squirrel" to SpeciesStyle(Icons.Default.Air, Color(0xFFC8C8C8)),
+        "Bat" to SpeciesStyle(Icons.Default.NightsStay, Color(0xFFE0E0E0)),
+        "Skunk" to SpeciesStyle(Icons.Default.Warning, Color(0xFFF0F0F0)),
+        "Groundhog" to SpeciesStyle(Icons.Default.Grass, Color(0xFF969696)),
+        "Bird" to SpeciesStyle(Icons.Default.Flight, Color(0xFFCCCCCC)),
+        "Snake" to SpeciesStyle(Icons.Default.LinearScale, Color(0xFFB4B4B4)),
+        "Opossum" to SpeciesStyle(Icons.Default.Pets, Color(0xFF9C9C9C)),
+        "Rodent" to SpeciesStyle(Icons.Default.PestControl, Color(0xFF888888)),
+        "Mouse" to SpeciesStyle(Icons.Default.PestControl, Color(0xFF888888)),
+        "Rat" to SpeciesStyle(Icons.Default.PestControl, Color(0xFF747474)),
+        "Carpenter Bee" to SpeciesStyle(Icons.Default.BugReport, Color(0xFFD0D0D0)),
+        "Other" to SpeciesStyle(Icons.Default.HelpOutline, Color(0xFFAAAAAA)),
     )
 
     fun forSpecies(species: String?): SpeciesStyle {
         return styles[species] ?: SpeciesStyle(
             Icons.Default.HelpOutline,
-            TextSecondary,
-            "🐾"
+            TextSecondary
         )
     }
 }

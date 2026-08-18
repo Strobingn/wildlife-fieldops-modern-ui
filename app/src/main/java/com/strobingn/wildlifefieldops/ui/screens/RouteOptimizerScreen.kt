@@ -1,7 +1,8 @@
 package com.strobingn.wildlifefieldops.ui.screens
 
-import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.clickable
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,88 +11,135 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
+import com.strobingn.wildlifefieldops.data.model.Job
+import com.strobingn.wildlifefieldops.data.model.JobPriority
+import com.strobingn.wildlifefieldops.data.model.JobStatus
+import com.strobingn.wildlifefieldops.data.route.RouteOptimizationEngine
+import com.strobingn.wildlifefieldops.data.route.RoutePoint
 import com.strobingn.wildlifefieldops.ui.theme.*
+import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RouteOptimizerScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    viewModel: JobsViewModel = hiltViewModel()
 ) {
-    var startLocation by remember { mutableStateOf("") }
-    var routeStops by remember { mutableStateOf(listOf(
-        RouteStop("1", "123 Main St, Middletown, NY", LatLng(41.45, -74.05), "Raccoon removal"),
-        RouteStop("2", "456 Oak Ave, Goshen, NY", LatLng(41.40, -74.32), "Squirrel inspection"),
-        RouteStop("3", "789 Pine Rd, Warwick, NY", LatLng(41.26, -74.36), "Bat exclusion"),
-        RouteStop("4", "321 Elm Dr, Monroe, NY", LatLng(41.33, -74.19), "Follow-up visit")
-    )) }
-    var isOptimized by remember { mutableStateOf(false) }
-
+    val context = LocalContext.current
+    val jobs by viewModel.jobs.collectAsState()
+    val sourceStops = remember(jobs) {
+        jobs
+            .asSequence()
+            .filter { it.status != JobStatus.COMPLETED && it.status != JobStatus.CANCELLED }
+            .filter { it.latitude != null && it.longitude != null }
+            .sortedWith(
+                compareBy<Job> { it.scheduledDate ?: Long.MAX_VALUE }
+                    .thenByDescending { priorityRank(it.priority) }
+            )
+            .map { it.toRouteStop() }
+            .toList()
+    }
+    var routeStops by remember(sourceStops) { mutableStateOf(sourceStops) }
+    var isOptimized by rememberSaveable { mutableStateOf(false) }
+    var returnToStart by rememberSaveable { mutableStateOf(false) }
     val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(LatLng(41.40, -74.20), 10f)
+        position = CameraPosition.fromLatLngZoom(LatLng(41.50, -74.20), 9.5f)
     }
 
-    val totalDistance = calculateTotalDistance(routeStops)
-    val estimatedTime = (totalDistance / 40.0 * 60).toInt() // 40 mph avg
+    val totalDistance = RouteOptimizationEngine.totalDistanceMiles(
+        routeStops.map { it.toRoutePoint() },
+        returnToStart
+    )
+    val travelMinutes = (totalDistance / 35.0 * 60.0).roundToInt()
+    val serviceMinutes = routeStops.size * 45
+    val totalMinutes = travelMinutes + serviceMinutes
+    val missingCoordinates = jobs.count {
+        it.status != JobStatus.COMPLETED &&
+            it.status != JobStatus.CANCELLED &&
+            (it.latitude == null || it.longitude == null)
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Route Optimizer", color = TextPrimary) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                title = {
+                    Column {
+                        Text("Route planner", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (isOptimized) "Optimized local driving order" else "Jobs with saved map locations",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = BackgroundDark)
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
             )
         },
-        containerColor = BackgroundDark
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
+        if (routeStops.isEmpty()) {
+            RouteEmptyState(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                missingCoordinates = missingCoordinates
+            )
+            return@Scaffold
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Map
             GoogleMap(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(250.dp),
+                    .height(230.dp),
                 cameraPositionState = cameraPositionState
             ) {
                 routeStops.forEachIndexed { index, stop ->
                     Marker(
-                        state = MarkerState(position = stop.latLng),
+                        state = MarkerState(position = LatLng(stop.latitude, stop.longitude)),
                         title = "${index + 1}. ${stop.address}",
-                        snippet = stop.jobDescription
+                        snippet = "${stop.serviceType} • ${stop.priorityLabel}"
                     )
                 }
-
                 if (routeStops.size > 1) {
-                    val points = routeStops.map { it.latLng }
                     Polyline(
-                        points = points,
-                        color = PrimaryGreen,
-                        width = 6f
+                        points = routeStops.map { LatLng(it.latitude, it.longitude) },
+                        color = MaterialTheme.colorScheme.primary,
+                        width = 5f
                     )
                 }
             }
 
-            // Route Summary
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(12.dp),
-                colors = CardDefaults.cardColors(containerColor = BackgroundCard),
-                shape = RoundedCornerShape(12.dp)
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                ),
+                shape = RoundedCornerShape(18.dp)
             ) {
                 Row(
                     modifier = Modifier
@@ -99,178 +147,269 @@ fun RouteOptimizerScreen(
                         .padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    RouteStat("${routeStops.size}", "Stops", AccentBlue)
-                    RouteStat("${String.format("%.1f", totalDistance)}", "Miles", PrimaryGreen)
-                    RouteStat("$estimatedTime", "Min", AccentPurple)
+                    RouteStat(routeStops.size.toString(), "Stops")
+                    RouteStat(String.format("%.1f", totalDistance), "Miles")
+                    RouteStat("${totalMinutes}", "Minutes")
                 }
             }
 
-            // Start Location
-            OutlinedTextField(
-                value = startLocation,
-                onValueChange = { startLocation = it },
-                label = { Text("Starting Location") },
-                leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = PrimaryGreen) },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = PrimaryGreen,
-                    unfocusedBorderColor = BorderDark,
-                    focusedTextColor = TextPrimary,
-                    unfocusedTextColor = TextPrimary,
-                    focusedContainerColor = BackgroundCard,
-                    unfocusedContainerColor = BackgroundCard
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                shape = RoundedCornerShape(12.dp),
-                singleLine = true
-            )
-
-            // Action buttons
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Button(
                     onClick = {
-                        if (!isOptimized) {
-                            // Simple nearest-neighbor optimization
-                            routeStops = optimizeRoute(routeStops)
-                            isOptimized = true
-                        }
+                        routeStops = RouteOptimizationEngine
+                            .optimize(routeStops.map { it.toRoutePoint() })
+                            .mapNotNull { point -> routeStops.firstOrNull { it.id == point.id } }
+                        isOptimized = true
                     },
+                    enabled = routeStops.size > 2,
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = if (isOptimized) AccentBlue else PrimaryGreen, contentColor = if (isOptimized) Color.White else Color.Black),
-                    shape = RoundedCornerShape(12.dp)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    shape = RoundedCornerShape(14.dp)
                 ) {
-                    Icon(if (isOptimized) Icons.Default.Check else Icons.Default.Route, contentDescription = null)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(if (isOptimized) "Optimized" else "Optimize Route", fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.Route, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(if (isOptimized) "Re-optimize" else "Optimize")
                 }
                 OutlinedButton(
                     onClick = {
-                        routeStops = routeStops.shuffled()
+                        routeStops = sourceStops
                         isOptimized = false
                     },
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary),
-                    shape = RoundedCornerShape(12.dp)
+                    enabled = routeStops != sourceStops,
+                    shape = RoundedCornerShape(14.dp)
                 ) {
-                    Icon(Icons.Default.Shuffle, contentDescription = null)
+                    Icon(Icons.Default.RestartAlt, contentDescription = "Reset")
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = returnToStart,
+                    onCheckedChange = { returnToStart = it }
+                )
+                Text(
+                    "Include return to first stop",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    "Starts at ${routeStops.first().address}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedButton(
+                    onClick = { openGoogleMaps(context, routeStops) },
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp)
+                ) {
+                    Icon(Icons.Default.Navigation, contentDescription = null)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Navigate")
                 }
             }
 
             Text(
-                "Route Stops",
+                "Stops",
                 style = MaterialTheme.typography.titleMedium,
-                color = TextPrimary,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
             )
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(routeStops, key = { it.id }) { stop ->
-                    val index = routeStops.indexOf(stop)
-                    RouteStopCard(stop = stop, index = index + 1, onRemove = {
-                        routeStops = routeStops.filter { it.id != stop.id }
-                    })
+                    RouteStopCard(
+                        stop = stop,
+                        index = routeStops.indexOf(stop) + 1,
+                        onRemove = {
+                            routeStops = routeStops.filter { it.id != stop.id }
+                            isOptimized = false
+                        }
+                    )
                 }
-                item { Spacer(modifier = Modifier.height(16.dp)) }
+                item { Spacer(modifier = Modifier.height(18.dp)) }
             }
         }
     }
 }
 
-data class RouteStop(
+private data class RouteStop(
     val id: String,
     val address: String,
-    val latLng: LatLng,
-    val jobDescription: String
+    val latitude: Double,
+    val longitude: Double,
+    val serviceType: String,
+    val priorityLabel: String,
+    val scheduledDate: Long?
 )
 
-private fun calculateTotalDistance(stops: List<RouteStop>): Double {
-    if (stops.size < 2) return 0.0
-    var total = 0.0
-    for (i in 0 until stops.size - 1) {
-        val results = FloatArray(1)
-        android.location.Location.distanceBetween(
-            stops[i].latLng.latitude, stops[i].latLng.longitude,
-            stops[i + 1].latLng.latitude, stops[i + 1].latLng.longitude,
-            results
-        )
-        total += results[0] * 0.000621371 // meters to miles
-    }
-    return total
+private fun Job.toRouteStop() = RouteStop(
+    id = id,
+    address = address.ifBlank { customerName.ifBlank { "Job location" } },
+    latitude = latitude ?: 0.0,
+    longitude = longitude ?: 0.0,
+    serviceType = type.ifBlank { title.ifBlank { "Wildlife service" } },
+    priorityLabel = priority.name,
+    scheduledDate = scheduledDate
+)
+
+private fun RouteStop.toRoutePoint() = RoutePoint(id, latitude, longitude)
+
+private fun priorityRank(priority: JobPriority): Int = when (priority) {
+    JobPriority.URGENT -> 4
+    JobPriority.HIGH -> 3
+    JobPriority.MEDIUM -> 2
+    JobPriority.LOW -> 1
 }
 
-private fun optimizeRoute(stops: List<RouteStop>): List<RouteStop> {
-    if (stops.size < 3) return stops
-    val mutable = stops.toMutableList()
-    val optimized = mutableListOf<RouteStop>(mutable.removeFirst())
-    while (mutable.isNotEmpty()) {
-        val last = optimized.last()
-        val nearest = mutable.minByOrNull { stop ->
-            val results = FloatArray(1)
-            android.location.Location.distanceBetween(
-                last.latLng.latitude, last.latLng.longitude,
-                stop.latLng.latitude, stop.latLng.longitude,
-                results
-            )
-            results[0]
-        }
-        nearest?.let {
-            optimized.add(it)
-            mutable.remove(it)
-        }
-    }
-    return optimized
+private fun openGoogleMaps(context: Context, stops: List<RouteStop>) {
+    val destination = Uri.encode(stops.last().address)
+    val waypoints = stops
+        .dropLast(1)
+        .joinToString("|") { Uri.encode(it.address) }
+    val waypointQuery = if (waypoints.isBlank()) "" else "&waypoints=$waypoints"
+    val uri = Uri.parse(
+        "https://www.google.com/maps/dir/?api=1&destination=${destination}" +
+            "&travelmode=driving${waypointQuery}"
+    )
+    context.startActivity(Intent(Intent.ACTION_VIEW, uri))
 }
 
 @Composable
-private fun RouteStat(value: String, label: String, color: Color) {
+private fun RouteStat(value: String, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = MaterialTheme.typography.headlineSmall, color = color, fontWeight = FontWeight.Bold)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+        Text(
+            value,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
 @Composable
-private fun RouteStopCard(stop: RouteStop, index: Int, onRemove: () -> Unit) {
+private fun RouteStopCard(
+    stop: RouteStop,
+    index: Int,
+    onRemove: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = BackgroundCard),
-        shape = RoundedCornerShape(10.dp)
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        shape = RoundedCornerShape(14.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = PrimaryGreen.copy(alpha = 0.2f)
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
             ) {
                 Text(
                     index.toString(),
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    color = PrimaryGreen,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodySmall
+                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                    fontWeight = FontWeight.Bold
                 )
             }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(stop.address, style = MaterialTheme.typography.bodySmall, color = TextPrimary)
-                Text(stop.jobDescription, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                Text(stop.address, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text(
+                    "${stop.serviceType} • ${stop.priorityLabel.lowercase()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                stop.scheduledDate?.let {
+                    Text(
+                        "Scheduled " + java.text.SimpleDateFormat(
+                            "MMM d, h:mm a",
+                            java.util.Locale.getDefault()
+                        ).format(java.util.Date(it)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
             IconButton(onClick = onRemove) {
-                Icon(Icons.Default.Close, contentDescription = "Remove", tint = ErrorRed.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Remove stop",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun RouteEmptyState(
+    modifier: Modifier,
+    missingCoordinates: Int
+) {
+    Column(
+        modifier = modifier.padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            Icons.Default.Route,
+            contentDescription = null,
+            modifier = Modifier.size(52.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("No routable jobs yet", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            if (missingCoordinates > 0) {
+                "${missingCoordinates} active job(s) are missing saved map coordinates. Open each job and save its location before optimizing."
+            } else {
+                "Active jobs with saved coordinates will appear here automatically."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

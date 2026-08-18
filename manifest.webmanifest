@@ -6,7 +6,7 @@
   "display": "standalone",
   "display_override": ["standalone", "fullscreen", "browser"],
   "background_color": "#0a0a0f",
-  "theme_color": "#22c55e",
+  "theme_color": "#808080",
   "orientation": "portrait-primary",
   "scope": ".",
   "id": "com.wildlifewhisperer.fieldops",
@@ -15,27 +15,27 @@
   "dir": "ltr",
   "icons": [
     {
-      "src": "assets/icon.png",
-      "sizes": "192x192",
-      "type": "image/png",
+      "src": "assets/fieldops-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "assets/icon.png",
-      "sizes": "192x192",
-      "type": "image/png",
+      "src": "assets/fieldops-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
       "purpose": "maskable"
     },
     {
-      "src": "assets/icon.png",
-      "sizes": "512x512",
-      "type": "image/png",
+      "src": "assets/fieldops-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "assets/logo.png",
-      "sizes": "512x512",
-      "type": "image/png",
+      "src": "assets/fieldops-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
       "purpose": "maskable"
     }
   ],
@@ -70,9 +70,9 @@
       "url": "./index.html#/jobs/new",
       "icons": [
         {
-          "src": "assets/icon.png",
-          "sizes": "96x96",
-          "type": "image/png"
+          "src": "assets/fieldops-icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
         }
       ]
     },
@@ -83,9 +83,9 @@
       "url": "./index.html#/",
       "icons": [
         {
-          "src": "assets/icon.png",
-          "sizes": "96x96",
-          "type": "image/png"
+          "src": "assets/fieldops-icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
         }
       ]
     },
@@ -96,9 +96,9 @@
       "url": "./index.html#/customers",
       "icons": [
         {
-          "src": "assets/icon.png",
-          "sizes": "96x96",
-          "type": "image/png"
+          "src": "assets/fieldops-icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
         }
       ]
     },
@@ -109,9 +109,9 @@
       "url": "./index.html#/estimate",
       "icons": [
         {
-          "src": "assets/icon.png",
-          "sizes": "96x96",
-          "type": "image/png"
+          "src": "assets/fieldops-icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
         }
       ]
     }

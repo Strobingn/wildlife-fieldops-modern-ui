@@ -36,6 +36,17 @@ fun SettingsScreen(
     val syncMessage by viewModel.syncMessage.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
     var showClearDataDialog by remember { mutableStateOf(false) }
+    var showAiOperations by remember { mutableStateOf(false) }
+    var showDiagnostics by remember { mutableStateOf(false) }
+
+    if (showAiOperations) {
+        AIOperationsScreen(onBack = { showAiOperations = false })
+        return
+    }
+    if (showDiagnostics) {
+        DiagnosticsScreen(onBack = { showDiagnostics = false })
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -81,6 +92,36 @@ fun SettingsScreen(
                 if (!syncMessage.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(syncMessage!!, color = PrimaryGreen, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SettingsSectionTitle("AI Command Center")
+            SettingsCard {
+                Text(
+                    "20 individually launchable AI tools plus 65 live intelligence modules for scheduling, pricing, compliance, safety, revenue, customers, inventory, field quality, and data health.",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = { showAiOperations = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.Black)
+                ) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Open AI Operations", fontWeight = FontWeight.Bold)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { showDiagnostics = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.BugReport, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("AI and App Diagnostics")
                 }
             }
 

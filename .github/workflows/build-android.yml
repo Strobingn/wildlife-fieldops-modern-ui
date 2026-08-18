@@ -2,6 +2,8 @@ name: Build Native Android APK (Debug)
 
 on:
   push:
+    branches: [ main, Field_Opps_V2.5, chatgptV25 ]
+  pull_request:
     branches: [ main ]
   workflow_dispatch:
 
@@ -15,7 +17,11 @@ jobs:
     env:
       SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-      GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+      # Normalize any existing Maps secret name into the native Gradle variable.
+      # GOOGLE_MAPS_API is preferred; the other names remain supported for
+      # compatibility with older branch/setup configurations.
+      GOOGLE_MAPS_API: ${{ secrets.GOOGLE_MAPS_API || secrets.GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API }}
+      VITE_GOOGLE_MAPS_API: ${{ secrets.GOOGLE_MAPS_API || secrets.GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API }}
       OPENWEATHER_API_KEY: ${{ secrets.VITE_OPENWEATHER_API_KEY }}
       XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
       LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
@@ -37,6 +43,14 @@ jobs:
 
       - name: Grant execute permission for Gradle wrapper
         run: chmod +x ./gradlew
+
+      - name: Verify Maps secret (no value printed)
+        run: |
+          if [ -z "${GOOGLE_MAPS_API}" ]; then
+            echo "::warning::Google Maps key is not configured; add GOOGLE_MAPS_API as a repository secret."
+          else
+            echo "GOOGLE_MAPS_API present (length ${#GOOGLE_MAPS_API})"
+          fi
 
       - name: Verify AI secrets (no values printed)
         run: |

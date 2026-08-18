@@ -23,11 +23,11 @@ Field operations app for wildlife removal:
 |--------|----------|
 | `VITE_SUPABASE_URL` | Supabase project URL → `SUPABASE_URL` in Gradle |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon key → `SUPABASE_ANON_KEY` |
-| `VITE_GOOGLE_MAPS_API_KEY` | Maps + GPS screens |
+| `GOOGLE_MAPS_API` | Maps + GPS screens |
 | `VITE_OPENWEATHER_API_KEY` | Weather on inspections / field |
 | `VITE_GOOGLE_CALENDAR_CLIENT_ID` | Optional calendar (future) |
 
-> Names still start with `VITE_` for history; the **native** workflow maps them into Android `BuildConfig`.
+> `GOOGLE_MAPS_API` is the native secret/build variable. The workflow also accepts older `GOOGLE_MAPS_API_KEY`, `VITE_GOOGLE_MAPS_API_KEY`, and `VITE_GOOGLE_MAPS_API` secret names.
 
 2. Push to `main` or run **Build Native Android APK (Debug)** in Actions.
 3. Download artifact **wildlife-field-ops-debug-apk**.
@@ -38,7 +38,7 @@ Field operations app for wildlife removal:
 # Windows / macOS / Linux with Android SDK
 export SUPABASE_URL="https://YOUR_PROJECT.supabase.co"
 export SUPABASE_ANON_KEY="your-anon-key"
-export GOOGLE_MAPS_API_KEY="AIza..."
+export GOOGLE_MAPS_API="AIza..."
 export OPENWEATHER_API_KEY="..."
 
 ./gradlew :app:assembleDebug
@@ -71,3 +71,13 @@ Legacy web / Capacitor folders may still exist in the repo history for reference
 
 - Prefer Supabase function `ai-assistant` (set LLM keys in Supabase Edge Function secrets).
 - If the function is offline, the app uses built-in field knowledge so the chat still works.
+
+
+## V2.5 route planner and visual system
+
+- The Routes screen now reads active jobs from Room and uses only jobs with saved latitude/longitude.
+- Route ordering runs locally with nearest-neighbor plus 2-opt improvement; no paid routing API is required.
+- The planner reports stops, estimated travel/service time, optional return-to-start distance, and can hand the ordered stops to Google Maps.
+- The app-wide Material palette is grayscale for a cleaner field-operations UI. Legacy color names remain only for source compatibility.
+- See [docs/FIELD_OPPS_V2_5_FEATURE_ROADMAP.md](docs/FIELD_OPPS_V2_5_FEATURE_ROADMAP.md) for the next ten feature proposals.
+- See [docs/FIELD_OPPS_V2_5_FEATURE_ROADMAP_20.md](docs/FIELD_OPPS_V2_5_FEATURE_ROADMAP_20.md) for the 20-feature expansion backlog.

@@ -23,8 +23,19 @@ android {
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseKey\"")
 
-        val mapsKey = System.getenv("GOOGLE_MAPS_API_KEY") ?: "YOUR_GOOGLE_MAPS_API_KEY_HERE"
+        // Normalize the repository secret into the native build variable. The
+        // VITE name is supported because it is the existing documented secret;
+        // GOOGLE_MAPS_API remains the preferred native/local name.
+        val mapsKey = sequenceOf(
+            "GOOGLE_MAPS_API",
+            "GOOGLE_MAPS_API_KEY",
+            "VITE_GOOGLE_MAPS_API_KEY",
+            "VITE_GOOGLE_MAPS_API"
+        ).mapNotNull { name ->
+            System.getenv(name)?.trim()?.takeIf { it.isNotEmpty() }
+        }.firstOrNull().orEmpty()
         buildConfigField("String", "GOOGLE_MAPS_API_KEY", "\"$mapsKey\"")
+        buildConfigField("String", "GOOGLE_MAPS_API", "\"$mapsKey\"")
         val weatherKey = System.getenv("OPENWEATHER_API_KEY") ?: ""
         buildConfigField("String", "OPENWEATHER_API_KEY", "\"$weatherKey\"")
 
@@ -60,8 +71,7 @@ android {
         buildConfigField("int", "LLM_KEY_LENGTH", "${llmKey.length}")
 
         // Manifest placeholder for Google Maps meta-data
-        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] =
-            System.getenv("GOOGLE_MAPS_API_KEY") ?: "YOUR_GOOGLE_MAPS_API_KEY_HERE"
+        manifestPlaceholders["GOOGLE_MAPS_API"] = mapsKey
 
         // Help 16 KB page-size devices (Android 15 / many S24 Ultra builds)
         ndk {
@@ -172,6 +182,9 @@ dependencies {
 
     implementation("com.google.android.gms:play-services-maps:18.2.0")
     implementation("com.google.maps.android:maps-compose:4.3.0")
+    implementation("com.google.ar:core:1.45.0")
+    implementation("com.google.mlkit:image-labeling:17.0.9")
+    implementation("com.google.mlkit:object-detection:17.0.2")
 
     implementation("io.coil-kt:coil-compose:2.5.0")
 

@@ -20,8 +20,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.strobingn.wildlifefieldops.data.model.Job
-import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.ScheduleViewModel
@@ -38,16 +36,25 @@ fun ScheduleScreen(
 ) {
     val selectedDate by viewModel.selectedDate.collectAsState()
     val allJobs by viewModel.allJobs.collectAsState()
+    val allVisits by viewModel.allVisits.collectAsState()
+    val allInspections by viewModel.allInspections.collectAsState()
     var currentMonth by remember { mutableStateOf(Calendar.getInstance()) }
-    val dayJobs by remember(selectedDate, allJobs) {
+    val dayVisits by remember(selectedDate, allVisits) {
         derivedStateOf {
             val cal = Calendar.getInstance().apply { timeInMillis = selectedDate }
             val dayStart = cal.apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
             val dayEnd = dayStart + 86400000L
-            allJobs.filter {
-                it.scheduledDate != null && it.scheduledDate in dayStart until dayEnd &&
-                it.status != JobStatus.COMPLETED && it.status != JobStatus.CANCELLED && it.status != JobStatus.PAID
-            }
+            allVisits.filter { !it.isCompleted && it.visitDate in dayStart until dayEnd }
+                .sortedBy { it.visitDate }
+        }
+    }
+    val dayInspections by remember(selectedDate, allInspections) {
+        derivedStateOf {
+            val cal = Calendar.getInstance().apply { timeInMillis = selectedDate }
+            val dayStart = cal.apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
+            val dayEnd = dayStart + 86400000L
+            allInspections.filter { it.inspectionDate in dayStart until dayEnd }
+                .sortedBy { it.inspectionDate }
         }
     }
 
@@ -115,7 +122,8 @@ fun ScheduleScreen(
             // Calendar Grid
             CalendarGrid(
                 month = currentMonth,
-                jobs = allJobs,
+                scheduledTimes = allVisits.filterNot { it.isCompleted }.map { it.visitDate } +
+                    allInspections.map { it.inspectionDate },
                 selectedDate = selectedDate,
                 onDateSelected = { viewModel.setSelectedDate(it) }
             )
@@ -123,14 +131,14 @@ fun ScheduleScreen(
             // Day's Jobs
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                "Jobs for ${SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(selectedDate))}",
+                "Schedule for ${SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(selectedDate))}",
                 style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            if (dayJobs.isEmpty()) {
+            if (dayVisits.isEmpty() && dayInspections.isEmpty()) {
                 EmptyState(
                     icon = {
                         Icon(
@@ -140,16 +148,31 @@ fun ScheduleScreen(
                             modifier = Modifier.size(36.dp)
                         )
                     },
-                    title = "No jobs scheduled",
-                    subtitle = "Select a date with dots to see jobs",
+                    title = "Nothing scheduled",
+                    subtitle = "Only jobs and inspections for this day appear here",
                     modifier = Modifier.fillMaxWidth()
                 )
             } else {
-                dayJobs.forEachIndexed { index, job ->
+                val jobsById = allJobs.associateBy { it.id }
+                dayVisits.forEachIndexed { index, visit ->
                     FadeSlideIn(index = index) {
-                        JobCard(
-                            job = job,
-                            onClick = { onNavigateToJobDetail(job.id) },
+                        ScheduleAgendaCard(
+                            time = visit.visitDate,
+                            label = "JOB VISIT",
+                            title = jobsById[visit.jobId]?.title ?: visit.customerName.ifBlank { "Scheduled job" },
+                            subtitle = jobsById[visit.jobId]?.address.orEmpty(),
+                            onClick = { if (visit.jobId.isNotBlank()) onNavigateToJobDetail(visit.jobId) }
+                        )
+                    }
+                }
+                dayInspections.forEachIndexed { index, inspection ->
+                    FadeSlideIn(index = dayVisits.size + index) {
+                        ScheduleAgendaCard(
+                            time = inspection.inspectionDate,
+                            label = "INSPECTION",
+                            title = inspection.customerName.ifBlank { "Scheduled inspection" },
+                            subtitle = inspection.inspectionType.name.lowercase().replaceFirstChar { it.uppercase() },
+                            onClick = { if (inspection.jobId.isNotBlank()) onNavigateToJobDetail(inspection.jobId) }
                         )
                     }
                 }
@@ -162,7 +185,7 @@ fun ScheduleScreen(
 @Composable
 private fun CalendarGrid(
     month: Calendar,
-    jobs: List<Job>,
+    scheduledTimes: List<Long>,
     selectedDate: Long,
     onDateSelected: (Long) -> Unit
 ) {
@@ -205,10 +228,7 @@ private fun CalendarGrid(
                         }
                         val thisDayStart = thisCal.apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
                         val thisDayEnd = thisDayStart + 86400000L
-                        val hasJobs = jobs.any {
-                            it.scheduledDate != null && it.scheduledDate in thisDayStart until thisDayEnd &&
-                            it.status != JobStatus.COMPLETED && it.status != JobStatus.CANCELLED && it.status != JobStatus.PAID
-                        }
+                        val hasJobs = scheduledTimes.any { it in thisDayStart until thisDayEnd }
                         val isSelected = selectedDate in thisDayStart until thisDayEnd
                         val isToday = today.get(Calendar.YEAR) == thisCal.get(Calendar.YEAR) &&
                                      today.get(Calendar.DAY_OF_YEAR) == thisCal.get(Calendar.DAY_OF_YEAR)
@@ -226,6 +246,42 @@ private fun CalendarGrid(
                 }
             }
             Spacer(modifier = Modifier.height(2.dp))
+        }
+    }
+}
+
+@Composable
+private fun ScheduleAgendaCard(
+    time: Long,
+    label: String,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = BackgroundCard)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                SimpleDateFormat("h:mm\na", Locale.getDefault()).format(Date(time)),
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(label, color = TextTertiary, style = MaterialTheme.typography.labelSmall)
+                Text(title, color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                if (subtitle.isNotBlank()) Text(subtitle, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = TextSecondary)
         }
     }
 }

@@ -1,0 +1,42 @@
+/* FieldOps visual contract: no hue anywhere in the web app. */
+:root {
+  --green: #d8d8d8;
+  --green-dark: #a8a8a8;
+  --green-light: #eeeeee;
+  --blue: #bdbdbd;
+  --blue-dark: #8f8f8f;
+  --red: #c8c8c8;
+  --red-dark: #888888;
+  --yellow: #d0d0d0;
+  --yellow-dark: #9a9a9a;
+  --orange: #bcbcbc;
+  --purple: #b0b0b0;
+  --cyan: #b5b5b5;
+  --accent: #bdbdbd;
+  --accent2: #8f8f8f;
+  --accent3: #686868;
+}
+[data-theme="light"] {
+  --green: #4a4a4a;
+  --green-dark: #2b2b2b;
+  --green-light: #6a6a6a;
+  --blue: #4b5563;
+  --blue-dark: #2f3742;
+  --red: #4b4b4b;
+  --red-dark: #2f2f2f;
+  --yellow: #5a5a5a;
+  --yellow-dark: #3a3a3a;
+  --orange: #4b4b4b;
+  --purple: #4b4b4b;
+  --cyan: #4b4b4b;
+  --accent: #4b5563;
+  --accent2: #374151;
+  --accent3: #1f2933;
+}
+body,
+.map-container,
+#gpsMap,
+#dashMap,
+#detailMap {
+  filter: grayscale(1);
+}

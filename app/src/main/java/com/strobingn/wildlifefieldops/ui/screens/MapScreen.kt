@@ -1,9 +1,16 @@
 package com.strobingn.wildlifefieldops.ui.screens
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -19,16 +26,41 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
+import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.*
+import com.strobingn.wildlifefieldops.BuildConfig
+import com.strobingn.wildlifefieldops.R
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.MapProperty
 import com.strobingn.wildlifefieldops.ui.viewmodel.MapViewModel
 import com.google.maps.android.compose.MapType
+import kotlinx.coroutines.delay
+
+
+private fun createMonochromeMarkerIcon(status: JobStatus): com.google.android.gms.maps.model.BitmapDescriptor {
+    val size = 48
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = when (status) {
+            JobStatus.PENDING -> android.graphics.Color.rgb(170, 170, 170)
+            JobStatus.IN_PROGRESS -> android.graphics.Color.rgb(115, 115, 115)
+            JobStatus.COMPLETED -> android.graphics.Color.rgb(55, 55, 55)
+            JobStatus.INVOICED -> android.graphics.Color.rgb(80, 80, 80)
+            JobStatus.PAID -> android.graphics.Color.rgb(25, 25, 25)
+            JobStatus.CANCELLED -> android.graphics.Color.rgb(145, 145, 145)
+        }
+    }
+    canvas.drawCircle(size / 2f, size / 2f, size * 0.32f, paint)
+    return com.google.android.gms.maps.model.BitmapDescriptorFactory.fromBitmap(bitmap)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,15 +71,60 @@ fun MapScreen(
 ) {
     val searchQuery by viewModel.searchQuery.collectAsState()
     val properties by viewModel.filteredProperties.collectAsState()
+    val unlocatedJobCount by viewModel.unlocatedJobCount.collectAsState()
     val isDrawing by viewModel.isDrawingBoundary.collectAsState()
     val boundaryPoints by viewModel.boundaryPoints.collectAsState()
     val context = LocalContext.current
+    val mapApiKeyConfigured = BuildConfig.GOOGLE_MAPS_API_KEY.trim().let { key ->
+        key.isNotEmpty() && !key.contains("YOUR_", ignoreCase = true)
+    }
+    val hasLocationPermission = remember(context) {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    }
+    val mapStyleOptions = remember(context) {
+        runCatching { MapStyleOptions.loadRawResourceStyle(context, R.raw.map_style_grayscale) }.getOrNull()
+    }
 
     var showSearch by remember { mutableStateOf(false) }
     var showControls by remember { mutableStateOf(true) }
+    var selectedStatus by remember { mutableStateOf<JobStatus?>(null) }
+    var mapLoaded by remember { mutableStateOf(false) }
+    var hasAutoFitted by remember { mutableStateOf(false) }
+    var mapInitializationTimedOut by remember { mutableStateOf(false) }
+
+    val visibleProperties = remember(properties, selectedStatus) {
+        properties.filter { selectedStatus == null || it.status == selectedStatus }
+    }
 
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(LatLng(41.45, -74.05), 12f)
+    }
+
+    fun fitVisibleJobs() {
+        if (visibleProperties.isEmpty()) return
+        val bounds = LatLngBounds.Builder().apply {
+            visibleProperties.forEach { include(LatLng(it.latitude, it.longitude)) }
+        }.build()
+        runCatching {
+            cameraPositionState.move(CameraUpdateFactory.newLatLngBounds(bounds, 96))
+        }
+    }
+
+    // Completed jobs may arrive after a sync. Fit once when the first complete
+    // set of located jobs is available so they are not hidden outside the
+    // default Hudson Valley camera position.
+    LaunchedEffect(mapLoaded, properties.size) {
+        if (mapLoaded && properties.isNotEmpty() && !hasAutoFitted) {
+            fitVisibleJobs()
+            hasAutoFitted = true
+        }
+    }
+
+    LaunchedEffect(mapApiKeyConfigured, mapLoaded) {
+        if (!mapApiKeyConfigured || mapLoaded) return@LaunchedEffect
+        delay(12_000)
+        if (!mapLoaded) mapInitializationTimedOut = true
     }
 
     Scaffold(
@@ -71,6 +148,9 @@ fun MapScreen(
                                 tint = TextSecondary
                             )
                         }
+                        IconButton(onClick = { fitVisibleJobs() }) {
+                            Icon(Icons.Default.CenterFocusStrong, contentDescription = "Fit all jobs", tint = TextSecondary)
+                        }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = BackgroundDark.copy(alpha = 0.9f))
                 )
@@ -83,8 +163,9 @@ fun MapScreen(
                 modifier = Modifier.fillMaxSize(),
                 cameraPositionState = cameraPositionState,
                 properties = MapProperties(
-                    isMyLocationEnabled = true,
-                    mapType = MapType.HYBRID
+                    isMyLocationEnabled = hasLocationPermission,
+                    mapType = MapType.NORMAL,
+                    mapStyleOptions = mapStyleOptions
                 ),
                 uiSettings = MapUiSettings(
                     zoomControlsEnabled = true,
@@ -92,6 +173,10 @@ fun MapScreen(
                     compassEnabled = true,
                     mapToolbarEnabled = false
                 ),
+                onMapLoaded = {
+                    mapLoaded = true
+                    mapInitializationTimedOut = false
+                },
                 onMapClick = { latLng ->
                     if (isDrawing) {
                         viewModel.addBoundaryPoint(latLng)
@@ -99,21 +184,14 @@ fun MapScreen(
                 }
             ) {
                 // Property markers
-                properties.forEach { property ->
-                    val markerColor = when (property.status) {
-                        JobStatus.PENDING -> BitmapDescriptorFactory.HUE_YELLOW
-                        JobStatus.IN_PROGRESS -> BitmapDescriptorFactory.HUE_BLUE
-                        JobStatus.COMPLETED -> BitmapDescriptorFactory.HUE_GREEN
-                        JobStatus.CANCELLED -> BitmapDescriptorFactory.HUE_RED
-                        JobStatus.INVOICED -> BitmapDescriptorFactory.HUE_VIOLET
-                        JobStatus.PAID -> BitmapDescriptorFactory.HUE_GREEN
-                    }
-
+                visibleProperties.forEach { property ->
                     Marker(
                         state = MarkerState(position = LatLng(property.latitude, property.longitude)),
-                        title = property.name,
+                        title = "${property.name} · ${property.status.name.replace('_', ' ')}",
                         snippet = "${property.address} (${property.type})",
-                        icon = BitmapDescriptorFactory.defaultMarker(markerColor),
+                        icon = remember(property.id, property.status) {
+                            createMonochromeMarkerIcon(property.status)
+                        },
                         onClick = {
                             onNavigateToJobDetail(property.id)
                             true
@@ -137,7 +215,34 @@ fun MapScreen(
                         Marker(
                             state = MarkerState(position = point),
                             title = "Point ${index + 1}",
-                            icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)
+                            icon = createMonochromeMarkerIcon(JobStatus.IN_PROGRESS)
+                        )
+                    }
+                }
+            }
+
+            if (!mapApiKeyConfigured || mapInitializationTimedOut) {
+                Card(
+                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = BackgroundCard),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.Map, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(36.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            if (!mapApiKeyConfigured) "Google Maps is not configured" else "Google Maps did not initialize",
+                            color = TextPrimary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            if (!mapApiKeyConfigured) {
+                                "Add the GOOGLE_MAPS_API repository secret and rebuild this branch."
+                            } else {
+                                "The key is present, but Android Maps did not initialize. Enable Maps SDK for Android and allow package com.strobingn.wildlifefieldops in Google Cloud."
+                            },
+                            color = TextSecondary
                         )
                     }
                 }
@@ -197,11 +302,31 @@ fun MapScreen(
                     Column(modifier = Modifier.padding(12.dp)) {
                         // Property count
                         Text(
-                            "${properties.size} properties shown",
+                            "${visibleProperties.size} jobs shown · ${unlocatedJobCount} without coordinates",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextTertiary,
                             modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
                         )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            FilterChip(
+                                selected = selectedStatus == null,
+                                onClick = { selectedStatus = null },
+                                label = { Text("All") }
+                            )
+                            JobStatus.entries.forEach { status ->
+                                FilterChip(
+                                    selected = selectedStatus == status,
+                                    onClick = { selectedStatus = if (selectedStatus == status) null else status },
+                                    label = { Text(status.name.replace('_', ' ')) }
+                                )
+                            }
+                        }
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -229,6 +354,14 @@ fun MapScreen(
                                 active = false,
                                 modifier = Modifier.weight(1f),
                                 onClick = { viewModel.clearBoundary() }
+                            )
+
+                            MapControlButton(
+                                label = "Fit Jobs",
+                                icon = Icons.Default.CenterFocusStrong,
+                                active = false,
+                                modifier = Modifier.weight(1f),
+                                onClick = { fitVisibleJobs() }
                             )
 
                             MapControlButton(

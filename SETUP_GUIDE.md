@@ -47,12 +47,18 @@ You now have:
 | 5 | Tap the **hamburger menu** (3 lines) → **APIs & Services** → **Credentials** | Credentials page |
 | 6 | Tap **+ CREATE CREDENTIALS** → **API key** | A long key appears (like `AIzaSyC...`) |
 | 7 | **Copy the key** to your Notes app | Save it |
-| 8 | Tap **Library** (left side) → Search for **"Maps JavaScript API"** | API details page |
+| 8 | Tap **Library** (left side) → Search for **"Maps SDK for Android"** | API details page |
 | 9 | Tap **Enable** | Enabled confirmation |
-| 10 | Search for **"Places API"** → Tap **Enable** | Enabled confirmation |
+| 10 | Optional: enable **"Places API"** only if you use address/place search | Enabled confirmation |
 
 You now have:
-- `VITE_GOOGLE_MAPS_API_KEY=AIzaSyC...`
+- `GOOGLE_MAPS_API=AIzaSyC...`
+
+For Android key restrictions, use this application ID:
+
+`com.strobingn.wildlifefieldops`
+
+The key must allow **Maps SDK for Android**. A key restricted only to browser/JavaScript APIs will build successfully but the native map will remain blank.
 
 ---
 
@@ -86,7 +92,7 @@ This is the **ONLY time** you paste your keys. GitHub stores them encrypted and 
 | 6 | Tap **New repository secret** again | New form |
 | 7 | Name: **`VITE_SUPABASE_ANON_KEY`** / Value: *your Supabase anon key* → **Add secret** | Secret added |
 | 8 | Tap **New repository secret** | New form |
-| 9 | Name: **`VITE_GOOGLE_MAPS_API_KEY`** / Value: *your Google Maps key* → **Add secret** | Secret added |
+| 9 | Name: **`GOOGLE_MAPS_API`** / Value: *your Google Maps key* → **Add secret** | Secret added |
 | 10 | (Optional) Name: **`VITE_OPENWEATHER_API_KEY`** / Value: *your weather key* → **Add secret** | Secret added |
 
 Your secrets page should now look like this:
@@ -96,7 +102,7 @@ Repository secrets
 ------------------
 VITE_SUPABASE_URL          ********
 VITE_SUPABASE_ANON_KEY     ********
-VITE_GOOGLE_MAPS_API_KEY   ********
+GOOGLE_MAPS_API             ********
 VITE_OPENWEATHER_API_KEY   ********  (optional)
 ```
 

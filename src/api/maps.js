@@ -23,26 +23,22 @@ const activeMarkers = new Map();
 
 // ─── Dark Theme Map Styles ───────────────────────────────────────────────────
 
-const DARK_THEME_STYLES = [
-  { elementType: 'geometry', stylers: [{ color: '#242f3e' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#242f3e' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#746855' }] },
-  { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#d59563' }] },
-  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#d59563' }] },
-  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#263c3f' }] },
-  { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#6b9a76' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#38414e' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#212a37' }] },
-  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9ca5b3' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#746855' }] },
-  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#1f2835' }] },
-  { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#f3d19c' }] },
-  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#2f3948' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#17263c' }] },
-  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#515c6d' }] },
+const GRAYSCALE_MAP_STYLES = [
+  { elementType: 'geometry', stylers: [{ color: '#242424' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#bdbdbd' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#242424' }] },
+  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#4a4a4a' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#303030' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#505050' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#686868' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#3c3c3c' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#181818' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#8f8f8f' }] },
 ];
 
-const LIGHT_THEME_STYLES = [];
+const DARK_THEME_STYLES = GRAYSCALE_MAP_STYLES;
+const LIGHT_THEME_STYLES = GRAYSCALE_MAP_STYLES;
 
 // ─── API Key Validation ──────────────────────────────────────────────────────
 
@@ -139,7 +135,7 @@ export async function initMap(containerId, options = {}) {
   if (!loaded) {
     const el = document.getElementById(containerId);
     if (el) {
-      el.innerHTML = `<div style="padding:16px;text-align:center;color:var(--muted);">Add Google Maps API key in Settings to enable the map.</div>`;
+      el.innerHTML = `<div style="padding:16px;text-align:center;color:var(--muted);">Configure the GOOGLE_MAPS_API build secret to enable the map.</div>`;
     }
     return null;
   }

@@ -38,6 +38,7 @@ fun DashboardScreen(
     onNavigateToJobForm: () -> Unit,
     onNavigateToCustomers: () -> Unit,
     onNavigateToMap: () -> Unit,
+    onNavigateToRoutes: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToAI: () -> Unit,
     onOpenDrawer: () -> Unit = {},
@@ -320,14 +321,23 @@ fun DashboardScreen(
             item {
                 SectionHeader(title = "Quick actions")
                 Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    QuickActionTile("New job", Icons.Default.AddBox, PrimaryGreen, Modifier.weight(1f), onNavigateToJobForm)
-                    QuickActionTile("Customers", Icons.Default.People, AccentPurple, Modifier.weight(1f), onNavigateToCustomers)
-                    QuickActionTile("Map", Icons.Default.Map, AccentBlue, Modifier.weight(1f), onNavigateToMap)
-                    QuickActionTile("Inspect", Icons.Default.Search, AccentCyan, Modifier.weight(1f), onNavigateToInspections)
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        QuickActionTile("New job", Icons.Default.AddBox, PrimaryGreen, Modifier.weight(1f), onNavigateToJobForm)
+                        QuickActionTile("Customers", Icons.Default.People, AccentPurple, Modifier.weight(1f), onNavigateToCustomers)
+                        QuickActionTile("Map", Icons.Default.Map, AccentBlue, Modifier.weight(1f), onNavigateToMap)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        QuickActionTile("Inspect", Icons.Default.Search, AccentCyan, Modifier.weight(1f), onNavigateToInspections)
+                        QuickActionTile("Routes", Icons.Default.Route, AccentBlue, Modifier.weight(1f), onNavigateToRoutes)
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
                 }
             }
 

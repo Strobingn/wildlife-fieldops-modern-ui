@@ -199,6 +199,7 @@ private fun AppNavHost(
                 onNavigateToJobForm = { navController.navigate(Screen.JobForm.createRoute()) },
                 onNavigateToCustomers = { navController.navigate(Screen.CustomerList.route) },
                 onNavigateToMap = { navController.navigate(Screen.Map.route) },
+                onNavigateToRoutes = { navController.navigate(Screen.RouteOptimizer.route) },
                 onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                 onNavigateToAI = { navController.navigate(Screen.AIAssistant.route) },
                 onOpenDrawer = onOpenDrawer
