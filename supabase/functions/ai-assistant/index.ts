@@ -157,6 +157,26 @@ type AiProvider = {
   model: string;
 };
 
+async function callAgentFramework(payload: AiRequest) {
+  const base = Deno.env.get("AGENT_FRAMEWORK_URL")?.trim();
+  if (!base) return null;
+  const secret = Deno.env.get("AGENT_FRAMEWORK_SHARED_SECRET")?.trim();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (secret) headers.Authorization = "Bearer " + secret;
+  const endpoint = base.replace(/\/+$/, "") + "/v1/fieldops/run";
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error("Agent Framework error " + response.status + ": " + raw.slice(0, 600));
+  }
+  const data = JSON.parse(raw);
+  if (!data?.ok || !data?.result) throw new Error("Agent Framework returned no result.");
+  return data.result;
+}
 function getProvider(): AiProvider | null {
   const openrouterKey = Deno.env.get("OPENROUTER_API_KEY");
   if (openrouterKey) {
@@ -213,10 +233,16 @@ function getProvider(): AiProvider | null {
 }
 
 async function callAI(payload: AiRequest) {
+  const agentResult = await callAgentFramework(payload).catch((error) => {
+    console.warn("Agent Framework unavailable; using existing provider:", error);
+    return null;
+  });
+  if (agentResult) return { result: agentResult, provider: "microsoft-agent-framework" };
+
   const provider = getProvider();
 
   if (!provider) {
-    return getDemoResult(payload);
+    return { result: getDemoResult(payload), provider: "demo" };
   }
 
   const body: Record<string, unknown> = {
@@ -253,7 +279,7 @@ async function callAI(payload: AiRequest) {
     throw new Error(`${provider.name} returned no message content.`);
   }
 
-  return extractJson(content);
+  return { result: extractJson(content), provider: provider.name };
 }
 
 Deno.serve(async (req) => {
@@ -276,13 +302,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    const result = await callAI(payload);
-    const provider = getProvider();
+    const ai = await callAI(payload);
 
     return jsonResponse({
       ok: true,
-      provider: provider?.name || "demo",
-      result,
+      provider: ai.provider,
+      result: ai.result,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
