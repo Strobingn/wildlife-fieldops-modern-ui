@@ -323,7 +323,7 @@ private fun AppNavHost(
         composable(Screen.AIHub.route) {
             AIHubScreen(
                 onOpenChat = { navController.navigate(Screen.AIAssistant.route) },
-                onOpenOperations = { navController.navigate(Screen.AIOperations.route) },
+                onOpenOperations = { toolId -> navController.navigate(Screen.AIOperations.createRoute(toolId)) },
                 onOpenFeature = { id -> navController.navigate(Screen.FieldAIFeature.createRoute(id)) },
                 onOpenDrawer = onOpenDrawer
             )
@@ -335,9 +335,15 @@ private fun AppNavHost(
             )
         }
 
-        composable(Screen.AIOperations.route) {
+        composable(
+            route = Screen.AIOperations.route,
+            arguments = listOf(navArgument("toolId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val rawToolId = backStackEntry.arguments?.getString("toolId")
+            val toolId = rawToolId?.takeUnless { it.isBlank() || it == "all" }
             AIOperationsScreen(
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                initialToolId = toolId
             )
         }
 
