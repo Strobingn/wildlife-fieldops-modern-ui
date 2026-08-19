@@ -25,12 +25,20 @@ The field app therefore keeps:
 
 If `AGENT_FRAMEWORK_URL` is blank, the app is unchanged.
 
-If it is set and `/health` returns ok, chat and job questions go through the orchestrator.
+If it is set, chat goes through the orchestrator first.
 If the sidecar is down, `AiService` falls back to the existing Grok / offline path.
 
 ## Local loop
 
 1. Start `agents/fieldops-maf` on port 8088
-2. Rebuild with `AGENT_FRAMEWORK_URL`
+2. Rebuild with `AGENT_FRAMEWORK_URL` (emulator: `http://10.0.2.2:8088`)
 3. Open AI Assistant and ask a species or estimate question
-4. Reply header will mention `microsoft-agent-framework` when MAF handled it
+4. Reply footer will mention `microsoft-agent-framework` when MAF handled it
+
+## Agents
+
+- FieldTech — exclusion, trapping, species, PPE
+- Estimator — labor/materials drafts
+- Compliance — NY / US legal and seasonal checks
+- Dispatcher — schedule and route priority
+- FieldOpsOrchestrator — routes the request and returns one field brief
