@@ -92,7 +92,6 @@ fun DashboardScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // ── Hero header ───────────────────────────────────────────────
             item {
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(
@@ -141,7 +140,7 @@ fun DashboardScreen(
                             ) {
                                 Icon(
                                     Icons.Default.Psychology,
-                                    contentDescription = "AI Assistant",
+                                    contentDescription = "AI Operations",
                                     tint = AccentPurple,
                                     modifier = Modifier.size(22.dp)
                                 )
@@ -158,7 +157,6 @@ fun DashboardScreen(
                 }
             }
 
-            // ── Today strip ───────────────────────────────────────────────
             item {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -217,7 +215,42 @@ fun DashboardScreen(
                 }
             }
 
-            // ── Stats ─────────────────────────────────────────────────────
+            item {
+                FieldCard(onClick = onNavigateToAI) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(AccentPurple.copy(alpha = 0.16f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = AccentPurple
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "AI Operations",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "Own tab \u00b7 Dispatch, Money, Records, Field",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -275,7 +308,6 @@ fun DashboardScreen(
                 }
             }
 
-            // ── Overview grid ─────────────────────────────────────────────
             item {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -317,7 +349,6 @@ fun DashboardScreen(
                 }
             }
 
-            // ── Quick actions ─────────────────────────────────────────────
             item {
                 SectionHeader(title = "Quick actions")
                 Spacer(modifier = Modifier.height(4.dp))
@@ -336,12 +367,11 @@ fun DashboardScreen(
                     ) {
                         QuickActionTile("Inspect", Icons.Default.Search, AccentCyan, Modifier.weight(1f), onNavigateToInspections)
                         QuickActionTile("Routes", Icons.Default.Route, AccentBlue, Modifier.weight(1f), onNavigateToRoutes)
-                        Spacer(modifier = Modifier.weight(1f))
+                        QuickActionTile("AI Ops", Icons.Default.AutoAwesome, AccentPurple, Modifier.weight(1f), onNavigateToAI)
                     }
                 }
             }
 
-            // ── Recent jobs ───────────────────────────────────────────────
             item {
                 SectionHeader(
                     title = "Recent jobs",
