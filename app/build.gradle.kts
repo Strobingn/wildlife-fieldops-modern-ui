@@ -17,15 +17,11 @@ android {
         versionCode = 15
         versionName = "2.2.0-grok-ai-v5"
 
-        // Real keys from env/secrets (Supabase + Maps hooked)
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
         val supabaseKey = System.getenv("SUPABASE_ANON_KEY") ?: "your-anon-key"
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseKey\"")
 
-        // Normalize the repository secret into the native build variable. The
-        // VITE name is supported because it is the existing documented secret;
-        // GOOGLE_MAPS_API remains the preferred native/local name.
         val mapsKey = sequenceOf(
             "GOOGLE_MAPS_API",
             "GOOGLE_MAPS_API_KEY",
@@ -39,8 +35,6 @@ android {
         val weatherKey = System.getenv("OPENWEATHER_API_KEY") ?: ""
         buildConfigField("String", "OPENWEATHER_API_KEY", "\"$weatherKey\"")
 
-        // SpaceXAI (xAI Grok) — keys are baked in at BUILD time from CI env / secrets.
-        // Prefer XAI_API_KEY; LLM_API_KEY is a fallback alias.
         fun envTrim(name: String): String =
             System.getenv(name)?.trim()?.trim('"')?.trim('\'').orEmpty()
         fun escapeBuildConfig(value: String): String =
@@ -58,12 +52,9 @@ android {
             .ifBlank { envTrim("XAI_MODEL") }
             .ifBlank { "grok-4.5" }
 
-        // Log presence only (never the key) so CI makes missing secrets obvious.
-        logger.lifecycle(
-            "LLM config: keyChars=${llmKey.length} base=$llmBase model=$llmModel " +
-                "(XAI_API_KEY ${if (envTrim(\"XAI_API_KEY\").isNotEmpty()) \"set\" else \"empty\"}, " +
-                "LLM_API_KEY ${if (envTrim(\"LLM_API_KEY\").isNotEmpty()) \"set\" else \"empty\"})"
-        )
+        val xaiStatus = if (envTrim("XAI_API_KEY").isNotEmpty()) "set" else "empty"
+        val llmStatus = if (envTrim("LLM_API_KEY").isNotEmpty()) "set" else "empty"
+        logger.lifecycle("LLM config: keyChars=${llmKey.length} base=$llmBase model=$llmModel (XAI_API_KEY $xaiStatus, LLM_API_KEY $llmStatus)")
 
         buildConfigField("String", "LLM_API_KEY", "\"${escapeBuildConfig(llmKey)}\"")
         buildConfigField("String", "LLM_BASE_URL", "\"${escapeBuildConfig(llmBase)}\"")
@@ -72,12 +63,11 @@ android {
 
         val agentFrameworkUrl = envTrim("AGENT_FRAMEWORK_URL")
         buildConfigField("String", "AGENT_FRAMEWORK_URL", "\"${escapeBuildConfig(agentFrameworkUrl)}\"")
-        logger.lifecycle("Agent Framework URL: ${agentFrameworkUrl.ifBlank { \"(disabled)\" }}")
+        val agentStatus = agentFrameworkUrl.ifBlank { "disabled" }
+        logger.lifecycle("Agent Framework URL: $agentStatus")
 
-        // Manifest placeholder for Google Maps meta-data
         manifestPlaceholders["GOOGLE_MAPS_API"] = mapsKey
 
-        // Help 16 KB page-size devices (Android 15 / many S24 Ultra builds)
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
         }
@@ -97,7 +87,7 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false // keep install simple until Play release signing is set
+            isMinifyEnabled = false
             isShrinkResources = false
             val keystorePath = System.getenv("KEYSTORE_PATH")
             if (keystorePath != null && file(keystorePath).exists()) {
@@ -106,7 +96,6 @@ android {
         }
         debug {
             isDebuggable = true
-            // No applicationIdSuffix — one package name for installs on your phone
         }
     }
 
@@ -144,7 +133,6 @@ android {
             )
         }
         jniLibs {
-            // Uncompressed native libs — better compatibility on Android 15 page-size devices
             useLegacyPackaging = false
         }
     }
@@ -160,7 +148,6 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation("androidx.appcompat:appcompat:1.6.1")
 
-    // Keep BOM aligned with Kotlin 1.9.22 / compose compiler 1.5.10
     val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)
@@ -191,8 +178,6 @@ dependencies {
     implementation("com.google.mlkit:object-detection:17.0.2")
 
     implementation("io.coil-kt:coil-compose:2.5.0")
-
-    // Splash screen + animations
     implementation("androidx.core:core-splashscreen:1.0.1")
 
     val supabaseVersion = "2.6.1"
