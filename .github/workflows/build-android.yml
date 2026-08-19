@@ -2,7 +2,7 @@ name: Build Native Android APK (Debug)
 
 on:
   push:
-    branches: [ main, Field_Opps_V2.5, chatgptV25 ]
+    branches: [ main, Field_Opps_V2.5, chatgptV25, GrokAIV5 ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -17,9 +17,6 @@ jobs:
     env:
       SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-      # Normalize any existing Maps secret name into the native Gradle variable.
-      # GOOGLE_MAPS_API is preferred; the other names remain supported for
-      # compatibility with older branch/setup configurations.
       GOOGLE_MAPS_API: ${{ secrets.GOOGLE_MAPS_API || secrets.GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API }}
       VITE_GOOGLE_MAPS_API: ${{ secrets.GOOGLE_MAPS_API || secrets.GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API }}
       OPENWEATHER_API_KEY: ${{ secrets.VITE_OPENWEATHER_API_KEY }}
@@ -97,12 +94,22 @@ jobs:
           test -n "$(ls -A app/build/outputs/apk/debug/*.apk 2>/dev/null)"
           echo "=== End check ==="
 
+      - name: Name phone-install APK
+        if: success()
+        run: |
+          set -e
+          SRC=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          cp "$SRC" app/build/outputs/apk/debug/wildlife-fieldops-grokai-v5.apk
+          ls -la app/build/outputs/apk/debug/
+
       - name: Upload Debug APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: wildlife-field-ops-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: |
+            app/build/outputs/apk/debug/wildlife-fieldops-grokai-v5.apk
+            app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -115,23 +122,24 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Publish APK on Releases (easy download)
-        if: success() && github.ref == 'refs/heads/main'
+      - name: Publish APK on Releases (phone download)
+        if: success() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/GrokAIV5')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: debug-latest
-          name: Wildlife Field Ops Debug APK
-          files: app/build/outputs/apk/debug/*.apk
+          tag_name: ${{ github.ref == 'refs/heads/GrokAIV5' && 'grokai-v5-latest' || 'debug-latest' }}
+          name: ${{ github.ref == 'refs/heads/GrokAIV5' && 'Wildlife FieldOps GrokAIV5 APK' || 'Wildlife Field Ops Debug APK' }}
+          files: |
+            app/build/outputs/apk/debug/wildlife-fieldops-grokai-v5.apk
+            app/build/outputs/apk/debug/app-debug.apk
           fail_on_unmatched_files: true
           make_latest: true
           body: |
-            Native Kotlin / Jetpack Compose debug APK from `${{ github.sha }}` (run ${{ github.run_number }}).
-            Unzip is not needed here — download the `.apk` asset and install on device (unknown sources).
-            Actions artifact name remains `wildlife-field-ops-debug-apk`.
+            Phone-install APK from `${{ github.sha }}` (run ${{ github.run_number }}, branch `${{ github.ref_name }}`).
+            Download `wildlife-fieldops-grokai-v5.apk` and install (unknown sources).
+            This is a real `.apk`, not a zip.
 
       - name: Summary
         if: success()
         run: |
           echo "Wildlife Field Ops Debug APK built successfully."
-          echo "Download from this run: Artifacts → wildlife-field-ops-debug-apk"
-          echo "Or from repo Releases: tag debug-latest"
+          echo "Phone download: https://github.com/Strobingn/wildlife-fieldops-modern-ui/releases/tag/grokai-v5-latest"
