@@ -1,0 +1,4 @@
+{$AGENT_DOMAIN} {
+    encode gzip
+    reverse_proxy agent:8080
+}
