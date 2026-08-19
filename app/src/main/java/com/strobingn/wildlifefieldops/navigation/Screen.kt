@@ -11,6 +11,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object InspectionList : Screen("inspections", "Inspections", Icons.Default.Search)
     object Schedule : Screen("schedule", "Schedule", Icons.Default.CalendarMonth)
     object GPS : Screen("gps", "GPS", Icons.Default.LocationOn)
+    object AIHub : Screen("ai_hub", "AI", Icons.Default.Psychology)
 
     // Job Screens
     object JobDetail : Screen("job_detail/{jobId}", "Job Detail") {
@@ -44,7 +45,11 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     }
     object PhotoGallery : Screen("photos", "Photo Gallery", Icons.Default.PhotoCamera)
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
-    object AIAssistant : Screen("ai_assistant", "AI Assistant", Icons.Default.Psychology)
+    object AIAssistant : Screen("ai_assistant", "AI Chat", Icons.Default.Chat)
+    object AIOperations : Screen("ai_operations", "AI Operations", Icons.Default.AutoAwesome)
+    object FieldAIFeature : Screen("ai_feature/{featureId}", "AI Tool") {
+        fun createRoute(featureId: String) = "ai_feature/$featureId"
+    }
     object Expense : Screen("expenses", "Expenses", Icons.Default.Receipt)
     object Inventory : Screen("inventory", "Inventory", Icons.Default.Inventory)
     object RouteOptimizer : Screen("routes", "Routes", Icons.Default.Route)
@@ -53,15 +58,18 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     }
 
     companion object {
-        val bottomNavItems = listOf(Dashboard, JobList, InspectionList, Schedule, GPS)
+        val bottomNavItems = listOf(Dashboard, JobList, InspectionList, Schedule, AIHub)
         val drawerItems = listOf(
             CustomerList,
             Map,
+            GPS,
             PhotoGallery,
             Expense,
             Inventory,
             RouteOptimizer,
+            AIHub,
             AIAssistant,
+            AIOperations,
             Settings
         )
     }
