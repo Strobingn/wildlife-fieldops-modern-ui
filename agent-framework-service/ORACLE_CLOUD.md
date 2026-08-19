@@ -1,6 +1,6 @@
 # Oracle Cloud deployment
 
-This runs the Agent Framework service on an Oracle Cloud Compute VM. Nothing runs on your desktop.
+This runs the Agent Framework service on an Oracle Cloud Compute VM. Nothing runs on your desktop. Oracle Linux normally uses the opc SSH user.
 
 ## One-time OCI setup
 
@@ -11,9 +11,19 @@ This runs the Agent Framework service on an Oracle Cloud Compute VM. Nothing run
 
 ## Install and start
 
-    sudo apt-get update
-    sudo apt-get install -y git docker.io docker-compose-plugin
-    sudo systemctl enable --now docker
+Oracle Linux 9/10:
+
+    sudo dnf install -y git container-tools python3-pip
+    sudo pip3 install podman-compose
+
+Oracle Linux 8:
+
+    sudo dnf install -y git python3-pip
+    sudo dnf module install -y container-tools:ol8
+    sudo pip3 install podman-compose
+
+Then download and configure the service:
+
     git clone --branch Field_Opps_V2.5 https://github.com/Strobingn/wildlife-fieldops-modern-ui.git
     cd wildlife-fieldops-modern-ui/agent-framework-service
     cp .env.oracle.example .env
@@ -21,7 +31,7 @@ This runs the Agent Framework service on an Oracle Cloud Compute VM. Nothing run
 
 Edit .env and set AGENT_DOMAIN, AGENT_FRAMEWORK_API_KEY, AGENT_FRAMEWORK_MODEL, and a long random AGENT_FRAMEWORK_SHARED_SECRET. Then start it:
 
-    sudo docker compose -f docker-compose.oracle.yml up -d --build
+    sudo podman-compose -f docker-compose.oracle.yml up -d --build
 
 Caddy obtains and renews HTTPS automatically after DNS points to the VM and ports 80/443 are reachable.
 
