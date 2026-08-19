@@ -69,8 +69,11 @@ Legacy web / Capacitor folders may still exist in the repo history for reference
 
 ## AI
 
-- Prefer Supabase function `ai-assistant` (set LLM keys in Supabase Edge Function secrets).
-- If the function is offline, the app uses built-in field knowledge so the chat still works.
+- The native app calls the Supabase `ai-assistant` gateway.
+- When `AGENT_FRAMEWORK_URL` is configured, Supabase routes requests through the private Microsoft Agent Framework service in `agent-framework-service/`.
+- The service runs a FieldPlanner → SafetyAndComplianceReviewer → FieldOpsFormatter workflow.
+- If the gateway is unavailable, the app keeps its existing direct-model/local fallback.
+- Keep `AGENT_FRAMEWORK_URL`, `AGENT_FRAMEWORK_SHARED_SECRET`, and model API keys in server-side secrets; never bake them into the APK.
 
 
 ## V2.5 route planner and visual system
