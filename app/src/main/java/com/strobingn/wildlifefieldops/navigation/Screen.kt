@@ -11,7 +11,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object InspectionList : Screen("inspections", "Inspections", Icons.Default.Search)
     object Schedule : Screen("schedule", "Schedule", Icons.Default.CalendarMonth)
     object GPS : Screen("gps", "GPS", Icons.Default.LocationOn)
-    object AIHub : Screen("ai_hub", "AI", Icons.Default.Psychology)
+    object AIHub : Screen("ai_hub", "AI Ops", Icons.Default.AutoAwesome)
 
     // Job Screens
     object JobDetail : Screen("job_detail/{jobId}", "Job Detail") {
@@ -46,7 +46,9 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object PhotoGallery : Screen("photos", "Photo Gallery", Icons.Default.PhotoCamera)
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
     object AIAssistant : Screen("ai_assistant", "AI Chat", Icons.Default.Chat)
-    object AIOperations : Screen("ai_operations", "AI Operations", Icons.Default.AutoAwesome)
+    object AIOperations : Screen("ai_operations/{toolId}", "AI Operations", Icons.Default.AutoAwesome) {
+        fun createRoute(toolId: String? = null) = "ai_operations/${toolId ?: "all"}"
+    }
     object FieldAIFeature : Screen("ai_feature/{featureId}", "AI Tool") {
         fun createRoute(featureId: String) = "ai_feature/$featureId"
     }
@@ -68,8 +70,6 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
             Inventory,
             RouteOptimizer,
             AIHub,
-            AIAssistant,
-            AIOperations,
             Settings
         )
     }
