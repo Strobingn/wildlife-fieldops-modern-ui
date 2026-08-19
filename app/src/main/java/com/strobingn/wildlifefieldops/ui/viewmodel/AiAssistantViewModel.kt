@@ -22,7 +22,7 @@ class AiAssistantViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val welcomeMessage = buildString {
-        append("Hello — I'm your Wildlife FieldOps AI (SpaceXAI / Grok).\n\n")
+        append("Hello — I'm your Wildlife FieldOps AI.\n\n")
         append("Ask about inspections, jobs, trapping, exclusion, safety, estimates, customers, or daily workflow.\n")
         if (aiService.isConfigured) {
             append("\n✅ Live AI connected via ${aiService.providerLabel}.")
@@ -50,20 +50,18 @@ class AiAssistantViewModel @Inject constructor(
         _messages.value = _messages.value + ChatMessage(trimmed, true)
         _isTyping.value = true
         viewModelScope.launch {
-            val reply = if (aiService.isConfigured) {
-                aiService.ask(trimmed)
+            // Supabase is the secure gateway to the Agent Framework workflow.
+            // Keep direct model access as a fallback for offline/dev builds.
+            val edge = runCatching { aiService.askViaSupabase(trimmed) }.getOrNull()
+            val reply = if (!edge.isNullOrBlank() &&
+                !edge.startsWith("⚠️") &&
+                !edge.startsWith("Supabase") &&
+                !edge.startsWith("Network") &&
+                !edge.startsWith("Demo mode")
+            ) {
+                edge
             } else {
-                // Optional Supabase edge; otherwise ask() returns SpaceXAI setup help.
-                val edge = runCatching { aiService.askViaSupabase(trimmed) }.getOrNull()
-                if (!edge.isNullOrBlank() &&
-                    !edge.startsWith("⚠️") &&
-                    !edge.startsWith("Supabase") &&
-                    !edge.startsWith("Network")
-                ) {
-                    edge
-                } else {
-                    aiService.ask(trimmed)
-                }
+                aiService.ask(trimmed)
             }
             _messages.value = _messages.value + ChatMessage(reply, false)
             _isTyping.value = false
