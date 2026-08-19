@@ -1,17 +1,20 @@
 package com.strobingn.wildlifefieldops.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,18 +23,48 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.ai.FieldAIFeatures
+import com.strobingn.wildlifefieldops.ai.operations.IndividualAIToolCatalog
 import com.strobingn.wildlifefieldops.ui.components.FieldCard
 import com.strobingn.wildlifefieldops.ui.theme.*
+import com.strobingn.wildlifefieldops.ui.viewmodel.AIOperationsViewModel
+
+private val HubCategories = listOf(
+    "Operations",
+    "Dispatch",
+    "Money",
+    "Records",
+    "Field",
+    "Insights",
+    "Playbooks",
+    "Chat"
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AIHubScreen(
     onOpenChat: () -> Unit,
-    onOpenOperations: () -> Unit,
+    onOpenOperations: (String?) -> Unit,
     onOpenFeature: (String) -> Unit,
-    onOpenDrawer: () -> Unit = {}
+    onOpenDrawer: () -> Unit = {},
+    viewModel: AIOperationsViewModel = hiltViewModel()
 ) {
+    val dashboard by viewModel.dashboard.collectAsState()
+    var category by rememberSaveable { mutableStateOf("Operations") }
+    var query by rememberSaveable { mutableStateOf("") }
+
+    val tools = remember(category, query) {
+        IndividualAIToolCatalog.tools.filter { tool ->
+            val inCategory = category == "Operations" || tool.category == category
+            val matchesQuery = query.isBlank() ||
+                tool.title.contains(query, ignoreCase = true) ||
+                tool.purpose.contains(query, ignoreCase = true) ||
+                tool.category.contains(query, ignoreCase = true)
+            inCategory && matchesQuery
+        }
+    }
+
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -48,12 +81,12 @@ fun AIHubScreen(
                     }
                     Column(Modifier.weight(1f)) {
                         Text(
-                            "AI",
+                            "AI Operations",
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "Field command center",
+                            "Own tab · split by job",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -65,7 +98,7 @@ fun AIHubScreen(
                             .background(AccentPurple.copy(alpha = 0.18f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Psychology, contentDescription = null, tint = AccentPurple)
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = AccentPurple)
                     }
                 }
             }
@@ -86,10 +119,14 @@ fun AIHubScreen(
                             .padding(18.dp)
                     ) {
                         Column {
-                            Text("25 new field tools", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                "20 live tools from your jobs",
+                                color = Color.White.copy(alpha = 0.8f),
+                                style = MaterialTheme.typography.labelLarge
+                            )
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "Chat, live operations, and species playbooks — not buried in Settings.",
+                                "Pick a category. Dispatch, money, records, and field stay separate.",
                                 color = Color.White,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
@@ -100,49 +137,130 @@ fun AIHubScreen(
             }
 
             item {
-                HubActionCard(
-                    title = "AI Chat",
-                    subtitle = "Ask species, safety, and equipment questions",
-                    icon = Icons.Default.Chat,
-                    onClick = onOpenChat
-                )
-            }
-            item {
-                HubActionCard(
-                    title = "AI Operations",
-                    subtitle = "20 live tools from your real jobs",
-                    icon = Icons.Default.AutoAwesome,
-                    onClick = onOpenOperations
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("Search tools") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    shape = FieldShapes.button
                 )
             }
 
             item {
-                Text(
-                    "25 field features",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    HubCategories.forEach { label ->
+                        FilterChip(
+                            selected = category == label,
+                            onClick = { category = label },
+                            label = { Text(label) }
+                        )
+                    }
+                }
             }
 
-            itemsIndexed(FieldAIFeatures.all) { index, feature ->
-                FieldCard(onClick = { onOpenFeature(feature.id) }) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            color = SurfaceBright,
-                            shape = CircleShape
-                        ) {
+            when (category) {
+                "Chat" -> item {
+                    HubActionCard(
+                        title = "AI Chat",
+                        subtitle = "Ask species, safety, and equipment questions",
+                        icon = Icons.Default.Chat,
+                        onClick = onOpenChat
+                    )
+                }
+                "Playbooks" -> {
+                    itemsIndexed(FieldAIFeatures.all) { index, feature ->
+                        FieldCard(onClick = { onOpenFeature(feature.id) }) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(color = SurfaceBright, shape = CircleShape) {
+                                    Text(
+                                        "${index + 1}",
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(feature.title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
+                                    Text(feature.purpose, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }
+                "Insights" -> item {
+                    FieldCard(onClick = { onOpenOperations(null) }) {
+                        Column {
+                            Text("Full live dashboard", fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(4.dp))
                             Text(
-                                "${index + 1}",
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.labelMedium
+                                "${dashboard.business.totalJobs} jobs · close rate ${dashboard.business.closeRatePercent}% · ${dashboard.advancedInsights.size} modules",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text("Open business, property, quality, pricing, routes, inventory, species", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+                else -> {
+                    if (category == "Operations") {
+                        item {
+                            HubActionCard(
+                                title = "AI Chat",
+                                subtitle = "Species, safety, and equipment questions",
+                                icon = Icons.Default.Chat,
+                                onClick = onOpenChat
                             )
                         }
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(feature.title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
-                            Text(feature.purpose, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IndividualAIToolCatalog.categories
+                        .filter { category == "Operations" || it == category }
+                        .forEach { group ->
+                            val groupTools = tools.filter { it.category == group }
+                            if (groupTools.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        group,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                }
+                                itemsIndexed(groupTools, key = { _, tool -> tool.id }) { index, tool ->
+                                    FieldCard(onClick = { onOpenOperations(tool.id) }) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Surface(color = SurfaceBright, shape = CircleShape) {
+                                                Text(
+                                                    "${index + 1}",
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                                    fontWeight = FontWeight.Bold,
+                                                    style = MaterialTheme.typography.labelMedium
+                                                )
+                                            }
+                                            Spacer(Modifier.width(12.dp))
+                                            Column(Modifier.weight(1f)) {
+                                                Text(tool.title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
+                                                Text(tool.purpose, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    if (tools.isEmpty()) {
+                        item {
+                            Text(
+                                "No tools match that search.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
