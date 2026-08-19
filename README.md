@@ -13,7 +13,7 @@ Field operations app for wildlife removal:
 - Offline-first Room database
 - Cloud sync via Supabase
 - Weather (OpenWeather, optional)
-- AI assistant (Supabase Edge Function + on-device fallback)
+- AI assistant (Grok + optional Microsoft Agent Framework sidecar + on-device fallback)
 
 ## Build the APK (GitHub Actions)
 
@@ -40,6 +40,8 @@ export SUPABASE_URL="https://YOUR_PROJECT.supabase.co"
 export SUPABASE_ANON_KEY="your-anon-key"
 export GOOGLE_MAPS_API="AIza..."
 export OPENWEATHER_API_KEY="..."
+# optional MAF sidecar for GrokAIV5:
+export AGENT_FRAMEWORK_URL="http://10.0.2.2:8088"
 
 ./gradlew :app:assembleDebug
 ```
@@ -50,6 +52,7 @@ APK: `app/build/outputs/apk/debug/`
 
 ```
 app/                    # Native Android application module
+agents/fieldops-maf/    # Microsoft Agent Framework sidecar (GrokAIV5)
 build.gradle.kts        # Root Gradle
 settings.gradle.kts
 .github/workflows/      # APK build
@@ -69,9 +72,10 @@ Legacy web / Capacitor folders may still exist in the repo history for reference
 
 ## AI
 
-- Prefer Supabase function `ai-assistant` (set LLM keys in Supabase Edge Function secrets).
-- If the function is offline, the app uses built-in field knowledge so the chat still works.
-
+- Live chat uses xAI Grok when `XAI_API_KEY` is baked into the APK.
+- GrokAIV5 optionally routes chat through a Microsoft Agent Framework sidecar (`agents/fieldops-maf`).
+- Set `AGENT_FRAMEWORK_URL` at build time (example: `http://10.0.2.2:8088`). If it is blank or the sidecar is down, the app falls back to Grok, then offline field knowledge.
+- See [docs/GROK_AI_V5_AGENT_FRAMEWORK.md](docs/GROK_AI_V5_AGENT_FRAMEWORK.md).
 
 ## V2.5 route planner and visual system
 

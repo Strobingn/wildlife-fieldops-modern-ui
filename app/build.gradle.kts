@@ -14,8 +14,8 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 14
-        versionName = "2.1.4-xai-key-bake"
+        versionCode = 15
+        versionName = "2.2.0-grok-ai-v5"
 
         // Real keys from env/secrets (Supabase + Maps hooked)
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
@@ -61,14 +61,18 @@ android {
         // Log presence only (never the key) so CI makes missing secrets obvious.
         logger.lifecycle(
             "LLM config: keyChars=${llmKey.length} base=$llmBase model=$llmModel " +
-                "(XAI_API_KEY ${if (envTrim("XAI_API_KEY").isNotEmpty()) "set" else "empty"}, " +
-                "LLM_API_KEY ${if (envTrim("LLM_API_KEY").isNotEmpty()) "set" else "empty"})"
+                "(XAI_API_KEY ${if (envTrim(\"XAI_API_KEY\").isNotEmpty()) \"set\" else \"empty\"}, " +
+                "LLM_API_KEY ${if (envTrim(\"LLM_API_KEY\").isNotEmpty()) \"set\" else \"empty\"})"
         )
 
         buildConfigField("String", "LLM_API_KEY", "\"${escapeBuildConfig(llmKey)}\"")
         buildConfigField("String", "LLM_BASE_URL", "\"${escapeBuildConfig(llmBase)}\"")
         buildConfigField("String", "LLM_MODEL", "\"${escapeBuildConfig(llmModel)}\"")
         buildConfigField("int", "LLM_KEY_LENGTH", "${llmKey.length}")
+
+        val agentFrameworkUrl = envTrim("AGENT_FRAMEWORK_URL")
+        buildConfigField("String", "AGENT_FRAMEWORK_URL", "\"${escapeBuildConfig(agentFrameworkUrl)}\"")
+        logger.lifecycle("Agent Framework URL: ${agentFrameworkUrl.ifBlank { \"(disabled)\" }}")
 
         // Manifest placeholder for Google Maps meta-data
         manifestPlaceholders["GOOGLE_MAPS_API"] = mapsKey
