@@ -1,11 +1,13 @@
-name: Build Native Android APK (Debug)
+name: Build GrokAIV5 Android APK
 
 on:
   push:
-    branches: [ main, Field_Opps_V2.5, chatgptV25, GrokAIV5 ]
-  pull_request:
-    branches: [ main ]
+    branches: [ GrokAIV5 ]
   workflow_dispatch:
+
+concurrency:
+  group: grokai-v5-apk
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -100,16 +102,14 @@ jobs:
           set -e
           SRC=$(ls app/build/outputs/apk/debug/*.apk | head -1)
           cp "$SRC" app/build/outputs/apk/debug/wildlife-fieldops-grokai-v5.apk
-          ls -la app/build/outputs/apk/debug/
+          ls -lah app/build/outputs/apk/debug/wildlife-fieldops-grokai-v5.apk
 
       - name: Upload Debug APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: wildlife-field-ops-debug-apk
-          path: |
-            app/build/outputs/apk/debug/wildlife-fieldops-grokai-v5.apk
-            app/build/outputs/apk/debug/app-debug.apk
+          name: wildlife-fieldops-grokai-v5-apk
+          path: app/build/outputs/apk/debug/wildlife-fieldops-grokai-v5.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -122,24 +122,28 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Publish APK on Releases (phone download)
-        if: success() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/GrokAIV5')
+      - name: Publish GrokAIV5 APK to Releases
+        if: success()
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref == 'refs/heads/GrokAIV5' && 'grokai-v5-latest' || 'debug-latest' }}
-          name: ${{ github.ref == 'refs/heads/GrokAIV5' && 'Wildlife FieldOps GrokAIV5 APK' || 'Wildlife Field Ops Debug APK' }}
-          files: |
-            app/build/outputs/apk/debug/wildlife-fieldops-grokai-v5.apk
-            app/build/outputs/apk/debug/app-debug.apk
+          tag_name: grokai-v5-latest
+          name: Wildlife FieldOps GrokAIV5 APK
+          target_commitish: GrokAIV5
+          files: app/build/outputs/apk/debug/wildlife-fieldops-grokai-v5.apk
           fail_on_unmatched_files: true
-          make_latest: true
+          make_latest: false
+          prerelease: false
           body: |
-            Phone-install APK from `${{ github.sha }}` (run ${{ github.run_number }}, branch `${{ github.ref_name }}`).
-            Download `wildlife-fieldops-grokai-v5.apk` and install (unknown sources).
+            Phone-install APK from `${{ github.sha }}` (run ${{ github.run_number }}, branch `GrokAIV5` only).
+
+            Download **wildlife-fieldops-grokai-v5.apk** and install (unknown sources).
             This is a real `.apk`, not a zip.
+
+            Direct link:
+            https://github.com/Strobingn/wildlife-fieldops-modern-ui/releases/download/grokai-v5-latest/wildlife-fieldops-grokai-v5.apk
 
       - name: Summary
         if: success()
         run: |
-          echo "Wildlife Field Ops Debug APK built successfully."
-          echo "Phone download: https://github.com/Strobingn/wildlife-fieldops-modern-ui/releases/tag/grokai-v5-latest"
+          echo "GrokAIV5 APK built and published."
+          echo "https://github.com/Strobingn/wildlife-fieldops-modern-ui/releases/download/grokai-v5-latest/wildlife-fieldops-grokai-v5.apk"
