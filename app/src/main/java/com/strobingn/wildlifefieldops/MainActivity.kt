@@ -344,6 +344,12 @@ private fun AppNavHost(
             )
         }
 
+        composable(Screen.AIOperations.route) {
+            AIOperationsScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+
         composable(Screen.Expense.route) {
             ExpenseScreen(
                 onBack = { navController.popBackStack() }
