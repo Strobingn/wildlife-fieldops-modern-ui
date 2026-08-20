@@ -11,10 +11,6 @@ data class RepairMaterials(
 )
 
 object RepairCalc {
-    /**
-     * Materials to replace/repair openings. Not a "takeoff."
-     * Adds 2 in overlap on every edge.
-     */
     fun forOpenings(
         openings: Int,
         widthIn: Double,
@@ -31,7 +27,11 @@ object RepairCalc {
         val raccoon = species.contains("raccoon", true) || species.contains("coon", true)
         val clothKind = if (raccoon) "1/2 in 16-ga cloth" else "1/4 in 16-ga cloth"
         val screws = ((clothFeet * 12.0) / 5.0).toInt().coerceAtLeast(n * 8)
-        val flashing = if (location.contains("roof", true) || location.contains("ridge", true) || location.contains("chimney", true)) {
+        val flashing = if (
+            location.contains("roof", true) ||
+            location.contains("ridge", true) ||
+            location.contains("chimney", true)
+        ) {
             (n * 2.0) + linearFeetExtra
         } else 0.0
         val oneWays = when {
@@ -40,7 +40,8 @@ object RepairCalc {
             else -> if (n > 0) 1 else 0
         }
         val caps = if (location.contains("chimney", true)) 1 else 0
-        val hours = 1.0 + n * 0.75 + if (raccoon) 0.5 else 0.0 + if (caps == 1) 0.75 else 0.0
+        val extraHours = (if (raccoon) 0.5 else 0.0) + (if (caps == 1) 0.75 else 0.0)
+        val hours = 1.0 + n * 0.75 + extraHours
         return RepairMaterials(
             clothFeet = kotlin.math.ceil(clothFeet * 10.0) / 10.0,
             clothKind = clothKind,
