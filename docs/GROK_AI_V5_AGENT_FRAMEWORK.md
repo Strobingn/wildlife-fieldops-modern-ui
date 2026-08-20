@@ -1,44 +1,44 @@
-# GrokAIV5 — Microsoft Agent Framework in Wildlife FieldOps
+# GrokAIV5 — Field desk, not a chatbot
 
-Branch: `GrokAIV5`  
-Source: https://github.com/microsoft/agent-framework
+Branch: `GrokAIV5`
 
-## Why a sidecar
+The Microsoft Agent Framework sidecar and the 20 office-chat tools are not the product.
+They do not run on a job and they do not price a hole.
 
-Microsoft Agent Framework is Python / .NET. It does not ship an Android runtime.
-The field app therefore keeps:
+## What the phone does now
 
-1. Room + `AIOperationsEngine` for offline facts
-2. Existing xAI Grok chat in `AiService`
-3. A new optional HTTP orchestrator that runs MAF specialists
+On-device engines in `ai/field/`:
 
-## What landed
+| Engine | What you get |
+|---|---|
+| `SeasonRules` | NY holds for bat maternity, kits, MBTA, heat trap checks |
+| `SignScorer` | Ranked species from droppings, hole size, time of day |
+| `RepairCalc` | Cloth, screws, flashing, hours for replace/repair |
+| `QuoteBuilder` | Line-item quote + work order at Wildlife Whisperer rates |
 
-| Layer | Path | Role |
-|---|---|---|
-| MAF service | `agents/fieldops-maf/` | FieldTech, Estimator, Compliance, Dispatcher, Orchestrator |
-| Android client | `ai/AgentFrameworkClient.kt` | Health check + `/v1/run` |
-| Chat path | `AiService.ask()` | Tries MAF first, then Grok, then offline knowledge |
-| Build flag | `AGENT_FRAMEWORK_URL` | Empty = current behavior |
+Open **Field** on the bottom nav. Everything is on one screen. No extra tap.
 
-## Default behavior
+Copy the quote. Radio can be off.
 
-If `AGENT_FRAMEWORK_URL` is blank, the app is unchanged.
+## Language
 
-If it is set, chat goes through the orchestrator first.
-If the sidecar is down, `AiService` falls back to the existing Grok / offline path.
+- Remove
+- Replace / Repair
+- Exclusion
 
-## Local loop
+Never “take off.”
 
-1. Start `agents/fieldops-maf` on port 8088
-2. Rebuild with `AGENT_FRAMEWORK_URL` (emulator: `http://10.0.2.2:8088`)
-3. Open AI Assistant and ask a species or estimate question
-4. Reply footer will mention `microsoft-agent-framework` when MAF handled it
+## Rates (`PriceBook`)
 
-## Agents
+- Labor $95/hr
+- Tax 8.125%
+- Inspection $125
+- Trip $65
 
-- FieldTech — exclusion, trapping, species, PPE
-- Estimator — labor/materials drafts
-- Compliance — NY / US legal and seasonal checks
-- Dispatcher — schedule and route priority
-- FieldOpsOrchestrator — routes the request and returns one field brief
+Edit `PriceBook.kt` if your book changes.
+
+## Grok
+
+Optional. Only if `XAI_API_KEY` is in the APK. The field desk does not wait for it.
+
+The Python sidecar under `agents/fieldops-maf/` is leftover. Do not start it for field work.
