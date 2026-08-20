@@ -14,8 +14,8 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 15
-        versionName = "2.2.0-grok-ai-v5"
+        versionCode = 16
+        versionName = "2.2.1-grok-ai-v5"
 
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
         val supabaseKey = System.getenv("SUPABASE_ANON_KEY") ?: "your-anon-key"
@@ -65,6 +65,10 @@ android {
         buildConfigField("String", "AGENT_FRAMEWORK_URL", "\"${escapeBuildConfig(agentFrameworkUrl)}\"")
         val agentStatus = agentFrameworkUrl.ifBlank { "disabled" }
         logger.lifecycle("Agent Framework URL: $agentStatus")
+
+        val hfToken = envTrim("HF_TOKEN").ifBlank { envTrim("HUGGINGFACE_HUB_TOKEN") }
+        buildConfigField("String", "HF_TOKEN", "\"${escapeBuildConfig(hfToken)}\"")
+        logger.lifecycle("HF_TOKEN ${if (hfToken.length >= 8) "set" else "empty"}")
 
         manifestPlaceholders["GOOGLE_MAPS_API"] = mapsKey
 
@@ -176,6 +180,7 @@ dependencies {
     implementation("com.google.ar:core:1.45.0")
     implementation("com.google.mlkit:image-labeling:17.0.9")
     implementation("com.google.mlkit:object-detection:17.0.2")
+    implementation("com.google.mediapipe:tasks-genai:0.10.27")
 
     implementation("io.coil-kt:coil-compose:2.5.0")
     implementation("androidx.core:core-splashscreen:1.0.1")
