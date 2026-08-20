@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.Handyman
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -60,7 +59,6 @@ fun AIHubScreen(
     onOpenDrawer: () -> Unit = {}
 ) {
     var query by rememberSaveable { mutableStateOf("") }
-    var showTools by rememberSaveable { mutableStateOf(false) }
 
     val phoneReadyHint = if (OnDeviceLlm.hasHfToken()) "Phone model can download" else "Phone model needs HF_TOKEN"
     val grokHint = if (BuildConfig.LLM_KEY_LENGTH >= 10) "Grok key baked in" else "No Grok key in this APK"
@@ -98,14 +96,6 @@ fun AIHubScreen(
             }
 
             item {
-                Text(
-                    "On site: talk, shoot, quote. That is the whole loop.",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-
-            item {
                 HubHero(
                     title = "Walk + quote",
                     subtitle = "Talk while you inspect. Add photos. Estimate writes itself.",
@@ -121,49 +111,6 @@ fun AIHubScreen(
                     onClick = onOpenChat
                 )
             }
-            item {
-                HubHero(
-                    title = "Field tools",
-                    subtitle = "25 job-specific prompts. You type the facts, then run AI.",
-                    icon = Icons.Outlined.Handyman,
-                    onClick = { showTools = !showTools }
-                )
-            }
-
-            if (showTools) {
-                item {
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        placeholder = { Text("Search bats, traps, estimate…") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
-                    )
-                }
-                itemsIndexed(features, key = { _, f -> f.id }) { index, feature ->
-                    FieldCard(onClick = { onOpenFeature(feature.id) }) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(color = SurfaceBright, shape = CircleShape) {
-                                Text(
-                                    "${index + 1}",
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(feature.title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
-                                Text(feature.purpose, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                            }
-                        }
-                    }
-                }
-                if (features.isEmpty()) {
-                    item { Text("Nothing matches.", color = TextTertiary) }
-                }
-            }
 
             item {
                 FilterChip(
@@ -171,6 +118,46 @@ fun AIHubScreen(
                     onClick = { onOpenOperations(null) },
                     label = { Text("Job numbers (not AI)") }
                 )
+            }
+
+            item {
+                Text(
+                    "Field tools",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            item {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("Search bats, traps, estimate…") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
+                )
+            }
+            itemsIndexed(features, key = { _, f -> f.id }) { index, feature ->
+                FieldCard(onClick = { onOpenFeature(feature.id) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(color = SurfaceBright, shape = CircleShape) {
+                            Text(
+                                "${index + 1}",
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(feature.title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
+                            Text(feature.purpose, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                        }
+                    }
+                }
+            }
+            if (features.isEmpty()) {
+                item { Text("Nothing matches.", color = TextTertiary) }
             }
             item { Spacer(Modifier.height(88.dp)) }
         }
