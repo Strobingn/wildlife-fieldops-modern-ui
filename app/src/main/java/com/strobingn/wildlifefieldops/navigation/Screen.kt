@@ -10,7 +10,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object InspectionList : Screen("inspections", "Inspections", Icons.Default.Search)
     object Schedule : Screen("schedule", "Schedule", Icons.Default.CalendarMonth)
     object GPS : Screen("gps", "GPS", Icons.Default.LocationOn)
-    object AIHub : Screen("ai_hub", "AI Ops", Icons.Default.AutoAwesome)
+    object AIHub : Screen("ai_hub", "Field", Icons.Default.Handyman)
     object InspectionTalk : Screen("inspection_talk", "Walk + quote", Icons.Default.RecordVoiceOver)
 
     object JobDetail : Screen("job_detail/{jobId}", "Job Detail") {
@@ -41,10 +41,10 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object PhotoGallery : Screen("photos", "Photo Gallery", Icons.Default.PhotoCamera)
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
     object AIAssistant : Screen("ai_assistant", "AI Chat", Icons.Default.Chat)
-    object AIOperations : Screen("ai_operations/{toolId}", "AI Operations", Icons.Default.AutoAwesome) {
+    object AIOperations : Screen("ai_operations/{toolId}", "Field desk", Icons.Default.Handyman) {
         fun createRoute(toolId: String? = null) = "ai_operations/${toolId ?: "all"}"
     }
-    object FieldAIFeature : Screen("ai_feature/{featureId}", "AI Tool") {
+    object FieldAIFeature : Screen("ai_feature/{featureId}", "Field tool") {
         fun createRoute(featureId: String) = "ai_feature/$featureId"
     }
     object Expense : Screen("expenses", "Expenses", Icons.Default.Receipt)

@@ -1,8 +1,8 @@
 package com.strobingn.wildlifefieldops.ai.operations
 
 /**
- * User-facing AI tools. Each entry launches independently and binds to one
- * real-data signal produced by [AIOperationsEngine].
+ * Operator tools only. Office-chat bots are gone.
+ * The field desk computes these on-device.
  */
 object IndividualAIToolCatalog {
     data class Tool(
@@ -14,33 +14,48 @@ object IndividualAIToolCatalog {
         val checklist: List<String>
     )
 
-    val categories: List<String> = listOf(
-        "Dispatch",
-        "Money",
-        "Records",
-        "Field"
-    )
+    val categories: List<String> = listOf("Field")
 
     val tools: List<Tool> = listOf(
-        Tool("lead_response", "Lead Response Coach", "Measures how quickly new calls become appointments.", "Dispatch", "Lead-to-appointment speed", listOf("Review oldest unscheduled lead", "Confirm urgency and species", "Offer the earliest appropriate window")),
-        Tool("weekend_staffing", "Weekend Staffing Planner", "Uses scheduled work to measure weekend demand.", "Dispatch", "Weekend workload predictor", listOf("Review Saturday and Sunday stops", "Confirm emergency coverage", "Verify weekend pricing policy")),
-        Tool("morning_routes", "Morning Route Planner", "Finds morning workload and protects species activity windows.", "Dispatch", "Morning route load", listOf("Group nearby morning stops", "Load long-job materials first", "Confirm dawn access instructions")),
-        Tool("late_day_safety", "Late-Day Safety Planner", "Flags work that may run beyond safe daylight.", "Dispatch", "Late-day route load", listOf("Review sunset and roof access", "Move flexible exterior work earlier", "Confirm lighting and second-technician needs")),
-        Tool("tomorrow_prep", "Tomorrow Prep Assistant", "Builds a readiness signal for tomorrow's appointments.", "Dispatch", "Tomorrow readiness check", listOf("Verify every address", "Confirm assigned technician", "Check access, equipment, and customer contact")),
-        Tool("cancelled_recovery", "Cancelled Job Recovery", "Measures estimated value lost to cancelled work.", "Money", "Cancelled revenue leakage", listOf("Review cancellation reason", "Separate lost work from postponed work", "Contact only customers with a justified next step")),
-        Tool("invoice_recovery", "Invoice Collection Assistant", "Prioritizes value still sitting in invoiced status.", "Money", "Invoice value recovery", listOf("Sort invoices by age", "Verify completion documentation", "Send a factual payment reminder")),
-        Tool("price_consistency", "Price Consistency Analyzer", "Measures estimate variation across recorded work.", "Money", "Price consistency monitor", listOf("Compare the same service scopes", "Separate access and material differences", "Update the price book only from comparable jobs")),
-        Tool("profit_margin", "Profit Margin Analyzer", "Reviews recorded margin on the highest-volume service.", "Money", "Top-service margin analyzer", listOf("Confirm actual labor cost", "Confirm material cost", "Review callbacks and unbilled scope")),
-        Tool("customer_records", "Customer Record Auditor", "Finds jobs that are not connected to a verified customer.", "Records", "Customer identity auditor", listOf("Add customer name", "Link the customer record", "Verify phone, email, and property address")),
-        Tool("service_classifier", "Service Type Classifier", "Finds jobs that cannot feed pricing or inventory forecasts.", "Records", "Service classification assistant", listOf("Read verified field evidence", "Choose the correct service type", "Avoid species guesses without confirmation")),
-        Tool("follow_up_finder", "Follow-Up Task Finder", "Extracts follow-up commitments from job notes.", "Records", "Follow-up commitment extractor", listOf("Open each identified job", "Create a dated visit or task", "Record the promised customer outcome")),
-        Tool("warranty_closeout", "Warranty Closeout Assistant", "Checks whether completed work records warranty scope.", "Records", "Warranty record auditor", listOf("Record covered repairs", "Record exclusions and customer duties", "Record warranty term and start date")),
-        Tool("forecast_confidence", "Forecast Confidence Center", "Explains whether the dataset is mature enough for forecasts.", "Records", "Forecast maturity score", listOf("Complete missing job fields", "Record schedules and closeout costs", "Treat low-maturity forecasts as directional only")),
-        Tool("momentum", "Business Momentum Tracker", "Shows how much operational data changed recently.", "Records", "Operational momentum", listOf("Review the last seven days", "Resolve stagnant open work", "Use recent data for near-term decisions")),
-        Tool("repair_scope", "Repair Scope Builder", "Finds structural entry and repair evidence in records.", "Field", "Structural repair scope classifier", listOf("Measure the opening", "Identify substrate and access", "List material and secondary gaps")),
-        Tool("zoonotic_safety", "Zoonotic Safety Assistant", "Flags possible disease, bite, and waste exposure.", "Field", "Zoonotic exposure warning", listOf("Verify the hazard", "Select required PPE", "Document containment and disposal procedure")),
-        Tool("weather_work", "Weather Work Planner", "Finds jobs with weather-sensitive field conditions.", "Field", "Weather-sensitive work planner", listOf("Check the current forecast", "Review roof, ladder, sealant, and trap safety", "Reschedule unsafe work")),
-        Tool("equipment_loadout", "Equipment Loadout Builder", "Turns equipment cues in notes into a loadout review.", "Field", "Equipment cue extractor", listOf("Check ladders and lift needs", "Load species-specific devices", "Verify PPE, repair material, and camera")),
-        Tool("property_access", "Property Access Planner", "Detects gates, tenants, pets, keys, and permission risks.", "Field", "Property access blocker", listOf("Confirm gate or access code", "Confirm tenant and pet arrangements", "Verify legal permission before entry"))
+        Tool(
+            "sign_id",
+            "Sign ID",
+            "Rank species from droppings, hole size, and time of day.",
+            "Field",
+            "Sign ID",
+            listOf("Mark dropping size", "Measure the hole", "Note night vs day")
+        ),
+        Tool(
+            "season",
+            "Season flags",
+            "NY bat, raccoon, squirrel, and heat-check holds for today.",
+            "Field",
+            "Season flags",
+            listOf("Read the hold", "Do not exclude occupied maternity", "12-hour trap checks in heat")
+        ),
+        Tool(
+            "repair_replace",
+            "Replace / Repair",
+            "Cloth, screws, flashing, and hours from measured openings.",
+            "Field",
+            "Replace / Repair",
+            listOf("Count openings", "Measure width and height", "16-ga cloth, no foam-only")
+        ),
+        Tool(
+            "quote",
+            "Field quote",
+            "Line-item quote at Wildlife Whisperer rates.",
+            "Field",
+            "Field quote",
+            listOf("Pick Remove or Replace/Repair", "Read season flags", "Copy to the customer")
+        ),
+        Tool(
+            "work_order",
+            "Work order",
+            "Numbered steps for this job, not a chatbot essay.",
+            "Field",
+            "Work order",
+            listOf("Photo with tape", "Remove or one-way", "Replace/repair the same opening")
+        )
     )
 }
