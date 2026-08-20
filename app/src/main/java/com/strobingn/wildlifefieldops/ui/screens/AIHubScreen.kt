@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -47,6 +48,7 @@ fun AIHubScreen(
     onOpenChat: () -> Unit,
     onOpenOperations: (String?) -> Unit,
     onOpenFeature: (String) -> Unit,
+    onOpenWalkTalk: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
     viewModel: AIOperationsViewModel = hiltViewModel()
 ) {
@@ -86,7 +88,7 @@ fun AIHubScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "Live Grok on a tool · SOP is labeled SOP",
+                            "Talk + photos become the estimate",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -104,36 +106,12 @@ fun AIHubScreen(
             }
 
             item {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = FieldShapes.hero,
-                    color = Color.Transparent
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                Brush.horizontalGradient(listOf(GradientStart, GradientMid, PrimaryContainer)),
-                                FieldShapes.hero
-                            )
-                            .padding(18.dp)
-                    ) {
-                        Column {
-                            Text(
-                                "Type the job. Run Grok. That is the AI.",
-                                color = Color.White.copy(alpha = 0.8f),
-                                style = MaterialTheme.typography.labelLarge
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "Checklists and job scores are not a model.",
-                                color = Color.White,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
+                HubActionCard(
+                    title = "Walk + quote",
+                    subtitle = "Talk during the inspection, add photos, get the estimate",
+                    icon = Icons.Default.Mic,
+                    onClick = onOpenWalkTalk
+                )
             }
 
             item {
@@ -205,8 +183,6 @@ fun AIHubScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(Modifier.height(8.dp))
-                            Text("Open a tool and run Grok if you want AI", style = MaterialTheme.typography.labelMedium)
                         }
                     }
                 }
