@@ -45,6 +45,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object PhotoGallery : Screen("photos", "Photo Gallery", Icons.Default.PhotoCamera)
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
     object AIAssistant : Screen("ai_assistant", "AI Assistant", Icons.Default.Psychology)
+    object AIOperations : Screen("ai_operations", "AI Operations", Icons.Default.AutoAwesome)
     object Expense : Screen("expenses", "Expenses", Icons.Default.Receipt)
     object Inventory : Screen("inventory", "Inventory", Icons.Default.Inventory)
     object RouteOptimizer : Screen("routes", "Routes", Icons.Default.Route)
@@ -62,6 +63,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
             Inventory,
             RouteOptimizer,
             AIAssistant,
+            AIOperations,
             Settings
         )
     }
