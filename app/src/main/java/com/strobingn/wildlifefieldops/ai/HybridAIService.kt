@@ -4,7 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.google.gson.Gson
 import com.strobingn.wildlifefieldops.BuildConfig
-import com.strobingn.wildlifefieldops.WildlifeFieldOpsApp
+import com.strobingn.wildlifefieldops.ai.field.QuoteBuilder
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.headers
@@ -87,40 +87,30 @@ object HybridAIService {
         analysis: AiAnalysisResult,
         jobContext: String = ""
     ): String {
-        if (!hasDirectKey()) {
-            return "Offline estimate\nGood: $${analysis.estimatedPriceLow}\nBetter: $${analysis.estimatedPriceHigh}\nBest: $${analysis.estimatedPriceHigh + 200}"
-        }
-        return runCatching {
-            callGrokText(GrokPrompts.tieredEstimatePrompt(analysis, jobContext))
-        }.getOrElse {
-            "Live estimate unavailable. Offline range: $${analysis.estimatedPriceLow} - $${analysis.estimatedPriceHigh}"
-        }
+        val quote = QuoteBuilder.fromNotes(
+            notes = analysis.suggestedNotes,
+            speciesHint = analysis.species.joinToString(),
+            snapshot = jobContext
+        )
+        return quote.asText()
     }
 
     suspend fun analyzeFormForCompliance(formText: String): List<String> {
-        if (!hasDirectKey()) return listOf("Offline mode: manually verify state rules, permits, protected species, and pesticide labels.")
-        return runCatching {
-            val text = callGrokText(GrokPrompts.complianceAuditPrompt(formText))
-            text.lines().map { it.trim().removePrefix("-").removePrefix("\u2022").trim() }.filter { it.isNotBlank() }
-        }.getOrElse { listOf("Compliance analysis failed: ${it.message}") }
+        return QuoteBuilder.fromNotes(formText).flags.ifEmpty {
+            listOf("No season hold from the text. Still verify DEC / maternity on site.")
+        }
     }
 
     suspend fun estimateFromWalkthrough(
         spokenNotes: String,
         photoSummaries: List<String>
-    ): FieldToolAnswer = answerFieldTool(
-        toolTitle = "Walk-and-talk inspection estimate",
-        purpose = "Turn spoken field notes and photo tags into a Good/Better/Best quote the tech can read to the customer on site.",
-        steps = listOf(
-            "Use only what the tech said and what the photos tagged",
-            "Hudson Valley wildlife pricing, 2026",
-            "Good / Better / Best with labor, materials, follow-ups",
-            "Flag missing measurements instead of inventing openings or animals"
-        ),
-        species = "",
-        siteNotes = spokenNotes.ifBlank { "No spoken notes yet." },
-        jobSnapshot = photoSummaries.joinToString("\n").ifBlank { "No photos tagged yet." }
-    )
+    ): FieldToolAnswer {
+        val quote = QuoteBuilder.fromNotes(
+            notes = spokenNotes,
+            snapshot = photoSummaries.joinToString("\n")
+        )
+        return FieldToolAnswer(quote.asText(), "Field engine")
+    }
 
     suspend fun answerFieldTool(
         toolTitle: String,
@@ -130,92 +120,13 @@ object HybridAIService {
         siteNotes: String,
         jobSnapshot: String = ""
     ): FieldToolAnswer = withContext(Dispatchers.IO) {
-        val userPrompt = buildString {
-            appendLine("Wildlife FieldOps tool: $toolTitle")
-            appendLine("Purpose: $purpose")
-            appendLine("SOP constraints only. Do not repeat the SOP as the answer.")
-            steps.forEachIndexed { i, step -> appendLine("${i + 1}. $step") }
-            appendLine()
-            if (jobSnapshot.isNotBlank()) {
-                appendLine("Job-record snapshot (spreadsheet math, not a model):")
-                appendLine(jobSnapshot.trim())
-                appendLine()
-            }
-            appendLine("Tech notes:")
-            appendLine("Species: ${species.ifBlank { "not specified" }}")
-            appendLine(siteNotes.ifBlank { "none given — ask for the missing facts instead of inventing them" })
-            appendLine()
-            appendLine("Write a job-specific answer. Numbers, next actions, and what to measure if facts are missing.")
-            appendLine("Hudson Valley / NY wildlife control. No legal advice. No generic brochure copy.")
-        }
-
-        val app = WildlifeFieldOpsApp.instanceOrNull()
-        if (app != null) {
-            if (!OnDeviceLlm.isReady(app) && OnDeviceLlm.hasHfToken()) {
-                OnDeviceLlm.download(app)
-            }
-            if (OnDeviceLlm.isReady(app)) {
-                val phone = runCatching { OnDeviceLlm.generate(app, userPrompt) }.getOrNull()
-                if (!phone.isNullOrBlank()) {
-                    return@withContext FieldToolAnswer(phone.trim(), "Phone")
-                }
-            }
-        }
-
-        val maf = runCatching {
-            AgentFrameworkClient.runOrNull(
-                userMessage = userPrompt,
-                species = species,
-                agent = "orchestrator",
-                context = mapOf(
-                    "tool" to toolTitle,
-                    "notes" to siteNotes,
-                    "snapshot" to jobSnapshot.take(1200)
-                )
-            )
-        }.getOrNull()
-        if (!maf.isNullOrBlank()) {
-            return@withContext FieldToolAnswer(maf.trim(), "MAF")
-        }
-
-        if (hasDirectKey()) {
-            val grok = runCatching {
-                callGrokText(
-                    prompt = userPrompt,
-                    jsonMode = false,
-                    system = FIELD_SYSTEM
-                )
-            }.getOrNull()
-            if (!grok.isNullOrBlank()) {
-                return@withContext FieldToolAnswer(grok.trim(), "Grok")
-            }
-        }
-
-        FieldToolAnswer(
-            text = buildString {
-                appendLine("Not AI. No phone model, Grok, or MAF answer.")
-                appendLine()
-                when {
-                    app != null && OnDeviceLlm.progress.value.error.isNotBlank() ->
-                        appendLine(OnDeviceLlm.progress.value.error)
-                    !OnDeviceLlm.hasHfToken() ->
-                        appendLine("Phone model needs repo secret HF_TOKEN (Hugging Face token with Gemma license accepted), then rebuild and tap Run live AI on Wi-Fi to download Gemma 3 1B (~555MB) onto this phone.")
-                    else ->
-                        appendLine("Phone model not installed or failed to load.")
-                }
-                if (!hasDirectKey()) {
-                    appendLine("Cloud Grok also has no XAI_API_KEY in this APK.")
-                }
-            }.trim(),
-            source = "Offline"
+        val quote = QuoteBuilder.fromNotes(
+            notes = siteNotes.ifBlank { "$toolTitle. $purpose. ${steps.joinToString()}" },
+            speciesHint = species,
+            snapshot = jobSnapshot
         )
+        FieldToolAnswer(quote.asText(), "Field engine")
     }
-
-    private const val FIELD_SYSTEM =
-        "You are a Hudson Valley wildlife exclusion technician. Answer in plain field notes, not JSON. " +
-            "Use the tech's measurements and job records. Do not invent openings, prices, or animals. " +
-            "Prefer 16-ga hardware cloth, mechanical fasteners, and NY/DEC-safe timing. " +
-            "Never claim a checklist is AI."
 
     private suspend fun callGrokForForm(prompt: String): GrokFormResponse {
         val content = callGrokText(prompt, jsonMode = true)
