@@ -5,31 +5,27 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector? = null) {
-    // Bottom Nav Screens
     object Dashboard : Screen("dashboard", "Home", Icons.Default.Home)
     object JobList : Screen("jobs", "Jobs", Icons.Default.Work)
     object InspectionList : Screen("inspections", "Inspections", Icons.Default.Search)
     object Schedule : Screen("schedule", "Schedule", Icons.Default.CalendarMonth)
     object GPS : Screen("gps", "GPS", Icons.Default.LocationOn)
     object AIHub : Screen("ai_hub", "AI Ops", Icons.Default.AutoAwesome)
+    object InspectionTalk : Screen("inspection_talk", "Walk + quote", Icons.Default.RecordVoiceOver)
 
-    // Job Screens
     object JobDetail : Screen("job_detail/{jobId}", "Job Detail") {
         fun createRoute(jobId: String) = "job_detail/$jobId"
     }
-    /** Use path segment "new" for create; real UUID for edit (query params were flaky). */
     object JobForm : Screen("job_form/{jobId}", "Job Form") {
         fun createRoute(jobId: String? = null) = "job_form/${jobId ?: "new"}"
     }
 
-    // Customer Screens
     object CustomerList : Screen("customers", "Customers", Icons.Default.People)
     object CustomerForm : Screen("customer_form?customerId={customerId}", "Customer Form") {
         fun createRoute(customerId: String? = null) =
             if (customerId != null) "customer_form?customerId=$customerId" else "customer_form"
     }
 
-    // Inspection Screens
     object InspectionDetail : Screen("inspection_detail/{inspectionId}", "Inspection Detail") {
         fun createRoute(inspectionId: String) = "inspection_detail/$inspectionId"
     }
@@ -38,7 +34,6 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
             if (inspectionId != null) "inspection_form?inspectionId=$inspectionId" else "inspection_form"
     }
 
-    // Other Screens
     object Map : Screen("map", "Property Map", Icons.Default.Map)
     object Invoice : Screen("invoice/{jobId}", "Invoice") {
         fun createRoute(jobId: String) = "invoice/$jobId"
@@ -69,6 +64,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
             Expense,
             Inventory,
             RouteOptimizer,
+            InspectionTalk,
             AIHub,
             Settings
         )
