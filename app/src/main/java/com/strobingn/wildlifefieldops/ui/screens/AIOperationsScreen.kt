@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,11 +20,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.strobingn.wildlifefieldops.ai.HybridAIService
 import com.strobingn.wildlifefieldops.ai.operations.AIOperationsEngine
 import com.strobingn.wildlifefieldops.ai.operations.IndividualAIToolCatalog
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.AIOperationsViewModel
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,8 +82,8 @@ fun AIOperationsScreen(
                     Icon(Icons.Default.AutoAwesome, null, tint = AccentPurple)
                     Spacer(Modifier.width(10.dp))
                     Column {
-                        Text("Live intelligence from your real jobs", color = TextPrimary, fontWeight = FontWeight.Bold)
-                        Text("Tools are split by Dispatch, Money, Records, and Field.", color = TextSecondary)
+                        Text("Open a tool, type the job facts, run Grok", color = TextPrimary, fontWeight = FontWeight.Bold)
+                        Text("Checklists and job scores are not AI. Only the live answer is.", color = TextSecondary)
                     }
                 }
             }
@@ -116,15 +119,12 @@ fun AIOperationsScreen(
 
             if (category != "Insights") {
                 Text(
-                    if (category == "All") "20 Individual AI Tools" else "$category tools",
+                    if (category == "All") "20 live Grok tools" else "$category tools",
                     style = MaterialTheme.typography.titleLarge,
                     color = TextPrimary,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
-                    "Tap a card to open that tool only.",
-                    color = TextSecondary
-                )
+                Text("Tap a card. Type facts. Run live AI.", color = TextSecondary)
                 visibleTools.forEach { tool ->
                     Card(
                         modifier = Modifier
@@ -161,7 +161,7 @@ fun AIOperationsScreen(
             }
 
             if (category == "All" || category == "Insights") {
-                Section("Business AI") {
+                Section("Job numbers (not AI)") {
                     Metric("Jobs", data.business.totalJobs.toString())
                     Metric("Completed", data.business.completedJobs.toString())
                     Metric("Close rate", "${data.business.closeRatePercent}%")
@@ -173,7 +173,7 @@ fun AIOperationsScreen(
                     Note(data.business.recommendation)
                 }
 
-                Section("Property Intelligence") {
+                Section("Property history (not AI)") {
                     if (data.properties.isEmpty()) Note("Add addresses to jobs to build property history.")
                     data.properties.take(10).forEach { item ->
                         ItemTitle(item.address)
@@ -184,7 +184,7 @@ fun AIOperationsScreen(
                     }
                 }
 
-                Section("AI Quality Control") {
+                Section("Record completeness (not AI)") {
                     data.qualityChecks.take(10).forEach { item ->
                         ItemTitle("${item.score}/100 · ${item.title}")
                         Text(
@@ -195,7 +195,7 @@ fun AIOperationsScreen(
                     }
                 }
 
-                Section("Pricing and Profit") {
+                Section("Pricing from invoices (not AI)") {
                     if (data.pricing.isEmpty()) Note("Add estimated and actual costs to unlock pricing analysis.")
                     data.pricing.take(10).forEach { item ->
                         ItemTitle(item.title)
@@ -205,7 +205,7 @@ fun AIOperationsScreen(
                     }
                 }
 
-                Section("Route Priority") {
+                Section("Route scores (not AI)") {
                     data.routePriorities.take(10).forEach { item ->
                         ItemTitle("Score ${item.score} · ${item.title}")
                         Text(item.address.ifBlank { "Address missing" }, color = TextSecondary)
@@ -214,7 +214,7 @@ fun AIOperationsScreen(
                     }
                 }
 
-                Section("Inventory Forecast") {
+                Section("Inventory forecast (not AI)") {
                     data.inventory.forEach { item ->
                         ItemTitle(item.item)
                         Text("Expected weekly use: ${item.expectedWeeklyUse} · Confidence ${item.confidencePercent}%", color = TextSecondary)
@@ -223,21 +223,12 @@ fun AIOperationsScreen(
                     }
                 }
 
-                Section("Species Behavior Engine") {
+                Section("Season notes (not AI)") {
                     data.speciesGuidance.forEach { item ->
                         ItemTitle(item.species)
                         Text(item.activityWindow, color = PrimaryGreen)
                         Text(item.fieldPriority, color = TextPrimary)
                         Text(item.exclusionNote, color = TextSecondary)
-                        HorizontalDivider()
-                    }
-                }
-
-                Section("65 Advanced AI Modules") {
-                    data.advancedInsights.forEachIndexed { index, item ->
-                        ItemTitle("${index + 1}. ${item.name} · ${item.score}/100")
-                        Text(item.signal, color = PrimaryGreen)
-                        Text(item.action, color = TextSecondary)
                         HorizontalDivider()
                     }
                 }
@@ -255,16 +246,60 @@ private fun IndividualAIToolScreen(
 ) {
     val insight = dashboard.advancedInsights.firstOrNull { it.name == tool.insightName }
     val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
+    var notes by rememberSaveable(tool.id) { mutableStateOf("") }
+    var answer by rememberSaveable(tool.id) { mutableStateOf("") }
+    var source by rememberSaveable(tool.id) { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
     var copied by rememberSaveable(tool.id) { mutableStateOf(false) }
+
+    val snapshot = remember(dashboard, insight) {
+        buildString {
+            appendLine("Jobs ${dashboard.business.totalJobs}, completed ${dashboard.business.completedJobs}, close ${dashboard.business.closeRatePercent}%")
+            appendLine("Quoted ${dashboard.business.quotedRevenue}, actual ${dashboard.business.actualRevenue}, avg ticket ${dashboard.business.averageTicket}")
+            appendLine("Top service: ${dashboard.business.topService}")
+            appendLine("Record score: ${insight?.score ?: 0}/100")
+            appendLine("Record signal: ${insight?.signal ?: "none"}")
+            appendLine("Record action: ${insight?.action ?: "none"}")
+            dashboard.routePriorities.take(6).forEach {
+                appendLine("Route ${it.title} @ ${it.address} score ${it.score}: ${it.reason}")
+            }
+            dashboard.qualityChecks.take(6).forEach {
+                appendLine("QC ${it.title} ${it.score}/100 missing=${it.missing.joinToString()}")
+            }
+            dashboard.pricing.take(6).forEach {
+                appendLine("Price ${it.title} est ${it.estimated} actual ${it.actual}")
+            }
+        }
+    }
+
+    fun runLive() {
+        if (loading) return
+        loading = true
+        copied = false
+        scope.launch {
+            val result = HybridAIService.answerFieldTool(
+                toolTitle = tool.title,
+                purpose = tool.purpose,
+                steps = tool.checklist,
+                species = "",
+                siteNotes = notes,
+                jobSnapshot = snapshot
+            )
+            answer = result.text
+            source = result.source
+            loading = false
+        }
+    }
+
     val report = buildString {
         appendLine(tool.title)
-        appendLine(tool.purpose)
-        appendLine("Category: ${tool.category}")
-        appendLine("Score: ${insight?.score ?: 0}/100")
-        appendLine("Signal: ${insight?.signal ?: "No job data available"}")
-        appendLine("Action: ${insight?.action ?: "Add job records to run this analysis."}")
-        appendLine("Checklist:")
-        tool.checklist.forEach { appendLine("- $it") }
+        appendLine(notes)
+        appendLine()
+        if (answer.isNotBlank()) {
+            appendLine("Live $source:")
+            appendLine(answer)
+        }
     }.trim()
 
     Scaffold(
@@ -289,43 +324,74 @@ private fun IndividualAIToolScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Card(colors = CardDefaults.cardColors(containerColor = BackgroundCard)) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(tool.category, color = PrimaryGreen, style = MaterialTheme.typography.labelLarge)
-                    Text("Live analysis", color = TextPrimary, fontWeight = FontWeight.Bold)
-                    Text(tool.purpose, color = TextSecondary)
-                    HorizontalDivider()
-                    Metric("Priority score", "${insight?.score ?: 0}/100")
-                    Text(insight?.signal ?: "No job data available", color = PrimaryGreen)
-                }
+            Text(tool.category, color = PrimaryGreen, style = MaterialTheme.typography.labelLarge)
+            Text(tool.purpose, color = TextSecondary)
+
+            Section("Record snapshot (not AI)") {
+                Metric("Score", "${insight?.score ?: 0}/100")
+                Note(insight?.signal ?: "No job data in the database yet.")
+                Note(insight?.action ?: "Add real jobs, then run live AI.")
             }
 
-            Section("Recommended Action") {
-                Note(insight?.action ?: "Add real job records to run this tool.")
-            }
-
-            Section("Field Checklist") {
+            Section("SOP (not AI)") {
                 tool.checklist.forEachIndexed { index, item ->
                     Text("${index + 1}. $item", color = TextPrimary)
                 }
             }
 
+            OutlinedTextField(
+                value = notes,
+                onValueChange = { notes = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Job facts for Grok") },
+                placeholder = { Text("Addresses, species, dates, money, what you saw") },
+                minLines = 3,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = PrimaryGreen,
+                    unfocusedBorderColor = BorderDark,
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary
+                )
+            )
+
             Button(
-                onClick = {
-                    clipboard.setText(AnnotatedString(report))
-                    copied = true
-                },
+                onClick = { runLive() },
+                enabled = !loading,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = BackgroundDark)
             ) {
-                Text(if (copied) "Report Copied" else "Copy AI Report", fontWeight = FontWeight.Bold)
+                if (loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = BackgroundDark
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Asking Grok…", fontWeight = FontWeight.Bold)
+                } else {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Run live AI", fontWeight = FontWeight.Bold)
+                }
             }
 
-            Text(
-                "This tool uses current job records and updates automatically when the database changes.",
-                color = TextTertiary,
-                style = MaterialTheme.typography.bodySmall
-            )
+            if (answer.isNotBlank()) {
+                Section(if (source == "Offline") "Offline — not AI" else "Live $source answer") {
+                    Text(answer, color = TextPrimary)
+                }
+                Button(
+                    onClick = {
+                        clipboard.setText(AnnotatedString(report))
+                        copied = true
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = BackgroundDark)
+                ) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (copied) "Copied" else "Copy live answer", fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }

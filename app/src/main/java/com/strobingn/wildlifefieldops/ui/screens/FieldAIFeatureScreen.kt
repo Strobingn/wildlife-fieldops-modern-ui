@@ -56,7 +56,31 @@ fun FieldAIFeatureScreen(
     }
 
     val hint = when (feature.id) {
-        "exclusion_calc" -> "Example: 3 soffit gaps 18x3 in, 40 ft fascia, bats + squirrels, wood soffit to asphalt roof"
+        "species_sign" -> "Dropping size, chew marks, time of activity, attic vs yard"
+        "entry_mapper" -> "Walk order done, hole sizes, substrate, photos taken"
+        "exclusion_calc" -> "3 soffit gaps 18x3 in, 40 ft fascia, bats + squirrels, wood soffit to asphalt"
+        "trap_interval" -> "Species, trap type, sun/shade, forecast high, public view yes/no"
+        "season_calendar" -> "Today's date, species, occupied yes/no, heard young yes/no"
+        "ny_legal" -> "Species, town, relocate vs exclude, bats in season?"
+        "customer_script" -> "What they saw, where, when, kids/pets, access notes"
+        "estimate_builder" -> "Entries found, removal needed, repairs, cleanout, warranty"
+        "photo_prompts" -> "Job type, elevations done, missing shots"
+        "callback_risk" -> "Secondaries left open, juveniles unknown, follow-up booked?"
+        "ppe_selector" -> "Guano, live animal, attic fiberglass, roof pitch"
+        "bat_timing" -> "Month, dusk fly-out count, chirping heard, exit locations"
+        "raccoon_den" -> "Opening size, latrine, camera result, kits suspected"
+        "squirrel_door" -> "Active hole size, other holes, daytime sightings"
+        "skunk_sop" -> "Under deck/shed, kits?, neighbor dogs, trap already set"
+        "groundhog_map" -> "Main mound, extra holes, foundation gap sizes"
+        "bird_nest" -> "Species if known, chicks present, vent vs ledge"
+        "snake_safety" -> "Color/pattern, location, mice present"
+        "opossum_notes" -> "Pouch young?, crawl/deck, same-day exclusion possible"
+        "wasp_tree" -> "Honey bee / yellowjacket / paper wasp, in wall or ground"
+        "attic_score" -> "Smell, droppings coverage, insulation, visible entries, wiring"
+        "crawl_hazards" -> "Water, wires, smell, second exit, spotter present"
+        "roof_risk" -> "Stories, pitch, wet/frost, power lines, two-person available"
+        "daily_brief" -> "Tomorrow's addresses, species, heat/storm, far stop first"
+        "warranty_terms" -> "Openings photographed, species, term months, customer duties"
         else -> "Species signs, sizes, photos already taken, weather, access"
     }
 
@@ -76,7 +100,7 @@ fun FieldAIFeatureScreen(
             answer = result.text
             source = result.source
             if (result.source == "Offline") {
-                error = "That box is only a live answer when Grok or MAF responds."
+                error = "SOP is not AI. This only counts when Grok or MAF answers."
             }
             loading = false
         }
@@ -134,7 +158,7 @@ fun FieldAIFeatureScreen(
                 value = siteNotes,
                 onValueChange = { siteNotes = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Openings / measurements") },
+                label = { Text("Job facts / measurements") },
                 placeholder = { Text(hint) },
                 minLines = 3
             )
@@ -155,7 +179,7 @@ fun FieldAIFeatureScreen(
                 } else {
                     Icon(Icons.Default.AutoAwesome, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Run live AI on these measurements")
+                    Text("Run live AI on these facts")
                 }
             }
 
@@ -167,7 +191,7 @@ fun FieldAIFeatureScreen(
                 Card(colors = CardDefaults.cardColors(containerColor = BackgroundCard)) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            if (source == "Offline") "Offline SOP fallback" else "Live $source answer",
+                            if (source == "Offline") "Offline — not AI" else "Live $source answer",
                             fontWeight = FontWeight.Bold
                         )
                         Text(answer, color = TextSecondary)

@@ -86,7 +86,7 @@ fun AIHubScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "Own tab · split by job",
+                            "Live Grok on a tool · SOP is labeled SOP",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -120,13 +120,13 @@ fun AIHubScreen(
                     ) {
                         Column {
                             Text(
-                                "20 live tools from your jobs",
+                                "Type the job. Run Grok. That is the AI.",
                                 color = Color.White.copy(alpha = 0.8f),
                                 style = MaterialTheme.typography.labelLarge
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "Pick a category. Dispatch, money, records, and field stay separate.",
+                                "Checklists and job scores are not a model.",
                                 color = Color.White,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
@@ -169,7 +169,7 @@ fun AIHubScreen(
                 "Chat" -> item {
                     HubActionCard(
                         title = "AI Chat",
-                        subtitle = "Ask species, safety, and equipment questions",
+                        subtitle = "Ask Grok about species, safety, and equipment",
                         icon = Icons.Default.Chat,
                         onClick = onOpenChat
                     )
@@ -198,15 +198,15 @@ fun AIHubScreen(
                 "Insights" -> item {
                     FieldCard(onClick = { onOpenOperations(null) }) {
                         Column {
-                            Text("Full live dashboard", fontWeight = FontWeight.Bold)
+                            Text("Job numbers and rule scores", fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "${dashboard.business.totalJobs} jobs · close rate ${dashboard.business.closeRatePercent}% · ${dashboard.advancedInsights.size} modules",
+                                "${dashboard.business.totalJobs} jobs · close rate ${dashboard.business.closeRatePercent}% · not a model",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(Modifier.height(8.dp))
-                            Text("Open business, property, quality, pricing, routes, inventory, species", style = MaterialTheme.typography.labelMedium)
+                            Text("Open a tool and run Grok if you want AI", style = MaterialTheme.typography.labelMedium)
                         }
                     }
                 }
@@ -215,7 +215,7 @@ fun AIHubScreen(
                         item {
                             HubActionCard(
                                 title = "AI Chat",
-                                subtitle = "Species, safety, and equipment questions",
+                                subtitle = "Live Grok — species, safety, equipment",
                                 icon = Icons.Default.Chat,
                                 onClick = onOpenChat
                             )
