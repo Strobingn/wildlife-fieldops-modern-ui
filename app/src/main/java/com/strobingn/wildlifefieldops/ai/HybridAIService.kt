@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.google.gson.Gson
 import com.strobingn.wildlifefieldops.BuildConfig
+import com.strobingn.wildlifefieldops.WildlifeFieldOpsApp
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.headers
@@ -100,7 +101,7 @@ object HybridAIService {
         if (!hasDirectKey()) return listOf("Offline mode: manually verify state rules, permits, protected species, and pesticide labels.")
         return runCatching {
             val text = callGrokText(GrokPrompts.complianceAuditPrompt(formText))
-            text.lines().map { it.trim().removePrefix("-").removePrefix("•").trim() }.filter { it.isNotBlank() }
+            text.lines().map { it.trim().removePrefix("-").removePrefix("\u2022").trim() }.filter { it.isNotBlank() }
         }.getOrElse { listOf("Compliance analysis failed: ${it.message}") }
     }
 
@@ -129,6 +130,19 @@ object HybridAIService {
             appendLine()
             appendLine("Write a job-specific answer. Numbers, next actions, and what to measure if facts are missing.")
             appendLine("Hudson Valley / NY wildlife control. No legal advice. No generic brochure copy.")
+        }
+
+        val app = WildlifeFieldOpsApp.instanceOrNull()
+        if (app != null) {
+            if (!OnDeviceLlm.isReady(app) && OnDeviceLlm.hasHfToken()) {
+                OnDeviceLlm.download(app)
+            }
+            if (OnDeviceLlm.isReady(app)) {
+                val phone = runCatching { OnDeviceLlm.generate(app, userPrompt) }.getOrNull()
+                if (!phone.isNullOrBlank()) {
+                    return@withContext FieldToolAnswer(phone.trim(), "Phone")
+                }
+            }
         }
 
         val maf = runCatching {
@@ -162,15 +176,19 @@ object HybridAIService {
 
         FieldToolAnswer(
             text = buildString {
-                appendLine("Not AI. No live Grok/MAF answer.")
+                appendLine("Not AI. No phone model, Grok, or MAF answer.")
                 appendLine()
-                appendLine(
-                    if (!hasDirectKey() && !AgentFrameworkClient.isConfigured) {
-                        "This APK has no usable LLM key and no Agent Framework URL. Add repo secret XAI_API_KEY and rebuild."
-                    } else {
-                        "Live call failed. Check XAI_API_KEY / AGENT_FRAMEWORK_URL and network."
-                    }
-                )
+                when {
+                    app != null && OnDeviceLlm.progress.value.error.isNotBlank() ->
+                        appendLine(OnDeviceLlm.progress.value.error)
+                    !OnDeviceLlm.hasHfToken() ->
+                        appendLine("Phone model needs repo secret HF_TOKEN (Hugging Face token with Gemma license accepted), then rebuild and tap Run live AI on Wi-Fi to download Gemma 3 1B (~555MB) onto this phone.")
+                    else ->
+                        appendLine("Phone model not installed or failed to load.")
+                }
+                if (!hasDirectKey()) {
+                    appendLine("Cloud Grok also has no XAI_API_KEY in this APK.")
+                }
             }.trim(),
             source = "Offline"
         )
