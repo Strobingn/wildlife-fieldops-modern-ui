@@ -2,8 +2,9 @@ package com.strobingn.wildlifefieldops.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.strobingn.wildlifefieldops.ai.AgentFrameworkClient
-import com.strobingn.wildlifefieldops.data.remote.AiService
+import com.strobingn.wildlifefieldops.BuildConfig
+import com.strobingn.wildlifefieldops.ai.HybridAIService
+import com.strobingn.wildlifefieldops.ai.OnDeviceLlm
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,23 +21,15 @@ data class ChatMessage(
 )
 
 @HiltViewModel
-class AiAssistantViewModel @Inject constructor(
-    private val aiService: AiService
-) : ViewModel() {
+class AiAssistantViewModel @Inject constructor() : ViewModel() {
 
     private val welcomeMessage = buildString {
-        append("Hello — I'm your Wildlife FieldOps AI (GrokAIV5).\n\n")
-        append("Ask about inspections, jobs, trapping, exclusion, safety, estimates, customers, or daily workflow.\n")
-        append(AgentFrameworkClient.diagnostics())
-        append("\n")
-        if (aiService.isConfigured) {
-            append("\n✅ Live AI connected via ${aiService.providerLabel}.")
-            append("\n${aiService.configDiagnostics()}")
-        } else {
-            append("\n⚠️ Live Grok key not baked into this APK.\n")
-            append("\n${aiService.configDiagnostics()}")
-            append("\n\nMAF sidecar still works if AGENT_FRAMEWORK_URL is set and the sidecar is running.")
-        }
+        append("Talk like you are on the job.\n\n")
+        append("Ask about species, exclusion, timing, safety, or a quote.\n")
+        if (BuildConfig.LLM_KEY_LENGTH >= 10) append("Grok key is in this APK.\n")
+        else append("No Grok key in this APK.\n")
+        if (OnDeviceLlm.hasHfToken()) append("Phone model can download on first live run.")
+        else append("Phone model needs HF_TOKEN to download.")
     }
 
     private val _messages = MutableStateFlow(listOf(ChatMessage(welcomeMessage, false)))
@@ -52,8 +45,18 @@ class AiAssistantViewModel @Inject constructor(
         _isTyping.value = true
         viewModelScope.launch {
             val reply = withContext(Dispatchers.IO) {
-                AgentFrameworkClient.runOrNull(trimmed)
-                    ?: aiService.ask(trimmed)
+                val answer = HybridAIService.answerFieldTool(
+                    toolTitle = "Field chat",
+                    purpose = "Answer the technician in the field from the question they just asked.",
+                    steps = listOf(
+                        "Hudson Valley wildlife control",
+                        "Do not invent openings, animals, or prices",
+                        "Ask for the missing measurement instead of guessing"
+                    ),
+                    species = "",
+                    siteNotes = trimmed
+                )
+                if (answer.source == "Offline") answer.text else "${answer.text}\n\n— ${answer.source}"
             }
             _messages.value = _messages.value + ChatMessage(reply, false)
             _isTyping.value = false
