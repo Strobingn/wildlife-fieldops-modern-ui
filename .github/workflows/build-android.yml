@@ -4,10 +4,15 @@ on:
   push:
     branches: [ GrokAIV5 ]
   workflow_dispatch:
+    inputs:
+      reason:
+        description: Rebuild the phone-install GrokAIV5 APK
+        required: false
+        default: manual
 
 concurrency:
-  group: grokai-v5-apk
-  cancel-in-progress: true
+  group: grokai-v5-apk-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 permissions:
   contents: write
@@ -15,6 +20,7 @@ permissions:
 
 jobs:
   build:
+    name: Build and publish APK
     runs-on: ubuntu-latest
     env:
       SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
@@ -28,6 +34,8 @@ jobs:
       LLM_MODEL: grok-4.5
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: GrokAIV5
 
       - uses: actions/setup-java@v4
         with:
