@@ -33,6 +33,13 @@ object HybridAIService {
         val complianceFlags: List<String> = emptyList()
     )
 
+    data class FieldToolAnswer(
+        val text: String,
+        val source: String
+    )
+
+    fun hasDirectKey(): Boolean = BuildConfig.LLM_API_KEY.trim().length >= 10
+
     suspend fun analyzePhotoAndFillForm(
         context: Context,
         imageUri: Uri,
@@ -97,7 +104,79 @@ object HybridAIService {
         }.getOrElse { listOf("Compliance analysis failed: ${it.message}") }
     }
 
-    private fun hasDirectKey(): Boolean = BuildConfig.LLM_API_KEY.trim().length >= 10
+    suspend fun answerFieldTool(
+        toolTitle: String,
+        purpose: String,
+        steps: List<String>,
+        species: String,
+        siteNotes: String
+    ): FieldToolAnswer = withContext(Dispatchers.IO) {
+        val userPrompt = buildString {
+            appendLine("Wildlife FieldOps tool: $toolTitle")
+            appendLine("Purpose: $purpose")
+            appendLine("Field SOP (use as constraints, do not just repeat it):")
+            steps.forEachIndexed { i, step -> appendLine("${i + 1}. $step") }
+            appendLine()
+            appendLine("Job facts from the tech:")
+            appendLine("Species: ${species.ifBlank { "not specified" }}")
+            appendLine("Site / measurements / notes:")
+            appendLine(siteNotes.ifBlank { "none given — ask for the missing measurements instead of inventing them" })
+            appendLine()
+            appendLine("Reply as a field tech. Be specific to THESE measurements.")
+            appendLine("If this is a material calculator, return cloth type/gauge, linear feet, overlap, screw count, flashing, and a parts list.")
+            appendLine("If facts are missing, list exactly what to measure next. Hudson Valley / NY rules.")
+        }
+
+        val maf = runCatching {
+            AgentFrameworkClient.runOrNull(
+                userMessage = userPrompt,
+                species = species,
+                agent = "orchestrator",
+                context = mapOf(
+                    "tool" to toolTitle,
+                    "notes" to siteNotes
+                )
+            )
+        }.getOrNull()
+        if (!maf.isNullOrBlank()) {
+            return@withContext FieldToolAnswer(maf.trim(), "MAF")
+        }
+
+        if (hasDirectKey()) {
+            val grok = runCatching {
+                callGrokText(
+                    prompt = userPrompt,
+                    jsonMode = false,
+                    system = FIELD_SYSTEM
+                )
+            }.getOrNull()
+            if (!grok.isNullOrBlank()) {
+                return@withContext FieldToolAnswer(grok.trim(), "Grok")
+            }
+        }
+
+        FieldToolAnswer(
+            text = buildString {
+                appendLine("Not AI. No live Grok/MAF answer.")
+                appendLine()
+                appendLine(
+                    if (!hasDirectKey() && !AgentFrameworkClient.isConfigured) {
+                        "This APK has no usable LLM key and no Agent Framework URL."
+                    } else {
+                        "Live call failed. Check XAI_API_KEY / AGENT_FRAMEWORK_URL and network."
+                    }
+                )
+                appendLine()
+                appendLine("SOP fallback only — not a model:")
+                steps.forEachIndexed { i, step -> appendLine("${i + 1}. $step") }
+            }.trim(),
+            source = "Offline"
+        )
+    }
+
+    private const val FIELD_SYSTEM =
+        "You are a Hudson Valley wildlife exclusion technician. Answer in plain field notes, not JSON. " +
+            "Use the tech's measurements. Do not invent openings. Prefer 16-ga hardware cloth, mechanical fasteners, and NY/DEC-safe timing."
 
     private suspend fun callGrokForForm(prompt: String): GrokFormResponse {
         val content = callGrokText(prompt, jsonMode = true)
@@ -105,11 +184,15 @@ object HybridAIService {
         return gson.fromJson(content, GrokFormResponse::class.java)
     }
 
-    private suspend fun callGrokText(prompt: String, jsonMode: Boolean = false): String = withContext(Dispatchers.IO) {
+    private suspend fun callGrokText(
+        prompt: String,
+        jsonMode: Boolean = false,
+        system: String = GrokPrompts.SYSTEM
+    ): String = withContext(Dispatchers.IO) {
         val body = mutableMapOf<String, Any>(
             "model" to BuildConfig.LLM_MODEL,
             "messages" to listOf(
-                mapOf("role" to "system", "content" to GrokPrompts.SYSTEM),
+                mapOf("role" to "system", "content" to system),
                 mapOf("role" to "user", "content" to prompt)
             ),
             "temperature" to 0.2,
@@ -128,4 +211,3 @@ object HybridAIService {
             ?: error("Empty Grok response")
     }
 }
-
