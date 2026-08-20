@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main, Field_Opps_V2.5, chatGTPV5.0 ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, Field_Opps_V2.5 ]
   workflow_dispatch:
 
 jobs:
