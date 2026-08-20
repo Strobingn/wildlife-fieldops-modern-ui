@@ -97,9 +97,7 @@ fun WildlifeFieldOpsNavHost() {
         drawerState.targetValue == DrawerValue.Open
 
     LaunchedEffect(showBottomNav) {
-        if (!showBottomNav && drawerState.isOpen) {
-            drawerState.close()
-        }
+        if (!showBottomNav && drawerState.isOpen) drawerState.close()
     }
 
     BackHandler(enabled = drawerOpen) {
@@ -187,7 +185,6 @@ private fun AppNavHost(
                 onOpenDrawer = onOpenDrawer
             )
         }
-
         composable(Screen.JobList.route) {
             JobListScreen(
                 onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) },
@@ -196,11 +193,7 @@ private fun AppNavHost(
                 showBack = false
             )
         }
-
-        composable(
-            route = Screen.JobDetail.route,
-            arguments = listOf(navArgument("jobId") { type = NavType.StringType })
-        ) { backStackEntry ->
+        composable(Screen.JobDetail.route, arguments = listOf(navArgument("jobId") { type = NavType.StringType })) { backStackEntry ->
             val jobId = backStackEntry.arguments?.getString("jobId") ?: ""
             JobDetailScreen(
                 jobId = jobId,
@@ -211,19 +204,10 @@ private fun AppNavHost(
                 onBack = { navController.popBackStack() }
             )
         }
-
-        composable(
-            route = Screen.JobForm.route,
-            arguments = listOf(navArgument("jobId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val rawId = backStackEntry.arguments?.getString("jobId")
-            val jobId = rawId?.takeUnless { it.isBlank() || it == "new" }
-            JobFormScreen(
-                jobId = jobId,
-                onBack = { navController.popBackStack() }
-            )
+        composable(Screen.JobForm.route, arguments = listOf(navArgument("jobId") { type = NavType.StringType })) { backStackEntry ->
+            val jobId = backStackEntry.arguments?.getString("jobId")?.takeUnless { it.isBlank() || it == "new" }
+            JobFormScreen(jobId = jobId, onBack = { navController.popBackStack() })
         }
-
         composable(Screen.InspectionList.route) {
             InspectionListScreen(
                 onNavigateToInspectionDetail = { id -> navController.navigate(Screen.InspectionDetail.createRoute(id)) },
@@ -231,29 +215,18 @@ private fun AppNavHost(
                 onBack = { navController.popBackStack() }
             )
         }
-
-        composable(
-            route = Screen.InspectionDetail.route,
-            arguments = listOf(navArgument("inspectionId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val inspectionId = backStackEntry.arguments?.getString("inspectionId")
+        composable(Screen.InspectionDetail.route, arguments = listOf(navArgument("inspectionId") { type = NavType.StringType })) { backStackEntry ->
             InspectionFormScreen(
-                inspectionId = inspectionId,
+                inspectionId = backStackEntry.arguments?.getString("inspectionId"),
                 onBack = { navController.popBackStack() }
             )
         }
-
-        composable(
-            route = Screen.InspectionForm.route,
-            arguments = listOf(navArgument("inspectionId") { type = NavType.StringType; nullable = true; defaultValue = null })
-        ) { backStackEntry ->
-            val inspectionId = backStackEntry.arguments?.getString("inspectionId")
+        composable(Screen.InspectionForm.route, arguments = listOf(navArgument("inspectionId") { type = NavType.StringType; nullable = true; defaultValue = null })) { backStackEntry ->
             InspectionFormScreen(
-                inspectionId = inspectionId,
+                inspectionId = backStackEntry.arguments?.getString("inspectionId"),
                 onBack = { navController.popBackStack() }
             )
         }
-
         composable(Screen.Schedule.route) {
             ScheduleScreen(
                 onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) },
@@ -261,139 +234,65 @@ private fun AppNavHost(
                 onBack = { navController.popBackStack() }
             )
         }
-
         composable(Screen.GPS.route) {
-            GPSScreen(
-                onNavigateToMap = { navController.navigate(Screen.Map.route) },
-                onBack = { navController.popBackStack() }
-            )
+            GPSScreen(onNavigateToMap = { navController.navigate(Screen.Map.route) }, onBack = { navController.popBackStack() })
         }
-
         composable(Screen.CustomerList.route) {
             CustomerListScreen(
-                onNavigateToCustomerForm = { id ->
-                    navController.navigate(Screen.CustomerForm.createRoute(id))
-                },
+                onNavigateToCustomerForm = { id -> navController.navigate(Screen.CustomerForm.createRoute(id)) },
                 onBack = { navController.popBackStack() }
             )
         }
-
-        composable(
-            route = Screen.CustomerForm.route,
-            arguments = listOf(navArgument("customerId") { type = NavType.StringType; nullable = true; defaultValue = null })
-        ) { backStackEntry ->
-            val customerId = backStackEntry.arguments?.getString("customerId")
+        composable(Screen.CustomerForm.route, arguments = listOf(navArgument("customerId") { type = NavType.StringType; nullable = true; defaultValue = null })) { backStackEntry ->
             CustomerFormScreen(
-                customerId = customerId,
+                customerId = backStackEntry.arguments?.getString("customerId"),
                 onBack = { navController.popBackStack() }
             )
         }
-
         composable(Screen.Map.route) {
-            MapScreen(
-                onBack = { navController.popBackStack() },
-                onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) }
-            )
+            MapScreen(onBack = { navController.popBackStack() }, onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) })
         }
-
-        composable(
-            route = Screen.Invoice.route,
-            arguments = listOf(navArgument("jobId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val jobId = backStackEntry.arguments?.getString("jobId") ?: ""
-            InvoiceScreen(
-                jobId = jobId,
-                onBack = { navController.popBackStack() }
-            )
+        composable(Screen.Invoice.route, arguments = listOf(navArgument("jobId") { type = NavType.StringType })) { backStackEntry ->
+            InvoiceScreen(jobId = backStackEntry.arguments?.getString("jobId") ?: "", onBack = { navController.popBackStack() })
         }
-
         composable(Screen.PhotoGallery.route) {
-            PhotoGalleryScreen(
-                onBack = { navController.popBackStack() },
-                viewModel = hiltViewModel()
-            )
+            PhotoGalleryScreen(onBack = { navController.popBackStack() }, viewModel = hiltViewModel())
         }
-
-        composable(Screen.Settings.route) {
-            SettingsScreen(
-                onBack = { navController.popBackStack() }
-            )
-        }
-
+        composable(Screen.Settings.route) { SettingsScreen(onBack = { navController.popBackStack() }) }
         composable(Screen.AIHub.route) {
             AIHubScreen(
                 onOpenChat = { navController.navigate(Screen.AIAssistant.route) },
                 onOpenOperations = { toolId -> navController.navigate(Screen.AIOperations.createRoute(toolId)) },
                 onOpenFeature = { id -> navController.navigate(Screen.FieldAIFeature.createRoute(id)) },
+                onOpenWalkTalk = { navController.navigate(Screen.InspectionTalk.route) },
                 onOpenDrawer = onOpenDrawer
             )
         }
-
-        composable(Screen.AIAssistant.route) {
-            AIAssistantScreen(
-                onBack = { navController.popBackStack() }
-            )
+        composable(Screen.InspectionTalk.route) {
+            InspectionTalkScreen(onBack = { navController.popBackStack() })
         }
-
-        composable(
-            route = Screen.AIOperations.route,
-            arguments = listOf(navArgument("toolId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val rawToolId = backStackEntry.arguments?.getString("toolId")
-            val toolId = rawToolId?.takeUnless { it.isBlank() || it == "all" }
-            AIOperationsScreen(
-                onBack = { navController.popBackStack() },
-                initialToolId = toolId
-            )
+        composable(Screen.AIAssistant.route) { AIAssistantScreen(onBack = { navController.popBackStack() }) }
+        composable(Screen.AIOperations.route, arguments = listOf(navArgument("toolId") { type = NavType.StringType })) { backStackEntry ->
+            val toolId = backStackEntry.arguments?.getString("toolId")?.takeUnless { it.isBlank() || it == "all" }
+            AIOperationsScreen(onBack = { navController.popBackStack() }, initialToolId = toolId)
         }
-
-        composable(
-            route = Screen.FieldAIFeature.route,
-            arguments = listOf(navArgument("featureId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val featureId = backStackEntry.arguments?.getString("featureId") ?: ""
+        composable(Screen.FieldAIFeature.route, arguments = listOf(navArgument("featureId") { type = NavType.StringType })) { backStackEntry ->
             FieldAIFeatureScreen(
-                featureId = featureId,
+                featureId = backStackEntry.arguments?.getString("featureId") ?: "",
                 onBack = { navController.popBackStack() }
             )
         }
-
-        composable(Screen.Expense.route) {
-            ExpenseScreen(
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.Inventory.route) {
-            InventoryScreen(
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.RouteOptimizer.route) {
-            RouteOptimizerScreen(
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(
-            route = Screen.Estimate.route,
-            arguments = listOf(navArgument("jobId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val jobId = backStackEntry.arguments?.getString("jobId") ?: ""
-            EstimateScreen(
-                jobId = jobId,
-                onBack = { navController.popBackStack() }
-            )
+        composable(Screen.Expense.route) { ExpenseScreen(onBack = { navController.popBackStack() }) }
+        composable(Screen.Inventory.route) { InventoryScreen(onBack = { navController.popBackStack() }) }
+        composable(Screen.RouteOptimizer.route) { RouteOptimizerScreen(onBack = { navController.popBackStack() }) }
+        composable(Screen.Estimate.route, arguments = listOf(navArgument("jobId") { type = NavType.StringType })) { backStackEntry ->
+            EstimateScreen(jobId = backStackEntry.arguments?.getString("jobId") ?: "", onBack = { navController.popBackStack() })
         }
     }
 }
 
 @Composable
-private fun ModernBottomBar(
-    currentRoute: String,
-    onNavigate: (String) -> Unit
-) {
+private fun ModernBottomBar(currentRoute: String, onNavigate: (String) -> Unit) {
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -402,11 +301,7 @@ private fun ModernBottomBar(
         Screen.bottomNavItems.forEach { screen ->
             val selected = currentRoute == screen.route
             NavigationBarItem(
-                icon = {
-                    screen.icon?.let {
-                        Icon(it, contentDescription = screen.title)
-                    }
-                },
+                icon = { screen.icon?.let { Icon(it, contentDescription = screen.title) } },
                 label = {
                     Text(
                         screen.title,
@@ -429,60 +324,31 @@ private fun ModernBottomBar(
 }
 
 @Composable
-private fun AppDrawer(
-    onNavigate: (String) -> Unit,
-    onClose: () -> Unit
-) {
+private fun AppDrawer(onNavigate: (String) -> Unit, onClose: () -> Unit) {
     ModalDrawerSheet(
         drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         drawerContentColor = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier
-            .fillMaxHeight()
-            .width(300.dp)
+        modifier = Modifier.fillMaxHeight().width(300.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxHeight()
-                .verticalScroll(rememberScrollState())
-        ) {
+        Column(modifier = Modifier.fillMaxHeight().verticalScroll(rememberScrollState())) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(GradientStart, MaterialTheme.colorScheme.surfaceContainerLow)
-                        )
-                    )
-                    .padding(horizontal = 20.dp, vertical = 28.dp)
+                modifier = Modifier.fillMaxWidth().background(
+                    Brush.verticalGradient(listOf(GradientStart, MaterialTheme.colorScheme.surfaceContainerLow))
+                ).padding(horizontal = 20.dp, vertical = 28.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     BrandMark(size = 48)
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Wildlife FieldOps",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "Field operations center",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.75f)
-                        )
+                        Text("Wildlife FieldOps", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Field operations center", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.75f))
                     }
                     IconButton(onClick = onClose) {
-                        Text(
-                            "X",
-                            color = Color.White.copy(alpha = 0.9f),
-                            style = MaterialTheme.typography.titleMedium
-                        )
+                        Text("X", color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.titleMedium)
                     }
                 }
             }
-
             Spacer(modifier = Modifier.height(8.dp))
-
             Text(
                 "TOOLS",
                 style = MaterialTheme.typography.labelSmall,
@@ -490,17 +356,10 @@ private fun AppDrawer(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
             )
-
             Screen.drawerItems.forEach { screen ->
                 NavigationDrawerItem(
-                    icon = {
-                        screen.icon?.let {
-                            Icon(it, contentDescription = screen.title)
-                        }
-                    },
-                    label = {
-                        Text(screen.title, style = MaterialTheme.typography.bodyLarge)
-                    },
+                    icon = { screen.icon?.let { Icon(it, contentDescription = screen.title) } },
+                    label = { Text(screen.title, style = MaterialTheme.typography.bodyLarge) },
                     selected = false,
                     onClick = { onNavigate(screen.route) },
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
@@ -515,20 +374,6 @@ private fun AppDrawer(
                     )
                 )
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                color = MaterialTheme.colorScheme.outlineVariant
-            )
-
-            Text(
-                "v2.0.1 · Modern UI",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(20.dp)
-            )
         }
     }
 }
