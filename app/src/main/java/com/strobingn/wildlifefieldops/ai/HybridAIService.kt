@@ -105,6 +105,23 @@ object HybridAIService {
         }.getOrElse { listOf("Compliance analysis failed: ${it.message}") }
     }
 
+    suspend fun estimateFromWalkthrough(
+        spokenNotes: String,
+        photoSummaries: List<String>
+    ): FieldToolAnswer = answerFieldTool(
+        toolTitle = "Walk-and-talk inspection estimate",
+        purpose = "Turn spoken field notes and photo tags into a Good/Better/Best quote the tech can read to the customer on site.",
+        steps = listOf(
+            "Use only what the tech said and what the photos tagged",
+            "Hudson Valley wildlife pricing, 2026",
+            "Good / Better / Best with labor, materials, follow-ups",
+            "Flag missing measurements instead of inventing openings or animals"
+        ),
+        species = "",
+        siteNotes = spokenNotes.ifBlank { "No spoken notes yet." },
+        jobSnapshot = photoSummaries.joinToString("\n").ifBlank { "No photos tagged yet." }
+    )
+
     suspend fun answerFieldTool(
         toolTitle: String,
         purpose: String,
