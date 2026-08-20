@@ -32,6 +32,7 @@ jobs:
       LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
       LLM_BASE_URL: https://api.x.ai/v1
       LLM_MODEL: grok-4.5
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -72,17 +73,23 @@ jobs:
           if [ -n "${LLM_API_KEY}" ]; then
             export LLM_API_KEY="$(printf '%s' "$LLM_API_KEY" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
           fi
+          if [ -n "${HF_TOKEN}" ]; then
+            export HF_TOKEN="$(printf '%s' "$HF_TOKEN" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          fi
           echo "XAI_API_KEY length: ${#XAI_API_KEY}"
           echo "LLM_API_KEY length: ${#LLM_API_KEY}"
+          echo "HF_TOKEN length: ${#HF_TOKEN}"
           echo "LLM_BASE_URL: ${LLM_BASE_URL}"
           echo "LLM_MODEL: ${LLM_MODEL}"
           if [ "${#XAI_API_KEY}" -lt 10 ] && [ "${#LLM_API_KEY}" -lt 10 ]; then
-            echo "::warning::No usable XAI_API_KEY or LLM_API_KEY secret — AI will be offline in this APK. Add repo secret XAI_API_KEY and rebuild."
-          else
-            echo "AI key present for BuildConfig bake-in."
+            echo "::warning::No usable XAI_API_KEY or LLM_API_KEY secret — cloud Grok will be offline."
+          fi
+          if [ "${#HF_TOKEN}" -lt 8 ]; then
+            echo "::warning::No HF_TOKEN secret — phone Gemma download will 401 until you add it."
           fi
           echo "XAI_API_KEY=$XAI_API_KEY" >> "$GITHUB_ENV"
           echo "LLM_API_KEY=$LLM_API_KEY" >> "$GITHUB_ENV"
+          echo "HF_TOKEN=$HF_TOKEN" >> "$GITHUB_ENV"
 
       - name: Build Debug APK
         run: |
@@ -92,6 +99,7 @@ jobs:
           export LLM_API_KEY="${LLM_API_KEY}"
           export LLM_BASE_URL="${LLM_BASE_URL:-https://api.x.ai/v1}"
           export LLM_MODEL="${LLM_MODEL:-grok-4.5}"
+          export HF_TOKEN="${HF_TOKEN}"
           ./gradlew :app:assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
         timeout-minutes: 30
 
