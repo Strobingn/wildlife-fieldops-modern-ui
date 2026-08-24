@@ -3,15 +3,14 @@
  * Top bar, sync status, side drawer, bottom nav, FAB, modal, toast, loading overlay
  */
 
-import {
-  DRAWER_PAGES,
-  BOTTOM_NAV,
-  APP_VERSION
-} from "../constants.js";
+import { DRAWER_PAGES, BOTTOM_NAV, APP_VERSION } from '../constants.js';
 
 /** HTML escape helper */
 function E(s) {
-  return String(s || "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[m]));
+  return String(s || '').replace(
+    /[&<>"']/g,
+    m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]
+  );
 }
 
 export const AppShell = {
@@ -23,8 +22,8 @@ export const AppShell = {
   render(state) {
     const pageTitle = this._getPageTitle(state.page);
     const isOnline = state.isOnline ?? navigator.onLine;
-    const syncStatus = state.syncStatus || "idle";
-    const pendingCount = state.jobs?.filter((j) => j._pending)?.length || 0;
+    const syncStatus = state.syncStatus || 'idle';
+    const pendingCount = state.jobs?.filter(j => j._pending)?.length || 0;
 
     return /* html */ `
       <!-- Loading Overlay -->
@@ -50,16 +49,16 @@ export const AppShell = {
         </div>
         <div class="menu-label">Navigation</div>
         ${DRAWER_PAGES.map(
-          (p) => /* html */ `
+          p => /* html */ `
             <button
               class="nav-link"
               data-page="${p.id}"
-              ${state.page === p.id ? 'aria-current="page"' : ""}
+              ${state.page === p.id ? 'aria-current="page"' : ''}
             >
               ${E(p.label)}
             </button>
           `
-        ).join("")}
+        ).join('')}
         <div class="menu-divider"></div>
         <div class="menu-label">Account</div>
         <button class="nav-link" data-action="sync" aria-label="Sync data with cloud">
@@ -72,11 +71,11 @@ export const AppShell = {
 
       <!-- Sync Status Bar -->
       <div class="sync-bar" role="status" aria-live="polite">
-        <div class="sync-status ${isOnline ? "online" : ""} ${syncStatus === "syncing" ? "syncing" : ""} ${syncStatus === "error" ? "error" : ""}" id="syncStatus">
-          ${syncStatus === "syncing" ? "🔄 Syncing..." : isOnline ? "🟢 Online" : "🔴 Offline"}
+        <div class="sync-status ${isOnline ? 'online' : ''} ${syncStatus === 'syncing' ? 'syncing' : ''} ${syncStatus === 'error' ? 'error' : ''}" id="syncStatus">
+          ${syncStatus === 'syncing' ? '🔄 Syncing...' : isOnline ? '🟢 Online' : '🔴 Offline'}
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
-          ${pendingCount > 0 ? `<span class="pill warn">${pendingCount} pending</span>` : ""}
+          ${pendingCount > 0 ? `<span class="pill warn">${pendingCount} pending</span>` : ''}
           <span id="syncTime" class="tiny" style="margin-top:0;">${state.lastSync ? `Synced ${this._timeAgo(state.lastSync)}` : 'Not synced'}</span>
         </div>
       </div>
@@ -97,10 +96,10 @@ export const AppShell = {
           <button
             id="themeToggle"
             class="theme-toggle"
-            aria-label="Toggle ${state.theme === "dark" ? "light" : "dark"} theme"
+            aria-label="Toggle ${state.theme === 'dark' ? 'light' : 'dark'} theme"
             title="Toggle theme"
           >
-            ${state.theme === "dark" ? "☀️" : "🌙"}
+            ${state.theme === 'dark' ? '☀️' : '🌙'}
           </button>
           <button
             id="notifBtn"
@@ -109,7 +108,7 @@ export const AppShell = {
             title="Notifications"
           >
             🔔
-            ${state.notifications?.length ? `<span class="badge" aria-label="${state.notifications.length} notifications">${Math.min(state.notifications.length, 9)}</span>` : ""}
+            ${state.notifications?.length ? `<span class="badge" aria-label="${state.notifications.length} notifications">${Math.min(state.notifications.length, 9)}</span>` : ''}
           </button>
         </div>
       </header>
@@ -120,24 +119,24 @@ export const AppShell = {
       <!-- Bottom Navigation -->
       <nav class="bottom-nav" role="navigation" aria-label="Primary navigation">
         ${BOTTOM_NAV.map(
-          (item) => /* html */ `
+          item => /* html */ `
             <button
-              class="nav-tab ${state.page === item.id ? "active" : ""}"
+              class="nav-tab ${state.page === item.id ? 'active' : ''}"
               data-page="${item.id}"
               aria-label="${E(item.label)}"
-              ${state.page === item.id ? 'aria-current="page"' : ""}
+              ${state.page === item.id ? 'aria-current="page"' : ''}
             >
               ${item.icon}
               <span class="nav-label">${E(item.label)}</span>
             </button>
           `
-        ).join("")}
+        ).join('')}
       </nav>
 
       <!-- FAB -->
       <button
         id="fab"
-        class="fab ${state.hideFab ? "hidden-fab" : ""}"
+        class="fab ${state.hideFab ? 'hidden-fab' : ''}"
         aria-label="Quick add"
         title="Quick add"
       >
@@ -174,36 +173,36 @@ export const AppShell = {
   },
 
   afterRender(state) {
-    const drawer = document.getElementById("drawer");
-    const backdrop = document.getElementById("menuBackdrop");
-    const menuBtn = document.getElementById("menuBtn");
-    const themeToggle = document.getElementById("themeToggle");
-    const fab = document.getElementById("fab");
-    const modalBackdrop = document.getElementById("modalBackdrop");
-    const modalClose = document.getElementById("modalClose");
-    const notifBtn = document.getElementById("notifBtn");
+    const drawer = document.getElementById('drawer');
+    const backdrop = document.getElementById('menuBackdrop');
+    const menuBtn = document.getElementById('menuBtn');
+    const themeToggle = document.getElementById('themeToggle');
+    const fab = document.getElementById('fab');
+    const modalBackdrop = document.getElementById('modalBackdrop');
+    const modalClose = document.getElementById('modalClose');
+    const notifBtn = document.getElementById('notifBtn');
 
     // Menu open/close
     const toggleMenu = () => {
       this._menuOpen = !this._menuOpen;
-      drawer.classList.toggle("open", this._menuOpen);
-      backdrop.classList.toggle("open", this._menuOpen);
-      drawer.setAttribute("aria-hidden", String(!this._menuOpen));
-      menuBtn.setAttribute("aria-expanded", String(this._menuOpen));
+      drawer.classList.toggle('open', this._menuOpen);
+      backdrop.classList.toggle('open', this._menuOpen);
+      drawer.setAttribute('aria-hidden', String(!this._menuOpen));
+      menuBtn.setAttribute('aria-expanded', String(this._menuOpen));
       if (this._menuOpen) {
-        const firstBtn = drawer.querySelector("button");
+        const firstBtn = drawer.querySelector('button');
         if (firstBtn) firstBtn.focus();
       }
     };
 
-    menuBtn.addEventListener("click", toggleMenu);
-    backdrop.addEventListener("click", toggleMenu);
-    this._listeners.push({ el: menuBtn, type: "click", fn: toggleMenu });
-    this._listeners.push({ el: backdrop, type: "click", fn: toggleMenu });
+    menuBtn.addEventListener('click', toggleMenu);
+    backdrop.addEventListener('click', toggleMenu);
+    this._listeners.push({ el: menuBtn, type: 'click', fn: toggleMenu });
+    this._listeners.push({ el: backdrop, type: 'click', fn: toggleMenu });
 
     // Keyboard: Escape closes menu
-    const keyHandler = (e) => {
-      if (e.key === "Escape") {
+    const keyHandler = e => {
+      if (e.key === 'Escape') {
         if (this._menuOpen) {
           toggleMenu();
         }
@@ -212,49 +211,49 @@ export const AppShell = {
         }
       }
     };
-    document.addEventListener("keydown", keyHandler);
-    this._listeners.push({ el: document, type: "keydown", fn: keyHandler });
+    document.addEventListener('keydown', keyHandler);
+    this._listeners.push({ el: document, type: 'keydown', fn: keyHandler });
 
     // Theme toggle
-    themeToggle.addEventListener("click", () => {
-      const newTheme = (state.theme === "dark" ? "light" : "dark");
-      document.documentElement.setAttribute("data-theme", newTheme);
-      localStorage.setItem("ww_theme", newTheme);
-      if (state.dispatch) state.dispatch({ type: "SET_THEME", theme: newTheme });
+    themeToggle.addEventListener('click', () => {
+      const newTheme = state.theme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', newTheme);
+      localStorage.setItem('ww_theme', newTheme);
+      if (state.dispatch) state.dispatch({ type: 'SET_THEME', theme: newTheme });
     });
-    this._listeners.push({ el: themeToggle, type: "click" });
+    this._listeners.push({ el: themeToggle, type: 'click' });
 
     // Navigation drawer links
-    drawer.querySelectorAll("button[data-page]").forEach((btn) => {
+    drawer.querySelectorAll('button[data-page]').forEach(btn => {
       const handler = () => {
         const page = btn.dataset.page;
         toggleMenu();
         if (state.navigate) state.navigate(page);
       };
-      btn.addEventListener("click", handler);
-      this._listeners.push({ el: btn, type: "click", fn: handler });
+      btn.addEventListener('click', handler);
+      this._listeners.push({ el: btn, type: 'click', fn: handler });
     });
 
     // Drawer action buttons
-    drawer.querySelectorAll("button[data-action]").forEach((btn) => {
+    drawer.querySelectorAll('button[data-action]').forEach(btn => {
       const handler = () => {
         const action = btn.dataset.action;
         toggleMenu();
-        if (action === "sync" && state.onSync) state.onSync();
-        if (action === "settings" && state.navigate) state.navigate("settings");
+        if (action === 'sync' && state.onSync) state.onSync();
+        if (action === 'settings' && state.navigate) state.navigate('settings');
       };
-      btn.addEventListener("click", handler);
-      this._listeners.push({ el: btn, type: "click", fn: handler });
+      btn.addEventListener('click', handler);
+      this._listeners.push({ el: btn, type: 'click', fn: handler });
     });
 
     // Bottom nav
-    document.querySelectorAll(".nav-tab[data-page]").forEach((btn) => {
+    document.querySelectorAll('.nav-tab[data-page]').forEach(btn => {
       const handler = () => {
         const page = btn.dataset.page;
         if (state.navigate) state.navigate(page);
       };
-      btn.addEventListener("click", handler);
-      this._listeners.push({ el: btn, type: "click", fn: handler });
+      btn.addEventListener('click', handler);
+      this._listeners.push({ el: btn, type: 'click', fn: handler });
     });
 
     // FAB
@@ -262,16 +261,16 @@ export const AppShell = {
       const fabHandler = () => {
         if (state.onFabClick) state.onFabClick();
       };
-      fab.addEventListener("click", fabHandler);
-      this._listeners.push({ el: fab, type: "click", fn: fabHandler });
+      fab.addEventListener('click', fabHandler);
+      this._listeners.push({ el: fab, type: 'click', fn: fabHandler });
     }
 
     // Modal close
-    modalClose.addEventListener("click", () => this.closeModal());
-    this._listeners.push({ el: modalClose, type: "click" });
+    modalClose.addEventListener('click', () => this.closeModal());
+    this._listeners.push({ el: modalClose, type: 'click' });
 
     // Close modal on backdrop click
-    modalBackdrop.addEventListener("click", (e) => {
+    modalBackdrop.addEventListener('click', e => {
       if (e.target === modalBackdrop) this.closeModal();
     });
 
@@ -280,8 +279,8 @@ export const AppShell = {
       const notifHandler = () => {
         if (state.onNotifications) state.onNotifications();
       };
-      notifBtn.addEventListener("click", notifHandler);
-      this._listeners.push({ el: notifBtn, type: "click", fn: notifHandler });
+      notifBtn.addEventListener('click', notifHandler);
+      this._listeners.push({ el: notifBtn, type: 'click', fn: notifHandler });
     }
 
     // Scroll reveal observer
@@ -301,26 +300,26 @@ export const AppShell = {
 
   // ─── Modal API ───
   openModal(title, bodyHtml, onClose) {
-    const backdrop = document.getElementById("modalBackdrop");
-    const titleEl = document.getElementById("modalTitle");
-    const bodyEl = document.getElementById("modalBody");
+    const backdrop = document.getElementById('modalBackdrop');
+    const titleEl = document.getElementById('modalTitle');
+    const bodyEl = document.getElementById('modalBody');
     if (!backdrop || !titleEl || !bodyEl) return;
     titleEl.textContent = title;
     bodyEl.innerHTML = bodyHtml;
     this._modalOpen = true;
     this._modalCallback = onClose;
-    backdrop.classList.add("open");
-    backdrop.setAttribute("aria-hidden", "false");
+    backdrop.classList.add('open');
+    backdrop.setAttribute('aria-hidden', 'false');
     // Focus trap: focus close button initially
-    const closeBtn = document.getElementById("modalClose");
+    const closeBtn = document.getElementById('modalClose');
     if (closeBtn) closeBtn.focus();
   },
 
   closeModal() {
-    const backdrop = document.getElementById("modalBackdrop");
+    const backdrop = document.getElementById('modalBackdrop');
     if (!backdrop) return;
-    backdrop.classList.remove("open");
-    backdrop.setAttribute("aria-hidden", "true");
+    backdrop.classList.remove('open');
+    backdrop.setAttribute('aria-hidden', 'true');
     this._modalOpen = false;
     if (this._modalCallback) {
       this._modalCallback();
@@ -329,75 +328,75 @@ export const AppShell = {
   },
 
   // ─── Toast API ───
-  showToast(message, type = "success", duration = 3000) {
-    const toast = document.getElementById("toast");
+  showToast(message, type = 'success', duration = 3000) {
+    const toast = document.getElementById('toast');
     if (!toast) return;
     toast.className = `toast ${type}`;
     toast.textContent = message;
-    requestAnimationFrame(() => toast.classList.add("show"));
+    requestAnimationFrame(() => toast.classList.add('show'));
     clearTimeout(this._toastTimer);
     this._toastTimer = setTimeout(() => {
-      toast.classList.remove("show");
+      toast.classList.remove('show');
     }, duration);
   },
 
   // ─── Loading API ───
-  showLoading(message = "Loading...") {
-    const overlay = document.getElementById("loadingOverlay");
-    const text = document.getElementById("loadingText");
-    if (overlay) overlay.classList.add("active");
+  showLoading(message = 'Loading...') {
+    const overlay = document.getElementById('loadingOverlay');
+    const text = document.getElementById('loadingText');
+    if (overlay) overlay.classList.add('active');
     if (text) text.textContent = message;
   },
 
   hideLoading() {
-    const overlay = document.getElementById("loadingOverlay");
-    if (overlay) overlay.classList.remove("active");
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.classList.remove('active');
   },
 
   // ─── Helpers ───
   _getPageTitle(page) {
     const titles = {
-      dashboard: "🏠 Dashboard",
-      jobs: "🦝 Jobs",
-      gps: "📍 GPS Map",
-      estimate: "💵 Estimator",
-      ai: "🧠 AI Assistant",
-      customers: "👥 Customers",
-      photos: "📸 Photos",
-      metrics: "📊 Metrics",
-      settings: "⚙️ Settings",
+      dashboard: '🏠 Dashboard',
+      jobs: '🦝 Jobs',
+      gps: '📍 GPS Map',
+      estimate: '💵 Estimator',
+      ai: '🧠 AI Assistant',
+      customers: '👥 Customers',
+      photos: '📸 Photos',
+      metrics: '📊 Metrics',
+      settings: '⚙️ Settings'
     };
-    return titles[page] || "Wildlife Whisperer";
+    return titles[page] || 'Wildlife Whisperer';
   },
 
   _timeAgo(date) {
     const now = Date.now();
     const d = new Date(date).getTime();
     const diff = Math.floor((now - d) / 1000);
-    if (diff < 60) return "just now";
-    if (diff < 3600) return Math.floor(diff / 60) + "m ago";
-    if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
-    return Math.floor(diff / 86400) + "d ago";
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    return Math.floor(diff / 86400) + 'd ago';
   },
 
   _initScrollReveal() {
-    const revealEls = document.querySelectorAll(".reveal");
+    const revealEls = document.querySelectorAll('.reveal');
     if (!revealEls.length) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      revealEls.forEach((el) => el.classList.add("visible"));
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      revealEls.forEach(el => el.classList.add('visible'));
       return;
     }
     this._scrollObserver = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
+      entries => {
+        entries.forEach(entry => {
           if (entry.isIntersecting) {
-            entry.target.classList.add("visible");
+            entry.target.classList.add('visible');
             this._scrollObserver.unobserve(entry.target);
           }
         });
       },
-      { threshold: 0.1, rootMargin: "0px 0px -20px 0px" }
+      { threshold: 0.1, rootMargin: '0px 0px -20px 0px' }
     );
-    revealEls.forEach((el) => this._scrollObserver.observe(el));
-  },
+    revealEls.forEach(el => this._scrollObserver.observe(el));
+  }
 };

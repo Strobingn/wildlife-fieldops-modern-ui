@@ -16,9 +16,7 @@
 // ═══════════════════════════════════════════════════
 
 /** @type {Record<string, string>} */
-const env = typeof import.meta !== 'undefined' && import.meta.env
-  ? import.meta.env
-  : {};
+const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : {};
 
 /** @type {string} Supabase project URL */
 const SUPABASE_URL = env.VITE_SUPABASE_URL || '';
@@ -51,7 +49,7 @@ function isValidKey(key, minLen = 20) {
   const k = key.trim();
   if (k.length < minLen) return false;
   const bad = ['your-', 'YOUR_', 'example', 'placeholder', 'xxx', 'testkey', 'demo_key', 'changeme', 'replace_me'];
-  return !bad.some((b) => k.toLowerCase().includes(b.toLowerCase()));
+  return !bad.some(b => k.toLowerCase().includes(b.toLowerCase()));
 }
 
 // ═══════════════════════════════════════════════════
@@ -119,7 +117,7 @@ export const config = Object.freeze({
   // ── Limits ──
   MAX_PHOTOS_PER_JOB: 100,
   MAX_FILE_SIZE_MB: 10,
-  MAX_SYNC_QUEUE: 500,
+  MAX_SYNC_QUEUE: 500
 });
 
 // ═══════════════════════════════════════════════════
@@ -133,14 +131,22 @@ export const config = Object.freeze({
  */
 export function isFeatureAvailable(feature) {
   switch (feature) {
-    case 'supabase': return config.hasSupabase;
-    case 'googleMaps': return config.hasGoogleMaps;
-    case 'googleCalendar': return config.hasGoogleCalendar;
-    case 'weather': return config.hasWeather;
-    case 'notifications': return 'Notification' in window;
-    case 'geolocation': return 'geolocation' in navigator;
-    case 'speechRecognition': return 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
-    default: return false;
+    case 'supabase':
+      return config.hasSupabase;
+    case 'googleMaps':
+      return config.hasGoogleMaps;
+    case 'googleCalendar':
+      return config.hasGoogleCalendar;
+    case 'weather':
+      return config.hasWeather;
+    case 'notifications':
+      return 'Notification' in window;
+    case 'geolocation':
+      return 'geolocation' in navigator;
+    case 'speechRecognition':
+      return 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
+    default:
+      return false;
   }
 }
 
@@ -159,6 +165,6 @@ export function getBuildInfo() {
     `Supabase: ${config.hasSupabase ? '✅' : '❌'}`,
     `Google Maps: ${config.hasGoogleMaps ? '✅' : '❌'}`,
     `Google Calendar: ${config.hasGoogleCalendar ? '✅' : '❌'}`,
-    `Weather: ${config.hasWeather ? '✅' : '❌'}`,
+    `Weather: ${config.hasWeather ? '✅' : '❌'}`
   ].join(' | ');
 }

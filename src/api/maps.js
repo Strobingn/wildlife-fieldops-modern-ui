@@ -34,7 +34,7 @@ const GRAYSCALE_MAP_STYLES = [
   { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#686868' }] },
   { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#3c3c3c' }] },
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#181818' }] },
-  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#8f8f8f' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#8f8f8f' }] }
 ];
 
 const DARK_THEME_STYLES = GRAYSCALE_MAP_STYLES;
@@ -68,12 +68,12 @@ export async function loadGoogleMaps(loadPlaces = true) {
 
   // Already loading, wait for it
   if (scriptLoading) {
-    return new Promise((resolve) => loadCallbacks.push(resolve));
+    return new Promise(resolve => loadCallbacks.push(resolve));
   }
 
   scriptLoading = true;
 
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const libraries = loadPlaces ? 'places' : '';
     const existing = document.getElementById(SCRIPT_ID);
     if (existing) {
@@ -93,7 +93,7 @@ export async function loadGoogleMaps(loadPlaces = true) {
     window[callbackName] = () => {
       _scriptLoaded = true;
       delete window[callbackName];
-      loadCallbacks.forEach((cb) => cb(true));
+      loadCallbacks.forEach(cb => cb(true));
       loadCallbacks = [];
       resolve(true);
     };
@@ -153,7 +153,7 @@ export async function initMap(containerId, options = {}) {
     zoomControl = true,
     streetViewControl = false,
     mapTypeControl = false,
-    fullscreenControl = true,
+    fullscreenControl = true
   } = options;
 
   const map = new google.maps.Map(el, {
@@ -164,7 +164,7 @@ export async function initMap(containerId, options = {}) {
     mapTypeControl,
     fullscreenControl,
     styles: darkTheme ? DARK_THEME_STYLES : LIGHT_THEME_STYLES,
-    gestureHandling: 'cooperative',
+    gestureHandling: 'cooperative'
   });
 
   activeMaps.set(containerId, map);
@@ -189,7 +189,7 @@ export function getMap(containerId) {
 export function destroyMap(containerId) {
   const markers = activeMarkers.get(containerId);
   if (markers) {
-    markers.forEach((m) => m.setMap(null));
+    markers.forEach(m => m.setMap(null));
     activeMarkers.delete(containerId);
   }
   activeMaps.delete(containerId);
@@ -219,7 +219,7 @@ export function addMarker(map, position, title = '', onClick, options = {}) {
     title,
     animation: options.animation || google.maps.Animation?.DROP,
     icon: options.icon || null,
-    ...options,
+    ...options
   });
 
   if (typeof onClick === 'function') {
@@ -246,7 +246,7 @@ export function clearMarkers(map) {
   const containerId = findContainerId(map);
   const markers = activeMarkers.get(containerId);
   if (markers) {
-    markers.forEach((m) => m.setMap(null));
+    markers.forEach(m => m.setMap(null));
     activeMarkers.set(containerId, []);
   }
 }
@@ -266,7 +266,7 @@ export function fitBounds(map, positions, padding = 50) {
   const bounds = new google.maps.LatLngBounds();
   let hasValid = false;
 
-  positions.forEach((pos) => {
+  positions.forEach(pos => {
     const lat = parseFloat(pos.lat);
     const lng = parseFloat(pos.lng);
     if (!isNaN(lat) && !isNaN(lng)) {
@@ -289,7 +289,7 @@ export function fitBounds(map, positions, padding = 50) {
 export function fitToMarkers(map, padding = 50) {
   const containerId = findContainerId(map);
   const markers = activeMarkers.get(containerId) || [];
-  const positions = markers.map((m) => m.getPosition().toJSON());
+  const positions = markers.map(m => m.getPosition().toJSON());
   fitBounds(map, positions, padding);
 }
 
@@ -350,7 +350,7 @@ export async function geocodeAddress(address) {
     return null;
   }
 
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const geocoder = new google.maps.Geocoder();
     geocoder.geocode({ address: address.trim() }, (results, status) => {
       if (status === 'OK' && results?.[0]?.geometry?.location) {
@@ -358,7 +358,7 @@ export async function geocodeAddress(address) {
         resolve({
           lat: loc.lat(),
           lng: loc.lng(),
-          formattedAddress: results[0].formatted_address,
+          formattedAddress: results[0].formatted_address
         });
       } else {
         console.warn(`[maps] Geocoding failed: ${status}`);
@@ -384,7 +384,7 @@ export async function reverseGeocode(lat, lng) {
   const loaded = await loadGoogleMaps(false);
   if (!loaded) return null;
 
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const geocoder = new google.maps.Geocoder();
     geocoder.geocode({ location: { lat: parseFloat(lat), lng: parseFloat(lng) } }, (results, status) => {
       if (status === 'OK' && results?.[0]) {
@@ -418,7 +418,7 @@ export async function initAutocomplete(inputElement, options = {}) {
   const autocomplete = new google.maps.places.Autocomplete(inputElement, {
     types: ['address'],
     fields: ['formatted_address', 'geometry', 'address_components'],
-    ...options,
+    ...options
   });
 
   return autocomplete;
