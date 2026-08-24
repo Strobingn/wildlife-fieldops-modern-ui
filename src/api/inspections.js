@@ -68,7 +68,7 @@ export async function createInspection(data) {
     notes: data.notes || '',
     job_id: null,
     created_at: now(),
-    updated_at: now(),
+    updated_at: now()
   };
 
   // Save locally first (offline-first)
@@ -116,7 +116,7 @@ export async function getInspections(filters = {}) {
   }
 
   if (filters.status) {
-    items = items.filter((i) => i.status === filters.status);
+    items = items.filter(i => i.status === filters.status);
   }
 
   return { data: items, error: null };
@@ -129,7 +129,7 @@ export async function getInspections(filters = {}) {
  */
 export async function getInspectionById(inspectionId) {
   const local = loadLocal();
-  const found = local.find((i) => i.id === inspectionId);
+  const found = local.find(i => i.id === inspectionId);
   if (found) return { data: found, error: null };
 
   if (config.hasSupabase) {
@@ -156,7 +156,7 @@ export async function getInspectionById(inspectionId) {
  */
 export async function updateInspection(inspectionId, updates) {
   const local = loadLocal();
-  const idx = local.findIndex((i) => i.id === inspectionId);
+  const idx = local.findIndex(i => i.id === inspectionId);
   if (idx < 0) return { data: null, error: new Error('Inspection not found') };
 
   local[idx] = { ...local[idx], ...updates, updated_at: now() };
@@ -185,7 +185,7 @@ export async function updateInspection(inspectionId, updates) {
  */
 export async function deleteInspection(inspectionId) {
   let local = loadLocal();
-  local = local.filter((i) => i.id !== inspectionId);
+  local = local.filter(i => i.id !== inspectionId);
   saveLocal(local);
 
   if (config.hasSupabase) {
@@ -230,13 +230,13 @@ export async function convertInspectionToJob(inspectionId, jobOverrides = {}) {
     scheduled_start: inspection.scheduled_date || null,
     ...jobOverrides,
     created_at: timestamp,
-    updated_at: timestamp,
+    updated_at: timestamp
   };
 
   // Update inspection to mark as converted
   const updatedInspection = { ...inspection, status: 'converted', job_id: jobId, updated_at: timestamp };
   const local = loadLocal();
-  const idx = local.findIndex((i) => i.id === inspectionId);
+  const idx = local.findIndex(i => i.id === inspectionId);
   if (idx >= 0) {
     local[idx] = updatedInspection;
     saveLocal(local);
@@ -283,7 +283,11 @@ export async function syncInspections() {
   for (const item of items) {
     try {
       const { error } = await supabase.from(TABLE).upsert(item, { onConflict: 'id' });
-      if (error) { errors++; } else { synced++; }
+      if (error) {
+        errors++;
+      } else {
+        synced++;
+      }
     } catch {
       errors++;
     }

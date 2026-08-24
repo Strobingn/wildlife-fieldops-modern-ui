@@ -12,14 +12,17 @@ import {
   SEVERITY_MULTIPLIERS,
   DEFAULT_TAX_RATE,
   SPECIES_ICONS
-} from "../constants.js";
+} from '../constants.js';
 
 function E(s) {
-  return String(s || "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[m]));
+  return String(s || '').replace(
+    /[&<>"']/g,
+    m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]
+  );
 }
 
 function money(n) {
-  return "$" + (n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return '$' + (n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function id() {
@@ -30,10 +33,10 @@ export const EstimateCalc = {
   _listeners: [],
   _lineItems: [],
   _species: SPECIES[0],
-  _severity: "Medium",
-  _issue: "",
-  _customerName: "",
-  _customerEmail: "",
+  _severity: 'Medium',
+  _issue: '',
+  _customerName: '',
+  _customerEmail: '',
 
   render(state) {
     const taxRate = state.settings?.taxRate || DEFAULT_TAX_RATE;
@@ -70,7 +73,11 @@ export const EstimateCalc = {
         <label for="estTemplate">Scenario Template</label>
         <select id="estTemplate">
           <option value="">-- Custom estimate --</option>
-          ${Object.entries(ESTIMATE_TEMPLATES).map(([key, t]) => `<option value="${key}">${E(t.label)} (${SPECIES_ICONS[t.species]} ${t.species})</option>`).join("")}
+          ${Object.entries(ESTIMATE_TEMPLATES)
+            .map(
+              ([key, t]) => `<option value="${key}">${E(t.label)} (${SPECIES_ICONS[t.species]} ${t.species})</option>`
+            )
+            .join('')}
         </select>
       </div>
 
@@ -81,13 +88,13 @@ export const EstimateCalc = {
           <div>
             <label for="estSpecies">Species</label>
             <select id="estSpecies">
-              ${SPECIES.map((s) => `<option value="${E(s)}" ${this._species === s ? "selected" : ""}>${SPECIES_ICONS[s] || "🐾"} ${E(s)}</option>`).join("")}
+              ${SPECIES.map(s => `<option value="${E(s)}" ${this._species === s ? 'selected' : ''}>${SPECIES_ICONS[s] || '🐾'} ${E(s)}</option>`).join('')}
             </select>
           </div>
           <div>
             <label for="estSeverity">Severity</label>
             <select id="estSeverity">
-              ${SEVERITIES.map((s) => `<option value="${E(s)}" ${this._severity === s ? "selected" : ""}>${E(s)} (${SEVERITY_MULTIPLIERS[s] || 1}x)</option>`).join("")}
+              ${SEVERITIES.map(s => `<option value="${E(s)}" ${this._severity === s ? 'selected' : ''}>${E(s)} (${SEVERITY_MULTIPLIERS[s] || 1}x)</option>`).join('')}
             </select>
           </div>
         </div>
@@ -104,15 +111,18 @@ export const EstimateCalc = {
         <div style="display:flex;gap:8px;margin-bottom:10px;">
           <select id="estService" style="margin-top:0;flex:2;">
             <option value="">-- Select service --</option>
-            ${SERVICES.map((s) => `<option value="${E(s.name)}" data-price="${s.price}">${E(s.name)} — $${s.price}</option>`).join("")}
+            ${SERVICES.map(s => `<option value="${E(s.name)}" data-price="${s.price}">${E(s.name)} — $${s.price}</option>`).join('')}
           </select>
           <input type="number" id="estQty" placeholder="Qty" min="1" value="1" style="margin-top:0;width:60px;flex-shrink:0;">
           <button class="action dark" data-action="add-service" style="margin-top:0;width:auto;padding:10px;">+</button>
         </div>
 
-        ${this._lineItems.length
-          ? `<div style="margin-bottom:12px;">
-              ${this._lineItems.map((item, idx) => `
+        ${
+          this._lineItems.length
+            ? `<div style="margin-bottom:12px;">
+              ${this._lineItems
+                .map(
+                  (item, idx) => `
                 <div class="service-item">
                   <div class="service-info">
                     <b>${E(item.service)}</b>
@@ -121,9 +131,11 @@ export const EstimateCalc = {
                   <div class="service-price">${money(item.total)}</div>
                   <button class="service-remove" data-action="remove-service" data-idx="${idx}" aria-label="Remove ${E(item.service)}">&times;</button>
                 </div>
-              `).join("")}
+              `
+                )
+                .join('')}
              </div>`
-          : `<div class="tiny" style="margin-bottom:12px;">No line items yet. Add services above or use a template.</div>`
+            : `<div class="tiny" style="margin-bottom:12px;">No line items yet. Add services above or use a template.</div>`
         }
       </div>
 
@@ -159,7 +171,7 @@ export const EstimateCalc = {
 
   afterRender(state) {
     // Template select
-    const tmplEl = document.getElementById("estTemplate");
+    const tmplEl = document.getElementById('estTemplate');
     if (tmplEl) {
       const handler = () => {
         const key = tmplEl.value;
@@ -168,98 +180,120 @@ export const EstimateCalc = {
         if (!t) return;
         this._species = t.species;
         this._issue = t.issue;
-        this._lineItems = [{
-          id: id(), service: t.service, qty: t.qty, price: t.price, total: t.qty * t.price
-        }];
+        this._lineItems = [
+          {
+            id: id(),
+            service: t.service,
+            qty: t.qty,
+            price: t.price,
+            total: t.qty * t.price
+          }
+        ];
         state.rerender?.();
       };
-      tmplEl.addEventListener("change", handler);
-      this._listeners.push({ el: tmplEl, type: "change", fn: handler });
+      tmplEl.addEventListener('change', handler);
+      this._listeners.push({ el: tmplEl, type: 'change', fn: handler });
     }
 
     // Species and severity changes
-    const specEl = document.getElementById("estSpecies");
-    const sevEl = document.getElementById("estSeverity");
+    const specEl = document.getElementById('estSpecies');
+    const sevEl = document.getElementById('estSeverity');
     if (specEl) {
-      const handler = () => { this._species = specEl.value; state.rerender?.(); };
-      specEl.addEventListener("change", handler);
-      this._listeners.push({ el: specEl, type: "change", fn: handler });
+      const handler = () => {
+        this._species = specEl.value;
+        state.rerender?.();
+      };
+      specEl.addEventListener('change', handler);
+      this._listeners.push({ el: specEl, type: 'change', fn: handler });
     }
     if (sevEl) {
-      const handler = () => { this._severity = sevEl.value; state.rerender?.(); };
-      sevEl.addEventListener("change", handler);
-      this._listeners.push({ el: sevEl, type: "change", fn: handler });
+      const handler = () => {
+        this._severity = sevEl.value;
+        state.rerender?.();
+      };
+      sevEl.addEventListener('change', handler);
+      this._listeners.push({ el: sevEl, type: 'change', fn: handler });
     }
 
     // Track customer name/email
-    const nameEl = document.getElementById("estCustName");
-    const emailEl = document.getElementById("estCustEmail");
-    const issueEl = document.getElementById("estIssue");
+    const nameEl = document.getElementById('estCustName');
+    const emailEl = document.getElementById('estCustEmail');
+    const issueEl = document.getElementById('estIssue');
     if (nameEl) {
-      const h = () => { this._customerName = nameEl.value; };
-      nameEl.addEventListener("input", h);
-      this._listeners.push({ el: nameEl, type: "input", fn: h });
+      const h = () => {
+        this._customerName = nameEl.value;
+      };
+      nameEl.addEventListener('input', h);
+      this._listeners.push({ el: nameEl, type: 'input', fn: h });
     }
     if (emailEl) {
-      const h = () => { this._customerEmail = emailEl.value; };
-      emailEl.addEventListener("input", h);
-      this._listeners.push({ el: emailEl, type: "input", fn: h });
+      const h = () => {
+        this._customerEmail = emailEl.value;
+      };
+      emailEl.addEventListener('input', h);
+      this._listeners.push({ el: emailEl, type: 'input', fn: h });
     }
     if (issueEl) {
-      const h = () => { this._issue = issueEl.value; };
-      issueEl.addEventListener("input", h);
-      this._listeners.push({ el: issueEl, type: "input", fn: h });
+      const h = () => {
+        this._issue = issueEl.value;
+      };
+      issueEl.addEventListener('input', h);
+      this._listeners.push({ el: issueEl, type: 'input', fn: h });
     }
 
     // Action buttons
-    document.querySelectorAll("[data-action]").forEach((btn) => {
+    document.querySelectorAll('[data-action]').forEach(btn => {
       const handler = () => {
         const action = btn.dataset.action;
 
-        if (action === "add-service") {
-          const svcEl = document.getElementById("estService");
-          const qtyEl = document.getElementById("estQty");
+        if (action === 'add-service') {
+          const svcEl = document.getElementById('estService');
+          const qtyEl = document.getElementById('estQty');
           const svcName = svcEl?.value;
           const qty = parseInt(qtyEl?.value || 1, 10);
-          if (!svcName) { state.showToast?.("Select a service", "warn"); return; }
-          const svc = SERVICES.find((s) => s.name === svcName);
+          if (!svcName) {
+            state.showToast?.('Select a service', 'warn');
+            return;
+          }
+          const svc = SERVICES.find(s => s.name === svcName);
           const price = svc?.price || 0;
           this._lineItems.push({ id: id(), service: svcName, qty, price, total: qty * price });
-          svcEl.value = ""; qtyEl.value = "1";
+          svcEl.value = '';
+          qtyEl.value = '1';
           state.rerender?.();
         }
 
-        if (action === "remove-service") {
+        if (action === 'remove-service') {
           const idx = parseInt(btn.dataset.idx, 10);
           this._lineItems.splice(idx, 1);
           state.rerender?.();
         }
 
-        if (action === "email-estimate") {
+        if (action === 'email-estimate') {
           const preview = this._generatePreview(
             this._calcSubtotal(),
             this._calcSubtotal() * (state.settings?.taxRate || DEFAULT_TAX_RATE),
             this._calcGrandTotal(state),
             state.settings?.taxRate || DEFAULT_TAX_RATE
           );
-          const subject = encodeURIComponent("Wildlife Whisperer LLC — Estimate");
+          const subject = encodeURIComponent('Wildlife Whisperer LLC — Estimate');
           const body = encodeURIComponent(preview);
-          const email = this._customerEmail ? `mailto:${this._customerEmail}?` : "mailto:?";
+          const email = this._customerEmail ? `mailto:${this._customerEmail}?` : 'mailto:?';
           window.location.href = email + `subject=${subject}&body=${body}`;
         }
 
-        if (action === "save-estimate") {
+        if (action === 'save-estimate') {
           const subtotal = this._calcSubtotal();
           const taxRate = state.settings?.taxRate || DEFAULT_TAX_RATE;
           const grandTotal = this._calcGrandTotal(state);
           const payload = {
             id: id(),
-            customer: this._customerName || "TBD",
+            customer: this._customerName || 'TBD',
             species: this._species,
-            status: "Active",
-            priority: "Normal",
-            title: this._species + " — " + (this._issue ? this._issue.slice(0, 50) : "Estimate"),
-            scope: this._issue || "",
+            status: 'Active',
+            priority: 'Normal',
+            title: this._species + ' — ' + (this._issue ? this._issue.slice(0, 50) : 'Estimate'),
+            scope: this._issue || '',
             estimate: grandTotal,
             subtotal,
             tax_rate: taxRate,
@@ -269,13 +303,13 @@ export const EstimateCalc = {
             balance_due: grandTotal,
             services: this._lineItems,
             created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
           };
           state.onSaveEstimateAsJob?.(payload);
         }
       };
-      btn.addEventListener("click", handler);
-      this._listeners.push({ el: btn, type: "click", fn: handler });
+      btn.addEventListener('click', handler);
+      this._listeners.push({ el: btn, type: 'click', fn: handler });
     });
   },
 
@@ -284,10 +318,10 @@ export const EstimateCalc = {
     this._listeners = [];
     this._lineItems = [];
     this._species = SPECIES[0];
-    this._severity = "Medium";
-    this._issue = "";
-    this._customerName = "";
-    this._customerEmail = "";
+    this._severity = 'Medium';
+    this._issue = '';
+    this._customerName = '';
+    this._customerEmail = '';
   },
 
   _calcSubtotal() {
@@ -300,21 +334,23 @@ export const EstimateCalc = {
   _calcGrandTotal(state) {
     const subtotal = this._calcSubtotal();
     const taxRate = state.settings?.taxRate || DEFAULT_TAX_RATE;
-    return subtotal + (subtotal * taxRate);
+    return subtotal + subtotal * taxRate;
   },
 
   _generatePreview(subtotal, tax, grandTotal, taxRate) {
     const items = this._lineItems.length
-      ? this._lineItems.map((item) => `  - ${item.service}: ${item.qty} x $${item.price.toFixed(2)} = $${item.total.toFixed(2)}`).join("\n")
+      ? this._lineItems
+          .map(item => `  - ${item.service}: ${item.qty} x $${item.price.toFixed(2)} = $${item.total.toFixed(2)}`)
+          .join('\n')
       : `  - ${this._species} removal (${this._severity} severity): $${this._calcSubtotal().toFixed(2)}`;
 
     return `WILDLIFE WHISPERER LLC — ESTIMATE
 ================================
-Customer: ${this._customerName || "[Name TBD]"}
+Customer: ${this._customerName || '[Name TBD]'}
 Date: ${new Date().toLocaleDateString()}
 Species: ${this._species}
 Severity: ${this._severity}
-Issue: ${this._issue || "[See scope]"}
+Issue: ${this._issue || '[See scope]'}
 
 LINE ITEMS:
 ${items}
@@ -327,5 +363,5 @@ GRAND TOTAL: $${grandTotal.toFixed(2)}
 This estimate is valid for 30 days. Final pricing may
 vary based on actual conditions discovered during service.
 Warranty applies only to listed sealed/repaired areas.`;
-  },
+  }
 };

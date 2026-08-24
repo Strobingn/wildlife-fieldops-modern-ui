@@ -13,7 +13,7 @@ export function queueAction(type, payload) {
     type,
     payload,
     at: new Date().toISOString(),
-    device: 'fieldops-app',
+    device: 'fieldops-app'
   };
   syncQueue.push(action);
   localStorage.setItem('syncQueue', JSON.stringify(syncQueue));
@@ -32,12 +32,12 @@ export async function processSyncQueue() {
     const response = await fetch(SYNC_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         device: 'fieldops-app',
-        queue,
-      }),
+        queue
+      })
     });
 
     const result = await response.json();
