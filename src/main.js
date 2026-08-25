@@ -403,14 +403,15 @@ function O(arr, selected = '') {
 /**
  * Calculate job completeness score (0-100).
  * @param {string} jobId
+ * @param {import('./types').AppState} [state] - Optional state object to reuse existing reference
  * @returns {number}
  */
-function jobScore(jobId) {
-  const s = store.getState();
-  const hasVisits = s.visits.some((v) => v.jobId === jobId || v.job_id === jobId);
-  const hasPhotos = s.photos.some((p) => p.jobId === jobId || p.job_id === jobId);
-  const hasRepairs = s.repairs.some((r) => r.jobId === jobId || r.job_id === jobId);
-  const hasSig = s.signatures.some((sig) => sig.jobId === jobId || sig.job_id === jobId);
+function jobScore(jobId, state) {
+  const s = state || store.getState();
+  const hasVisits = (s.visits || []).some((v) => v.jobId === jobId || v.job_id === jobId);
+  const hasPhotos = (s.photos || []).some((p) => p.jobId === jobId || p.job_id === jobId);
+  const hasRepairs = (s.repairs || []).some((r) => r.jobId === jobId || r.job_id === jobId);
+  const hasSig = (s.signatures || []).some((sig) => sig.jobId === jobId || sig.job_id === jobId);
   return Math.min(100,
     (hasVisits ? 25 : 0) +
     (hasPhotos ? 25 : 0) +
@@ -602,7 +603,7 @@ const Dashboard = {
   },
 
   _jobCard(j, state) {
-    const s = jobScore(j.id);
+    const s = jobScore(j.id, state);
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
     const vCount = (state.visits || []).filter((v) => (v.jobId || v.job_id) === j.id).length;
@@ -815,7 +816,7 @@ const JobDetail = {
 
     const icon = SPECIES_ICONS[job.species] || '🐾';
     const sc = STATUS_STYLES[job.status] || 'active';
-    const s = jobScore(jobId);
+    const s = jobScore(jobId, state);
     const jobVisits = (state.visits || []).filter((v) => (v.jobId || v.job_id) === jobId);
     const jobRepairs = (state.repairs || []).filter((r) => (r.jobId || r.job_id) === jobId);
     const jobPhotos = (state.photos || []).filter((p) => (p.jobId || p.job_id) === jobId);
