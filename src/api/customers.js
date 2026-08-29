@@ -101,7 +101,7 @@ export async function getCustomerById(id) {
   try {
     if (!navigator.onLine) {
       const cached = loadCache();
-      const customer = cached.find((c) => c.id === id) || null;
+      const customer = cached.find(c => c.id === id) || null;
       if (customer) {
         // Get jobs from local jobs cache
         const jobs = getLocalJobsForCustomer(id);
@@ -113,19 +113,19 @@ export async function getCustomerById(id) {
     // Fetch customer + jobs in parallel
     const [customerResult, jobsResult] = await Promise.all([
       supabase.from('customers').select('*').eq('id', id).single(),
-      supabase.from('jobs').select('*').eq('customer_id', id).order('created_at', { ascending: false }),
+      supabase.from('jobs').select('*').eq('customer_id', id).order('created_at', { ascending: false })
     ]);
 
     if (customerResult.error) throw customerResult.error;
 
     return {
       ...customerResult.data,
-      jobs: jobsResult.data || [],
+      jobs: jobsResult.data || []
     };
   } catch (err) {
     console.error(`[customers] getCustomerById(${id}) error:`, err.message);
     const cached = loadCache();
-    const customer = cached.find((c) => c.id === id) || null;
+    const customer = cached.find(c => c.id === id) || null;
     if (customer) {
       return { ...customer, jobs: getLocalJobsForCustomer(id) };
     }
@@ -155,7 +155,7 @@ export async function createCustomer(data) {
     zip: data.zip?.trim() || null,
     notes: data.notes?.trim() || null,
     created_at: now,
-    updated_at: now,
+    updated_at: now
   };
 
   // Optimistic cache update
@@ -173,7 +173,7 @@ export async function createCustomer(data) {
     if (error) throw error;
 
     if (result) {
-      const updated = loadCache().map((c) => (c.id === customer.id ? result : c));
+      const updated = loadCache().map(c => (c.id === customer.id ? result : c));
       saveCache(updated);
     }
     return { ...result, _syncStatus: 'synced' };
@@ -199,7 +199,7 @@ export async function updateCustomer(id, data) {
 
   const updates = { ...data, updated_at: new Date().toISOString() };
   const stringFields = ['name', 'phone', 'email', 'address', 'town', 'state', 'zip', 'notes'];
-  stringFields.forEach((f) => {
+  stringFields.forEach(f => {
     if (typeof updates[f] === 'string') {
       updates[f] = updates[f].trim();
       if (updates[f] === '') updates[f] = null;
@@ -209,10 +209,10 @@ export async function updateCustomer(id, data) {
 
   // Store rollback state
   const cached = loadCache();
-  const preUpdate = cached.find((c) => c.id === id);
+  const preUpdate = cached.find(c => c.id === id);
 
   // Optimistic update
-  const updated = cached.map((c) => (c.id === id ? { ...c, ...updates } : c));
+  const updated = cached.map(c => (c.id === id ? { ...c, ...updates } : c));
   saveCache(updated);
 
   try {
@@ -228,7 +228,7 @@ export async function updateCustomer(id, data) {
     console.error(`[customers] updateCustomer(${id}) error:`, err.message);
     // Rollback
     if (preUpdate) {
-      const rollback = loadCache().map((c) => (c.id === id ? preUpdate : c));
+      const rollback = loadCache().map(c => (c.id === id ? preUpdate : c));
       saveCache(rollback);
     }
     syncQueue.enqueue({ table: 'customers', action: 'update', payload: { id, ...updates } });
@@ -273,7 +273,7 @@ export async function deleteCustomer(id, options = {}) {
 
     // Remove from local cache
     const cached = loadCache();
-    saveCache(cached.filter((c) => c.id !== id));
+    saveCache(cached.filter(c => c.id !== id));
 
     if (!navigator.onLine) {
       syncQueue.enqueue({ table: 'customers', action: 'delete', payload: { id } });
@@ -311,7 +311,9 @@ export async function searchCustomers(query) {
     const { data, error } = await supabase
       .from('customers')
       .select('*')
-      .or(`name.ilike.%${term}%,phone.ilike.%${term}%,email.ilike.%${term}%,address.ilike.%${term}%,town.ilike.%${term}%`)
+      .or(
+        `name.ilike.%${term}%,phone.ilike.%${term}%,email.ilike.%${term}%,address.ilike.%${term}%,town.ilike.%${term}%`
+      )
       .order('name', { ascending: true });
 
     if (error) throw error;
@@ -335,7 +337,7 @@ export async function getCustomerHistory(customerId) {
 
   try {
     if (!navigator.onLine) {
-      const customer = loadCache().find((c) => c.id === customerId) || null;
+      const customer = loadCache().find(c => c.id === customerId) || null;
       if (!customer) return null;
       const jobs = getLocalJobsForCustomer(customerId);
       const timeline = buildTimeline(jobs);
@@ -361,7 +363,7 @@ export async function getCustomerHistory(customerId) {
     return { customer, jobs: jobs || [], timeline };
   } catch (err) {
     console.error(`[customers] getCustomerHistory(${customerId}) error:`, err.message);
-    const customer = loadCache().find((c) => c.id === customerId) || null;
+    const customer = loadCache().find(c => c.id === customerId) || null;
     if (!customer) return null;
     const jobs = getLocalJobsForCustomer(customerId);
     return { customer, jobs, timeline: buildTimeline(jobs) };
@@ -384,18 +386,10 @@ export async function mergeCustomers(fromId, toId) {
 
   try {
     // Fetch both customers
-    const { data: fromCust, error: fromErr } = await supabase
-      .from('customers')
-      .select('*')
-      .eq('id', fromId)
-      .single();
+    const { data: fromCust, error: fromErr } = await supabase.from('customers').select('*').eq('id', fromId).single();
     if (fromErr) throw fromErr;
 
-    const { data: toCust, error: toErr } = await supabase
-      .from('customers')
-      .select('*')
-      .eq('id', toId)
-      .single();
+    const { data: toCust, error: toErr } = await supabase.from('customers').select('*').eq('id', toId).single();
     if (toErr) throw toErr;
 
     // Merge fields: prefer target data, fill in missing from source
@@ -408,7 +402,7 @@ export async function mergeCustomers(fromId, toId) {
       state: toCust.state || fromCust.state,
       zip: toCust.zip || fromCust.zip,
       notes: [toCust.notes, fromCust.notes].filter(Boolean).join('\n---\n'),
-      updated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
 
     // Update target customer
@@ -429,8 +423,8 @@ export async function mergeCustomers(fromId, toId) {
 
     // Update local cache
     const cached = loadCache();
-    const filtered = cached.filter((c) => c.id !== fromId);
-    const updated = filtered.map((c) => (c.id === toId ? merged : c));
+    const filtered = cached.filter(c => c.id !== fromId);
+    const updated = filtered.map(c => (c.id === toId ? merged : c));
     saveCache(updated);
 
     return {
@@ -438,7 +432,7 @@ export async function mergeCustomers(fromId, toId) {
       fromId,
       reassignedJobs: reassignedJobs?.length || 0,
       mergedCustomer: merged,
-      _syncStatus: 'synced',
+      _syncStatus: 'synced'
     };
   } catch (err) {
     console.error(`[customers] mergeCustomers(${fromId} -> ${toId}) error:`, err.message);
@@ -496,8 +490,9 @@ export async function findDuplicateCustomers() {
 
 function filterCustomersLocally(customers, term) {
   const lower = term.toLowerCase();
-  return customers.filter((c) => {
-    const haystack = `${c.name || ''} ${c.phone || ''} ${c.email || ''} ${c.address || ''} ${c.town || ''}`.toLowerCase();
+  return customers.filter(c => {
+    const haystack =
+      `${c.name || ''} ${c.phone || ''} ${c.email || ''} ${c.address || ''} ${c.town || ''}`.toLowerCase();
     return haystack.includes(lower);
   });
 }
@@ -506,7 +501,7 @@ function getLocalJobsForCustomer(customerId) {
   try {
     const jobsCache = JSON.parse(localStorage.getItem('ww_fieldops_jobs_cache') || '[]');
     return jobsCache
-      .filter((j) => j.customer_id === customerId)
+      .filter(j => j.customer_id === customerId)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   } catch {
     return [];
@@ -515,20 +510,20 @@ function getLocalJobsForCustomer(customerId) {
 
 function buildTimeline(jobs) {
   const events = [];
-  jobs.forEach((job) => {
+  jobs.forEach(job => {
     events.push({
       type: 'job_created',
       date: job.created_at,
       title: `Job created: ${job.species || 'Unknown'}`,
       status: job.status,
-      id: job.id,
+      id: job.id
     });
     if (job.completed_at) {
       events.push({
         type: 'job_completed',
         date: job.completed_at,
         title: `Job completed: ${job.species || 'Unknown'}`,
-        id: job.id,
+        id: job.id
       });
     }
   });

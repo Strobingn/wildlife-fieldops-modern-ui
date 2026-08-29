@@ -62,7 +62,7 @@ export async function initGoogleCalendar() {
 
 function loadGapi() {
   return new Promise((resolve, reject) => {
-    if (gapiLoaded || (window.gapi?.client?.calendar)) {
+    if (gapiLoaded || window.gapi?.client?.calendar) {
       gapiLoaded = true;
       resolve();
       return;
@@ -92,7 +92,7 @@ function loadGapi() {
         try {
           await window.gapi.client.init({
             apiKey: API_KEY,
-            discoveryDocs: [DISCOVERY_DOC],
+            discoveryDocs: [DISCOVERY_DOC]
           });
           gapiLoaded = true;
           resolve();
@@ -138,7 +138,7 @@ function loadGis() {
         tokenClient = window.google.accounts.oauth2.initTokenClient({
           client_id: CLIENT_ID,
           scope: SCOPE,
-          callback: (tokenResponse) => {
+          callback: tokenResponse => {
             if (tokenResponse?.access_token) {
               accessToken = tokenResponse.access_token;
             }
@@ -146,7 +146,7 @@ function loadGis() {
               authCallback(tokenResponse);
               authCallback = null;
             }
-          },
+          }
         });
         gisLoaded = true;
         resolve();
@@ -177,8 +177,8 @@ export async function requestAuth() {
     return { success: false, error: 'Failed to initialize Google Calendar' };
   }
 
-  return new Promise((resolve) => {
-    authCallback = (tokenResponse) => {
+  return new Promise(resolve => {
+    authCallback = tokenResponse => {
       if (tokenResponse?.error) {
         resolve({ success: false, error: tokenResponse.error });
       } else if (tokenResponse?.access_token) {
@@ -194,7 +194,7 @@ export async function requestAuth() {
       tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: SCOPE,
-        callback: authCallback,
+        callback: authCallback
       });
     }
 
@@ -279,20 +279,20 @@ export async function createCalendarEvent(job, options = {}) {
     description: buildEventDescription(job),
     start: {
       dateTime: startDate.toISOString(),
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'
     },
     end: {
       dateTime: endDate.toISOString(),
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'
     },
     location: formatLocation(job),
     reminders: {
       useDefault: false,
       overrides: [
         { method: 'popup', minutes: 60 },
-        { method: 'popup', minutes: 15 },
-      ],
-    },
+        { method: 'popup', minutes: 15 }
+      ]
+    }
   };
 
   try {
@@ -301,7 +301,7 @@ export async function createCalendarEvent(job, options = {}) {
 
     const response = await window.gapi.client.calendar.events.insert({
       calendarId: options.calendarId || 'primary',
-      resource: event,
+      resource: event
     });
 
     if (response.status === 200 && response.result) {
@@ -310,7 +310,7 @@ export async function createCalendarEvent(job, options = {}) {
         success: true,
         eventId: response.result.id,
         htmlLink: response.result.htmlLink,
-        summary: response.result.summary,
+        summary: response.result.summary
       };
     }
 
@@ -357,12 +357,12 @@ export async function listCalendarEvents(maxResults = 10) {
       showDeleted: false,
       singleEvents: true,
       maxResults,
-      orderBy: 'startTime',
+      orderBy: 'startTime'
     });
 
     return {
       success: true,
-      events: response.result.items || [],
+      events: response.result.items || []
     };
   } catch (err) {
     console.error('[calendar] listCalendarEvents error:', err.message || err);
@@ -400,7 +400,7 @@ function buildEventDescription(job) {
     `Customer: ${job.customer}`,
     `Phone: ${job.phone || 'N/A'}`,
     `Address: ${job.address || 'N/A'}`,
-    `Species: ${job.species || 'Unknown'}`,
+    `Species: ${job.species || 'Unknown'}`
   ];
 
   if (job.scope) lines.push(`Scope: ${job.scope}`);

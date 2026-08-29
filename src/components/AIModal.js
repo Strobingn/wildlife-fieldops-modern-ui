@@ -40,14 +40,14 @@ export function initAIModal() {
       dictateBtn.textContent = 'Stop';
 
       await startDictation(
-        (text) => {
+        text => {
           currentState.observations = text;
           // Update your observations input field
           const obsField = document.getElementById('observations');
           if (obsField) obsField.value = text;
           updateUI();
         },
-        (errorMsg) => {
+        errorMsg => {
           alert(errorMsg); // or your toast
           currentState.isListening = false;
           dictateBtn.textContent = 'Dictate';

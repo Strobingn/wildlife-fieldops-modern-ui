@@ -90,9 +90,9 @@ class SyncQueue {
    * @private
    */
   _evictOldEntries() {
-    const completed = this.queue.filter((op) => op.status === 'completed');
+    const completed = this.queue.filter(op => op.status === 'completed');
     if (completed.length > 10) {
-      this.queue = this.queue.filter((op) => op.status !== 'completed');
+      this.queue = this.queue.filter(op => op.status !== 'completed');
       try {
         localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(this.queue));
         console.log(`[SyncQueue] Evicted ${completed.length} completed entries`);
@@ -115,7 +115,7 @@ class SyncQueue {
   }
 
   _emit(event) {
-    this._listeners.forEach((cb) => {
+    this._listeners.forEach(cb => {
       try {
         cb(event);
       } catch (e) {
@@ -147,9 +147,7 @@ class SyncQueue {
    */
   _deduplicate(operation) {
     const key = this._dedupeKey(operation);
-    const duplicateIndex = this.queue.findIndex(
-      (op) => op.status === 'pending' && this._dedupeKey(op) === key
-    );
+    const duplicateIndex = this.queue.findIndex(op => op.status === 'pending' && this._dedupeKey(op) === key);
 
     if (duplicateIndex !== -1) {
       // Replace the older operation with the newer one, preserving its ID
@@ -159,7 +157,7 @@ class SyncQueue {
         id: existingId, // Keep original ID for traceability
         createdAt: this.queue[duplicateIndex].createdAt, // Keep original timestamp
         status: 'pending',
-        retryCount: 0, // Reset retries since we have fresher data
+        retryCount: 0 // Reset retries since we have fresher data
       };
       console.log(`[SyncQueue] Deduplicated: replaced pending ${key}`);
       return true;
@@ -201,7 +199,7 @@ class SyncQueue {
       retryCount: 0,
       createdAt: new Date().toISOString(),
       lastAttempt: null,
-      error: null,
+      error: null
     };
 
     // Attempt deduplication first
@@ -264,7 +262,7 @@ class SyncQueue {
     this.isProcessing = true;
     this._emit({ type: 'processing_start' });
 
-    const pendingOps = this.queue.filter((op) => op.status === 'pending');
+    const pendingOps = this.queue.filter(op => op.status === 'pending');
     let processed = 0;
     let succeeded = 0;
     let failed = 0;
@@ -300,7 +298,10 @@ class SyncQueue {
           this._emit({ type: 'operation_failed', operation: op, error: op.error });
         } else {
           const nextDelay = this.retryDelays[Math.min(op.retryCount - 1, this.retryDelays.length - 1)];
-          console.warn(`[SyncQueue] Operation ${op.id} failed (retry ${op.retryCount}/${this.maxRetries}), next attempt in ${nextDelay}ms:`, op.error);
+          console.warn(
+            `[SyncQueue] Operation ${op.id} failed (retry ${op.retryCount}/${this.maxRetries}), next attempt in ${nextDelay}ms:`,
+            op.error
+          );
           this._emit({ type: 'operation_retry', operation: op, retryCount: op.retryCount });
         }
       }
@@ -308,12 +309,12 @@ class SyncQueue {
     }
 
     // Clean up completed operations (keep last 50 for history)
-    this.queue = this.queue.filter((op) => op.status !== 'completed').slice(-100);
+    this.queue = this.queue.filter(op => op.status !== 'completed').slice(-100);
     this._persistQueue();
 
     setMetadata({
       lastSyncAttempt: new Date().toISOString(),
-      lastSyncResult: { processed, succeeded, failed },
+      lastSyncResult: { processed, succeeded, failed }
     });
 
     this.isProcessing = false;
@@ -438,22 +439,22 @@ class SyncQueue {
 
   /** @returns {number} Count of pending operations */
   getPendingCount() {
-    return this.queue.filter((op) => op.status === 'pending').length;
+    return this.queue.filter(op => op.status === 'pending').length;
   }
 
   /** @returns {number} Count of failed operations */
   getFailedCount() {
-    return this.queue.filter((op) => op.status === 'failed').length;
+    return this.queue.filter(op => op.status === 'failed').length;
   }
 
   /** @returns {Array} All pending operations */
   getPendingOps() {
-    return this.queue.filter((op) => op.status === 'pending');
+    return this.queue.filter(op => op.status === 'pending');
   }
 
   /** @returns {Array} All failed operations */
   getFailedOps() {
-    return this.queue.filter((op) => op.status === 'failed');
+    return this.queue.filter(op => op.status === 'failed');
   }
 
   /** @returns {Object|null} Last sync metadata */
@@ -478,7 +479,7 @@ class SyncQueue {
    */
   retryAllFailed() {
     let retried = 0;
-    this.queue = this.queue.map((op) => {
+    this.queue = this.queue.map(op => {
       if (op.status === 'failed') {
         retried++;
         return { ...op, status: 'pending', retryCount: 0, error: null, lastAttempt: null };
@@ -498,7 +499,7 @@ class SyncQueue {
    */
   remove(opId) {
     const before = this.queue.length;
-    this.queue = this.queue.filter((op) => op.id !== opId);
+    this.queue = this.queue.filter(op => op.id !== opId);
     const removed = before - this.queue.length;
     if (removed > 0) {
       this._persistQueue();
@@ -536,7 +537,9 @@ class SyncQueue {
 
     setMetadata({ [`lastSync_${table}`]: new Date().toISOString() });
 
-    console.log(`[SyncQueue] Full sync for ${table}: pushed ${pushResult.succeeded}, pulled ${serverChanges?.length || 0}`);
+    console.log(
+      `[SyncQueue] Full sync for ${table}: pushed ${pushResult.succeeded}, pulled ${serverChanges?.length || 0}`
+    );
     return { pushed: pushResult.succeeded, pulled: serverChanges?.length || 0, serverChanges: serverChanges || [] };
   }
 }
@@ -607,7 +610,7 @@ export function processSyncQueue() {
 export function setupSync() {
   // Initial sync if online
   if (navigator.onLine) {
-    syncQueue.process().catch((err) => {
+    syncQueue.process().catch(err => {
       console.warn('[SyncQueue] Initial sync error:', err.message);
     });
   }
@@ -617,11 +620,14 @@ export function setupSync() {
   window.addEventListener('online', handleOnline);
 
   // Periodic sync every 5 minutes
-  const intervalId = setInterval(() => {
-    if (navigator.onLine) {
-      syncQueue.process().catch(() => {});
-    }
-  }, 5 * 60 * 1000);
+  const intervalId = setInterval(
+    () => {
+      if (navigator.onLine) {
+        syncQueue.process().catch(() => {});
+      }
+    },
+    5 * 60 * 1000
+  );
 
   // Return cleanup
   return () => {

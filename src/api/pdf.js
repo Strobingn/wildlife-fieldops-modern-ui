@@ -18,26 +18,26 @@ const COMPANY = {
   website: 'www.wildlifewhisperer.com',
   address: '123 Wildlife Way, Natureville, ST 12345',
   license: 'NWCO-LIC-2024-001',
-  insurance: 'Insured & Bonded',
+  insurance: 'Insured & Bonded'
 };
 
 const COLORS = {
-  primary: [34, 197, 94],    // Green #22c55e
-  dark: [18, 18, 18],        // Near black #121212
-  gray: [120, 120, 120],     // Medium gray
+  primary: [34, 197, 94], // Green #22c55e
+  dark: [18, 18, 18], // Near black #121212
+  gray: [120, 120, 120], // Medium gray
   lightGray: [220, 220, 220], // Light gray for borders
   white: [255, 255, 255],
-  red: [239, 68, 68],        // Red for totals/due
-  yellow: [251, 191, 36],    // Yellow for warnings
+  red: [239, 68, 68], // Red for totals/due
+  yellow: [251, 191, 36] // Yellow for warnings
 };
 
 const STATUS_COLORS = {
-  'Active': [34, 197, 94],
-  'Scheduled': [59, 130, 246],
+  Active: [34, 197, 94],
+  Scheduled: [59, 130, 246],
   'In Progress': [251, 191, 36],
   'Needs Follow-up': [249, 115, 22],
-  'Closed': [120, 120, 120],
-  'Cancelled': [239, 68, 68],
+  Closed: [120, 120, 120],
+  Cancelled: [239, 68, 68]
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -51,7 +51,9 @@ function formatDate(dateStr) {
   if (!dateStr) return 'N/A';
   try {
     return new Date(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric', month: 'long', day: 'numeric',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     });
   } catch {
     return dateStr;
@@ -178,7 +180,7 @@ export function generateJobPDF(job, services = [], photos = []) {
     ['Customer:', job.customer || 'N/A'],
     ['Phone:', job.phone || 'N/A'],
     ['Email:', job.email || 'N/A'],
-    ['Address:', [job.address, job.town, job.state, job.zip].filter(Boolean).join(', ') || 'N/A'],
+    ['Address:', [job.address, job.town, job.state, job.zip].filter(Boolean).join(', ') || 'N/A']
   ];
 
   custFields.forEach(([label, value]) => {
@@ -207,7 +209,7 @@ export function generateJobPDF(job, services = [], photos = []) {
     ['Assigned Tech:', job.assigned_tech || 'Unassigned'],
     ['Scope:', job.scope || 'N/A'],
     ['Warranty:', job.warranty || 'Not set'],
-    ['Scheduled:', job.scheduled_start ? formatDate(job.scheduled_start) : 'Not scheduled'],
+    ['Scheduled:', job.scheduled_start ? formatDate(job.scheduled_start) : 'Not scheduled']
   ];
 
   jobFields.forEach(([label, value]) => {
@@ -262,7 +264,11 @@ export function generateJobPDF(job, services = [], photos = []) {
   // ─── Services Table ──────────────────────────────────────────────────────
   if (services.length > 0) {
     y += 5;
-    if (y > 230) { doc.addPage(); y = addPageHeader(doc, 'JOB REPORT (continued)'); pageNum++; }
+    if (y > 230) {
+      doc.addPage();
+      y = addPageHeader(doc, 'JOB REPORT (continued)');
+      pageNum++;
+    }
 
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
@@ -271,12 +277,12 @@ export function generateJobPDF(job, services = [], photos = []) {
     y += 5;
 
     const tableHeaders = [['Service', 'Qty', 'Unit Price', 'Total', 'Notes']];
-    const tableData = services.map((s) => [
+    const tableData = services.map(s => [
       s.service || '',
       String(s.qty || 1),
       formatCurrency(s.unit_price),
       formatCurrency(s.total || (s.qty || 1) * (s.unit_price || 0)),
-      s.notes || '',
+      s.notes || ''
     ]);
 
     doc.autoTable({
@@ -292,9 +298,9 @@ export function generateJobPDF(job, services = [], photos = []) {
         1: { cellWidth: 15, halign: 'center' },
         2: { cellWidth: 30, halign: 'right' },
         3: { cellWidth: 30, halign: 'right' },
-        4: { cellWidth: 'auto' },
+        4: { cellWidth: 'auto' }
       },
-      margin: { left: 15, right: 15 },
+      margin: { left: 15, right: 15 }
     });
 
     y = doc.lastAutoTable.finalY + 5;
@@ -302,10 +308,10 @@ export function generateJobPDF(job, services = [], photos = []) {
     // Totals
     const subtotal = parseFloat(job.subtotal) || services.reduce((s, svc) => s + (parseFloat(svc.total) || 0), 0);
     const taxRate = parseFloat(job.tax_rate) || 0;
-    const taxAmount = parseFloat(job.tax_amount) || (subtotal * taxRate);
-    const grandTotal = parseFloat(job.grand_total) || (subtotal + taxAmount);
+    const taxAmount = parseFloat(job.tax_amount) || subtotal * taxRate;
+    const grandTotal = parseFloat(job.grand_total) || subtotal + taxAmount;
     const deposit = parseFloat(job.deposit_paid) || 0;
-    const balance = parseFloat(job.balance_due) || (grandTotal - deposit);
+    const balance = parseFloat(job.balance_due) || grandTotal - deposit;
 
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
@@ -344,7 +350,11 @@ export function generateJobPDF(job, services = [], photos = []) {
   // ─── Photos Section ──────────────────────────────────────────────────────
   if (photos.length > 0) {
     y += 5;
-    if (y > 230) { doc.addPage(); y = addPageHeader(doc, 'JOB REPORT (continued)'); pageNum++; }
+    if (y > 230) {
+      doc.addPage();
+      y = addPageHeader(doc, 'JOB REPORT (continued)');
+      pageNum++;
+    }
 
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
@@ -397,7 +407,7 @@ export function generateEstimatePDF(job, estimate = {}) {
     ['Property:', [job.address, job.town].filter(Boolean).join(', ') || 'N/A'],
     ['Species:', job.species || 'Unknown'],
     ['Severity:', estimate.severity || 'Medium'],
-    ['Date:', formatDate(new Date())],
+    ['Date:', formatDate(new Date())]
   ];
 
   estFields.forEach(([label, value]) => {
@@ -426,7 +436,7 @@ export function generateEstimatePDF(job, estimate = {}) {
     [`Base Service Fee (species: ${job.species || 'General'})`, formatCurrency(basePrice)],
     [`Complexity Adjustment (${estimate.severity || 'Medium'})`, `x ${multiplier.toFixed(2)}`],
     ['', ''],
-    ['Subtotal', formatCurrency(subtotal)],
+    ['Subtotal', formatCurrency(subtotal)]
   ];
 
   if (taxRate > 0) {
@@ -434,7 +444,10 @@ export function generateEstimatePDF(job, estimate = {}) {
   }
 
   pricingRows.forEach(([label, value], i) => {
-    if (label === '') { y += 3; return; }
+    if (label === '') {
+      y += 3;
+      return;
+    }
     doc.setFont('helvetica', i >= 3 ? 'bold' : 'normal');
     doc.setTextColor(...(i >= 3 ? COLORS.dark : COLORS.gray));
     doc.setFontSize(i >= 3 ? 12 : 10);
@@ -486,7 +499,11 @@ export function generateEstimatePDF(job, estimate = {}) {
 
   // ─── Standard Inclusions ─────────────────────────────────────────────────
   y += 3;
-  if (y > 220) { doc.addPage(); y = addPageHeader(doc, 'SERVICE ESTIMATE (continued)'); pageNum++; }
+  if (y > 220) {
+    doc.addPage();
+    y = addPageHeader(doc, 'SERVICE ESTIMATE (continued)');
+    pageNum++;
+  }
 
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
@@ -505,10 +522,10 @@ export function generateEstimatePDF(job, estimate = {}) {
     'Damage repair to affected areas (as specified)',
     'Cleanup and sanitization of wildlife-affected zones',
     'Written warranty on all sealed areas',
-    'Follow-up inspection to confirm resolution',
+    'Follow-up inspection to confirm resolution'
   ];
 
-  inclusions.forEach((item) => {
+  inclusions.forEach(item => {
     doc.text(`\u2022 ${item}`, 22, y);
     y += 5;
   });
@@ -524,10 +541,10 @@ export function generateEstimatePDF(job, estimate = {}) {
     'Attic insulation replacement',
     'Major structural repairs beyond entry points',
     'Electrical or plumbing repairs',
-    'Ongoing pest control for insects/rodents post-exclusion',
+    'Ongoing pest control for insects/rodents post-exclusion'
   ];
 
-  exclusions.forEach((item) => {
+  exclusions.forEach(item => {
     doc.text(`\u2022 ${item}`, 22, y);
     y += 5;
   });
@@ -577,9 +594,12 @@ export function generateInvoicePDF(job, options = {}) {
 
   const doc = new jsPDF({ unit: 'mm', format: 'letter' });
   const pageW = doc.internal.pageSize.getWidth();
-  const invoiceNumber = options.invoiceNumber || `INV-${job.id?.slice(0, 8).toUpperCase() || Date.now().toString(36).toUpperCase()}`;
+  const invoiceNumber =
+    options.invoiceNumber || `INV-${job.id?.slice(0, 8).toUpperCase() || Date.now().toString(36).toUpperCase()}`;
   const invoiceDate = formatDate(new Date());
-  const dueDate = options.dueDate ? formatDate(options.dueDate) : formatDate(new Date(Date.now() + 15 * 24 * 60 * 60 * 1000));
+  const dueDate = options.dueDate
+    ? formatDate(options.dueDate)
+    : formatDate(new Date(Date.now() + 15 * 24 * 60 * 60 * 1000));
 
   let y = addPageHeader(doc, 'INVOICE', `Invoice #: ${invoiceNumber}`);
   const pageNum = 1;
@@ -592,7 +612,7 @@ export function generateInvoicePDF(job, options = {}) {
     ['Invoice Date:', invoiceDate],
     ['Due Date:', dueDate],
     ['Terms:', 'Net 15'],
-    ['Job ID:', job.id?.slice(0, 8) || 'N/A'],
+    ['Job ID:', job.id?.slice(0, 8) || 'N/A']
   ];
 
   metaFields.forEach(([label, value]) => {
@@ -632,11 +652,11 @@ export function generateInvoicePDF(job, options = {}) {
   if (lineItems.length > 0) {
     doc.autoTable({
       head: [['Description', 'Qty', 'Rate', 'Amount']],
-      body: lineItems.map((item) => [
+      body: lineItems.map(item => [
         item.description || '',
         String(item.qty || 1),
         formatCurrency(item.rate || item.unit_price || 0),
-        formatCurrency((item.qty || 1) * (item.rate || item.unit_price || 0)),
+        formatCurrency((item.qty || 1) * (item.rate || item.unit_price || 0))
       ]),
       startY: y,
       theme: 'plain',
@@ -644,16 +664,16 @@ export function generateInvoicePDF(job, options = {}) {
         fillColor: COLORS.dark,
         textColor: COLORS.white,
         fontSize: 9,
-        fontStyle: 'bold',
+        fontStyle: 'bold'
       },
       bodyStyles: { fontSize: 9, textColor: COLORS.dark },
       columnStyles: {
         0: { cellWidth: 80 },
         1: { cellWidth: 25, halign: 'center' },
         2: { cellWidth: 35, halign: 'right' },
-        3: { cellWidth: 35, halign: 'right' },
+        3: { cellWidth: 35, halign: 'right' }
       },
-      margin: { left: 15, right: 15 },
+      margin: { left: 15, right: 15 }
     });
     y = doc.lastAutoTable.finalY + 5;
   } else {
@@ -661,7 +681,12 @@ export function generateInvoicePDF(job, options = {}) {
     doc.autoTable({
       head: [['Description', 'Qty', 'Rate', 'Amount']],
       body: [
-        [`Wildlife ${job.species || ''} Removal & Exclusion Services`, '1', formatCurrency(job.subtotal || job.estimate || 0), formatCurrency(job.subtotal || job.estimate || 0)],
+        [
+          `Wildlife ${job.species || ''} Removal & Exclusion Services`,
+          '1',
+          formatCurrency(job.subtotal || job.estimate || 0),
+          formatCurrency(job.subtotal || job.estimate || 0)
+        ]
       ],
       startY: y,
       theme: 'plain',
@@ -669,16 +694,16 @@ export function generateInvoicePDF(job, options = {}) {
         fillColor: COLORS.dark,
         textColor: COLORS.white,
         fontSize: 9,
-        fontStyle: 'bold',
+        fontStyle: 'bold'
       },
       bodyStyles: { fontSize: 9, textColor: COLORS.dark },
       columnStyles: {
         0: { cellWidth: 80 },
         1: { cellWidth: 25, halign: 'center' },
         2: { cellWidth: 35, halign: 'right' },
-        3: { cellWidth: 35, halign: 'right' },
+        3: { cellWidth: 35, halign: 'right' }
       },
-      margin: { left: 15, right: 15 },
+      margin: { left: 15, right: 15 }
     });
     y = doc.lastAutoTable.finalY + 5;
   }
@@ -686,10 +711,10 @@ export function generateInvoicePDF(job, options = {}) {
   // ─── Totals ──────────────────────────────────────────────────────────────
   const subtotal = parseFloat(job.subtotal) || parseFloat(job.estimate) || 0;
   const taxRate = parseFloat(job.tax_rate) || 0;
-  const tax = parseFloat(job.tax_amount) || (subtotal * taxRate);
-  const total = parseFloat(job.grand_total) || (subtotal + tax);
+  const tax = parseFloat(job.tax_amount) || subtotal * taxRate;
+  const total = parseFloat(job.grand_total) || subtotal + tax;
   const deposit = parseFloat(job.deposit_paid) || 0;
-  const balance = parseFloat(job.balance_due) || (total - deposit);
+  const balance = parseFloat(job.balance_due) || total - deposit;
 
   const totalsX = pageW - 25;
 
@@ -744,10 +769,10 @@ export function generateInvoicePDF(job, options = {}) {
     'Accepted payment methods: Check, Cash, Credit Card, ACH Transfer.',
     'Make checks payable to: Wildlife Whisperer LLC',
     `Credit card payments: Call (555) 123-4567 or pay online at ${COMPANY.website}`,
-    'Late payments subject to 1.5% monthly service charge.',
+    'Late payments subject to 1.5% monthly service charge.'
   ];
 
-  paymentLines.forEach((line) => {
+  paymentLines.forEach(line => {
     doc.text(line, 20, y);
     y += 4.5;
   });

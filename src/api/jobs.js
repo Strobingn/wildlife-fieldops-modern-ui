@@ -12,8 +12,19 @@ import { syncQueue } from './sync.js';
 const LOCAL_JOBS_KEY = 'ww_fieldops_jobs_cache';
 const JOB_STATUS = ['Active', 'Scheduled', 'In Progress', 'Needs Follow-up', 'Closed', 'Cancelled'];
 const VALID_SPECIES = [
-  'Raccoon', 'Grey Squirrel', 'Red Squirrel', 'Flying Squirrel', 'Bat',
-  'Skunk', 'Groundhog', 'Bird', 'Snake', 'Opossum', 'Rodent', 'Carpenter Bee', 'Other'
+  'Raccoon',
+  'Grey Squirrel',
+  'Red Squirrel',
+  'Flying Squirrel',
+  'Bat',
+  'Skunk',
+  'Groundhog',
+  'Bird',
+  'Snake',
+  'Opossum',
+  'Rodent',
+  'Carpenter Bee',
+  'Other'
 ];
 
 // ─── Local Cache Helpers ─────────────────────────────────────────────────────
@@ -87,9 +98,7 @@ export async function getJobs(filters = {}) {
       return applyLocalFilters(cached, filters);
     }
 
-    let query = supabase
-      .from('jobs')
-      .select('*, services(*), photos(*), inspections(*)');
+    let query = supabase.from('jobs').select('*, services(*), photos(*), inspections(*)');
 
     query = applyJobFilters(query, filters);
 
@@ -129,7 +138,7 @@ export async function getJobById(id) {
   try {
     if (!navigator.onLine) {
       const cached = loadLocalCache();
-      return cached.find((j) => j.id === id) || null;
+      return cached.find(j => j.id === id) || null;
     }
 
     const { data, error } = await supabase
@@ -143,7 +152,7 @@ export async function getJobById(id) {
   } catch (err) {
     console.error(`[jobs] getJobById(${id}) error:`, err.message);
     const cached = loadLocalCache();
-    return cached.find((j) => j.id === id) || null;
+    return cached.find(j => j.id === id) || null;
   }
 }
 
@@ -193,7 +202,7 @@ export async function createJob(jobData) {
     recurrence_pattern: jobData.recurrence_pattern || null,
     parent_job_id: jobData.parent_job_id || null,
     created_at: now,
-    updated_at: now,
+    updated_at: now
   };
 
   // Optimistic: add to local cache immediately
@@ -207,7 +216,7 @@ export async function createJob(jobData) {
       syncQueue.enqueue({
         table: 'jobs',
         action: 'insert',
-        payload: newJob,
+        payload: newJob
       });
       return { ...newJob, _syncStatus: 'pending' };
     }
@@ -219,7 +228,7 @@ export async function createJob(jobData) {
 
     // Update cache with server-confirmed data (has proper UUID, triggers, etc.)
     if (data) {
-      const updatedCache = loadLocalCache().map((j) => (j.id === tempId ? data : j));
+      const updatedCache = loadLocalCache().map(j => (j.id === tempId ? data : j));
       saveLocalCache(updatedCache);
       return { ...data, _syncStatus: 'synced' };
     }
@@ -231,7 +240,7 @@ export async function createJob(jobData) {
     syncQueue.enqueue({
       table: 'jobs',
       action: 'insert',
-      payload: newJob,
+      payload: newJob
     });
     return { ...newJob, _syncStatus: 'pending', _error: err.message };
   }
@@ -260,7 +269,7 @@ export async function updateJob(id, updates) {
   // Build clean updates
   const cleanUpdates = { ...updates, updated_at: new Date().toISOString() };
   const fieldsToClean = ['customer', 'phone', 'email', 'address', 'town', 'state', 'zip', 'notes', 'scope'];
-  fieldsToClean.forEach((f) => {
+  fieldsToClean.forEach(f => {
     if (typeof cleanUpdates[f] === 'string') cleanUpdates[f] = cleanUpdates[f].trim();
     if (cleanUpdates[f] === '') cleanUpdates[f] = null;
   });
@@ -268,11 +277,11 @@ export async function updateJob(id, updates) {
 
   // Store pre-update state for rollback
   const cached = loadLocalCache();
-  const preUpdateJob = cached.find((j) => j.id === id);
+  const preUpdateJob = cached.find(j => j.id === id);
   const preUpdateState = preUpdateJob ? { ...preUpdateJob } : null;
 
   // Optimistic: update local cache
-  const updatedCache = cached.map((j) => (j.id === id ? { ...j, ...cleanUpdates } : j));
+  const updatedCache = cached.map(j => (j.id === id ? { ...j, ...cleanUpdates } : j));
   saveLocalCache(updatedCache);
 
   try {
@@ -280,17 +289,12 @@ export async function updateJob(id, updates) {
       syncQueue.enqueue({
         table: 'jobs',
         action: 'update',
-        payload: { id, ...cleanUpdates },
+        payload: { id, ...cleanUpdates }
       });
       return { id, ...cleanUpdates, _syncStatus: 'pending' };
     }
 
-    const { data, error } = await supabase
-      .from('jobs')
-      .update(cleanUpdates)
-      .eq('id', id)
-      .select()
-      .single();
+    const { data, error } = await supabase.from('jobs').update(cleanUpdates).eq('id', id).select().single();
 
     if (error) throw error;
     return { ...data, _syncStatus: 'synced' };
@@ -299,7 +303,7 @@ export async function updateJob(id, updates) {
 
     // Rollback: restore pre-update state
     if (preUpdateState) {
-      const rollbackCache = loadLocalCache().map((j) => (j.id === id ? preUpdateState : j));
+      const rollbackCache = loadLocalCache().map(j => (j.id === id ? preUpdateState : j));
       saveLocalCache(rollbackCache);
       console.log(`[jobs] updateJob(${id}): rolled back optimistic update`);
     }
@@ -308,7 +312,7 @@ export async function updateJob(id, updates) {
     syncQueue.enqueue({
       table: 'jobs',
       action: 'update',
-      payload: { id, ...cleanUpdates },
+      payload: { id, ...cleanUpdates }
     });
 
     throw new Error(`Failed to update job ${id}: ${err.message}`);
@@ -325,10 +329,12 @@ export async function deleteJob(id) {
   validateJobId(id);
 
   const cached = loadLocalCache();
-  const preDeleteJob = cached.find((j) => j.id === id);
+  const preDeleteJob = cached.find(j => j.id === id);
 
   // Optimistic: mark as Cancelled in local cache
-  const updatedCache = cached.map((j) => (j.id === id ? { ...j, status: 'Cancelled', updated_at: new Date().toISOString() } : j));
+  const updatedCache = cached.map(j =>
+    j.id === id ? { ...j, status: 'Cancelled', updated_at: new Date().toISOString() } : j
+  );
   saveLocalCache(updatedCache);
 
   try {
@@ -336,7 +342,7 @@ export async function deleteJob(id) {
       syncQueue.enqueue({
         table: 'jobs',
         action: 'update',
-        payload: { id, status: 'Cancelled', updated_at: new Date().toISOString() },
+        payload: { id, status: 'Cancelled', updated_at: new Date().toISOString() }
       });
       return { id, status: 'Cancelled', _syncStatus: 'pending' };
     }
@@ -355,14 +361,14 @@ export async function deleteJob(id) {
 
     // Rollback
     if (preDeleteJob) {
-      const rollbackCache = loadLocalCache().map((j) => (j.id === id ? preDeleteJob : j));
+      const rollbackCache = loadLocalCache().map(j => (j.id === id ? preDeleteJob : j));
       saveLocalCache(rollbackCache);
     }
 
     syncQueue.enqueue({
       table: 'jobs',
       action: 'update',
-      payload: { id, status: 'Cancelled', updated_at: new Date().toISOString() },
+      payload: { id, status: 'Cancelled', updated_at: new Date().toISOString() }
     });
 
     throw new Error(`Failed to delete job ${id}: ${err.message}`);
@@ -447,7 +453,7 @@ export async function getJobsBySpecies() {
     const { data, error } = await supabase.from('species_stats').select('*');
     if (error) throw error;
     if (data) {
-      return data.map((r) => ({ species: r.species, count: r.job_count, value: r.quoted_value }));
+      return data.map(r => ({ species: r.species, count: r.job_count, value: r.quoted_value }));
     }
   } catch (err) {
     console.error('[jobs] getJobsBySpecies error:', err.message);
@@ -456,7 +462,7 @@ export async function getJobsBySpecies() {
   // Fallback: compute locally
   const jobs = loadLocalCache();
   const grouped = {};
-  jobs.forEach((j) => {
+  jobs.forEach(j => {
     const s = j.species || 'Unknown';
     if (!grouped[s]) grouped[s] = { species: s, count: 0, value: 0 };
     grouped[s].count++;
@@ -482,14 +488,16 @@ export async function getJobsByStatus() {
 
   const jobs = loadLocalCache();
   const grouped = {};
-  JOB_STATUS.forEach((s) => (grouped[s] = { status: s, count: 0, value: 0 }));
-  jobs.forEach((j) => {
+  JOB_STATUS.forEach(s => (grouped[s] = { status: s, count: 0, value: 0 }));
+  jobs.forEach(j => {
     const s = j.status || 'Active';
     if (!grouped[s]) grouped[s] = { status: s, count: 0, value: 0 };
     grouped[s].count++;
     grouped[s].value += parseFloat(j.grand_total) || 0;
   });
-  return Object.values(grouped).filter((g) => g.count > 0).sort((a, b) => b.count - a.count);
+  return Object.values(grouped)
+    .filter(g => g.count > 0)
+    .sort((a, b) => b.count - a.count);
 }
 
 /**
@@ -501,9 +509,7 @@ export async function getJobsByTown() {
   try {
     if (!navigator.onLine) throw new Error('Offline');
 
-    const { data, error } = await supabase
-      .from('jobs')
-      .select('town, species, grand_total');
+    const { data, error } = await supabase.from('jobs').select('town, species, grand_total');
 
     if (error) throw error;
     return aggregateByTown(data || []);
@@ -525,11 +531,11 @@ export async function getRevenueByTech() {
     const { data, error } = await supabase.from('tech_stats').select('*');
     if (error) throw error;
     if (data) {
-      return data.map((r) => ({
+      return data.map(r => ({
         tech: r.assigned_tech,
         jobCount: r.job_count,
         activeJobs: r.active_job_count,
-        revenue: r.quoted_value,
+        revenue: r.quoted_value
       }));
     }
   } catch (err) {
@@ -539,7 +545,7 @@ export async function getRevenueByTech() {
   // Fallback
   const jobs = loadLocalCache();
   const grouped = {};
-  jobs.forEach((j) => {
+  jobs.forEach(j => {
     const t = j.assigned_tech || 'Unassigned';
     if (!grouped[t]) grouped[t] = { tech: t, jobCount: 0, activeJobs: 0, revenue: 0 };
     grouped[t].jobCount++;
@@ -552,7 +558,7 @@ export async function getRevenueByTech() {
 // ─── Local Helpers ───────────────────────────────────────────────────────────
 
 function applyLocalFilters(jobs, filters) {
-  return jobs.filter((j) => {
+  return jobs.filter(j => {
     if (filters.status && j.status !== filters.status) return false;
     if (filters.species && j.species !== filters.species) return false;
     if (filters.tech && j.assigned_tech !== filters.tech) return false;
@@ -564,26 +570,27 @@ function applyLocalFilters(jobs, filters) {
 }
 
 function filterBySearchTerm(jobs, term) {
-  return jobs.filter((j) => {
-    const haystack = `${j.customer || ''} ${j.address || ''} ${j.town || ''} ${j.species || ''} ${j.status || ''} ${j.notes || ''} ${j.assigned_tech || ''}`.toLowerCase();
+  return jobs.filter(j => {
+    const haystack =
+      `${j.customer || ''} ${j.address || ''} ${j.town || ''} ${j.species || ''} ${j.status || ''} ${j.notes || ''} ${j.assigned_tech || ''}`.toLowerCase();
     return haystack.includes(term);
   });
 }
 
 function computeLocalStats(jobs) {
-  const active = jobs.filter((j) => j.status !== 'Closed');
+  const active = jobs.filter(j => j.status !== 'Closed');
   const totalValue = jobs.reduce((sum, j) => sum + (parseFloat(j.grand_total) || 0), 0);
   return {
     total_jobs: jobs.length,
     active_jobs: active.length,
-    closed_jobs: jobs.filter((j) => j.status === 'Closed').length,
-    quoted_value: Math.round(totalValue * 100) / 100,
+    closed_jobs: jobs.filter(j => j.status === 'Closed').length,
+    quoted_value: Math.round(totalValue * 100) / 100
   };
 }
 
 function aggregateByTown(jobs) {
   const grouped = {};
-  jobs.forEach((j) => {
+  jobs.forEach(j => {
     const t = j.town || 'Unsorted';
     if (!grouped[t]) grouped[t] = { town: t, count: 0, value: 0, species: {} };
     grouped[t].count++;
@@ -616,7 +623,7 @@ export async function addService(jobId, service) {
     total: (parseFloat(service.qty) || 1) * (parseFloat(service.unit_price) || 0),
     notes: service.notes?.trim() || null,
     created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
   };
 
   try {
