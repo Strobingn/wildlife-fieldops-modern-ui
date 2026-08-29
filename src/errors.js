@@ -25,7 +25,7 @@ export function initErrorBoundary() {
   /**
    * @param {ErrorEvent} event
    */
-  const onError = (event) => {
+  const onError = event => {
     console.error('[Global Error]', event.error);
     showToast(`Error: ${event.message ?? 'Unknown error'}`, 'error', 5000);
     // Prevent default browser error handling in production
@@ -35,11 +35,9 @@ export function initErrorBoundary() {
   /**
    * @param {PromiseRejectionEvent} event
    */
-  const onUnhandledRejection = (event) => {
+  const onUnhandledRejection = event => {
     console.error('[Unhandled Rejection]', event.reason);
-    const msg = event.reason instanceof Error
-      ? event.reason.message
-      : String(event.reason ?? 'Unknown async error');
+    const msg = event.reason instanceof Error ? event.reason.message : String(event.reason ?? 'Unknown async error');
     showToast(`Async Error: ${msg}`, 'error', 5000);
     event.preventDefault();
   };
@@ -139,7 +137,7 @@ export async function retry(fn, retries = 3, delay = 1000, maxDelay = 30000) {
  * @returns {Promise<void>}
  */
 export function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // ═══════════════════════════════════════════════════
@@ -180,7 +178,11 @@ export function safeExecute(fn, fallback, context = '') {
  */
 export function safeJSONParse(str, fallback = null) {
   if (!str || typeof str !== 'string') return fallback;
-  try { return JSON.parse(str); } catch { return fallback; }
+  try {
+    return JSON.parse(str);
+  } catch {
+    return fallback;
+  }
 }
 
 /**
@@ -190,8 +192,11 @@ export function safeJSONParse(str, fallback = null) {
  * @returns {string|null}
  */
 export function safeLocalStorageGet(key, fallback = null) {
-  try { return localStorage.getItem(key) ?? fallback; }
-  catch { return fallback; }
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 /**
@@ -201,8 +206,10 @@ export function safeLocalStorageGet(key, fallback = null) {
  * @returns {boolean} Whether the write succeeded
  */
 export function safeLocalStorageSet(key, value) {
-  try { localStorage.setItem(key, value); return true; }
-  catch (err) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (err) {
     console.warn(`[safeLocalStorageSet] Failed to write "${key}":`, err);
     return false;
   }
@@ -228,7 +235,7 @@ export function logError(err, context = '') {
     message: err instanceof Error ? err.message : String(err),
     stack: err instanceof Error ? err.stack : undefined,
     context,
-    timestamp: new Date().toISOString(),
+    timestamp: new Date().toISOString()
   };
   errorLog.unshift(entry);
   if (errorLog.length > MAX_ERROR_LOG) errorLog.length = MAX_ERROR_LOG;
