@@ -32,17 +32,18 @@ export function createStore(initialState) {
     throw new TypeError('createStore: initialState must be an object');
   }
 
-  let state = deepClone(initialState);
+  // Freeze initial state to enforce immutability without expensive deep cloning
+  let state = Object.freeze({ ...initialState });
   const listeners = new Set();
   let isNotifying = false;
 
   return {
     /**
-     * Get a deep-cloned snapshot of current state.
+     * Get current frozen state reference (O(1) time complexity).
      * @returns {T}
      */
     getState() {
-      return deepClone(state);
+      return state;
     },
 
     /**
@@ -52,16 +53,15 @@ export function createStore(initialState) {
     setState(updater) {
       const prev = state;
       const next = typeof updater === 'function'
-        ? /** @type {any} */(updater)(deepClone(prev))
+        ? /** @type {any} */(updater)(prev)
         : { ...prev, ...updater };
       state = Object.freeze(next);
 
       // Notify subscribers (copy set to handle mutations during iteration)
       if (!isNotifying) {
         isNotifying = true;
-        const snapshot = deepClone(state);
         for (const fn of [...listeners]) {
-          try { fn(snapshot); } catch (err) { console.error('Store subscriber error:', err); }
+          try { fn(state); } catch (err) { console.error('Store subscriber error:', err); }
         }
         isNotifying = false;
       }
@@ -76,7 +76,7 @@ export function createStore(initialState) {
       if (typeof fn !== 'function') throw new TypeError('subscribe: fn must be a function');
       listeners.add(fn);
       // Immediately invoke with current state so subscriber is in sync
-      try { fn(deepClone(state)); } catch (err) { console.error('Store initial subscriber error:', err); }
+      try { fn(state); } catch (err) { console.error('Store initial subscriber error:', err); }
       return () => { listeners.delete(fn); };
     },
 
@@ -88,7 +88,7 @@ export function createStore(initialState) {
      */
     select(selector) {
       if (typeof selector !== 'function') throw new TypeError('select: selector must be a function');
-      return selector(deepClone(state));
+      return selector(state);
     },
   };
 }
