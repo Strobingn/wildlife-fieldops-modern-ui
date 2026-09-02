@@ -498,10 +498,21 @@ export function searchJobs(jobs, query) {
   if (!query || !Array.isArray(jobs)) return jobs || [];
   const term = query.toLowerCase().trim();
   if (!term) return jobs;
-  const fields = ['title', 'customer', 'address', 'town', 'species', 'scope', 'status', 'phone'];
-  return jobs.filter((j) =>
-    fields.some((f) => String(j?.[f] ?? '').toLowerCase().includes(term))
-  );
+  // Performance optimization: Direct property checks with short-circuiting avoid
+  // temporary field array allocations and repeated string conversions per element.
+  return jobs.filter((j) => {
+    if (!j) return false;
+    return (
+      (j.title != null && String(j.title).toLowerCase().includes(term)) ||
+      (j.customer != null && String(j.customer).toLowerCase().includes(term)) ||
+      (j.address != null && String(j.address).toLowerCase().includes(term)) ||
+      (j.town != null && String(j.town).toLowerCase().includes(term)) ||
+      (j.species != null && String(j.species).toLowerCase().includes(term)) ||
+      (j.scope != null && String(j.scope).toLowerCase().includes(term)) ||
+      (j.status != null && String(j.status).toLowerCase().includes(term)) ||
+      (j.phone != null && String(j.phone).toLowerCase().includes(term))
+    );
+  });
 }
 
 /**
@@ -513,10 +524,19 @@ export function searchJobs(jobs, query) {
 export function filterJobs(jobs, filters) {
   if (!Array.isArray(jobs)) return [];
   if (!filters || typeof filters !== 'object') return jobs;
-  return jobs.filter((j) =>
-    Object.entries(filters).every(([key, val]) => {
-      if (!val) return true;
-      return String(j?.[key] ?? '').toLowerCase() === String(val).toLowerCase();
-    })
-  );
+  // Performance optimization: Pre-filter active non-empty filter criteria and lowercase values
+  // outside the loop to eliminate per-element Object.entries() and String().toLowerCase() overhead.
+  const activeFilters = Object.entries(filters)
+    .filter(([, val]) => Boolean(val))
+    .map(([key, val]) => [key, String(val).toLowerCase()]);
+
+  if (activeFilters.length === 0) return jobs;
+
+  return jobs.filter((j) => {
+    if (!j) return false;
+    return activeFilters.every(([key, targetVal]) => {
+      const fieldVal = j[key];
+      return String(fieldVal ?? '').toLowerCase() === targetVal;
+    });
+  });
 }
