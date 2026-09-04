@@ -33,9 +33,9 @@ enum class LocalLlmPhase {
 
 data class LocalLlmStatus(
     val phase: LocalLlmPhase = LocalLlmPhase.MISSING,
-    val model: LocalLlmSpec = LocalLlmCatalog.QWEN3_06B,
+    val model: LocalLlmSpec = LocalLlmCatalog.DEFAULT,
     val backendLabel: String = "",
-    val message: String = "Local LLM not downloaded",
+    val message: String = "Preparing baked Qwen3.5 0.8B abliterated…",
     val lastError: String? = null
 )
 
@@ -60,21 +60,15 @@ class LocalLlmEngine @Inject constructor(
     val isReady: Boolean
         get() = _status.value.phase == LocalLlmPhase.READY && conversation != null
 
-    fun selectedSpec(): LocalLlmSpec = LocalLlmCatalog.byId(prefs.getString(KEY_MODEL, LocalLlmCatalog.DEFAULT_ID))
+    fun selectedSpec(): LocalLlmSpec =
+        LocalLlmCatalog.byId(prefs.getString(KEY_MODEL, LocalLlmCatalog.DEFAULT_ID))
 
     fun selectModel(id: String) {
         prefs.edit().putString(KEY_MODEL, id).apply()
         val spec = LocalLlmCatalog.byId(id)
         if (loadedModelId != spec.id) {
             closeEngine()
-            _status.value = LocalLlmStatus(
-                phase = if (downloader.isDownloaded(spec)) LocalLlmPhase.MISSING else LocalLlmPhase.MISSING,
-                model = spec,
-                message = if (downloader.isDownloaded(spec))
-                    "${spec.displayName} downloaded. Tap Load to run on-device."
-                else
-                    "${spec.displayName} — ${spec.sizeLabel}. Tap Download."
-            )
+            _status.value = statusFor(spec)
         }
     }
 
@@ -83,14 +77,15 @@ class LocalLlmEngine @Inject constructor(
         _status.value = _status.value.copy(
             phase = LocalLlmPhase.DOWNLOADING,
             model = spec,
-            message = "Downloading ${spec.displayName} (${spec.sizeLabel})…"
+            message = if (spec.bakedInDefault) "Extracting baked ${spec.displayName}…"
+            else "Downloading ${spec.displayName} (${spec.sizeLabel})…"
         )
-        val result = downloader.download(spec)
+        val result = downloader.ensureAvailable(spec)
         return result.fold(
             onSuccess = {
                 _status.value = _status.value.copy(
-                    phase = LocalLlmPhase.MISSING,
-                    message = "${spec.displayName} downloaded. Loading…"
+                    phase = LocalLlmPhase.LOADING,
+                    message = "${spec.displayName} ready on disk. Loading…"
                 )
                 load().map { }
             },
@@ -98,7 +93,7 @@ class LocalLlmEngine @Inject constructor(
                 _status.value = LocalLlmStatus(
                     phase = LocalLlmPhase.ERROR,
                     model = spec,
-                    message = "Download failed",
+                    message = "Could not place model on disk",
                     lastError = err.message
                 )
                 Result.failure(err)
@@ -108,10 +103,13 @@ class LocalLlmEngine @Inject constructor(
 
     suspend fun load(): Result<Unit> = mutex.withLock {
         val spec = selectedSpec()
-        if (!downloader.isDownloaded(spec)) {
-            val msg = "${spec.displayName} is not on this phone yet."
-            _status.value = LocalLlmStatus(LocalLlmPhase.MISSING, spec, message = msg)
-            return Result.failure(IllegalStateException(msg))
+        if (!downloader.isOnDisk(spec)) {
+            val placed = downloader.ensureAvailable(spec)
+            if (placed.isFailure) {
+                val msg = placed.exceptionOrNull()?.message ?: "${spec.displayName} is not on this phone yet."
+                _status.value = LocalLlmStatus(LocalLlmPhase.MISSING, spec, message = msg)
+                return Result.failure(placed.exceptionOrNull() ?: IllegalStateException(msg))
+            }
         }
         if (conversation != null && loadedModelId == spec.id) {
             _status.value = LocalLlmStatus(
@@ -188,7 +186,7 @@ class LocalLlmEngine @Inject constructor(
         mutex.withLock {
             val ready = conversation
             if (ready == null) {
-                return@withLock "Local LLM is not loaded. Open Settings → Local LLM and tap Download / Load."
+                return@withLock "Local LLM is not loaded yet. The baked Qwen3.5 0.8B abliterated model is extracting or still packing."
             }
             withContext(Dispatchers.IO) {
                 val prompt = if (systemExtra.isBlank()) userMessage else "$systemExtra\n\n$userMessage"
@@ -225,15 +223,7 @@ class LocalLlmEngine @Inject constructor(
 
     fun unload() {
         closeEngine()
-        val spec = selectedSpec()
-        _status.value = LocalLlmStatus(
-            phase = if (downloader.isDownloaded(spec)) LocalLlmPhase.MISSING else LocalLlmPhase.MISSING,
-            model = spec,
-            message = if (downloader.isDownloaded(spec))
-                "${spec.displayName} is on disk. Not loaded."
-            else
-                "${spec.displayName} not downloaded."
-        )
+        _status.value = statusFor(selectedSpec())
     }
 
     fun deleteSelected() {
@@ -243,26 +233,34 @@ class LocalLlmEngine @Inject constructor(
         _status.value = LocalLlmStatus(
             phase = LocalLlmPhase.MISSING,
             model = spec,
-            message = "${spec.displayName} removed from this phone."
+            message = if (spec.bakedInDefault)
+                "${spec.displayName} removed from files. Re-extract from the APK to restore."
+            else
+                "${spec.displayName} removed from this phone."
         )
     }
 
-    private fun readInitialStatus(): LocalLlmStatus {
-        val spec = selectedSpec()
-        return if (downloader.isDownloaded(spec)) {
-            LocalLlmStatus(
+    private fun statusFor(spec: LocalLlmSpec): LocalLlmStatus {
+        return when {
+            downloader.isOnDisk(spec) -> LocalLlmStatus(
                 phase = LocalLlmPhase.MISSING,
                 model = spec,
                 message = "${spec.displayName} is on disk. Load it to chat offline."
             )
-        } else {
-            LocalLlmStatus(
+            downloader.hasBundledAsset(spec) -> LocalLlmStatus(
                 phase = LocalLlmPhase.MISSING,
                 model = spec,
-                message = "Download ${spec.displayName} (${spec.sizeLabel}) to run AI with no signal."
+                message = "${spec.displayName} is baked into this APK. Extract/load to use."
+            )
+            else -> LocalLlmStatus(
+                phase = LocalLlmPhase.MISSING,
+                model = spec,
+                message = "Download ${spec.displayName} (${spec.sizeLabel}) to run on-device."
             )
         }
     }
+
+    private fun readInitialStatus(): LocalLlmStatus = statusFor(selectedSpec())
 
     private fun closeEngine() {
         try {
