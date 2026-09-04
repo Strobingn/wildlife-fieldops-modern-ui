@@ -21,12 +21,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
+import com.strobingn.wildlifefieldops.data.model.Customer
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobPriority
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.data.route.RouteOptimizationEngine
 import com.strobingn.wildlifefieldops.data.route.RoutePoint
 import com.strobingn.wildlifefieldops.ui.theme.*
+import com.strobingn.wildlifefieldops.ui.viewmodel.CustomersViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
 import kotlin.math.roundToInt
 
@@ -34,18 +36,36 @@ import kotlin.math.roundToInt
 @Composable
 fun RouteOptimizerScreen(
     onBack: () -> Unit,
-    viewModel: JobsViewModel = hiltViewModel()
+    viewModel: JobsViewModel = hiltViewModel(),
+    customersViewModel: CustomersViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val jobs by viewModel.jobs.collectAsState()
+    val customers by customersViewModel.customers.collectAsState()
+    val customersById = remember(customers) { customers.associateBy { it.id } }
+
     LaunchedEffect(jobs) { viewModel.fillMissingCoordinates() }
-    val sourceStops = remember(jobs) {
-        jobs.asSequence()
-            .filter { it.status != JobStatus.COMPLETED && it.status != JobStatus.CANCELLED }
-            .filter { isTodayOrOpen(it) }
-            .filter { it.latitude != null && it.longitude != null }
-            .sortedWith(compareBy<Job> { it.scheduledDate ?: Long.MAX_VALUE }.thenByDescending { priorityRank(it.priority) })
-            .map { it.toRouteStop() }
+
+    val candidateJobs = remember(jobs) {
+        jobs.filter {
+            it.status != JobStatus.COMPLETED &&
+                it.status != JobStatus.CANCELLED &&
+                isTodayOrOpen(it)
+        }
+    }
+
+    val sourceStops = remember(candidateJobs, customersById) {
+        candidateJobs
+            .asSequence()
+            .mapNotNull { job ->
+                val (lat, lng) = resolveJobCoordinates(job, customersById[job.customerId])
+                    ?: return@mapNotNull null
+                job.toRouteStop(lat, lng)
+            }
+            .sortedWith(
+                compareBy<RouteStop> { it.scheduledDate ?: Long.MAX_VALUE }
+                    .thenByDescending { priorityRankLabel(it.priorityLabel) }
+            )
             .toList()
     }
     var routeStops by remember(sourceStops) { mutableStateOf(sourceStops) }
@@ -54,13 +74,17 @@ fun RouteOptimizerScreen(
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(LatLng(41.50, -74.20), 9.5f)
     }
-    val totalDistance = RouteOptimizationEngine.totalDistanceMiles(routeStops.map { it.toRoutePoint() }, returnToStart)
+    val totalDistance = RouteOptimizationEngine.totalDistanceMiles(
+        routeStops.map { it.toRoutePoint() },
+        returnToStart
+    )
     val travelMinutes = (totalDistance / 35.0 * 60.0).roundToInt()
     val serviceMinutes = routeStops.size * 45
     val totalMinutes = travelMinutes + serviceMinutes
-    val missingCoordinates = jobs.count {
-        it.status != JobStatus.COMPLETED && it.status != JobStatus.CANCELLED &&
-            isTodayOrOpen(it) && (it.latitude == null || it.longitude == null)
+    val missingCoordinates = remember(candidateJobs, customersById) {
+        candidateJobs.count { job ->
+            resolveJobCoordinates(job, customersById[job.customerId]) == null
+        }
     }
 
     Scaffold(
@@ -77,23 +101,35 @@ fun RouteOptimizerScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") }
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
             )
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         if (routeStops.isEmpty()) {
             RouteEmptyState(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
                 missingCoordinates = missingCoordinates
             )
             return@Scaffold
         }
-        Column(Modifier.fillMaxSize().padding(padding)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
             GoogleMap(
-                modifier = Modifier.fillMaxWidth().height(230.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(230.dp),
                 cameraPositionState = cameraPositionState
             ) {
                 routeStops.forEachIndexed { index, stop ->
@@ -112,20 +148,35 @@ fun RouteOptimizerScreen(
                 }
             }
             Card(
-                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                ),
                 shape = RoundedCornerShape(18.dp)
             ) {
-                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
                     RouteStat(routeStops.size.toString(), "Stops")
                     RouteStat(String.format("%.1f", totalDistance), "Miles")
                     RouteStat("$totalMinutes", "Minutes")
                 }
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Button(
                     onClick = {
-                        routeStops = RouteOptimizationEngine.optimize(routeStops.map { it.toRoutePoint() })
+                        routeStops = RouteOptimizationEngine
+                            .optimize(routeStops.map { it.toRoutePoint() })
                             .mapNotNull { point -> routeStops.firstOrNull { it.id == point.id } }
                         isOptimized = true
                     },
@@ -138,37 +189,88 @@ fun RouteOptimizerScreen(
                     shape = RoundedCornerShape(14.dp)
                 ) {
                     Icon(Icons.Default.Route, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(if (isOptimized) "Re-optimize" else "Optimize")
                 }
                 OutlinedButton(
-                    onClick = { routeStops = sourceStops; isOptimized = false },
+                    onClick = {
+                        routeStops = sourceStops
+                        isOptimized = false
+                    },
                     enabled = routeStops != sourceStops,
                     shape = RoundedCornerShape(14.dp)
-                ) { Icon(Icons.Default.RestartAlt, contentDescription = "Reset") }
+                ) {
+                    Icon(Icons.Default.RestartAlt, contentDescription = "Reset")
+                }
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = returnToStart, onCheckedChange = { returnToStart = it })
-                Text("Include return to first stop", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = returnToStart,
+                    onCheckedChange = { returnToStart = it }
+                )
+                Text(
+                    "Include return to first stop",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.PlayArrow, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                Text("Starts at ${routeStops.first().address}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.weight(1f))
-                OutlinedButton(onClick = { openGoogleMaps(context, routeStops) }, shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
-                    Icon(Icons.Default.Navigation, null)
-                    Spacer(Modifier.width(4.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    "Starts at ${routeStops.first().address}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedButton(
+                    onClick = { openGoogleMaps(context, routeStops) },
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp)
+                ) {
+                    Icon(Icons.Default.Navigation, contentDescription = null)
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text("Navigate")
                 }
             }
-            Text("Stops", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                "Stops",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+            )
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 items(routeStops, key = { it.id }) { stop ->
-                    RouteStopCard(stop, routeStops.indexOf(stop) + 1) {
-                        routeStops = routeStops.filter { it.id != stop.id }
-                        isOptimized = false
-                    }
+                    RouteStopCard(
+                        stop = stop,
+                        index = routeStops.indexOf(stop) + 1,
+                        onRemove = {
+                            routeStops = routeStops.filter { it.id != stop.id }
+                            isOptimized = false
+                        }
+                    )
                 }
-                item { Spacer(Modifier.height(18.dp)) }
+                item { Spacer(modifier = Modifier.height(18.dp)) }
             }
         }
     }
@@ -184,11 +286,34 @@ private data class RouteStop(
     val scheduledDate: Long?
 )
 
-private fun Job.toRouteStop() = RouteStop(
-    id, address.ifBlank { customerName.ifBlank { "Job location" } },
-    latitude ?: 0.0, longitude ?: 0.0,
-    type.ifBlank { title.ifBlank { "Wildlife service" } },
-    priority.name, scheduledDate
+/**
+ * Prefer job coordinates; fall back to the linked customer when the job row
+ * has no usable lat/lng (same rule as MapViewModel). Address alone is not
+ * treated as a pin — no fake 0,0.
+ */
+private fun resolveJobCoordinates(
+    job: Job,
+    customer: Customer?
+): Pair<Double, Double>? {
+    val latitude = job.latitude ?: customer?.latitude
+    val longitude = job.longitude ?: customer?.longitude
+    if (latitude == null || longitude == null ||
+        !latitude.isFinite() || !longitude.isFinite() ||
+        latitude !in -90.0..90.0 || longitude !in -180.0..180.0
+    ) {
+        return null
+    }
+    return latitude to longitude
+}
+
+private fun Job.toRouteStop(latitude: Double, longitude: Double) = RouteStop(
+    id = id,
+    address = address.ifBlank { customerName.ifBlank { "Job location" } },
+    latitude = latitude,
+    longitude = longitude,
+    serviceType = type.ifBlank { title.ifBlank { "Wildlife service" } },
+    priorityLabel = priority.name,
+    scheduledDate = scheduledDate
 )
 
 private fun RouteStop.toRoutePoint() = RoutePoint(id, latitude, longitude)
@@ -206,64 +331,137 @@ private fun isTodayOrOpen(job: Job): Boolean {
     else job.status == JobStatus.PENDING || job.status == JobStatus.IN_PROGRESS
 }
 
-private fun priorityRank(priority: JobPriority): Int = when (priority) {
-    JobPriority.URGENT -> 4
-    JobPriority.HIGH -> 3
-    JobPriority.MEDIUM -> 2
-    JobPriority.LOW -> 1
+private fun priorityRankLabel(priorityLabel: String): Int = when (priorityLabel) {
+    JobPriority.URGENT.name -> 4
+    JobPriority.HIGH.name -> 3
+    JobPriority.MEDIUM.name -> 2
+    JobPriority.LOW.name -> 1
+    else -> 0
 }
 
 private fun openGoogleMaps(context: Context, stops: List<RouteStop>) {
     val destination = Uri.encode(stops.last().address)
-    val waypoints = stops.dropLast(1).joinToString("|") { Uri.encode(it.address) }
+    val waypoints = stops
+        .dropLast(1)
+        .joinToString("|") { Uri.encode(it.address) }
     val waypointQuery = if (waypoints.isBlank()) "" else "&waypoints=$waypoints"
-    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(
-        "https://www.google.com/maps/dir/?api=1&destination=$destination&travelmode=driving$waypointQuery"
-    )))
+    context.startActivity(
+        Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse(
+                "https://www.google.com/maps/dir/?api=1&destination=$destination" +
+                    "&travelmode=driving$waypointQuery"
+            )
+        )
+    )
 }
 
 @Composable
 private fun RouteStat(value: String, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            value,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
 @Composable
-private fun RouteStopCard(stop: RouteStop, index: Int, onRemove: () -> Unit) {
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), shape = RoundedCornerShape(14.dp)) {
-        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)) {
-                Text(index.toString(), Modifier.padding(horizontal = 11.dp, vertical = 6.dp), fontWeight = FontWeight.Bold)
+private fun RouteStopCard(
+    stop: RouteStop,
+    index: Int,
+    onRemove: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+            ) {
+                Text(
+                    index.toString(),
+                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                    fontWeight = FontWeight.Bold
+                )
             }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(stop.address, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                Text("${stop.serviceType} • ${stop.priorityLabel.lowercase()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "${stop.serviceType} • ${stop.priorityLabel.lowercase()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 stop.scheduledDate?.let {
-                    Text("Scheduled " + java.text.SimpleDateFormat("MMM d, h:mm a", java.util.Locale.getDefault()).format(java.util.Date(it)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "Scheduled " + java.text.SimpleDateFormat(
+                            "MMM d, h:mm a",
+                            java.util.Locale.getDefault()
+                        ).format(java.util.Date(it)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
             IconButton(onClick = onRemove) {
-                Icon(Icons.Default.Close, contentDescription = "Remove stop", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Remove stop",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
 }
 
 @Composable
-private fun RouteEmptyState(modifier: Modifier, missingCoordinates: Int) {
-    Column(modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Icon(Icons.Default.Route, null, Modifier.size(52.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(16.dp))
-        Text("Looking up today's stops", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
+private fun RouteEmptyState(
+    modifier: Modifier,
+    missingCoordinates: Int
+) {
+    Column(
+        modifier = modifier.padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            Icons.Default.Route,
+            contentDescription = null,
+            modifier = Modifier.size(52.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            "Looking up today's stops",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
             if (missingCoordinates > 0) {
-                "$missingCoordinates job(s) have an address but no pin yet. The app is looking those up now. Leave this screen open a few seconds, then come back."
+                "$missingCoordinates job(s) still lack map pins on both the job and its customer. " +
+                    "Customer locations are used when the job has none; address-only jobs are looked up automatically. " +
+                    "Leave this screen open a few seconds, then come back."
             } else {
-                "Jobs scheduled today with a street address will show here after the pin lookup finishes."
+                "Today's jobs with job or customer coordinates will appear here. " +
+                    "Address-only jobs get a pin lookup when you open this screen."
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
