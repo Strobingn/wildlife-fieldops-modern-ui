@@ -2,6 +2,8 @@ package com.strobingn.wildlifefieldops.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.strobingn.wildlifefieldops.ai.local.LocalLlmEngine
+import com.strobingn.wildlifefieldops.ai.local.LocalLlmModelManager
 import com.strobingn.wildlifefieldops.data.remote.AiService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,31 +20,52 @@ data class ChatMessage(
 
 @HiltViewModel
 class AiAssistantViewModel @Inject constructor(
-    private val aiService: AiService
+    private val aiService: AiService,
+    private val localLlm: LocalLlmEngine,
+    private val modelManager: LocalLlmModelManager
 ) : ViewModel() {
 
-    private val welcomeMessage = buildString {
-        append("Hello — I'm your Wildlife FieldOps AI (SpaceXAI / Grok).\n\n")
-        append("Ask about inspections, jobs, trapping, exclusion, safety, estimates, customers, or daily workflow.\n")
-        if (aiService.isConfigured) {
-            append("\n✅ Live AI connected via ${aiService.providerLabel}.")
-            append("\n${aiService.configDiagnostics()}")
-        } else {
-            append("\n⚠️ Live AI not connected — this APK has no usable key baked in.\n")
-            append("\n${aiService.configDiagnostics()}")
-            append("\n\nTo enable SpaceXAI:")
-            append("\n1. Create a key at https://console.x.ai")
-            append("\n2. GitHub secret name: XAI_API_KEY (exact)")
-            append("\n3. Re-run the Android build workflow")
-            append("\n4. Install the new APK (old installs keep empty key)")
+    private fun buildWelcome(): String = buildString {
+        append("Hello — I'm your Wildlife FieldOps AI.\n\n")
+        append("Answers come from a real LLM only:\n")
+        append("• Cloud (SpaceXAI / Grok) when a key is baked into the APK\n")
+        append("• On-device llama.cpp (abliterated GGUF) (${LocalLlmModelManager.MODEL_DISPLAY_NAME}) otherwise\n\n")
+        append("Canned keyword / \"field knowledge\" stub lists have been removed.\n\n")
+        append(aiService.configDiagnostics())
+        if (!aiService.isConfigured && !localLlm.isReady) {
+            append("\n\n⬇ Tap \"Download local model\" below (~940 MB, one-time) to enable offline generative AI.")
         }
     }
 
-    private val _messages = MutableStateFlow(listOf(ChatMessage(welcomeMessage, false)))
+    private val _messages = MutableStateFlow(listOf(ChatMessage(buildWelcome(), false)))
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
 
     private val _isTyping = MutableStateFlow(false)
     val isTyping: StateFlow<Boolean> = _isTyping.asStateFlow()
+
+    val modelState = modelManager.state
+
+    private val _isDownloading = MutableStateFlow(false)
+    val isDownloading: StateFlow<Boolean> = _isDownloading.asStateFlow()
+
+    init {
+        modelManager.refreshState()
+    }
+
+    fun downloadLocalModel(force: Boolean = false) {
+        if (_isDownloading.value) return
+        _isDownloading.value = true
+        viewModelScope.launch {
+            val result = localLlm.ensureReady(forceRedownload = force)
+            _isDownloading.value = false
+            val note = if (result.isSuccess) {
+                "✅ Local LLM ready (${LocalLlmModelManager.MODEL_DISPLAY_NAME}). Ask anything — answers are generated on-device."
+            } else {
+                "❌ Local LLM download/load failed: ${result.exceptionOrNull()?.message ?: "unknown error"}"
+            }
+            _messages.value = _messages.value + ChatMessage(note, false)
+        }
+    }
 
     fun send(userMessage: String) {
         val trimmed = userMessage.trim()
@@ -50,21 +73,20 @@ class AiAssistantViewModel @Inject constructor(
         _messages.value = _messages.value + ChatMessage(trimmed, true)
         _isTyping.value = true
         viewModelScope.launch {
-            val reply = if (aiService.isConfigured) {
-                aiService.ask(trimmed)
-            } else {
-                // Optional Supabase edge; otherwise ask() returns SpaceXAI setup help.
-                val edge = runCatching { aiService.askViaSupabase(trimmed) }.getOrNull()
-                if (!edge.isNullOrBlank() &&
-                    !edge.startsWith("⚠️") &&
-                    !edge.startsWith("Supabase") &&
-                    !edge.startsWith("Network")
-                ) {
-                    edge
-                } else {
-                    aiService.ask(trimmed)
+            val reply = runCatching {
+                if (!aiService.isConfigured && !localLlm.isReady) {
+                    val edge = runCatching { aiService.askViaSupabase(trimmed) }.getOrNull()
+                    if (!edge.isNullOrBlank() &&
+                        !edge.startsWith("⚠️") &&
+                        !edge.startsWith("Supabase") &&
+                        !edge.startsWith("Network") &&
+                        !edge.contains("Demo mode", ignoreCase = true)
+                    ) {
+                        return@runCatching "☁️ Supabase ai-assistant:\n\n$edge"
+                    }
                 }
-            }
+                aiService.ask(trimmed)
+            }.getOrElse { "AI error: ${it.message}" }
             _messages.value = _messages.value + ChatMessage(reply, false)
             _isTyping.value = false
         }

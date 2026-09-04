@@ -58,7 +58,7 @@ class JobAiViewModel @Inject constructor(
             _message.value = if (draft.fromAi) {
                 "AI estimate draft ready — review before quoting."
             } else {
-                "Offline/heuristic estimate draft — review carefully."
+                "No generative estimate yet — download the on-device LLM or set XAI_API_KEY."
             }
         }
     }
