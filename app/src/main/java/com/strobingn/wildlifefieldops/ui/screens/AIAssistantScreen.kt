@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.strobingn.wildlifefieldops.ai.local.LocalLlmModelManager
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.AiAssistantViewModel
@@ -31,6 +32,8 @@ fun AIAssistantScreen(
 ) {
     val messages by viewModel.messages.collectAsState()
     val isTyping by viewModel.isTyping.collectAsState()
+    val modelState by viewModel.modelState.collectAsState()
+    val isDownloading by viewModel.isDownloading.collectAsState()
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
@@ -52,7 +55,19 @@ fun AIAssistantScreen(
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("AI Assistant", color = TextPrimary)
+                        Column {
+                            Text("AI Assistant", color = TextPrimary)
+                            Text(
+                                when (modelState) {
+                                    is LocalLlmModelManager.ModelState.Ready -> "On-device LLM ready"
+                                    is LocalLlmModelManager.ModelState.Downloading -> "Downloading model…"
+                                    is LocalLlmModelManager.ModelState.Error -> "Local model error"
+                                    else -> "Cloud or local LLM"
+                                },
+                                color = TextTertiary,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
                     }
                 },
                 navigationIcon = {
@@ -71,6 +86,13 @@ fun AIAssistantScreen(
                 .padding(padding)
                 .imePadding()
         ) {
+            LocalModelBanner(
+                modelState = modelState,
+                isDownloading = isDownloading,
+                onDownload = { viewModel.downloadLocalModel(force = false) },
+                onRetry = { viewModel.downloadLocalModel(force = true) }
+            )
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -78,7 +100,7 @@ fun AIAssistantScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 QuickChip("Species ID", Icons.Default.Pets) {
-                    inputText = "How do I identify common wildlife species?"
+                    inputText = "How do I identify common wildlife species from field signs?"
                 }
                 QuickChip("Safety", Icons.Default.HealthAndSafety) {
                     inputText = "What are the safety protocols for wildlife removal?"
@@ -107,7 +129,7 @@ fun AIAssistantScreen(
                         ) {
                             PulsingDot(color = AccentPurple)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Thinking…", color = TextTertiary, style = MaterialTheme.typography.bodySmall)
+                            Text("Generating…", color = TextTertiary, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -123,7 +145,7 @@ fun AIAssistantScreen(
                 OutlinedTextField(
                     value = inputText,
                     onValueChange = { inputText = it },
-                    placeholder = { Text("Ask me anything…", color = TextTertiary) },
+                    placeholder = { Text("Ask the real LLM…", color = TextTertiary) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = AccentPurple,
                         unfocusedBorderColor = BorderDark,
@@ -169,6 +191,92 @@ fun AIAssistantScreen(
                     )
                 ) {
                     Icon(Icons.Default.Send, contentDescription = "Send")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocalModelBanner(
+    modelState: LocalLlmModelManager.ModelState,
+    isDownloading: Boolean,
+    onDownload: () -> Unit,
+    onRetry: () -> Unit
+) {
+    when (modelState) {
+        is LocalLlmModelManager.ModelState.Ready -> {
+            Surface(
+                color = PrimaryGreen.copy(alpha = 0.12f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    "📱 ${LocalLlmModelManager.MODEL_DISPLAY_NAME} ready for offline generation",
+                    color = PrimaryGreen,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
+        }
+        is LocalLlmModelManager.ModelState.Downloading -> {
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Text(
+                    "Downloading ${LocalLlmModelManager.MODEL_DISPLAY_NAME}…",
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                LinearProgressIndicator(
+                    progress = modelState.progress,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = AccentPurple,
+                    trackColor = BorderDark
+                )
+                Text(
+                    "${(modelState.progress * 100).toInt()}%  •  ${modelState.bytesRead / (1024 * 1024)} / ${modelState.totalBytes / (1024 * 1024)} MB",
+                    color = TextTertiary,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        }
+        is LocalLlmModelManager.ModelState.Error -> {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(modelState.message, color = ErrorRed, style = MaterialTheme.typography.bodySmall)
+                Spacer(modifier = Modifier.height(6.dp))
+                Button(onClick = onRetry, enabled = !isDownloading) {
+                    Text("Retry download")
+                }
+            }
+        }
+        is LocalLlmModelManager.ModelState.Missing -> {
+            Surface(
+                color = BackgroundElevated,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        "Install on-device LLM for real offline AI",
+                        color = TextPrimary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "${LocalLlmModelManager.MODEL_DISPLAY_NAME} (~940 MB) downloads once from Hugging Face (huihui-ai abliterated → mradermacher Q4_K_M GGUF, public).",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = onDownload,
+                        enabled = !isDownloading,
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentPurple)
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(if (isDownloading) "Downloading…" else "Download local model")
+                    }
                 }
             }
         }
