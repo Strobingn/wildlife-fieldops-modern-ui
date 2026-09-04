@@ -15,9 +15,6 @@ jobs:
     env:
       SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-      # Normalize any existing Maps secret name into the native Gradle variable.
-      # GOOGLE_MAPS_API is preferred; the other names remain supported for
-      # compatibility with older branch/setup configurations.
       GOOGLE_MAPS_API: ${{ secrets.GOOGLE_MAPS_API || secrets.GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API }}
       VITE_GOOGLE_MAPS_API: ${{ secrets.GOOGLE_MAPS_API || secrets.GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API }}
       OPENWEATHER_API_KEY: ${{ secrets.VITE_OPENWEATHER_API_KEY }}
@@ -43,23 +40,20 @@ jobs:
       - name: Grant execute permission for Gradle wrapper
         run: chmod +x ./gradlew
 
-      - name: Bake Qwen3.5 0.8B abliterated into APK assets
+      - name: Bake Qwen3.5 0.8B LiteRT into APK assets
         run: |
           set -euo pipefail
           mkdir -p app/src/main/assets/local-llm
-          OUT="app/src/main/assets/local-llm/qwen35_0.8b_abl_mm_q8_ekv4096.litertlm"
-          URL="https://huggingface.co/g-ntovas/Qwen3.5-0.8B-abliterated-LiteRT/resolve/main/qwen35_0.8b_abl_mm_q8_ekv4096.litertlm"
-          echo "Downloading default on-device LLM into $OUT"
+          OUT="app/src/main/assets/local-llm/Qwen3.5-0.8B_int8.litertlm"
+          URL="https://huggingface.co/litert-community/Qwen3.5-0.8B/resolve/main/Qwen3.5-0.8B_int8.litertlm"
+          echo "Downloading public default on-device LLM into $OUT"
           AUTH=()
           if [ -n "${HF_TOKEN:-}" ]; then
-            echo "HF_TOKEN present (length ${#HF_TOKEN}) — using authenticated download"
+            echo "HF_TOKEN present (length ${#HF_TOKEN}) — optional for this public file"
             AUTH=(-H "Authorization: Bearer ${HF_TOKEN}")
-          else
-            echo "::warning::No HF_TOKEN. The Qwen3.5 0.8B abliterated LiteRT repo is gated and will 401 without it."
           fi
           if ! curl -L --fail --retry 5 --retry-delay 5 "${AUTH[@]}" -o "$OUT" "$URL"; then
-            echo "::error::Could not download Qwen3.5 0.8B abliterated weights."
-            echo "::error::Add repo secret HF_TOKEN (Hugging Face token with access to g-ntovas/Qwen3.5-0.8B-abliterated-LiteRT) and rebuild."
+            echo "::error::Could not download public Qwen3.5 0.8B LiteRT weights from litert-community."
             exit 1
           fi
           SIZE=$(stat -c%s "$OUT")
@@ -153,12 +147,12 @@ jobs:
           make_latest: true
           body: |
             Native Kotlin / Jetpack Compose debug APK from `${{ github.sha }}` (run ${{ github.run_number }}).
-            Includes baked Qwen3.5 0.8B abliterated on-device LLM.
+            Includes baked public Qwen3.5 0.8B LiteRT on-device LLM.
             Actions artifact name remains `wildlife-field-ops-debug-apk`.
 
       - name: Summary
         if: success()
         run: |
           echo "Wildlife Field Ops Debug APK built successfully."
-          echo "Default local LLM: Qwen3.5 0.8B abliterated (baked into APK assets)."
+          echo "Default local LLM: public Qwen3.5 0.8B LiteRT (baked into APK assets)."
           echo "Download from this run: Artifacts → wildlife-field-ops-debug-apk"
