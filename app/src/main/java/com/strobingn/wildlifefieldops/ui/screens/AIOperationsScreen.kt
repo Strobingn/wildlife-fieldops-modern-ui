@@ -31,7 +31,7 @@ fun AIOperationsScreen(
 ) {
     val data by viewModel.dashboard.collectAsState()
     var selectedToolId by rememberSaveable { mutableStateOf<String?>(null) }
-    val selectedTool = IndividualAIToolCatalog.tools.firstOrNull { it.id == selectedToolId }
+    val selectedTool = resolveTool(selectedToolId, data)
     if (selectedTool != null) {
         IndividualAIToolScreen(
             tool = selectedTool,
@@ -64,49 +64,16 @@ fun AIOperationsScreen(
                     Spacer(Modifier.width(10.dp))
                     Column {
                         Text("Live intelligence from your real jobs", color = TextPrimary, fontWeight = FontWeight.Bold)
-                        Text("Offline analysis updates whenever job data changes.", color = TextSecondary)
+                        Text("Tap a tool. Each one opens its own analysis, not a dummy tab.", color = TextSecondary)
                     }
                 }
             }
 
-            Text(
-                "20 Individual AI Tools",
-                style = MaterialTheme.typography.titleLarge,
-                color = TextPrimary,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                "Tap any tool to open its own live analysis and field action screen.",
-                color = TextSecondary
-            )
+            Text("20 Individual AI Tools", style = MaterialTheme.typography.titleLarge, color = TextPrimary, fontWeight = FontWeight.Bold)
+            Text("Each card opens a live job-data tool with score, recommended action, and a field checklist.", color = TextSecondary)
             IndividualAIToolCatalog.tools.forEachIndexed { index, tool ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { selectedToolId = tool.id },
-                    colors = CardDefaults.cardColors(containerColor = BackgroundCard),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Row(Modifier.fillMaxWidth().padding(16.dp)) {
-                        Surface(
-                            color = SurfaceBright,
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text(
-                                "${index + 1}",
-                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
-                                color = TextPrimary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(tool.title, color = TextPrimary, fontWeight = FontWeight.Bold)
-                            Text(tool.purpose, color = TextSecondary)
-                            Spacer(Modifier.height(4.dp))
-                            Text("Open tool", color = PrimaryGreen, style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
+                LaunchableToolCard(index = index + 1, title = tool.title, subtitle = tool.purpose) {
+                    selectedToolId = tool.id
                 }
             }
 
@@ -121,7 +88,6 @@ fun AIOperationsScreen(
                 Metric("Top service", data.business.topService)
                 Note(data.business.recommendation)
             }
-
             Section("Property Intelligence") {
                 if (data.properties.isEmpty()) Note("Add addresses to jobs to build property history.")
                 data.properties.take(10).forEach { item ->
@@ -132,18 +98,13 @@ fun AIOperationsScreen(
                     HorizontalDivider()
                 }
             }
-
             Section("AI Quality Control") {
                 data.qualityChecks.take(10).forEach { item ->
                     ItemTitle("${item.score}/100 · ${item.title}")
-                    Text(
-                        if (item.missing.isEmpty()) "Complete" else "Missing: ${item.missing.joinToString()}",
-                        color = if (item.missing.isEmpty()) PrimaryGreen else MaterialTheme.colorScheme.tertiary
-                    )
+                    Text(if (item.missing.isEmpty()) "Complete" else "Missing: ${item.missing.joinToString()}", color = if (item.missing.isEmpty()) PrimaryGreen else MaterialTheme.colorScheme.tertiary)
                     HorizontalDivider()
                 }
             }
-
             Section("Pricing and Profit") {
                 if (data.pricing.isEmpty()) Note("Add estimated and actual costs to unlock pricing analysis.")
                 data.pricing.take(10).forEach { item ->
@@ -153,7 +114,6 @@ fun AIOperationsScreen(
                     HorizontalDivider()
                 }
             }
-
             Section("Route Priority") {
                 data.routePriorities.take(10).forEach { item ->
                     ItemTitle("Score ${item.score} · ${item.title}")
@@ -162,7 +122,6 @@ fun AIOperationsScreen(
                     HorizontalDivider()
                 }
             }
-
             Section("Inventory Forecast") {
                 data.inventory.forEach { item ->
                     ItemTitle(item.item)
@@ -171,7 +130,6 @@ fun AIOperationsScreen(
                     HorizontalDivider()
                 }
             }
-
             Section("Species Behavior Engine") {
                 data.speciesGuidance.forEach { item ->
                     ItemTitle(item.species)
@@ -182,13 +140,49 @@ fun AIOperationsScreen(
                 }
             }
 
-            Section("65 Advanced AI Modules") {
-                data.advancedInsights.forEachIndexed { index, item ->
-                    ItemTitle("${index + 1}. ${item.name} · ${item.score}/100")
-                    Text(item.signal, color = PrimaryGreen)
-                    Text(item.action, color = TextSecondary)
-                    HorizontalDivider()
+            Text("65 Live Intelligence Modules", style = MaterialTheme.typography.titleLarge, color = TextPrimary, fontWeight = FontWeight.Bold)
+            Text("Same rule as the 20 tools: tap any module to open it. Nothing here is a placeholder tab.", color = TextSecondary)
+            data.advancedInsights.forEachIndexed { index, item ->
+                LaunchableToolCard(index = index + 1, title = "${item.name} · ${item.score}/100", subtitle = item.signal) {
+                    selectedToolId = "insight:${item.name}"
                 }
+            }
+        }
+    }
+}
+
+private fun resolveTool(selectedToolId: String?, dashboard: AIOperationsEngine.Dashboard): IndividualAIToolCatalog.Tool? {
+    if (selectedToolId.isNullOrBlank()) return null
+    IndividualAIToolCatalog.tools.firstOrNull { it.id == selectedToolId }?.let { return it }
+    val insightName = selectedToolId.removePrefix("insight:")
+    IndividualAIToolCatalog.tools.firstOrNull { it.insightName == insightName }?.let { return it }
+    val insight = dashboard.advancedInsights.firstOrNull { it.name == insightName } ?: return null
+    return IndividualAIToolCatalog.Tool(
+        id = "insight:${insight.name}",
+        title = insight.name,
+        purpose = insight.signal,
+        insightName = insight.name,
+        checklist = listOf(insight.action, "Open the matching job records", "Record the outcome in notes before leaving the property")
+    )
+}
+
+@Composable
+private fun LaunchableToolCard(index: Int, title: String, subtitle: String, onOpen: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen),
+        colors = CardDefaults.cardColors(containerColor = BackgroundCard),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Row(Modifier.fillMaxWidth().padding(16.dp)) {
+            Surface(color = SurfaceBright, shape = RoundedCornerShape(10.dp)) {
+                Text("$index", modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp), color = TextPrimary, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, color = TextPrimary, fontWeight = FontWeight.Bold)
+                Text(subtitle, color = TextSecondary)
+                Spacer(Modifier.height(4.dp))
+                Text("Open tool", color = PrimaryGreen, style = MaterialTheme.typography.labelMedium)
             }
         }
     }
@@ -196,11 +190,7 @@ fun AIOperationsScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun IndividualAIToolScreen(
-    tool: IndividualAIToolCatalog.Tool,
-    dashboard: AIOperationsEngine.Dashboard,
-    onBack: () -> Unit
-) {
+private fun IndividualAIToolScreen(tool: IndividualAIToolCatalog.Tool, dashboard: AIOperationsEngine.Dashboard, onBack: () -> Unit) {
     val insight = dashboard.advancedInsights.firstOrNull { it.name == tool.insightName }
     val clipboard = LocalClipboardManager.current
     var copied by rememberSaveable(tool.id) { mutableStateOf(false) }
@@ -213,7 +203,6 @@ private fun IndividualAIToolScreen(
         appendLine("Checklist:")
         tool.checklist.forEach { appendLine("- $it") }
     }.trim()
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -228,14 +217,7 @@ private fun IndividualAIToolScreen(
         },
         containerColor = BackgroundDark
     ) { padding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Card(colors = CardDefaults.cardColors(containerColor = BackgroundCard)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Live analysis", color = TextPrimary, fontWeight = FontWeight.Bold)
@@ -245,33 +227,18 @@ private fun IndividualAIToolScreen(
                     Text(insight?.signal ?: "No job data available", color = PrimaryGreen)
                 }
             }
-
-            Section("Recommended Action") {
-                Note(insight?.action ?: "Add real job records to run this tool.")
-            }
-
+            Section("Recommended Action") { Note(insight?.action ?: "Add real job records to run this tool.") }
             Section("Field Checklist") {
-                tool.checklist.forEachIndexed { index, item ->
-                    Text("${index + 1}. $item", color = TextPrimary)
-                }
+                tool.checklist.forEachIndexed { index, item -> Text("${index + 1}. $item", color = TextPrimary) }
             }
-
             Button(
-                onClick = {
-                    clipboard.setText(AnnotatedString(report))
-                    copied = true
-                },
+                onClick = { clipboard.setText(AnnotatedString(report)); copied = true },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = BackgroundDark)
             ) {
                 Text(if (copied) "Report Copied" else "Copy AI Report", fontWeight = FontWeight.Bold)
             }
-
-            Text(
-                "This tool uses current job records and updates automatically when the database changes.",
-                color = TextTertiary,
-                style = MaterialTheme.typography.bodySmall
-            )
+            Text("This tool uses current job records and updates automatically when the database changes.", color = TextTertiary, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -280,10 +247,7 @@ private fun IndividualAIToolScreen(
 private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, style = MaterialTheme.typography.titleMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
-        Card(
-            colors = CardDefaults.cardColors(containerColor = BackgroundCard),
-            shape = RoundedCornerShape(14.dp)
-        ) {
+        Card(colors = CardDefaults.cardColors(containerColor = BackgroundCard), shape = RoundedCornerShape(14.dp)) {
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp), content = content)
         }
     }
@@ -295,7 +259,6 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
         Text(value, color = TextPrimary, fontWeight = FontWeight.SemiBold)
     }
 }
-
 @Composable private fun ItemTitle(text: String) = Text(text, color = TextPrimary, fontWeight = FontWeight.Bold)
 @Composable private fun Note(text: String) = Text(text, color = TextSecondary)
 private fun money(value: Double): String = "$" + String.format(Locale.US, "%,.2f", value)
