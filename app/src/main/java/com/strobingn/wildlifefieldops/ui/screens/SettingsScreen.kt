@@ -80,15 +80,7 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                val aiDiag = remember {
-                    try {
-                        com.strobingn.wildlifefieldops.data.remote.AiService().configDiagnostics()
-                    } catch (_: Exception) {
-                        "AI diagnostics unavailable"
-                    }
-                }
-                Text("AI / Grok", color = TextPrimary, style = MaterialTheme.typography.labelMedium)
-                Text(aiDiag, color = TextTertiary, style = MaterialTheme.typography.bodySmall)
+                SettingsAiDiagnosticsBlock()
                 if (!syncMessage.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(syncMessage!!, color = PrimaryGreen, style = MaterialTheme.typography.bodySmall)
@@ -127,7 +119,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Company Info
             SettingsSectionTitle("Company Information")
             SettingsCard {
                 OutlinedTextField(
@@ -168,7 +159,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Service types
             SettingsSectionTitle("Service Types")
             SettingsCard {
                 val serviceTypesVm: com.strobingn.wildlifefieldops.ui.viewmodel.ServiceTypesViewModel =
@@ -179,7 +169,7 @@ fun SettingsScreen(
                 var pendingDelete by remember { mutableStateOf<String?>(null) }
 
                 Text(
-                    "Built-in wildlife services are always available on jobs. Add your own types below. Deleting a custom type reassigns any jobs using it to “Inspection”.",
+                    "Built-in wildlife services are always available on jobs. Add your own types below. Deleting a custom type reassigns any jobs using it to \u201cInspection\u201d.",
                     color = TextTertiary,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -250,7 +240,7 @@ fun SettingsScreen(
                         title = { Text("Delete service type?", color = TextPrimary) },
                         text = {
                             Text(
-                                "Remove “$pendingDelete” from your list? Any jobs using this service will be set to “Inspection”. You can change them again when editing the job.",
+                                "Remove \u201c$pendingDelete\u201d from your list? Any jobs using this service will be set to \u201cInspection\u201d. You can change them again when editing the job.",
                                 color = TextSecondary
                             )
                         },
@@ -274,7 +264,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Appearance
             SettingsSectionTitle("Appearance")
             SettingsCard {
                 SettingsSwitchItem(
@@ -288,7 +277,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Notifications
             SettingsSectionTitle("Notifications")
             SettingsCard {
                 SettingsSwitchItem(
@@ -302,7 +290,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Sync & Data
             SettingsSectionTitle("Sync & Data")
             SettingsCard {
                 SettingsSwitchItem(
@@ -346,7 +333,7 @@ fun SettingsScreen(
                         Icon(Icons.Default.Sync, contentDescription = null)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (isSyncing) "Syncing…" else "Sync Now", fontWeight = FontWeight.Bold)
+                    Text(if (isSyncing) "Syncing\u2026" else "Sync Now", fontWeight = FontWeight.Bold)
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -377,7 +364,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Danger Zone
             SettingsSectionTitle("Danger Zone")
             SettingsCard {
                 Button(
