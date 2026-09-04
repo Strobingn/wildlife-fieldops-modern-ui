@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.datastore.preferences.core.*
-import androidx.datastore.preferences.preferencesDataStore
 import com.strobingn.wildlifefieldops.BuildConfig
 import com.strobingn.wildlifefieldops.data.local.AppDatabase
 import com.strobingn.wildlifefieldops.data.remote.AiService
@@ -21,8 +20,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-private val Context.dataStore by preferencesDataStore(name = "settings")
-
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -33,7 +30,7 @@ class SettingsViewModel @Inject constructor(
     private val aiService: AiService
 ) : ViewModel() {
 
-    private val dataStore = context.dataStore
+    private val dataStore = context.settingsDataStore
     private var companyJob: Job? = null
     private var techJob: Job? = null
     private var addressJob: Job? = null
@@ -83,10 +80,6 @@ class SettingsViewModel @Inject constructor(
     } catch (t: Throwable) {
         "AI diagnostics unavailable: ${t.message ?: t.javaClass.simpleName}"
     }
-
-    suspend fun shopAddress(): String = companyAddress.first().trim()
-
-    suspend fun taxPercent(): Double = defaultTaxRate.first().toDouble()
 
     private fun storedTax(raw: Float?): Float {
         if (raw == null || raw <= 0f) return DEFAULT_TAX_PERCENT
