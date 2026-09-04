@@ -14,8 +14,8 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 14
-        versionName = "2.1.4-xai-key-bake"
+        versionCode = 15
+        versionName = "2.2.0-qwen35-abl-bake"
 
         // Real keys from env/secrets (Supabase + Maps hooked)
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
@@ -23,7 +23,7 @@ android {
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseKey\"")
 
-        // Normalize the repository secret into the native build variable. The
+        // Normalize the repository secret into the native Gradle variable. The
         // VITE name is supported because it is the existing documented secret;
         // GOOGLE_MAPS_API remains the preferred native/local name.
         val mapsKey = sequenceOf(
@@ -69,6 +69,7 @@ android {
         buildConfigField("String", "LLM_BASE_URL", "\"${escapeBuildConfig(llmBase)}\"")
         buildConfigField("String", "LLM_MODEL", "\"${escapeBuildConfig(llmModel)}\"")
         buildConfigField("int", "LLM_KEY_LENGTH", "${llmKey.length}")
+        buildConfigField("String", "BUNDLED_LOCAL_LLM_ID", "\"qwen35-0.8b-abliterated\"")
 
         // Manifest placeholder for Google Maps meta-data
         manifestPlaceholders["GOOGLE_MAPS_API"] = mapsKey
@@ -124,6 +125,11 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    // Do not compress the baked .litertlm — LiteRT needs mmap and first-run extract is faster.
+    androidResources {
+        noCompress += "litertlm"
     }
 
     packaging {
@@ -185,6 +191,9 @@ dependencies {
     implementation("com.google.ar:core:1.45.0")
     implementation("com.google.mlkit:image-labeling:17.0.9")
     implementation("com.google.mlkit:object-detection:17.0.2")
+
+    // On-device LLM runtime (Qwen3.5 0.8B abliterated baked into assets by CI)
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.1")
 
     implementation("io.coil-kt:coil-compose:2.5.0")
 
