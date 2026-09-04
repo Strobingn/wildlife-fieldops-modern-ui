@@ -11,7 +11,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.ui.theme.*
@@ -38,6 +42,13 @@ fun SettingsScreen(
     var showClearDataDialog by remember { mutableStateOf(false) }
     var showAiOperations by remember { mutableStateOf(false) }
     var showDiagnostics by remember { mutableStateOf(false) }
+
+    var companyDraft by remember { mutableStateOf<String?>(null) }
+    val companyField = companyDraft ?: companyName
+    var technicianDraft by remember { mutableStateOf<String?>(null) }
+    val technicianField = technicianDraft ?: technicianName
+    var taxDraft by remember { mutableStateOf<String?>(null) }
+    val taxField = taxDraft ?: defaultTaxRate.toString()
 
     if (showAiOperations) {
         AIOperationsScreen(onBack = { showAiOperations = false })
@@ -122,38 +133,57 @@ fun SettingsScreen(
             SettingsSectionTitle("Company Information")
             SettingsCard {
                 OutlinedTextField(
-                    value = companyName,
-                    onValueChange = viewModel::setCompanyName,
+                    value = companyField,
+                    onValueChange = {
+                        companyDraft = it
+                        viewModel.setCompanyName(it)
+                    },
                     label = { Text("Company Name") },
                     leadingIcon = { Icon(Icons.Default.Business, contentDescription = null, tint = TextSecondary) },
                     colors = settingFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    singleLine = true
+                    singleLine = true,
+                    visualTransformation = VisualTransformation.None,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        capitalization = KeyboardCapitalization.Words
+                    )
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
-                    value = technicianName,
-                    onValueChange = viewModel::setTechnicianName,
+                    value = technicianField,
+                    onValueChange = {
+                        technicianDraft = it
+                        viewModel.setTechnicianName(it)
+                    },
                     label = { Text("Default Technician Name") },
                     leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = TextSecondary) },
                     colors = settingFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    singleLine = true
+                    singleLine = true,
+                    visualTransformation = VisualTransformation.None,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        capitalization = KeyboardCapitalization.Words
+                    )
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
-                    value = defaultTaxRate.toString(),
+                    value = taxField,
                     onValueChange = {
-                        it.toFloatOrNull()?.let { rate -> viewModel.setDefaultTaxRate(rate) }
+                        taxDraft = it
+                        viewModel.setDefaultTaxRateText(it)
                     },
                     label = { Text("Default Tax Rate (%)") },
                     leadingIcon = { Icon(Icons.Default.Percent, contentDescription = null, tint = TextSecondary) },
                     colors = settingFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    singleLine = true
+                    singleLine = true,
+                    visualTransformation = VisualTransformation.None,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                 )
             }
 
