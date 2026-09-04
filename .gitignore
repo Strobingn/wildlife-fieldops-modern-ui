@@ -6,3 +6,8 @@ dist/
 .env
 .env.kimi
 .gradle/
+
+# Baked on-device LLM weights — CI downloads these into assets, never commit.
+app/src/main/assets/local-llm/*.litertlm
+app/src/main/assets/local-llm/*.task
+app/src/main/assets/local-llm/*.gguf

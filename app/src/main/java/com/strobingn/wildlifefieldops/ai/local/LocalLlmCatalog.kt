@@ -2,10 +2,9 @@ package com.strobingn.wildlifefieldops.ai.local
 
 /**
  * On-device models in LiteRT-LM (.litertlm) format.
- * Files are downloaded to app storage on first use — not committed to git.
  *
- * Stock = official instruct weights.
- * Abliterated = community refusal-reduced conversion of those weights.
+ * Default (Qwen3.5 0.8B abliterated) is baked into the APK assets by CI
+ * and copied to app storage on first launch. Other models download on demand.
  */
 data class LocalLlmSpec(
     val id: String,
@@ -16,8 +15,11 @@ data class LocalLlmSpec(
     val expectedBytes: Long,
     val license: String,
     val notes: String,
-    val abliterated: Boolean = false
+    val abliterated: Boolean = false,
+    val bakedInDefault: Boolean = false
 ) {
+    val assetPath: String get() = "local-llm/$fileName"
+
     val sizeLabel: String
         get() {
             val mb = expectedBytes / (1024.0 * 1024.0)
@@ -26,17 +28,6 @@ data class LocalLlmSpec(
 }
 
 object LocalLlmCatalog {
-    val QWEN3_06B = LocalLlmSpec(
-        id = "qwen3-0.6b",
-        displayName = "Qwen3 0.6B (stock)",
-        shortLabel = "Qwen3 0.6B",
-        fileName = "Qwen3-0.6B.litertlm",
-        downloadUrl = "https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B.litertlm",
-        expectedBytes = 614_236_160L,
-        license = "Apache-2.0",
-        notes = "Official unobliterated Qwen3. Fast default for mid-range phones."
-    )
-
     val QWEN35_08B_ABLITERATED = LocalLlmSpec(
         id = "qwen35-0.8b-abliterated",
         displayName = "Qwen3.5 0.8B abliterated",
@@ -45,8 +36,20 @@ object LocalLlmCatalog {
         downloadUrl = "https://huggingface.co/g-ntovas/Qwen3.5-0.8B-abliterated-LiteRT/resolve/main/qwen35_0.8b_abl_mm_q8_ekv4096.litertlm",
         expectedBytes = 1_180_000_000L,
         license = "Apache-2.0",
-        notes = "Community LiteRT conversion of Qwen3.5-0.8B with refusal direction removed. ~1.1 GB.",
-        abliterated = true
+        notes = "Default. Baked into the APK. Community LiteRT conversion with refusal direction removed.",
+        abliterated = true,
+        bakedInDefault = true
+    )
+
+    val QWEN3_06B = LocalLlmSpec(
+        id = "qwen3-0.6b",
+        displayName = "Qwen3 0.6B (stock)",
+        shortLabel = "Qwen3 0.6B",
+        fileName = "Qwen3-0.6B.litertlm",
+        downloadUrl = "https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B.litertlm",
+        expectedBytes = 614_236_160L,
+        license = "Apache-2.0",
+        notes = "Official unobliterated Qwen3. Smaller/faster fallback."
     )
 
     val GEMMA4_E2B = LocalLlmSpec(
@@ -66,9 +69,9 @@ object LocalLlmCatalog {
         shortLabel = "Gemma 4 E2B abl",
         fileName = "Gemma-4-E2B-it-abliterated.litertlm",
         downloadUrl = "https://huggingface.co/nqd145/Gemma-4-E2B-it-abliterated-litertlm/resolve/main/Gemma-4-E2B-it-abliterated.litertlm",
-        expectedBytes = 2_500_000_000L,
+        expectedBytes = 5_065_244_672L,
         license = "Apache-2.0",
-        notes = "huihui-ai Gemma 4 E2B abliterated, exported to LiteRT-LM for on-device use.",
+        notes = "huihui-ai Gemma 4 E2B abliterated, LiteRT-LM export. Large download.",
         abliterated = true
     )
 
@@ -80,20 +83,22 @@ object LocalLlmCatalog {
         downloadUrl = "https://huggingface.co/PeppX/gemma-4-e2b-uncensored-litertlm/resolve/main/gemma-4-E2B-it-Uncensored-MAX.litertlm",
         expectedBytes = 2_550_041_824L,
         license = "Apache-2.0",
-        notes = "Community uncensored Gemma 4 E2B LiteRT bundle (INT4, 32K context). 2.37 GB.",
+        notes = "Community uncensored Gemma 4 E2B LiteRT bundle. 2.37 GB.",
         abliterated = true
     )
 
     val ALL: List<LocalLlmSpec> = listOf(
-        QWEN3_06B,
         QWEN35_08B_ABLITERATED,
+        QWEN3_06B,
         GEMMA4_E2B,
         GEMMA4_E2B_ABLITERATED,
         GEMMA4_E2B_UNCENSORED
     )
 
-    const val DEFAULT_ID: String = "qwen3-0.6b"
+    const val DEFAULT_ID: String = "qwen35-0.8b-abliterated"
+
+    val DEFAULT: LocalLlmSpec = QWEN35_08B_ABLITERATED
 
     fun byId(id: String?): LocalLlmSpec =
-        ALL.firstOrNull { it.id == id } ?: QWEN3_06B
+        ALL.firstOrNull { it.id == id } ?: DEFAULT
 }

@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.URL
@@ -37,21 +38,88 @@ class LocalLlmDownloader @Inject constructor(
 
     fun modelFile(spec: LocalLlmSpec): File = File(modelsDir(), spec.fileName)
 
-    fun isDownloaded(spec: LocalLlmSpec): Boolean {
+    fun hasBundledAsset(spec: LocalLlmSpec): Boolean {
+        return try {
+            context.assets.open(spec.assetPath).close()
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun isOnDisk(spec: LocalLlmSpec): Boolean {
         val file = modelFile(spec)
         if (!file.exists()) return false
-        val minAcceptable = (spec.expectedBytes * 0.98).toLong()
-        return file.length() >= minAcceptable
+        val minBytes = minOf((spec.expectedBytes * 0.90).toLong(), spec.expectedBytes - 8_000_000L)
+        val floor = 400_000_000L
+        return file.length() >= maxOf(floor, minBytes.coerceAtLeast(floor))
     }
+
+    fun isDownloaded(spec: LocalLlmSpec): Boolean = isOnDisk(spec)
 
     fun delete(spec: LocalLlmSpec) {
         modelFile(spec).delete()
         File(modelsDir(), spec.fileName + ".part").delete()
     }
 
+    /** Copy the APK-baked default model into filesDir so LiteRT-LM can mmap a real path. */
+    suspend fun extractBundledIfNeeded(spec: LocalLlmSpec): Result<File> = withContext(Dispatchers.IO) {
+        val dest = modelFile(spec)
+        if (isOnDisk(spec)) return@withContext Result.success(dest)
+        if (!hasBundledAsset(spec)) {
+            return@withContext Result.failure(IllegalStateException("No baked asset for ${spec.fileName}"))
+        }
+        _progress.value = LocalLlmDownloadProgress(
+            modelId = spec.id,
+            bytesRead = 0L,
+            totalBytes = spec.expectedBytes,
+            running = true
+        )
+        try {
+            context.assets.open(spec.assetPath).use { input ->
+                FileOutputStream(dest).use { output ->
+                    val buf = ByteArray(256 * 1024)
+                    var read = 0L
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n <= 0) break
+                        output.write(buf, 0, n)
+                        read += n
+                        if (read % (8L * 1024L * 1024L) < buf.size) {
+                            _progress.value = LocalLlmDownloadProgress(
+                                modelId = spec.id,
+                                bytesRead = read,
+                                totalBytes = spec.expectedBytes,
+                                running = true
+                            )
+                        }
+                    }
+                }
+            }
+            _progress.value = LocalLlmDownloadProgress(
+                modelId = spec.id,
+                bytesRead = dest.length(),
+                totalBytes = dest.length(),
+                running = false
+            )
+            Result.success(dest)
+        } catch (t: Throwable) {
+            dest.delete()
+            Log.e(TAG, "extract bundled failed", t)
+            _progress.value = _progress.value.copy(running = false, error = t.message)
+            Result.failure(t)
+        }
+    }
+
+    suspend fun ensureAvailable(spec: LocalLlmSpec): Result<File> {
+        if (isOnDisk(spec)) return Result.success(modelFile(spec))
+        if (hasBundledAsset(spec)) return extractBundledIfNeeded(spec)
+        return download(spec)
+    }
+
     suspend fun download(spec: LocalLlmSpec): Result<File> = withContext(Dispatchers.IO) {
         val dest = modelFile(spec)
-        if (isDownloaded(spec)) {
+        if (isOnDisk(spec)) {
             _progress.value = LocalLlmDownloadProgress(
                 modelId = spec.id,
                 bytesRead = dest.length(),
@@ -76,14 +144,14 @@ class LocalLlmDownloader @Inject constructor(
             if (code == 416) {
                 connection.disconnect()
                 if (part.exists()) part.renameTo(dest)
-                return@withContext if (isDownloaded(spec)) Result.success(dest)
+                return@withContext if (isOnDisk(spec)) Result.success(dest)
                 else Result.failure(IllegalStateException("Incomplete download (HTTP 416)"))
             }
             if (code !in 200..299) {
                 val err = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
                 connection.disconnect()
                 val msg = when (code) {
-                    401, 403 -> "Download blocked (HTTP $code). Model may require Hugging Face access."
+                    401, 403 -> "Download blocked (HTTP $code). Add repo secret HF_TOKEN with access to this model, then rebuild."
                     404 -> "Model file not found (HTTP 404)."
                     else -> "Download failed HTTP $code ${err.take(120)}"
                 }
@@ -126,7 +194,7 @@ class LocalLlmDownloader @Inject constructor(
                 part.copyTo(dest, overwrite = true)
                 part.delete()
             }
-            if (!isDownloaded(spec)) {
+            if (!isOnDisk(spec)) {
                 val msg = "Downloaded file incomplete (${dest.length()} bytes, expected ${spec.expectedBytes})."
                 _progress.value = _progress.value.copy(running = false, error = msg)
                 return@withContext Result.failure(IllegalStateException(msg))
