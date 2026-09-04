@@ -13,7 +13,7 @@ Field operations app for wildlife removal:
 - Offline-first Room database
 - Cloud sync via Supabase
 - Weather (OpenWeather, optional)
-- AI assistant (Supabase Edge Function + on-device fallback)
+- AI assistant (cloud LLM and/or **real on-device abliterated llama.cpp GGUF** — no canned tip lists)
 
 ## Build the APK (GitHub Actions)
 
@@ -67,10 +67,30 @@ Legacy web / Capacitor folders may still exist in the repo history for reference
 - Schema applied: `supabase/migrations/20260710153000_native_sync_fix.sql` (customers table + RLS/grants for `anon`).
 - Verified: REST insert/select/delete for `customers` + `jobs` works with the app anon key.
 
-## AI
+## AI (real generative only)
 
-- Prefer Supabase function `ai-assistant` (set LLM keys in Supabase Edge Function secrets).
-- If the function is offline, the app uses built-in field knowledge so the chat still works.
+The chat / estimate / summary paths never answer from hardcoded keyword tip lists.
+
+### Cloud LLM
+- Bake `XAI_API_KEY` (or `LLM_API_KEY`) into the APK at build time for SpaceXAI / Grok.
+- Optional: deploy Supabase Edge Function `ai-assistant` with a real provider key (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`, etc.). Demo/canned responses are disabled when no key is set.
+
+### On-device llama.cpp + **abliterated** GGUF
+- Stack: [`dev.ffmpegkit-maintained:llama-android:0.1.1`](https://central.sonatype.com/artifact/dev.ffmpegkit-maintained/llama-android) (prebuilt llama.cpp JNI, no NDK in this app).
+- **Default model is abliterated (not stock Instruct / refusal-trained):**
+  - Upstream: [`huihui-ai/Qwen2.5-1.5B-Instruct-abliterated`](https://huggingface.co/huihui-ai/Qwen2.5-1.5B-Instruct-abliterated)
+  - Quant repo: [`mradermacher/Qwen2.5-1.5B-Instruct-abliterated-GGUF`](https://huggingface.co/mradermacher/Qwen2.5-1.5B-Instruct-abliterated-GGUF)
+  - File / quant: **`Qwen2.5-1.5B-Instruct-abliterated.Q4_K_M.gguf`** (~986 MB, public, not gated)
+- First launch: open **AI Assistant** → **Download local model**. Progress UI is shown. Cached at:
+  - `files/local_llm/Qwen2.5-1.5B-Instruct-abliterated.Q4_K_M.gguf`
+- Abliteration removes safety-refusal directions so the field assistant generates freely instead of stock chat refusals.
+- Build notes: no NDK/CMake. Native libs ship for **`arm64-v8a`** (use a 64-bit ARM phone). `android:largeHeap` is enabled; prefer ≥6 GB RAM.
+- To point at another abliterated GGUF, change `LocalLlmModelManager.MODEL_URL` / `MODEL_FILE_NAME`.
+
+### Priority order
+1. Cloud chat completions when a key is present in the APK  
+2. On-device abliterated llama.cpp GGUF when the model file is installed  
+3. Clear setup error (never fake “field knowledge” bullets)
 
 
 ## V2.5 route planner and visual system
