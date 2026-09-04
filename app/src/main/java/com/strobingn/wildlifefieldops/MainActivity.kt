@@ -30,6 +30,7 @@ import com.strobingn.wildlifefieldops.navigation.Screen
 import com.strobingn.wildlifefieldops.ui.components.BrandMark
 import com.strobingn.wildlifefieldops.ui.screens.*
 import com.strobingn.wildlifefieldops.ui.theme.*
+import com.strobingn.wildlifefieldops.ui.viewmodel.SettingsViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -49,7 +50,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         try {
             setContent {
-                WildlifeFieldOpsTheme {
+                val settingsVm: SettingsViewModel = hiltViewModel()
+                val darkTheme by settingsVm.darkTheme.collectAsState(initial = true)
+                SideEffect { ThemeMode.isDark = darkTheme }
+                WildlifeFieldOpsTheme(darkTheme = darkTheme) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
