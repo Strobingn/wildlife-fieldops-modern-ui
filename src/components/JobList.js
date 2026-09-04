@@ -23,12 +23,16 @@ function estimateJob(j) {
   return Math.round(base * 1.35);
 }
 
-function scoreJob(j, visits, repairs, photos, signatures) {
-  const v = visits.some((x) => x.job_id === j.id);
-  const p = photos.some((x) => x.job_id === j.id);
-  const rr = repairs.filter((x) => x.job_id === j.id);
-  const sig = signatures.some((x) => x.job_id === j.id);
-  return Math.min(100, (v ? 25 : 0) + (p ? 25 : 0) + (rr.length ? 25 : 0) + (sig ? 25 : 0));
+/**
+ * Calculate job completion score (0-100%) using pre-computed index counts.
+ * Performance: Uses O(1) Map/Set lookups instead of scanning full arrays.
+ */
+function scoreJob(jobId, visitCounts, repairCounts, photoCounts, signatureSet) {
+  const hasVisits = (visitCounts.get(jobId) || 0) > 0;
+  const hasPhotos = (photoCounts.get(jobId) || 0) > 0;
+  const hasRepairs = (repairCounts.get(jobId) || 0) > 0;
+  const hasSignatures = signatureSet.has(jobId);
+  return Math.min(100, (hasVisits ? 25 : 0) + (hasPhotos ? 25 : 0) + (hasRepairs ? 25 : 0) + (hasSignatures ? 25 : 0));
 }
 
 function tel(p) {
@@ -50,6 +54,28 @@ export const JobList = {
     const repairs = state.repairs || [];
     const photos = state.photos || [];
     const signatures = state.signatures || [];
+
+    // Performance Optimization: Build O(1) hash maps for entity counts per job.
+    // Replaces O(N * M) repeated linear array scans during card rendering with single linear indexing pass.
+    const visitCounts = new Map();
+    for (const v of visits) {
+      if (v.job_id) visitCounts.set(v.job_id, (visitCounts.get(v.job_id) || 0) + 1);
+    }
+
+    const repairCounts = new Map();
+    for (const r of repairs) {
+      if (r.job_id) repairCounts.set(r.job_id, (repairCounts.get(r.job_id) || 0) + 1);
+    }
+
+    const photoCounts = new Map();
+    for (const p of photos) {
+      if (p.job_id) photoCounts.set(p.job_id, (photoCounts.get(p.job_id) || 0) + 1);
+    }
+
+    const signatureSet = new Set();
+    for (const s of signatures) {
+      if (s.job_id) signatureSet.add(s.job_id);
+    }
 
     // Filter and sort
     let filtered = this._filterJobs(jobs);
@@ -115,7 +141,7 @@ export const JobList = {
       <!-- Job List -->
       <div id="jobList">
         ${pageJobs.length
-          ? pageJobs.map((j) => this._jobCard(j, visits, repairs, photos, signatures)).join("")
+          ? pageJobs.map((j) => this._jobCard(j, visitCounts, repairCounts, photoCounts, signatureSet)).join("")
           : `<div class="empty-state">
               <div class="empty-icon" aria-hidden="true">🔍</div>
               <h4>${this._searchQuery || this._filters.status || this._filters.species ? "No matching jobs" : "No jobs yet"}</h4>
@@ -289,13 +315,13 @@ export const JobList = {
     return sorted;
   },
 
-  _jobCard(j, visits, repairs, photos, signatures) {
+  _jobCard(j, visitCounts, repairCounts, photoCounts, signatureSet) {
     const icon = SPECIES_ICONS[j.species] || "🐾";
     const sc = STATUS_STYLES[j.status] || "active";
-    const v = visits.filter((x) => x.job_id === j.id).length;
-    const r = repairs.filter((x) => x.job_id === j.id).length;
-    const p = photos.filter((x) => x.job_id === j.id).length;
-    const s = scoreJob(j, visits, repairs, photos, signatures);
+    const v = visitCounts.get(j.id) || 0;
+    const r = repairCounts.get(j.id) || 0;
+    const p = photoCounts.get(j.id) || 0;
+    const s = scoreJob(j.id, visitCounts, repairCounts, photoCounts, signatureSet);
     const est = estimateJob(j);
 
     return /* html */ `
