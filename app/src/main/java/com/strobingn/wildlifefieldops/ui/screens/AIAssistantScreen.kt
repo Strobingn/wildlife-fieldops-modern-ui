@@ -263,7 +263,7 @@ private fun LocalModelBanner(
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        "${LocalLlmModelManager.MODEL_DISPLAY_NAME} (~940 MB) downloads once from Hugging Face (huihui-ai abliterated → mradermacher Q4_K_M GGUF, public).",
+                        "${LocalLlmModelManager.MODEL_DISPLAY_NAME} (~503 MB) is the default on-device model — downloads once from Hugging Face (huihui-ai Qwen3.5-0.8B abliterated → mradermacher Q4_K_M GGUF, public).",
                         color = TextSecondary,
                         style = MaterialTheme.typography.bodySmall
                     )
