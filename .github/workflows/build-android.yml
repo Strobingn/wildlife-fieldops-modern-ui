@@ -22,7 +22,6 @@ jobs:
       LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
       LLM_BASE_URL: https://api.x.ai/v1
       LLM_MODEL: grok-4.5
-      HF_TOKEN: ${{ secrets.HF_TOKEN || secrets.HUGGING_FACE_HUB_TOKEN || secrets.HUGGINGFACE_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -39,31 +38,6 @@ jobs:
 
       - name: Grant execute permission for Gradle wrapper
         run: chmod +x ./gradlew
-
-      - name: Bake Qwen3.5 0.8B LiteRT into APK assets
-        run: |
-          set -euo pipefail
-          mkdir -p app/src/main/assets/local-llm
-          OUT="app/src/main/assets/local-llm/Qwen3.5-0.8B_int8.litertlm"
-          URL="https://huggingface.co/litert-community/Qwen3.5-0.8B/resolve/main/Qwen3.5-0.8B_int8.litertlm"
-          echo "Downloading public default on-device LLM into $OUT"
-          AUTH=()
-          if [ -n "${HF_TOKEN:-}" ]; then
-            echo "HF_TOKEN present (length ${#HF_TOKEN}) — optional for this public file"
-            AUTH=(-H "Authorization: Bearer ${HF_TOKEN}")
-          fi
-          if ! curl -L --fail --retry 5 --retry-delay 5 "${AUTH[@]}" -o "$OUT" "$URL"; then
-            echo "::error::Could not download public Qwen3.5 0.8B LiteRT weights from litert-community."
-            exit 1
-          fi
-          SIZE=$(stat -c%s "$OUT")
-          echo "Baked model size: $SIZE bytes"
-          if [ "$SIZE" -lt 400000000 ]; then
-            echo "::error::Downloaded file too small ($SIZE). Aborting bake."
-            exit 1
-          fi
-          ls -lh "$OUT"
-        timeout-minutes: 20
 
       - name: Verify Maps secret (no value printed)
         run: |
@@ -83,18 +57,7 @@ jobs:
           if [ -n "${XAI_API_KEY}" ]; then
             export XAI_API_KEY="$(printf '%s' "$XAI_API_KEY" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
           fi
-          if [ -n "${LLM_API_KEY}" ]; then
-            export LLM_API_KEY="$(printf '%s' "$LLM_API_KEY" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-          fi
           echo "XAI_API_KEY length: ${#XAI_API_KEY}"
-          echo "LLM_API_KEY length: ${#LLM_API_KEY}"
-          echo "LLM_BASE_URL: ${LLM_BASE_URL}"
-          echo "LLM_MODEL: ${LLM_MODEL}"
-          if [ "${#XAI_API_KEY}" -lt 10 ] && [ "${#LLM_API_KEY}" -lt 10 ]; then
-            echo "::warning::No usable XAI_API_KEY or LLM_API_KEY secret — cloud Grok will be offline in this APK. Local baked LLM still ships."
-          else
-            echo "AI key present for BuildConfig bake-in."
-          fi
           echo "XAI_API_KEY=$XAI_API_KEY" >> "$GITHUB_ENV"
           echo "LLM_API_KEY=$LLM_API_KEY" >> "$GITHUB_ENV"
 
@@ -107,16 +70,14 @@ jobs:
           export LLM_BASE_URL="${LLM_BASE_URL:-https://api.x.ai/v1}"
           export LLM_MODEL="${LLM_MODEL:-grok-4.5}"
           ./gradlew :app:assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
-        timeout-minutes: 60
+        timeout-minutes: 30
 
       - name: Check for APK and list outputs
         run: |
           set -e
-          echo "=== Checking for debug APKs ==="
           find app/build/outputs -name "*.apk" -type f
           ls -lah app/build/outputs/apk/debug/
           test -n "$(ls -A app/build/outputs/apk/debug/*.apk 2>/dev/null)"
-          echo "=== End check ==="
 
       - name: Upload Debug APK
         if: success()
@@ -135,24 +96,3 @@ jobs:
           path: build.log
           if-no-files-found: ignore
           retention-days: 14
-
-      - name: Publish APK on Releases (easy download)
-        if: success() && github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: debug-latest
-          name: Wildlife Field Ops Debug APK
-          files: app/build/outputs/apk/debug/*.apk
-          fail_on_unmatched_files: true
-          make_latest: true
-          body: |
-            Native Kotlin / Jetpack Compose debug APK from `${{ github.sha }}` (run ${{ github.run_number }}).
-            Includes baked public Qwen3.5 0.8B LiteRT on-device LLM.
-            Actions artifact name remains `wildlife-field-ops-debug-apk`.
-
-      - name: Summary
-        if: success()
-        run: |
-          echo "Wildlife Field Ops Debug APK built successfully."
-          echo "Default local LLM: public Qwen3.5 0.8B LiteRT (baked into APK assets)."
-          echo "Download from this run: Artifacts → wildlife-field-ops-debug-apk"
