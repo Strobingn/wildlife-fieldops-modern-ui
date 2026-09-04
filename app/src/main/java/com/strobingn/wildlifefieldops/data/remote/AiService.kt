@@ -1,6 +1,8 @@
 package com.strobingn.wildlifefieldops.data.remote
 
 import com.strobingn.wildlifefieldops.BuildConfig
+import com.strobingn.wildlifefieldops.ai.local.LocalLlmEngine
+import com.strobingn.wildlifefieldops.ai.local.LocalLlmModelManager
 import com.strobingn.wildlifefieldops.data.model.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -50,7 +52,9 @@ data class EstimateDraft(
 // AiEdgeRequest is defined in RemoteDtos.kt (same package) — do not redeclare
 
 @Singleton
-class AiService @Inject constructor() {
+class AiService @Inject constructor(
+    private val localLlm: LocalLlmEngine
+) {
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -70,32 +74,53 @@ class AiService @Inject constructor() {
             }
         }
 
+    val localLlmReady: Boolean get() = localLlm.isReady
+
     /** Safe diagnostics for Settings / AI screen (never exposes the key). */
     fun configDiagnostics(): String = buildString {
-        append("Provider: $providerLabel\n")
-        append("Base: ${BuildConfig.LLM_BASE_URL}\n")
-        append("Model: ${BuildConfig.LLM_MODEL}\n")
-        append("Key baked into APK: ")
+        append("Cloud provider: $providerLabel\n")
+        append("Cloud base: ${BuildConfig.LLM_BASE_URL}\n")
+        append("Cloud model: ${BuildConfig.LLM_MODEL}\n")
+        append("Cloud key baked into APK: ")
         if (isConfigured) append("yes (${BuildConfig.LLM_KEY_LENGTH} chars)")
         else append("NO — rebuild after setting secret XAI_API_KEY")
+        append("\n")
+        append(localLlm.modelStatusLabel())
+        append("\nLocal model file: ${LocalLlmModelManager.MODEL_FILE_NAME}")
+        append("\nLocal model source: Hugging Face ${LocalLlmModelManager.MODEL_REPO}")
     }
+
 
     /**
      * SpaceXAI (xAI Grok) by default — OpenAI-compatible chat completions.
      * Env: XAI_API_KEY (preferred) or LLM_API_KEY; base https://api.x.ai/v1; model grok-4.5.
      */
     suspend fun ask(userMessage: String, species: String = ""): String = withContext(Dispatchers.IO) {
-        if (!isConfigured) {
-            return@withContext notConfiguredMessage()
-        }
         val userPrompt = buildString {
             if (species.isNotBlank()) append("Species context: $species\n")
             append(userMessage)
         }
-        when (val result = completeChat(WILDLIFE_SYSTEM_PROMPT, userPrompt, maxTokens = 900, temperature = 0.35)) {
-            is ChatResult.Ok -> result.text
-            is ChatResult.Err -> result.message + "\n\n" + localFieldKnowledge(userMessage)
+        // 1) Cloud LLM when key is present
+        if (isConfigured) {
+            when (val result = completeChat(WILDLIFE_SYSTEM_PROMPT, userPrompt, maxTokens = 900, temperature = 0.35)) {
+                is ChatResult.Ok -> return@withContext result.text
+                is ChatResult.Err -> {
+                    android.util.Log.w("AiService", "Cloud LLM failed, trying local: ${result.message}")
+                    val local = generateLocal(WILDLIFE_SYSTEM_PROMPT, userPrompt)
+                    if (local != null) {
+                        return@withContext "📡 Cloud unavailable (${result.message.take(80)})\n\n📱 On-device LLM:\n\n$local"
+                    }
+                    return@withContext result.message + "\n\n" + localUnavailableHint()
+                }
+            }
         }
+        // 2) Real on-device LLM (never keyword stubs)
+        val local = generateLocal(WILDLIFE_SYSTEM_PROMPT, userPrompt)
+        if (local != null) {
+            return@withContext "📱 On-device LLM (${LocalLlmModelManager.MODEL_DISPLAY_NAME}):\n\n$local"
+        }
+        // 3) Honest setup guidance — no fake field-knowledge lists
+        notConfiguredMessage()
     }
 
     /**
@@ -103,12 +128,6 @@ class AiService @Inject constructor() {
      * Fills the Estimate Calculator fields. Falls back to heuristics offline.
      */
     suspend fun draftEstimateFromJob(job: Job): EstimateDraft = withContext(Dispatchers.IO) {
-        if (!isConfigured) {
-            return@withContext heuristicEstimate(job).copy(
-                rationale = "Offline draft (no SpaceXAI key). Review and adjust before quoting.",
-                fromAi = false
-            )
-        }
         val system = """
 You are a wildlife removal estimator. Return ONLY valid JSON (no markdown fences) with these number fields:
 laborHours, laborRate, materialsCost, equipmentCost, permitCost, disposalCost, mileage, mileageRate, taxRate, discountPercent
@@ -124,25 +143,37 @@ Rules:
 - Keep rationale under 3 sentences
 """.trimIndent()
         val user = buildJobContext(job) + "\n\nProduce an estimate draft JSON for this job."
-        when (val result = completeChat(system, user, maxTokens = 700, temperature = 0.25)) {
-            is ChatResult.Ok -> parseEstimateDraft(result.text) ?: heuristicEstimate(job).copy(
-                rationale = "AI response unparseable — used offline defaults.\n\n${result.text.take(280)}",
-                fromAi = false
-            )
-            is ChatResult.Err -> heuristicEstimate(job).copy(
-                rationale = "${result.message}\n\nUsing offline estimate defaults.",
+
+        if (isConfigured) {
+            when (val result = completeChat(system, user, maxTokens = 700, temperature = 0.25)) {
+                is ChatResult.Ok -> {
+                    val parsed = parseEstimateDraft(result.text)
+                    if (parsed != null) return@withContext parsed.copy(fromAi = true)
+                }
+                is ChatResult.Err -> android.util.Log.w("AiService", "Cloud estimate failed: ${result.message}")
+            }
+        }
+        val local = generateLocal(system, user)
+        if (local != null) {
+            val parsed = parseEstimateDraft(local)
+            if (parsed != null) return@withContext parsed.copy(fromAi = true, rationale = "On-device LLM draft. ${parsed.rationale}")
+            return@withContext EstimateDraft(
+                rationale = "On-device LLM response unparseable.\n\n${local.take(280)}",
+                lineItemNotes = "Review manually before quoting.",
                 fromAi = false
             )
         }
+        EstimateDraft(
+            rationale = "No cloud key and local LLM model not ready. Download the on-device model in AI Assistant, or set XAI_API_KEY.",
+            lineItemNotes = "Cannot invent pricing without a real LLM.",
+            fromAi = false
+        )
     }
 
     /**
      * Auto job summary for handoff, invoice notes, or office review.
      */
     suspend fun summarizeJob(job: Job): String = withContext(Dispatchers.IO) {
-        if (!isConfigured) {
-            return@withContext heuristicSummary(job)
-        }
         val system = """
 You write concise wildlife-control job summaries for field/office handoff.
 Structure with short headings:
@@ -155,23 +186,32 @@ Structure with short headings:
 Max ~180 words. Bullet-first. No fluff.
 """.trimIndent()
         val user = buildJobContext(job) + "\n\nWrite the job summary now."
-        when (val result = completeChat(system, user, maxTokens = 500, temperature = 0.3)) {
-            is ChatResult.Ok -> result.text
-            is ChatResult.Err -> heuristicSummary(job) + "\n\n(${result.message})"
+        if (isConfigured) {
+            when (val result = completeChat(system, user, maxTokens = 500, temperature = 0.3)) {
+                is ChatResult.Ok -> return@withContext result.text
+                is ChatResult.Err -> {
+                    val local = generateLocal(system, user)
+                    if (local != null) return@withContext "📱 On-device LLM summary:\n\n$local"
+                    return@withContext result.message + "\n\n" + localUnavailableHint()
+                }
+            }
         }
+        val local = generateLocal(system, user)
+        if (local != null) return@withContext "📱 On-device LLM summary:\n\n$local"
+        localUnavailableHint() + "\n\nJob context available locally:\n" + buildJobContext(job).take(500)
     }
 
     private fun buildJobContext(job: Job): String = buildString {
-        appendLine("Job title: ${job.title.ifBlank { "(none)" }}")
+        appendLine("Job title: ${job.title.ifBlank { \"(none)\" }}")
         appendLine("Service type: ${job.type}")
         appendLine("Status: ${job.status}")
         appendLine("Priority: ${job.priority}")
-        appendLine("Customer: ${job.customerName.ifBlank { "(none)" }}")
-        appendLine("Address: ${job.address.ifBlank { "(none)" }}")
+        appendLine("Customer: ${job.customerName.ifBlank { \"(none)\" }}")
+        appendLine("Address: ${job.address.ifBlank { \"(none)\" }}")
         if (job.estimatedValue > 0) appendLine("Existing estimate value: $${job.estimatedValue}")
         if (job.actualCost > 0) appendLine("Actual cost so far: $${job.actualCost}")
-        appendLine("Description: ${job.description.ifBlank { "(none)" }}")
-        appendLine("Notes: ${job.notes.ifBlank { "(none)" }}")
+        appendLine("Description: ${job.description.ifBlank { \"(none)\" }}")
+        appendLine("Notes: ${job.notes.ifBlank { \"(none)\" }}")
         if (job.assignedTo.isNotBlank()) appendLine("Assigned to: ${job.assignedTo}")
     }
 
@@ -258,91 +298,30 @@ Max ~180 words. Bullet-first. No fluff.
         }
     }
 
-    fun heuristicEstimate(job: Job): EstimateDraft {
-        val blob = "${job.title} ${job.type} ${job.description} ${job.notes}".lowercase()
-        var hours = 2.0
-        var materials = 40.0
-        var equipment = 25.0
-        var disposal = 0.0
-        when {
-            blob.contains("bat") -> {
-                hours = 4.0; materials = 180.0; equipment = 60.0; disposal = 75.0
-            }
-            blob.contains("raccoon") || blob.contains("coon") -> {
-                hours = 3.0; materials = 90.0; equipment = 45.0; disposal = 40.0
-            }
-            blob.contains("squirrel") -> {
-                hours = 2.5; materials = 70.0; equipment = 30.0
-            }
-            blob.contains("skunk") -> {
-                hours = 2.0; materials = 50.0; equipment = 35.0
-            }
-            blob.contains("attic") || blob.contains("cleanout") || blob.contains("guano") -> {
-                hours = 5.0; materials = 120.0; equipment = 80.0; disposal = 150.0
-            }
-            blob.contains("exclusion") || blob.contains("seal") -> {
-                hours = 3.5; materials = 140.0; equipment = 40.0
-            }
-            blob.contains("dead") -> {
-                hours = 1.5; materials = 30.0; disposal = 60.0
-            }
-            blob.contains("inspect") -> {
-                hours = 1.0; materials = 0.0; equipment = 0.0
-            }
-        }
-        if (job.priority.name.contains("URGENT") || job.priority.name.contains("HIGH")) {
-            hours += 0.5
-        }
-        val rate = 85.0
-        val totalLabor = hours * rate
-        val sub = totalLabor + materials + equipment + disposal
-        return EstimateDraft(
-            laborHours = hours,
-            laborRate = rate,
-            materialsCost = materials,
-            equipmentCost = equipment,
-            permitCost = 0.0,
-            disposalCost = disposal,
-            mileage = 12.0,
-            mileageRate = 0.65,
-            taxRate = 8.0,
-            discountPercent = 0.0,
-            rationale = "Heuristic draft based on service type/keywords. Labor ~$${String.format("%.0f", totalLabor)}, soft subtotal ~$${String.format("%.0f", sub)} before tax.",
-            lineItemNotes = "Review exclusion materials, multi-entry points, and return visits.",
-            fromAi = false
-        )
-    }
-
-    fun heuristicSummary(job: Job): String = buildString {
-        appendLine("Overview")
-        appendLine("• ${job.title.ifBlank { "Untitled job" }} — ${job.type} (${job.status.name.replace('_', ' ')})")
-        appendLine()
-        appendLine("Customer / site")
-        appendLine("• ${job.customerName.ifBlank { "No customer" }}")
-        appendLine("• ${job.address.ifBlank { "No address" }}")
-        appendLine()
-        appendLine("Work notes")
-        appendLine("• ${(job.description.ifBlank { job.notes }.ifBlank { "No description/notes yet" }).take(400)}")
-        if (job.notes.isNotBlank() && job.description.isNotBlank()) {
-            appendLine("• Notes: ${job.notes.take(300)}")
-        }
-        appendLine()
-        appendLine("Suggested next steps")
-        appendLine("• Confirm scope and safety PPE")
-        appendLine("• Document photos / entry points")
-        appendLine("• Complete estimate and schedule follow-up if needed")
-        append("\n(Offline summary — enable XAI_API_KEY for SpaceXAI-generated detail)")
-    }
-
     private fun notConfiguredMessage(): String = buildString {
-        append("⚠️ AI not connected — key was not baked into this APK.\n\n")
+        append("⚠️ No generative AI is ready yet.\n\n")
         append(configDiagnostics())
-        append("\n\nFix:\n")
-        append("1. Get a key: https://console.x.ai\n")
-        append("2. Repo secret name must be exactly: XAI_API_KEY\n")
-        append("3. Re-run Actions → Build Native Android APK\n")
-        append("4. Install the NEW artifact (old APKs keep the old empty key)\n\n")
-        append("Offline field tips still work.")
+        append("\n\nEnable ONE of:\n")
+        append("A) On-device LLM (works offline after download)\n")
+        append("   • Open AI Assistant → Download local model\n")
+        append("   • Model: ${LocalLlmModelManager.MODEL_DISPLAY_NAME}\n")
+        append("B) Cloud LLM\n")
+        append("   • Set repo secret XAI_API_KEY and rebuild the APK\n")
+        append("\nKeyword stub / canned field-knowledge lists have been removed.")
+    }
+
+    private fun localUnavailableHint(): String = buildString {
+        append("On-device LLM is not ready.\n")
+        append(localLlm.modelStatusLabel())
+        append("\nDownload ${LocalLlmModelManager.MODEL_DISPLAY_NAME} from AI Assistant (first use ~940 MB).")
+    }
+
+    private suspend fun generateLocal(system: String, user: String): String? {
+        val result = localLlm.generate(system, user)
+        return result.getOrElse {
+            android.util.Log.w("AiService", "Local LLM generate failed: ${it.message}")
+            null
+        }
     }
 
     private fun detectModel(): String {
@@ -357,9 +336,6 @@ Max ~180 words. Bullet-first. No fluff.
     }
 
     companion object {
-        /**
-         * Full-stack wildlife ops copilot — field + office, not just species tips.
-         */
         val WILDLIFE_SYSTEM_PROMPT: String = """
 You are FieldOps AI for a professional wildlife removal / nuisance wildlife control business
 (e.g. inspections, trapping, exclusion, cleanup, repairs, follow-ups, invoicing).
@@ -382,8 +358,16 @@ Style:
 - Prefer practical US nuisance wildlife practice; note regional variation when relevant
 - Never invent licenses or claim illegal methods; prefer legal exclusion/live-trap approaches
 
-You are powered by SpaceXAI (xAI Grok) when the API key is configured.
+Prefer cloud LLM when configured; otherwise use the on-device llama.cpp (abliterated GGUF).
+Never answer with canned keyword tip lists — always generate.
 """.trimIndent()
+
+        fun cloudDiagnosticsOnly(): String = buildString {
+            append("Cloud base: ${BuildConfig.LLM_BASE_URL}\n")
+            append("Cloud model: ${BuildConfig.LLM_MODEL}\n")
+            append("Cloud key length: ${BuildConfig.LLM_KEY_LENGTH}\n")
+            append("On-device: llama.cpp (abliterated GGUF) + ${LocalLlmModelManager.MODEL_DISPLAY_NAME}")
+        }
     }
 
     private fun parseLlmResponse(body: String): String? {
@@ -405,10 +389,6 @@ You are powered by SpaceXAI (xAI Grok) when the API key is configured.
         }
     }
 
-    /**
-     * Legacy Supabase edge function path — kept for backward compatibility.
-     * Only used if SUPABASE_URL is configured AND LLM_API_KEY is not.
-     */
     suspend fun askViaSupabase(userMessage: String, species: String = ""): String = withContext(Dispatchers.IO) {
         val base = BuildConfig.SUPABASE_URL.trimEnd('/')
         if (base.contains("your-project") || BuildConfig.SUPABASE_ANON_KEY == "your-anon-key") {
@@ -447,121 +427,6 @@ You are powered by SpaceXAI (xAI Grok) when the API key is configured.
             "Network error: ${e.message}"
         } finally {
             connection.disconnect()
-        }
-    }
-
-    /**
-     * Built-in field knowledge — used as fallback when AI API is rate-limited or unavailable.
-     * Provides practical wildlife removal guidance based on keywords in the user's message.
-     */
-    private fun localFieldKnowledge(userMessage: String): String {
-        val msg = userMessage.lowercase()
-        return when {
-            msg.contains("raccoon") || msg.contains("coon") -> buildString {
-                append("Raccoon Removal Tips:\n")
-                append("• Use live traps (12x12x32) with sardines or marshmallows as bait\n")
-                append("• Check attic entry points — raccoons tear fascia boards\n")
-                append("• Rabies vector species — wear gloves, never handle bare-handed\n")
-                append("• Typical job: $300-600 (trap + exclusion)\n")
-                append("• Babies present Apr-Jun — delay eviction or use eviction fluid")
-            }
-            msg.contains("squirrel") || msg.contains("squirrels") -> buildString {
-                append("Squirrel Removal Tips:\n")
-                append("• Grey squirrels: 5x5x18 single-door live traps, peanut butter bait\n")
-                append("• Flying squirrels: Multiple small traps, entry at dusk\n")
-                append("• Check gable vents, chimney gaps, soffit edges\n")
-                append("• One-way doors work well if no babies present\n")
-                append("• Typical job: $250-450 (trap + seal entry)")
-            }
-            msg.contains("bat") || msg.contains("bats") -> buildString {
-                append("Bat Removal Tips:\n")
-                append("• Federally protected — NEVER kill, use exclusion only\n")
-                append("• Install one-way bat valves at active entry points\n")
-                append("• Active at dusk/dawn — observe flight paths\n")
-                append("• Guano = histoplasmosis risk — wear respirator (N95 min)\n")
-                append("• Typical job: $500-1500 (exclusion + cleanup)\n")
-                append("• Exclusion window: Sept-May (avoid baby season Jun-Aug)")
-            }
-            msg.contains("skunk") || msg.contains("skunks") -> buildString {
-                append("Skunk Removal Tips:\n")
-                append("• Use covered live traps — draped tarp prevents spray\n")
-                append("• Bait: sardines, cat food, or marshmallows\n")
-                append("• Approach slowly, no sudden movements\n")
-                append("• Rabies vector — wear full PPE, gloves required\n")
-                append("• Typical job: $200-400 (trap + relocation)\n")
-                append("• If sprayed: 1qt 3% H2O2 + 1/4c baking soda + 1tsp dish soap")
-            }
-            msg.contains("groundhog") || msg.contains("woodchuck") -> buildString {
-                append("Groundhog Removal Tips:\n")
-                append("• Large live trap (12x12x32), bait with fresh veggies/fruits\n")
-                append("• Check for burrows under sheds, decks, porches\n")
-                append("• Can excavate 50+ ft burrows — check foundation integrity\n")
-                append("• Typical job: $250-500 (trap + burrow fill)")
-            }
-            msg.contains("snake") || msg.contains("snakes") -> buildString {
-                append("Snake Handling Tips:\n")
-                append("• NY native species are protected — check ID before removal\n")
-                append("• Common nuisance: garter snakes, milk snakes, rat snakes\n")
-                append("• Venomous species (timber rattler, copperhead) — call DEC\n")
-                append("• Use snake tongs or pillowcase for transport\n")
-                append("• Typical job: $150-300 (ID + relocation)")
-            }
-            msg.contains("bird") || msg.contains("birds") || msg.contains("pigeon") -> buildString {
-                append("Bird Removal Tips:\n")
-                append("• Federally protected (MBTA) — exclusion only, no kill\n")
-                append("• Pigeons/starlings/sparrows: nets, spikes, exclusion\n")
-                append("• Check vents, chimney caps, roof ledges\n")
-                append("• Typical job: $300-800 (exclusion + cleanup)")
-            }
-            msg.contains("safety") || msg.contains("rabies") || msg.contains("ppe") -> buildString {
-                append("Field Safety Protocols:\n")
-                append("• Rabies vectors: raccoons, bats, skunks, foxes, coyotes\n")
-                append("• Minimum PPE: leather gloves, long sleeves, safety glasses\n")
-                append("• For bats: N95+ respirator (histoplasmosis)\n")
-                append("• Bite protocol: wash 15 min, seek immediate medical care\n")
-                append("• Vaccine: pre-exposure rabies vaccine recommended\n")
-                append("• NEVER handle wildlife bare-handed — always use tools")
-            }
-            msg.contains("trap") || msg.contains("bait") || msg.contains("equipment") -> buildString {
-                append("Trapping Equipment:\n")
-                append("• Live traps: Havahart, Tomahawk, or Safeguard\n")
-                append("• Small (5x5x18): squirrels, chipmunks\n")
-                append("• Medium (10x12x30): raccoons, opossums, cats\n")
-                append("• Large (15x15x42): groundhogs, foxes\n")
-                append("• Baits: peanut butter (universal), sardines (raccoons/skunks),\n")
-                append("  apples (deer), marshmallows (raccoons)\n")
-                append("• Always check traps every 24hrs (NY law)")
-            }
-            msg.contains("estimate") || msg.contains("price") || msg.contains("cost") || msg.contains("charge") -> buildString {
-                append("Typical Wildlife Removal Pricing (NY):\n")
-                append("• Inspection only: $75-150\n")
-                append("• Squirrel removal: $250-450\n")
-                append("• Raccoon removal: $300-600\n")
-                append("• Bat exclusion: $500-1500\n")
-                append("• Skunk removal: $200-400\n")
-                append("• Bird exclusion: $300-800\n")
-                append("• Groundhog: $250-500\n")
-                append("• Dead animal removal: $150-350\n")
-                append("• Cleanup/sanitizing: $200-500 additional")
-            }
-            msg.contains("online") || msg.contains("there") || msg.contains("hello") || msg.contains("hi") -> {
-                "I'm your Wildlife FieldOps assistant. Ask me about:\n" +
-                "• Species ID and removal techniques\n" +
-                "• Safety protocols and PPE\n" +
-                "• Equipment and trapping strategies\n" +
-                "• Pricing and estimates\n" +
-                "• Exclusion and repair methods"
-            }
-            else -> buildString {
-                append("I'm your Wildlife FieldOps assistant. I can help with:\n")
-                append("• Species-specific removal techniques\n")
-                append("• Safety protocols for rabies-vector species\n")
-                append("• Trap selection and bait recommendations\n")
-                append("• Pricing guidance for estimates\n")
-                append("• Exclusion methods and entry point sealing\n\n")
-                append("Try asking about a specific species (raccoon, squirrel, bat, skunk) ")
-                append("or a topic like safety, equipment, or pricing.")
-            }
         }
     }
 
