@@ -19,12 +19,14 @@ import javax.inject.Singleton
  * Downloads and caches the on-device **abliterated** GGUF model for llama.cpp.
  *
  * Default model (NOT a stock aligned Instruct build):
- * - Upstream weights: huihui-ai/Qwen2.5-1.5B-Instruct-abliterated
- * - Quant host: mradermacher/Qwen2.5-1.5B-Instruct-abliterated-GGUF
- * - File: Qwen2.5-1.5B-Instruct-abliterated.Q4_K_M.gguf (~986 MB, public / not gated)
+ * - Upstream weights: huihui-ai/Huihui-Qwen3.5-0.8B-abliterated
+ * - Quant host: mradermacher/Huihui-Qwen3.5-0.8B-abliterated-GGUF
+ * - File: Huihui-Qwen3.5-0.8B-abliterated.Q4_K_M.gguf (~503 MB / 527,503,840 bytes, public / not gated)
  *
- * Abliteration removes refusal / safety-alignment directions so the local assistant
- * generates freely for field ops instead of stock Instruct refusals.
+ * This is the app's primary baked-in default on-device model (download-once to app files;
+ * not APK-assets because ~503 MB exceeds practical APK size). Abliteration removes
+ * refusal / safety-alignment directions so the local assistant generates freely for
+ * field ops instead of stock Instruct refusals.
  */
 @Singleton
 class LocalLlmModelManager @Inject constructor(
@@ -59,8 +61,9 @@ class LocalLlmModelManager @Inject constructor(
 
     fun refreshState() {
         val file = modelFile()
-        // Drop leftover MediaPipe .task from earlier builds if present.
+        // Drop leftover MediaPipe .task / previous default GGUF from earlier builds.
         File(modelsDir, LEGACY_MEDIAPIPE_TASK).takeIf { it.exists() }?.delete()
+        File(modelsDir, LEGACY_QWEN25_15B_GGUF).takeIf { it.exists() }?.delete()
         _state.value = when {
             file.exists() && file.length() >= MIN_VALID_BYTES -> ModelState.Ready(file.absolutePath)
             else -> ModelState.Missing
@@ -163,21 +166,24 @@ class LocalLlmModelManager @Inject constructor(
     companion object {
         private const val TAG = "LocalLlmModelManager"
 
-        /** Abliterated upstream (huihui-ai) + mradermacher GGUF quant. */
-        const val MODEL_BASE = "huihui-ai/Qwen2.5-1.5B-Instruct-abliterated"
-        const val MODEL_REPO = "mradermacher/Qwen2.5-1.5B-Instruct-abliterated-GGUF"
-        const val MODEL_FILE_NAME = "Qwen2.5-1.5B-Instruct-abliterated.Q4_K_M.gguf"
+        /** Default on-device model: Qwen3.5 0.8B abliterated (huihui-ai) + mradermacher GGUF. */
+        const val MODEL_BASE = "huihui-ai/Huihui-Qwen3.5-0.8B-abliterated"
+        const val MODEL_REPO = "mradermacher/Huihui-Qwen3.5-0.8B-abliterated-GGUF"
+        const val MODEL_FILE_NAME = "Huihui-Qwen3.5-0.8B-abliterated.Q4_K_M.gguf"
         const val MODEL_QUANT = "Q4_K_M"
         const val MODEL_DISPLAY_NAME =
-            "Qwen2.5-1.5B-Instruct-abliterated (Q4_K_M GGUF)"
+            "Qwen3.5-0.8B-abliterated (Huihui Q4_K_M GGUF)"
         const val MODEL_URL =
-            "https://huggingface.co/mradermacher/Qwen2.5-1.5B-Instruct-abliterated-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-abliterated.Q4_K_M.gguf"
+            "https://huggingface.co/mradermacher/Huihui-Qwen3.5-0.8B-abliterated-GGUF/resolve/main/Huihui-Qwen3.5-0.8B-abliterated.Q4_K_M.gguf"
 
-        /** Published Content-Length from Hugging Face CDN. */
-        const val EXPECTED_BYTES = 986_049_088L
-        const val MIN_VALID_BYTES = 50L * 1024L * 1024L
+        /** Exact file size from Hugging Face LFS (Q4_K_M). */
+        const val EXPECTED_BYTES = 527_503_840L
+        /** ~503 MB model; allow smaller floor for incomplete-download detection. */
+        const val MIN_VALID_BYTES = 80L * 1024L * 1024L
 
         private const val LEGACY_MEDIAPIPE_TASK =
             "Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task"
+        private const val LEGACY_QWEN25_15B_GGUF =
+            "Qwen2.5-1.5B-Instruct-abliterated.Q4_K_M.gguf"
     }
 }

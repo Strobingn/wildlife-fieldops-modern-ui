@@ -33,7 +33,7 @@ class AiAssistantViewModel @Inject constructor(
         append("Canned keyword / \"field knowledge\" stub lists have been removed.\n\n")
         append(aiService.configDiagnostics())
         if (!aiService.isConfigured && !localLlm.isReady) {
-            append("\n\n⬇ Tap \"Download local model\" below (~940 MB, one-time) to enable offline generative AI.")
+            append("\n\n⬇ Tap \"Download local model\" below (~503 MB, one-time) to install the default Qwen3.5-0.8B abliterated GGUF.")
         }
     }
 

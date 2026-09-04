@@ -75,16 +75,16 @@ The chat / estimate / summary paths never answer from hardcoded keyword tip list
 - Bake `XAI_API_KEY` (or `LLM_API_KEY`) into the APK at build time for SpaceXAI / Grok.
 - Optional: deploy Supabase Edge Function `ai-assistant` with a real provider key (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`, etc.). Demo/canned responses are disabled when no key is set.
 
-### On-device llama.cpp + **abliterated** GGUF
+### On-device llama.cpp + **abliterated** GGUF (default: Qwen3.5 0.8B)
 - Stack: [`dev.ffmpegkit-maintained:llama-android:0.1.1`](https://central.sonatype.com/artifact/dev.ffmpegkit-maintained/llama-android) (prebuilt llama.cpp JNI, no NDK in this app).
-- **Default model is abliterated (not stock Instruct / refusal-trained):**
-  - Upstream: [`huihui-ai/Qwen2.5-1.5B-Instruct-abliterated`](https://huggingface.co/huihui-ai/Qwen2.5-1.5B-Instruct-abliterated)
-  - Quant repo: [`mradermacher/Qwen2.5-1.5B-Instruct-abliterated-GGUF`](https://huggingface.co/mradermacher/Qwen2.5-1.5B-Instruct-abliterated-GGUF)
-  - File / quant: **`Qwen2.5-1.5B-Instruct-abliterated.Q4_K_M.gguf`** (~986 MB, public, not gated)
-- First launch: open **AI Assistant** → **Download local model**. Progress UI is shown. Cached at:
-  - `files/local_llm/Qwen2.5-1.5B-Instruct-abliterated.Q4_K_M.gguf`
+- **Default on-device model is abliterated Qwen3.5 0.8B (not stock Instruct / refusal-trained):**
+  - Upstream: [`huihui-ai/Huihui-Qwen3.5-0.8B-abliterated`](https://huggingface.co/huihui-ai/Huihui-Qwen3.5-0.8B-abliterated)
+  - Quant repo: [`mradermacher/Huihui-Qwen3.5-0.8B-abliterated-GGUF`](https://huggingface.co/mradermacher/Huihui-Qwen3.5-0.8B-abliterated-GGUF)
+  - File / quant: **`Huihui-Qwen3.5-0.8B-abliterated.Q4_K_M.gguf`** (exact size **527,503,840** bytes ≈ **503 MB**, public, not gated)
+- Delivery: **primary baked-in default** via download-once (too large for APK `assets/`). Open **AI Assistant** → **Download local model**. Progress UI is shown. Cached at:
+  - `files/local_llm/Huihui-Qwen3.5-0.8B-abliterated.Q4_K_M.gguf`
 - Abliteration removes safety-refusal directions so the field assistant generates freely instead of stock chat refusals.
-- Build notes: no NDK/CMake. Native libs ship for **`arm64-v8a`** (use a 64-bit ARM phone). `android:largeHeap` is enabled; prefer ≥6 GB RAM.
+- Build notes: no NDK/CMake. Native libs ship for **`arm64-v8a`** (use a 64-bit ARM phone). `android:largeHeap` is enabled; prefer ≥4 GB RAM for the 0.8B quant.
 - To point at another abliterated GGUF, change `LocalLlmModelManager.MODEL_URL` / `MODEL_FILE_NAME`.
 
 ### Priority order

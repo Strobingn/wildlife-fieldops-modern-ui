@@ -15,7 +15,7 @@ import javax.inject.Singleton
 
 /**
  * Real on-device LLM via llama.cpp (ffmpegkit-maintained llama-android AAR).
- * Loads the abliterated Qwen2.5-1.5B Q4_K_M GGUF — not a stock refusal-trained Instruct.
+ * Loads the default abliterated Qwen3.5-0.8B Q4_K_M GGUF — not a stock refusal-trained Instruct.
  */
 @Singleton
 class LocalLlmEngine @Inject constructor(
@@ -50,7 +50,7 @@ class LocalLlmEngine @Inject constructor(
             return@withContext Result.failure(
                 IllegalStateException(
                     "Local abliterated GGUF not installed. Open AI Assistant and tap Download local model " +
-                        "(${LocalLlmModelManager.MODEL_DISPLAY_NAME}, ~940 MB)."
+                        "(${LocalLlmModelManager.MODEL_DISPLAY_NAME}, ~503 MB)."
                 )
             )
         }
