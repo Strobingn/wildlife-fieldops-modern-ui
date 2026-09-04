@@ -90,7 +90,6 @@ class AiService @Inject constructor(
         append("\nLocal model source: Hugging Face ${LocalLlmModelManager.MODEL_REPO}")
     }
 
-
     /**
      * SpaceXAI (xAI Grok) by default — OpenAI-compatible chat completions.
      * Env: XAI_API_KEY (preferred) or LLM_API_KEY; base https://api.x.ai/v1; model grok-4.5.
@@ -100,7 +99,6 @@ class AiService @Inject constructor(
             if (species.isNotBlank()) append("Species context: $species\n")
             append(userMessage)
         }
-        // 1) Cloud LLM when key is present
         if (isConfigured) {
             when (val result = completeChat(WILDLIFE_SYSTEM_PROMPT, userPrompt, maxTokens = 900, temperature = 0.35)) {
                 is ChatResult.Ok -> return@withContext result.text
@@ -114,19 +112,13 @@ class AiService @Inject constructor(
                 }
             }
         }
-        // 2) Real on-device LLM (never keyword stubs)
         val local = generateLocal(WILDLIFE_SYSTEM_PROMPT, userPrompt)
         if (local != null) {
             return@withContext "📱 On-device LLM (${LocalLlmModelManager.MODEL_DISPLAY_NAME}):\n\n$local"
         }
-        // 3) Honest setup guidance — no fake field-knowledge lists
         notConfiguredMessage()
     }
 
-    /**
-     * Draft estimate numbers from job title, type, description, and notes.
-     * Fills the Estimate Calculator fields. Falls back to heuristics offline.
-     */
     suspend fun draftEstimateFromJob(job: Job): EstimateDraft = withContext(Dispatchers.IO) {
         val system = """
 You are a wildlife removal estimator. Return ONLY valid JSON (no markdown fences) with these number fields:
@@ -170,9 +162,6 @@ Rules:
         )
     }
 
-    /**
-     * Auto job summary for handoff, invoice notes, or office review.
-     */
     suspend fun summarizeJob(job: Job): String = withContext(Dispatchers.IO) {
         val system = """
 You write concise wildlife-control job summaries for field/office handoff.
@@ -202,16 +191,17 @@ Max ~180 words. Bullet-first. No fluff.
     }
 
     private fun buildJobContext(job: Job): String = buildString {
-        appendLine("Job title: ${job.title.ifBlank { \"(none)\" }}")
+        val missing = "(none)"
+        appendLine("Job title: ${job.title.ifBlank { missing }}")
         appendLine("Service type: ${job.type}")
         appendLine("Status: ${job.status}")
         appendLine("Priority: ${job.priority}")
-        appendLine("Customer: ${job.customerName.ifBlank { \"(none)\" }}")
-        appendLine("Address: ${job.address.ifBlank { \"(none)\" }}")
+        appendLine("Customer: ${job.customerName.ifBlank { missing }}")
+        appendLine("Address: ${job.address.ifBlank { missing }}")
         if (job.estimatedValue > 0) appendLine("Existing estimate value: $${job.estimatedValue}")
         if (job.actualCost > 0) appendLine("Actual cost so far: $${job.actualCost}")
-        appendLine("Description: ${job.description.ifBlank { \"(none)\" }}")
-        appendLine("Notes: ${job.notes.ifBlank { \"(none)\" }}")
+        appendLine("Description: ${job.description.ifBlank { missing }}")
+        appendLine("Notes: ${job.notes.ifBlank { missing }}")
         if (job.assignedTo.isNotBlank()) appendLine("Assigned to: ${job.assignedTo}")
     }
 
