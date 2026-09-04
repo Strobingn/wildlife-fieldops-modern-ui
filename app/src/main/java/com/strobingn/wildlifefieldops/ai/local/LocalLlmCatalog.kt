@@ -3,8 +3,9 @@ package com.strobingn.wildlifefieldops.ai.local
 /**
  * On-device models in LiteRT-LM (.litertlm) format.
  *
- * Default (Qwen3.5 0.8B abliterated) is baked into the APK assets by CI
- * and copied to app storage on first launch. Other models download on demand.
+ * Default is the public official Qwen3.5 0.8B LiteRT bundle. The gated
+ * g-ntovas abliterated LiteRT file 401s without accepted HF access, so it
+ * is no longer the bake target.
  */
 data class LocalLlmSpec(
     val id: String,
@@ -28,17 +29,28 @@ data class LocalLlmSpec(
 }
 
 object LocalLlmCatalog {
+    val QWEN35_08B = LocalLlmSpec(
+        id = "qwen35-0.8b",
+        displayName = "Qwen3.5 0.8B",
+        shortLabel = "Qwen 0.8B",
+        fileName = "Qwen3.5-0.8B_int8.litertlm",
+        downloadUrl = "https://huggingface.co/litert-community/Qwen3.5-0.8B/resolve/main/Qwen3.5-0.8B_int8.litertlm",
+        expectedBytes = 1_010_000_000L,
+        license = "Apache-2.0",
+        notes = "Default. Public official LiteRT conversion. Baked into the APK. No Hugging Face login required.",
+        bakedInDefault = true
+    )
+
     val QWEN35_08B_ABLITERATED = LocalLlmSpec(
         id = "qwen35-0.8b-abliterated",
-        displayName = "Qwen3.5 0.8B abliterated",
+        displayName = "Qwen3.5 0.8B abliterated (gated)",
         shortLabel = "Qwen 0.8B abl",
         fileName = "qwen35_0.8b_abl_mm_q8_ekv4096.litertlm",
         downloadUrl = "https://huggingface.co/g-ntovas/Qwen3.5-0.8B-abliterated-LiteRT/resolve/main/qwen35_0.8b_abl_mm_q8_ekv4096.litertlm",
         expectedBytes = 1_180_000_000L,
         license = "Apache-2.0",
-        notes = "Default. Baked into the APK. Community LiteRT conversion with refusal direction removed.",
-        abliterated = true,
-        bakedInDefault = true
+        notes = "Gated Hugging Face repo. Accept access on the model page, then download in Settings.",
+        abliterated = true
     )
 
     val QWEN3_06B = LocalLlmSpec(
@@ -88,6 +100,7 @@ object LocalLlmCatalog {
     )
 
     val ALL: List<LocalLlmSpec> = listOf(
+        QWEN35_08B,
         QWEN35_08B_ABLITERATED,
         QWEN3_06B,
         GEMMA4_E2B,
@@ -95,9 +108,9 @@ object LocalLlmCatalog {
         GEMMA4_E2B_UNCENSORED
     )
 
-    const val DEFAULT_ID: String = "qwen35-0.8b-abliterated"
+    const val DEFAULT_ID: String = "qwen35-0.8b"
 
-    val DEFAULT: LocalLlmSpec = QWEN35_08B_ABLITERATED
+    val DEFAULT: LocalLlmSpec = QWEN35_08B
 
     fun byId(id: String?): LocalLlmSpec =
         ALL.firstOrNull { it.id == id } ?: DEFAULT
