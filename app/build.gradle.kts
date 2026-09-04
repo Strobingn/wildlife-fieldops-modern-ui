@@ -1,9 +1,10 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
     id("dagger.hilt.android.plugin")
-    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 android {
@@ -14,18 +15,14 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 15
-        versionName = "2.2.0-qwen35-abl-bake"
+        versionCode = 16
+        versionName = "2.2.1-qwen35-litert"
 
-        // Real keys from env/secrets (Supabase + Maps hooked)
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
         val supabaseKey = System.getenv("SUPABASE_ANON_KEY") ?: "your-anon-key"
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseKey\"")
 
-        // Normalize the repository secret into the native Gradle variable. The
-        // VITE name is supported because it is the existing documented secret;
-        // GOOGLE_MAPS_API remains the preferred native/local name.
         val mapsKey = sequenceOf(
             "GOOGLE_MAPS_API",
             "GOOGLE_MAPS_API_KEY",
@@ -39,8 +36,6 @@ android {
         val weatherKey = System.getenv("OPENWEATHER_API_KEY") ?: ""
         buildConfigField("String", "OPENWEATHER_API_KEY", "\"$weatherKey\"")
 
-        // SpaceXAI (xAI Grok) — keys are baked in at BUILD time from CI env / secrets.
-        // Prefer XAI_API_KEY; LLM_API_KEY is a fallback alias.
         fun envTrim(name: String): String =
             System.getenv(name)?.trim()?.trim('"')?.trim('\'').orEmpty()
         fun escapeBuildConfig(value: String): String =
@@ -58,7 +53,6 @@ android {
             .ifBlank { envTrim("XAI_MODEL") }
             .ifBlank { "grok-4.5" }
 
-        // Log presence only (never the key) so CI makes missing secrets obvious.
         logger.lifecycle(
             "LLM config: keyChars=${llmKey.length} base=$llmBase model=$llmModel " +
                 "(XAI_API_KEY ${if (envTrim("XAI_API_KEY").isNotEmpty()) "set" else "empty"}, " +
@@ -69,12 +63,10 @@ android {
         buildConfigField("String", "LLM_BASE_URL", "\"${escapeBuildConfig(llmBase)}\"")
         buildConfigField("String", "LLM_MODEL", "\"${escapeBuildConfig(llmModel)}\"")
         buildConfigField("int", "LLM_KEY_LENGTH", "${llmKey.length}")
-        buildConfigField("String", "BUNDLED_LOCAL_LLM_ID", "\"qwen35-0.8b-abliterated\"")
+        buildConfigField("String", "BUNDLED_LOCAL_LLM_ID", "\"qwen35-0.8b\"")
 
-        // Manifest placeholder for Google Maps meta-data
         manifestPlaceholders["GOOGLE_MAPS_API"] = mapsKey
 
-        // Help 16 KB page-size devices (Android 15 / many S24 Ultra builds)
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
         }
@@ -94,7 +86,7 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false // keep install simple until Play release signing is set
+            isMinifyEnabled = false
             isShrinkResources = false
             val keystorePath = System.getenv("KEYSTORE_PATH")
             if (keystorePath != null && file(keystorePath).exists()) {
@@ -103,17 +95,12 @@ android {
         }
         debug {
             isDebuggable = true
-            // No applicationIdSuffix — one package name for installs on your phone
         }
     }
 
     buildFeatures {
         compose = true
         buildConfig = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.10"
     }
 
     kotlin {
@@ -127,7 +114,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    // Do not compress the baked .litertlm — LiteRT needs mmap and first-run extract is faster.
     androidResources {
         noCompress += "litertlm"
     }
@@ -146,24 +132,22 @@ android {
             )
         }
         jniLibs {
-            // Uncompressed native libs — better compatibility on Android 15 page-size devices
             useLegacyPackaging = false
         }
     }
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
-    implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
-    implementation("androidx.activity:activity-compose:1.8.2")
-    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.appcompat:appcompat:1.7.0")
 
-    // Keep BOM aligned with Kotlin 1.9.22 / compose compiler 1.5.10
-    val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
+    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)
     androidTestImplementation(composeBom)
     implementation("androidx.compose.ui:ui")
@@ -173,18 +157,18 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.foundation:foundation")
 
-    implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation("androidx.navigation:navigation-compose:2.8.5")
 
     val roomVersion = "2.6.1"
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
 
-    implementation("com.google.dagger:hilt-android:2.50")
-    ksp("com.google.dagger:hilt-android-compiler:2.50")
-    implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
+    implementation("com.google.dagger:hilt-android:2.56.2")
+    ksp("com.google.dagger:hilt-android-compiler:2.56.2")
+    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
-    implementation("androidx.datastore:datastore-preferences:1.0.0")
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
 
     implementation("com.google.android.gms:play-services-maps:18.2.0")
     implementation("com.google.maps.android:maps-compose:4.3.0")
@@ -192,12 +176,9 @@ dependencies {
     implementation("com.google.mlkit:image-labeling:17.0.9")
     implementation("com.google.mlkit:object-detection:17.0.2")
 
-    // On-device LLM runtime (Qwen3.5 0.8B abliterated baked into assets by CI)
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.1")
 
     implementation("io.coil-kt:coil-compose:2.5.0")
-
-    // Splash screen + animations
     implementation("androidx.core:core-splashscreen:1.0.1")
 
     val supabaseVersion = "2.6.1"
