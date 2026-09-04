@@ -3,9 +3,6 @@ package com.strobingn.wildlifefieldops.ui.screens
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Paint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -43,24 +40,6 @@ import com.strobingn.wildlifefieldops.ui.viewmodel.MapViewModel
 import com.google.maps.android.compose.MapType
 import kotlinx.coroutines.delay
 
-
-private fun createMonochromeMarkerIcon(status: JobStatus): com.google.android.gms.maps.model.BitmapDescriptor {
-    val size = 48
-    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap)
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = when (status) {
-            JobStatus.PENDING -> android.graphics.Color.rgb(170, 170, 170)
-            JobStatus.IN_PROGRESS -> android.graphics.Color.rgb(115, 115, 115)
-            JobStatus.COMPLETED -> android.graphics.Color.rgb(55, 55, 55)
-            JobStatus.INVOICED -> android.graphics.Color.rgb(80, 80, 80)
-            JobStatus.PAID -> android.graphics.Color.rgb(25, 25, 25)
-            JobStatus.CANCELLED -> android.graphics.Color.rgb(145, 145, 145)
-        }
-    }
-    canvas.drawCircle(size / 2f, size / 2f, size * 0.32f, paint)
-    return com.google.android.gms.maps.model.BitmapDescriptorFactory.fromBitmap(bitmap)
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

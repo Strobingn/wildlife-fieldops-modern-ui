@@ -252,6 +252,27 @@ Do NOT invent mileage or taxRate. Use the provided measured miles and tax percen
 You are FieldOps AI for a professional wildlife removal business.
 Concise, bullet-first, field-readable. Flag safety risks. Prefer legal exclusion/live-trap approaches.
 """.trimIndent()
+
+        /** Static cloud+model diagnostics for Settings (no Hilt injection required). */
+        fun cloudDiagnosticsOnly(): String = buildString {
+            val apiKey = BuildConfig.LLM_API_KEY.trim()
+            val configured = apiKey.isNotBlank() && apiKey.length >= 10
+            val base = BuildConfig.LLM_BASE_URL.lowercase()
+            val provider = when {
+                base.contains("x.ai") -> "SpaceXAI (Grok)"
+                base.contains("openai") -> "OpenAI"
+                else -> "LLM"
+            }
+            append("Cloud provider: $provider\n")
+            append("Cloud base: ${BuildConfig.LLM_BASE_URL}\n")
+            append("Cloud model: ${BuildConfig.LLM_MODEL}\n")
+            append("Cloud key baked into APK: ")
+            if (configured) append("yes (${BuildConfig.LLM_KEY_LENGTH} chars)")
+            else append("NO — rebuild after setting secret XAI_API_KEY")
+            append("\nLocal model: ${LocalLlmModelManager.MODEL_DISPLAY_NAME}")
+            append("\nLocal model file: ${LocalLlmModelManager.MODEL_FILE_NAME}")
+            append("\nLocal model source: Hugging Face ${LocalLlmModelManager.MODEL_REPO}")
+        }
     }
 
     private fun parseLlmResponse(body: String): String? = try {
