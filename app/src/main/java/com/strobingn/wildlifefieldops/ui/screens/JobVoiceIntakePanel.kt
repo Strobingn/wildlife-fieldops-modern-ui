@@ -1,4 +1,5 @@
 package com.strobingn.wildlifefieldops.ui.screens
+
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -26,6 +27,10 @@ import androidx.core.content.ContextCompat
 import com.strobingn.wildlifefieldops.data.remote.JobIntakeDraft
 import com.strobingn.wildlifefieldops.ui.theme.*
 import java.util.Locale
+
+/**
+ * Dictate → AI Fill Job panel for New Job form (SpeechRecognizer accumulation + local-first parse).
+ */
 @Composable
 fun JobVoiceIntakePanel(
     aiFillLoading: Boolean,
@@ -40,17 +45,20 @@ fun JobVoiceIntakePanel(
     var isListening by remember { mutableStateOf(false) }
     var dictationError by remember { mutableStateOf<String?>(null) }
     var speechPartial by remember { mutableStateOf("") }
+
     val speechRecognizer = remember {
         if (SpeechRecognizer.isRecognitionAvailable(context)) {
             SpeechRecognizer.createSpeechRecognizer(context)
         } else null
     }
+
     fun buildIntent(): Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
         putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
     }
+
     fun startListening() {
         val sr = speechRecognizer ?: run {
             dictationError = "Speech recognition not available on this device"
@@ -105,16 +113,19 @@ fun JobVoiceIntakePanel(
             dictationError = e.message ?: "Failed to start listening"
         }
     }
+
     fun stopListening() {
         isListening = false
         speechPartial = ""
         try { speechRecognizer?.stopListening() } catch (_: Exception) {}
     }
+
     DisposableEffect(Unit) {
         onDispose {
             try { speechRecognizer?.destroy() } catch (_: Exception) {}
         }
     }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -124,6 +135,7 @@ fun JobVoiceIntakePanel(
             isListening = false
         }
     }
+
     fun toggleDictate() {
         if (isListening) stopListening()
         else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
@@ -131,6 +143,7 @@ fun JobVoiceIntakePanel(
         ) startListening()
         else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
+
     Card(
         colors = CardDefaults.cardColors(containerColor = BackgroundElevated),
         shape = RoundedCornerShape(12.dp),
