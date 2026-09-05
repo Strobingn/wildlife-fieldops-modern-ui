@@ -7,7 +7,9 @@ import com.strobingn.wildlifefieldops.data.local.VisitDao
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.data.model.Visit
+import com.strobingn.wildlifefieldops.data.remote.AiService
 import com.strobingn.wildlifefieldops.data.remote.GeocodingService
+import com.strobingn.wildlifefieldops.data.remote.JobIntakeDraft
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -17,7 +19,8 @@ import javax.inject.Inject
 class JobsViewModel @Inject constructor(
     private val jobDao: JobDao,
     private val visitDao: VisitDao,
-    private val geocodingService: GeocodingService
+    private val geocodingService: GeocodingService,
+    private val aiService: AiService
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -236,4 +239,44 @@ class JobsViewModel @Inject constructor(
         }
         onSaved()
     }
+
+    private val _aiFillLoading = MutableStateFlow(false)
+    val aiFillLoading = _aiFillLoading.asStateFlow()
+
+    private val _aiFillError = MutableStateFlow<String?>(null)
+    val aiFillError = _aiFillError.asStateFlow()
+
+    private val _aiFillSource = MutableStateFlow<String?>(null)
+    val aiFillSource = _aiFillSource.asStateFlow()
+
+    fun clearAiFillError() {
+        _aiFillError.value = null
+    }
+
+    fun fillJobFromDictation(
+        transcript: String,
+        onFilled: (JobIntakeDraft) -> Unit
+    ) {
+        if (_aiFillLoading.value) return
+        val text = transcript.trim()
+        if (text.isBlank()) {
+            _aiFillError.value = "Dictate job details first, then tap AI Fill Job."
+            return
+        }
+        _aiFillLoading.value = true
+        _aiFillError.value = null
+        _aiFillSource.value = null
+        viewModelScope.launch {
+            val result = aiService.parseJobFromDictation(text)
+            _aiFillLoading.value = false
+            if (result.draft != null) {
+                _aiFillSource.value = result.sourceLabel
+                onFilled(result.draft)
+            } else {
+                _aiFillError.value = result.error ?: "AI job fill failed."
+            }
+        }
+    }
+
+
 }
