@@ -1,1 +1,1 @@
-PLACEHOLDER_REPLACE
+@file:///tmp/c.txt
