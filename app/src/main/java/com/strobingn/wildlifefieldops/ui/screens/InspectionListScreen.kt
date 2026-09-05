@@ -105,13 +105,13 @@ fun InspectionListScreen(
                                         modifier = Modifier.size(36.dp)
                                     )
                                 },
-                                title = "No inspections found",
-                                subtitle = "Create an inspection to get started",
+                                title = if (searchQuery.isBlank()) "No inspections yet" else "No matches",
+                                subtitle = if (searchQuery.isBlank()) "Tap + to create, or open Inspect from a Job" else "Try a different search",
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
                     } else {
-                        itemsIndexed(inspections) { index, inspection ->
+                        itemsIndexed(inspections, key = { _, insp -> insp.id }) { index, inspection ->
                             FadeSlideIn(index = index) {
                                 InspectionListItem(
                                     inspection = inspection,
@@ -162,6 +162,13 @@ private fun InspectionListItem(inspection: Inspection, onClick: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
+                    if (inspection.jobId.isNotBlank()) {
+                        Text(
+                            "Job · " + inspection.jobId.take(8) + "…",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = AccentBlue
+                        )
+                    }
                 }
                 if (inspection.severity != FindingSeverity.NONE) {
                     Box(
