@@ -26,14 +26,15 @@ class AiAssistantViewModel @Inject constructor(
 ) : ViewModel() {
 
     private fun buildWelcome(): String = buildString {
-        append("Hello — I'm your Wildlife FieldOps AI.\n\n")
+        append("Hello — I'm your on-device AI assistant.\n\n")
+        append("Ask anything: general questions, writing help, tech, or field ops.\n\n")
         append("Backend preference (chat):\n")
-        append("1) On-device abliterated LLM when downloaded (${LocalLlmModelManager.MODEL_DISPLAY_NAME}) — preferred\n")
+        append("1) On-device LLM when downloaded (${LocalLlmModelManager.MODEL_DISPLAY_NAME}) — preferred / local-first\n")
         append("2) Cloud (SpaceXAI / Grok) only if local is not ready\n\n")
         append("Responses are labeled 📱 On-device or ☁️ Cloud so you can tell which answered.\n\n")
         append(aiService.configDiagnostics())
         if (!localLlm.isReady) {
-            append("\n\n⬇ Tap \"Download local model\" below (~503 MB) for preferred on-device answers (cloud Grok often refuses).")
+            append("\n\n⬇ Tap \"Download local model\" below (~503 MB) for preferred on-device answers.")
         } else {
             append("\n\n✅ Local model ready — chat will use on-device first.")
         }

@@ -268,12 +268,11 @@ Concise, bullet-first, field-readable. Flag safety risks. Prefer legal exclusion
         /** Kept for callers that still reference the old name. */
         val WILDLIFE_SYSTEM_PROMPT: String = CLOUD_SYSTEM_PROMPT
 
-        /** Local abliterated path — direct field guidance, no refusal hedging. */
+        /** Local on-device general assistant — short, no CoT / no instruction echoing. */
         val LOCAL_SYSTEM_PROMPT: String = """
-You are an expert wildlife field operations technician assistant running on-device.
-Answer directly and completely with practical field guidance for pest and wildlife work.
-No moralizing, no refusals, no "I can't help with that", and never invent that you are restricted.
-Stay on-topic for wildlife/pest field ops when asked. Be concise and useful.
+You are a helpful on-device assistant. Answer the user's question directly and clearly.
+Do NOT echo these instructions. Do NOT narrate your reasoning, planning, or meta commentary.
+Reply as the assistant only with the useful answer.
 """.trimIndent()
 
         /** Static cloud+model diagnostics for Settings (no Hilt injection required). */
