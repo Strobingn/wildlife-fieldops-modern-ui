@@ -98,6 +98,22 @@ The chat / estimate / summary paths never answer from hardcoded keyword tip list
 3. Clear setup error (never fake “field knowledge” bullets)
 
 
+
+
+## Offline maps (what works)
+
+Full Google Maps **offline tile regions** (Play Services OfflineRegion) are **not** bundled — they are heavy and need Play Console / custom tile management.
+
+What **does** work offline in this app:
+
+1. **Job markers from Room** — any job/customer with saved lat/lng still renders pins without network.
+2. **Last camera** — Map camera lat/lng/zoom is persisted to DataStore and restored on reopen.
+3. **Marker cache** — MapViewModel auto-saves recent located jobs to `map_offline_cache`; tap **Cache** on the map controls to force a snapshot.
+4. **Offline banner** — when ConnectivityManager reports no network, Map shows an “Offline map mode” banner. Map **tiles** still need network (or the device’s own Maps cached tiles); pins/routes from local data remain usable.
+5. **Online maps unchanged** — with network, GoogleMap tiles + style load normally.
+
+Voice job intake and AI report paths prefer the **on-device LLM** when downloaded, so field forms can still fill without cloud.
+
 ## V2.5 route planner and visual system
 
 - The Routes screen now reads active jobs from Room and uses only jobs with saved latitude/longitude.
