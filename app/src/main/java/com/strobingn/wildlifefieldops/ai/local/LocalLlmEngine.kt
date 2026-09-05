@@ -15,7 +15,7 @@ import javax.inject.Singleton
 
 /**
  * Real on-device LLM via llama.cpp (ffmpegkit-maintained llama-android AAR).
- * Loads the default abliterated Qwen3.5-0.8B Q4_K_M GGUF — not a stock refusal-trained Instruct.
+ * Loads the selected abliterated Qwen2.5 Instruct Q4_K_M GGUF (default 3B; optional 7B v3).
  *
  * Formats prompts with explicit ChatML (Qwen instruct) because some abliterated GGUFs lack a
  * usable embedded chat template; the AAR then falls back to plain system+user concat and the
@@ -35,13 +35,41 @@ class LocalLlmEngine @Inject constructor(
 
     fun modelStatusLabel(): String = modelManager.statusLabel()
 
-    suspend fun ensureReady(forceRedownload: Boolean = false): Result<Unit> {
-        val fileResult = modelManager.ensureModel(forceRedownload)
+    /** Unload the in-memory llama model (call when switching GGUF selection). */
+    suspend fun unload() = mutex.withLock {
+        closeUnlocked()
+    }
+
+    suspend fun ensureReady(
+        forceRedownload: Boolean = false,
+        option: LocalLlmOption? = null
+    ): Result<Unit> {
+        val target = option ?: modelManager.selected
+        if (option != null && option.id != modelManager.selected.id) {
+            unload()
+            modelManager.selectModel(option.id)
+        }
+        val fileResult = modelManager.ensureModel(forceRedownload, modelManager.selected)
         if (fileResult.isFailure) {
             return Result.failure(fileResult.exceptionOrNull() ?: IllegalStateException("Model missing"))
         }
         return mutex.withLock {
             openUnlocked(fileResult.getOrThrow().absolutePath)
+        }
+    }
+
+    /**
+     * Switch selected catalog model, unload previous weights, optionally start download/load.
+     */
+    suspend fun switchModel(optionId: String, downloadIfNeeded: Boolean = true): Result<Unit> {
+        val option = modelManager.optionById(optionId)
+            ?: return Result.failure(IllegalArgumentException("Unknown model id: $optionId"))
+        unload()
+        modelManager.selectModel(option.id)
+        return if (downloadIfNeeded || modelManager.isModelReady(option)) {
+            ensureReady(forceRedownload = false, option = option)
+        } else {
+            Result.success(Unit)
         }
     }
 
@@ -51,10 +79,11 @@ class LocalLlmEngine @Inject constructor(
         maxTokens: Int = 512
     ): Result<String> = withContext(Dispatchers.Default) {
         if (!modelManager.isModelReady()) {
+            val sel = modelManager.selected
             return@withContext Result.failure(
                 IllegalStateException(
                     "Local abliterated GGUF not installed. Open AI Assistant and tap Download local model " +
-                        "(${LocalLlmModelManager.MODEL_DISPLAY_NAME}, ~503 MB)."
+                        "(${sel.displayName}, ${sel.approxSizeLabel})."
                 )
             )
         }

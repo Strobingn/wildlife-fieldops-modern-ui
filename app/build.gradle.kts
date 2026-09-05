@@ -14,8 +14,8 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 21
-        versionName = "2.2.3-dictate-inspect"
+        versionCode = 22
+        versionName = "2.2.4-local-llm-3b7b"
 
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
         val supabaseKey = System.getenv("SUPABASE_ANON_KEY") ?: "your-anon-key"
@@ -186,7 +186,7 @@ dependencies {
 
     implementation("com.google.code.gson:gson:2.10.1")
 
-    // On-device generative LLM (llama.cpp + abliterated Qwen2.5-1.5B GGUF)
+    // On-device generative LLM (llama.cpp + abliterated Qwen2.5-3B/7B GGUF)
     implementation("dev.ffmpegkit-maintained:llama-android:0.1.1")
 
     testImplementation("junit:junit:4.13.2")

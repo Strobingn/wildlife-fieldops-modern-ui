@@ -21,7 +21,7 @@ fun SettingsAiDiagnosticsBlock() {
     Text("AI (cloud + on-device LLM)", color = TextPrimary, style = MaterialTheme.typography.labelMedium)
     Text(aiDiag, color = TextTertiary, style = MaterialTheme.typography.bodySmall)
     Text(
-        "Open AI Assistant to download the default Qwen3.5-0.8B abliterated GGUF for offline generative answers.",
+        "Open AI Assistant to pick/download Qwen2.5-3B (default) or Qwen2.5-7B v3 abliterated GGUF for offline answers.",
         color = TextTertiary,
         style = MaterialTheme.typography.bodySmall
     )

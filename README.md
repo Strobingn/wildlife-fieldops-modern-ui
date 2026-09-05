@@ -75,21 +75,26 @@ The chat / estimate / summary paths never answer from hardcoded keyword tip list
 - Bake `XAI_API_KEY` (or `LLM_API_KEY`) into the APK at build time for SpaceXAI / Grok.
 - Optional: deploy Supabase Edge Function `ai-assistant` with a real provider key (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`, etc.). Demo/canned responses are disabled when no key is set.
 
-### On-device llama.cpp + **abliterated** GGUF (default: Qwen3.5 0.8B)
+### On-device llama.cpp + **abliterated** GGUF (default: Qwen2.5 3B; optional 7B v3)
 - Stack: [`dev.ffmpegkit-maintained:llama-android:0.1.1`](https://central.sonatype.com/artifact/dev.ffmpegkit-maintained/llama-android) (prebuilt llama.cpp JNI, no NDK in this app).
-- **Default on-device model is abliterated Qwen3.5 0.8B (not stock Instruct / refusal-trained):**
-  - Upstream: [`huihui-ai/Huihui-Qwen3.5-0.8B-abliterated`](https://huggingface.co/huihui-ai/Huihui-Qwen3.5-0.8B-abliterated)
-  - Quant repo: [`mradermacher/Huihui-Qwen3.5-0.8B-abliterated-GGUF`](https://huggingface.co/mradermacher/Huihui-Qwen3.5-0.8B-abliterated-GGUF)
-  - File / quant: **`Huihui-Qwen3.5-0.8B-abliterated.Q4_K_M.gguf`** (exact size **527,503,840** bytes ≈ **503 MB**, public, not gated)
-- Delivery: **primary baked-in default** via download-once (too large for APK `assets/`). Open **AI Assistant** → **Download local model**. Progress UI is shown. Cached at:
-  - `files/local_llm/Huihui-Qwen3.5-0.8B-abliterated.Q4_K_M.gguf`
+- Prompts use **ChatML** (Qwen2.5 Instruct). Selection is persisted; switching unloads the previous llama weights.
+- **Default — Qwen2.5-3B-Instruct-abliterated Q4_K_M:**
+  - Upstream: [`huihui-ai/Qwen2.5-3B-Instruct-abliterated`](https://huggingface.co/huihui-ai/Qwen2.5-3B-Instruct-abliterated)
+  - Quant repo: [`mradermacher/Qwen2.5-3B-Instruct-abliterated-GGUF`](https://huggingface.co/mradermacher/Qwen2.5-3B-Instruct-abliterated-GGUF)
+  - File: **`Qwen2.5-3B-Instruct-Abliterated.Q4_K_M.gguf`** (exact **2,104,933,600** bytes ≈ **2.1 GB**, LFS SHA256 `d0b449b22bc346ab75c63d91447e3a65e7735bbcbf102b5e008d8c75028cbb3f`)
+- **Optional — Qwen2.5-7B-Instruct-abliterated-v3 Q4_K_M** (bigger / slower):
+  - Upstream: [`huihui-ai/Qwen2.5-7B-Instruct-abliterated-v3`](https://huggingface.co/huihui-ai/Qwen2.5-7B-Instruct-abliterated-v3)
+  - Quant repo: [`mradermacher/Qwen2.5-7B-Instruct-abliterated-v3-GGUF`](https://huggingface.co/mradermacher/Qwen2.5-7B-Instruct-abliterated-v3-GGUF)
+  - File: **`Qwen2.5-7B-Instruct-abliterated-v3.Q4_K_M.gguf`** (exact **4,683,074,560** bytes ≈ **4.7 GB**, LFS SHA256 `fb4821c8707f89b03bd6738c07a382744184a3f15bd6668e6500cb313fbcaa75`)
+- Delivery: download-once from Hugging Face (too large for APK `assets/`). Open **AI Assistant** → pick **3B** or **7B v3** → **Download**. Cached under `files/local_llm/<filename>.gguf`.
+- On refresh, legacy **Qwen3.5-0.8B** / 1.5B / MediaPipe `.task` files are deleted so the app re-downloads the new default.
 - Abliteration removes safety-refusal directions so the field assistant generates freely instead of stock chat refusals.
-- Build notes: no NDK/CMake. Native libs ship for **`arm64-v8a`** (use a 64-bit ARM phone). `android:largeHeap` is enabled; prefer ≥4 GB RAM for the 0.8B quant.
-- To point at another abliterated GGUF, change `LocalLlmModelManager.MODEL_URL` / `MODEL_FILE_NAME`.
+- Build notes: no NDK/CMake. Native libs ship for **`arm64-v8a`**. `android:largeHeap` is enabled; prefer ≥6 GB RAM for 3B and ≥8 GB for 7B.
+- Catalog / URLs live in `LocalLlmModelManager` (`QWEN25_3B`, `QWEN25_7B_V3`).
 
 ### Priority order
-1. Cloud chat completions when a key is present in the APK  
-2. On-device abliterated llama.cpp GGUF when the model file is installed  
+1. On-device abliterated llama.cpp GGUF when the selected model file is installed (local-first for chat)  
+2. Cloud chat completions when a key is present in the APK  
 3. Clear setup error (never fake “field knowledge” bullets)
 
 

@@ -83,7 +83,8 @@ data class InspectionReportResult(
 
 @Singleton
 class AiService @Inject constructor(
-    private val localLlm: LocalLlmEngine
+    private val localLlm: LocalLlmEngine,
+    private val modelManager: LocalLlmModelManager
 ) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
     private val apiKey: String get() = BuildConfig.LLM_API_KEY.trim()
@@ -108,8 +109,8 @@ class AiService @Inject constructor(
         else append("NO — rebuild after setting secret XAI_API_KEY")
         append("\n")
         append(localLlm.modelStatusLabel())
-        append("\nLocal model file: ${LocalLlmModelManager.MODEL_FILE_NAME}")
-        append("\nLocal model source: Hugging Face ${LocalLlmModelManager.MODEL_REPO}")
+        append("\nLocal model file: ${modelManager.activeFileName}")
+        append("\nLocal model source: Hugging Face ${modelManager.activeRepo}")
     }
 
     suspend fun ask(userMessage: String, species: String = ""): String = withContext(Dispatchers.IO) {
@@ -121,7 +122,7 @@ class AiService @Inject constructor(
         if (localLlm.isReady) {
             val local = generateLocal(LOCAL_SYSTEM_PROMPT, userPrompt)
             if (local != null) {
-                return@withContext "📱 On-device (${LocalLlmModelManager.MODEL_DISPLAY_NAME}):\n\n$local"
+                return@withContext "📱 On-device (${modelManager.activeDisplayName}):\n\n$local"
             }
         }
         if (isConfigured) {
@@ -222,7 +223,7 @@ Do not invent species or damage that the transcript does not support; mark uncer
                 if (parsed != null) {
                     return@withContext InspectionReportResult(
                         draft = parsed,
-                        sourceLabel = "📱 On-device (${LocalLlmModelManager.MODEL_DISPLAY_NAME})"
+                        sourceLabel = "📱 On-device (${modelManager.activeDisplayName})"
                     )
                 }
             }
