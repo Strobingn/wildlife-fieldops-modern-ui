@@ -16,7 +16,8 @@ import javax.inject.Inject
 data class ChatMessage(
     val text: String,
     val isUser: Boolean,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val id: String = "${System.currentTimeMillis()}-${text.hashCode()}-${isUser}"
 )
 
 @HiltViewModel
