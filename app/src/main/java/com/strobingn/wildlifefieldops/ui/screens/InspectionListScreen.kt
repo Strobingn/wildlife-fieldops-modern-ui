@@ -54,7 +54,7 @@ fun InspectionListScreen(
             FloatingActionButton(
                 onClick = onNavigateToInspectionForm,
                 containerColor = PrimaryGreen,
-                contentColor = Color.Black
+                contentColor = Color.White
             ) {
                 Icon(Icons.Default.Add, contentDescription = "New Inspection")
             }

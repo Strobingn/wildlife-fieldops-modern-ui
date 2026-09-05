@@ -24,6 +24,7 @@ import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
 @Composable
 fun EstimateScreen(
     jobId: String,
+    autoDraft: Boolean = false,
     onBack: () -> Unit,
     jobsViewModel: JobsViewModel = hiltViewModel(),
     jobAiViewModel: JobAiViewModel = hiltViewModel()
@@ -32,6 +33,15 @@ fun EstimateScreen(
     val draft by jobAiViewModel.estimateDraft.collectAsState()
     val estimateLoading by jobAiViewModel.estimateLoading.collectAsState()
     val aiMessage by jobAiViewModel.message.collectAsState()
+    var autoDraftFired by remember { mutableStateOf(false) }
+
+    LaunchedEffect(job, autoDraft) {
+        val current = job
+        if (autoDraft && !autoDraftFired && current != null && !estimateLoading) {
+            autoDraftFired = true
+            jobAiViewModel.draftEstimate(current)
+        }
+    }
 
     var laborHours by remember { mutableStateOf("2.0") }
     var laborRate by remember { mutableStateOf("85.00") }

@@ -14,8 +14,8 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 20
-        versionName = "2.2.2-local-chatml"
+        versionCode = 21
+        versionName = "2.2.3-dictate-inspect"
 
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
         val supabaseKey = System.getenv("SUPABASE_ANON_KEY") ?: "your-anon-key"

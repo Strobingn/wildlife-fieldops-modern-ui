@@ -48,6 +48,39 @@ data class EstimateDraft(
     val fromAi: Boolean = true
 )
 
+@Serializable
+data class InspectionReportDraft(
+    val findings: String = "",
+    val recommendations: String = "",
+    val speciesIdentified: String = "",
+    val entryPoints: String = "",
+    val damageAssessment: String = "",
+    val severity: String = "MODERATE",
+    val notes: String = "",
+    val summary: String = ""
+)
+
+data class InspectionReportContext(
+    val customerName: String = "",
+    val inspectorName: String = "",
+    val inspectionType: String = "",
+    val jobTitle: String = "",
+    val jobAddress: String = "",
+    val jobDescription: String = "",
+    val existingFindings: String = "",
+    val existingRecommendations: String = "",
+    val existingSpecies: String = "",
+    val existingEntryPoints: String = "",
+    val existingDamage: String = "",
+    val existingNotes: String = ""
+)
+
+data class InspectionReportResult(
+    val draft: InspectionReportDraft? = null,
+    val error: String? = null,
+    val sourceLabel: String = ""
+)
+
 @Singleton
 class AiService @Inject constructor(
     private val localLlm: LocalLlmEngine
@@ -147,6 +180,75 @@ Do NOT invent mileage or taxRate. Use the provided measured miles and tax percen
         )
     }
 
+
+    suspend fun writeInspectionReportFromDictation(
+        transcript: String,
+        context: InspectionReportContext = InspectionReportContext()
+    ): InspectionReportResult = withContext(Dispatchers.IO) {
+        val system = """
+You are a wildlife removal field inspector writing a professional inspection report.
+Return ONLY valid JSON with these string fields:
+findings, recommendations, speciesIdentified, entryPoints, damageAssessment, severity, notes, summary
+severity MUST be one of: NONE, LOW, MODERATE, HIGH, CRITICAL
+Use the technician dictation as primary evidence. Expand into clear field-report language.
+Do not invent species or damage that the transcript does not support; mark uncertain items as "possible" or "unconfirmed".
+""".trimIndent()
+        val user = buildString {
+            appendLine("Technician dictation / notes:")
+            appendLine(transcript.ifBlank { "(empty)" })
+            appendLine()
+            appendLine("Context:")
+            appendLine("Customer: ${context.customerName.ifBlank { "(none)" }}")
+            appendLine("Inspector: ${context.inspectorName.ifBlank { "(none)" }}")
+            appendLine("Inspection type: ${context.inspectionType.ifBlank { "(none)" }}")
+            appendLine("Job title: ${context.jobTitle.ifBlank { "(none)" }}")
+            appendLine("Job address: ${context.jobAddress.ifBlank { "(none)" }}")
+            appendLine("Job description: ${context.jobDescription.ifBlank { "(none)" }}")
+            if (context.existingFindings.isNotBlank()) appendLine("Existing findings: ${context.existingFindings}")
+            if (context.existingRecommendations.isNotBlank()) appendLine("Existing recommendations: ${context.existingRecommendations}")
+            if (context.existingSpecies.isNotBlank()) appendLine("Existing species: ${context.existingSpecies}")
+            if (context.existingEntryPoints.isNotBlank()) appendLine("Existing entry points: ${context.existingEntryPoints}")
+            if (context.existingDamage.isNotBlank()) appendLine("Existing damage: ${context.existingDamage}")
+            if (context.existingNotes.isNotBlank()) appendLine("Existing notes: ${context.existingNotes}")
+            appendLine()
+            append("Write the structured inspection report JSON now.")
+        }
+
+        // Local-first like ask()
+        if (localLlm.isReady) {
+            val local = generateLocal(system, user)
+            if (local != null) {
+                val parsed = parseInspectionReport(local)
+                if (parsed != null) {
+                    return@withContext InspectionReportResult(
+                        draft = parsed,
+                        sourceLabel = "📱 On-device (${LocalLlmModelManager.MODEL_DISPLAY_NAME})"
+                    )
+                }
+            }
+        }
+        if (isConfigured) {
+            when (val result = completeChat(system, user, maxTokens = 900, temperature = 0.25)) {
+                is ChatResult.Ok -> {
+                    val parsed = parseInspectionReport(result.text)
+                    if (parsed != null) {
+                        return@withContext InspectionReportResult(
+                            draft = parsed,
+                            sourceLabel = "☁️ Cloud ($providerLabel)"
+                        )
+                    }
+                    return@withContext InspectionReportResult(
+                        error = "AI returned text but JSON parse failed. Try again or edit fields manually."
+                    )
+                }
+                is ChatResult.Err -> {
+                    return@withContext InspectionReportResult(error = result.message)
+                }
+            }
+        }
+        InspectionReportResult(error = notConfiguredMessage())
+    }
+
     suspend fun summarizeJob(job: Job): String = withContext(Dispatchers.IO) {
         val system = "Write a concise wildlife-control job summary. Bullet-first. Max 180 words."
         val user = buildJobContext(job) + "\nWrite the job summary now."
@@ -226,6 +328,25 @@ Do NOT invent mileage or taxRate. Use the provided measured miles and tax percen
         }
         val rationale = listOf(draft.rationale.trim(), extra).filter { it.isNotBlank() }.joinToString(" ")
         return draft.copy(mileage = miles, taxRate = taxPercent, rationale = rationale)
+    }
+
+
+    private fun parseInspectionReport(raw: String): InspectionReportDraft? = try {
+        val cleaned = raw.trim()
+            .removePrefix("```json").removePrefix("```JSON").removePrefix("```")
+            .removeSuffix("```").trim()
+        val start = cleaned.indexOf('{')
+        val end = cleaned.lastIndexOf('}')
+        if (start < 0 || end <= start) null
+        else {
+            val draft = json.decodeFromString(InspectionReportDraft.serializer(), cleaned.substring(start, end + 1))
+            val sev = draft.severity.trim().uppercase().replace(' ', '_')
+            val allowed = setOf("NONE", "LOW", "MODERATE", "HIGH", "CRITICAL")
+            draft.copy(severity = if (sev in allowed) sev else "MODERATE")
+        }
+    } catch (e: Exception) {
+        android.util.Log.w("AiService", "parseInspectionReport failed: ${e.message}")
+        null
     }
 
     private fun parseEstimateDraft(raw: String): EstimateDraft? = try {

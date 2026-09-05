@@ -14,18 +14,18 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFFE5E5E5),
-    onPrimary = Color(0xFF111111),
-    primaryContainer = Color(0xFF333333),
-    onPrimaryContainer = Color(0xFFF5F5F5),
-    secondary = Color(0xFFC7C7C7),
-    onSecondary = Color(0xFF111111),
-    secondaryContainer = Color(0xFF292929),
-    onSecondaryContainer = Color(0xFFF5F5F5),
-    tertiary = Color(0xFFCECECE),
-    onTertiary = Color(0xFF111111),
-    tertiaryContainer = Color(0xFF292929),
-    onTertiaryContainer = Color(0xFFF5F5F5),
+    primary = Color(0xFF1565C0),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFF0A2744),
+    onPrimaryContainer = Color(0xFFD6E4F5),
+    secondary = Color(0xFF42A5F5),
+    onSecondary = Color(0xFF0A1628),
+    secondaryContainer = Color(0xFF0D47A1),
+    onSecondaryContainer = Color(0xFFD6E4F5),
+    tertiary = Color(0xFF64B5F6),
+    onTertiary = Color(0xFF0A1628),
+    tertiaryContainer = Color(0xFF1565C0),
+    onTertiaryContainer = Color(0xFFFFFFFF),
     background = Color(0xFF0D0D0D),
     onBackground = Color(0xFFF5F5F5),
     surface = Color(0xFF171717),
@@ -47,22 +47,22 @@ private val DarkColorScheme = darkColorScheme(
     scrim = Color(0xCC000000),
     inverseSurface = Color(0xFFE5E5E5),
     inverseOnSurface = Color(0xFF111111),
-    inversePrimary = Color(0xFF1A1A1A)
+    inversePrimary = Color(0xFF1565C0)
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF2A2A2A),
+    primary = Color(0xFF0D47A1),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFE5E5E5),
-    onPrimaryContainer = Color(0xFF111111),
-    secondary = Color(0xFF555555),
+    primaryContainer = Color(0xFFD6E4F5),
+    onPrimaryContainer = Color(0xFF0A2744),
+    secondary = Color(0xFF1565C0),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFE5E5E5),
-    onSecondaryContainer = Color(0xFF111111),
-    tertiary = Color(0xFF727272),
+    secondaryContainer = Color(0xFFE3F2FD),
+    onSecondaryContainer = Color(0xFF0A2744),
+    tertiary = Color(0xFF1976D2),
     onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFE5E5E5),
-    onTertiaryContainer = Color(0xFF111111),
+    tertiaryContainer = Color(0xFFBBDEFB),
+    onTertiaryContainer = Color(0xFF0A2744),
     background = Color(0xFFF6F6F6),
     onBackground = Color(0xFF111111),
     surface = Color.White,
@@ -84,7 +84,7 @@ private val LightColorScheme = lightColorScheme(
     scrim = Color.Black,
     inverseSurface = Color(0xFF292929),
     inverseOnSurface = Color(0xFFF7F7F7),
-    inversePrimary = Color(0xFFE5E5E5)
+    inversePrimary = Color(0xFF42A5F5)
 )
 
 private fun Context.findActivity(): Activity? {
@@ -103,7 +103,7 @@ fun WildlifeFieldOpsTheme(
     content: @Composable () -> Unit
 ) {
     ThemeMode.isDark = darkTheme
-    // Dynamic Material You / system color adjustment intentionally off — app greyscale only.
+    // Dynamic Material You off — greyscale chrome with dark-blue primary accents.
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
     val view = LocalView.current
