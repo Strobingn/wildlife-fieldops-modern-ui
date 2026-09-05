@@ -124,7 +124,7 @@ fun AIAssistantScreen(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(messages) { message ->
+                items(messages, key = { it.id }) { message ->
                     ScaleIn {
                         ChatBubble(message = message)
                     }
