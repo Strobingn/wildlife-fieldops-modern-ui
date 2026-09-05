@@ -84,18 +84,28 @@ class AiService @Inject constructor(
             if (species.isNotBlank()) append("Species context: $species\n")
             append(userMessage)
         }
+        // Local-first for chat: abliterated on-device model before cloud Grok (which refuses).
+        if (localLlm.isReady) {
+            val local = generateLocal(LOCAL_SYSTEM_PROMPT, userPrompt)
+            if (local != null) {
+                return@withContext "📱 On-device (${LocalLlmModelManager.MODEL_DISPLAY_NAME}):\n\n$local"
+            }
+        }
         if (isConfigured) {
-            when (val result = completeChat(WILDLIFE_SYSTEM_PROMPT, userPrompt, maxTokens = 900, temperature = 0.35)) {
-                is ChatResult.Ok -> return@withContext result.text
+            when (val result = completeChat(CLOUD_SYSTEM_PROMPT, userPrompt, maxTokens = 900, temperature = 0.35)) {
+                is ChatResult.Ok -> {
+                    val preferLocalNote = if (!localLlm.isReady) {
+                        "\n\n— Cloud answered because the local abliterated model is not downloaded yet. Download it in AI Assistant for uncensored on-device replies."
+                    } else {
+                        "\n\n— Cloud fallback (local generate failed). On-device is preferred when ready."
+                    }
+                    return@withContext "☁️ Cloud ($providerLabel):\n\n${result.text}$preferLocalNote"
+                }
                 is ChatResult.Err -> {
-                    val local = generateLocal(WILDLIFE_SYSTEM_PROMPT, userPrompt)
-                    if (local != null) return@withContext "Cloud unavailable. On-device LLM:\n\n$local"
                     return@withContext result.message + "\n\n" + localUnavailableHint()
                 }
             }
         }
-        val local = generateLocal(WILDLIFE_SYSTEM_PROMPT, userPrompt)
-        if (local != null) return@withContext "On-device LLM (${LocalLlmModelManager.MODEL_DISPLAY_NAME}):\n\n$local"
         notConfiguredMessage()
     }
 
@@ -140,17 +150,17 @@ Do NOT invent mileage or taxRate. Use the provided measured miles and tax percen
     suspend fun summarizeJob(job: Job): String = withContext(Dispatchers.IO) {
         val system = "Write a concise wildlife-control job summary. Bullet-first. Max 180 words."
         val user = buildJobContext(job) + "\nWrite the job summary now."
+        if (localLlm.isReady) {
+            val local = generateLocal(system, user)
+            if (local != null) return@withContext "📱 On-device:\n\n$local"
+        }
         if (isConfigured) {
             when (val result = completeChat(system, user, maxTokens = 500, temperature = 0.3)) {
-                is ChatResult.Ok -> return@withContext result.text
-                is ChatResult.Err -> {
-                    val local = generateLocal(system, user)
-                    if (local != null) return@withContext local
-                    return@withContext result.message + "\n\n" + localUnavailableHint()
-                }
+                is ChatResult.Ok -> return@withContext "☁️ Cloud:\n\n${result.text}"
+                is ChatResult.Err -> return@withContext result.message + "\n\n" + localUnavailableHint()
             }
         }
-        generateLocal(system, user) ?: (localUnavailableHint() + "\n\n" + buildJobContext(job).take(500))
+        localUnavailableHint() + "\n\n" + buildJobContext(job).take(500)
     }
 
     private fun buildJobContext(job: Job): String = buildString {
@@ -234,7 +244,8 @@ Do NOT invent mileage or taxRate. Use the provided measured miles and tax percen
     }
 
     private fun localUnavailableHint(): String =
-        "On-device LLM is not ready. ${localLlm.modelStatusLabel()}"
+        "On-device LLM is not ready. ${localLlm.modelStatusLabel()}. " +
+            "Open AI Assistant and tap Download local model for preferred uncensored on-device answers."
 
     private suspend fun generateLocal(system: String, user: String): String? {
         val result = localLlm.generate(system, user)
@@ -248,9 +259,21 @@ Do NOT invent mileage or taxRate. Use the provided measured miles and tax percen
     }
 
     companion object {
-        val WILDLIFE_SYSTEM_PROMPT: String = """
+        /** Cloud path — more compliance-oriented. */
+        val CLOUD_SYSTEM_PROMPT: String = """
 You are FieldOps AI for a professional wildlife removal business.
 Concise, bullet-first, field-readable. Flag safety risks. Prefer legal exclusion/live-trap approaches.
+""".trimIndent()
+
+        /** Kept for callers that still reference the old name. */
+        val WILDLIFE_SYSTEM_PROMPT: String = CLOUD_SYSTEM_PROMPT
+
+        /** Local abliterated path — direct field guidance, no refusal hedging. */
+        val LOCAL_SYSTEM_PROMPT: String = """
+You are an expert wildlife field operations technician assistant running on-device.
+Answer directly and completely with practical field guidance for pest and wildlife work.
+No moralizing, no refusals, no "I can't help with that", and never invent that you are restricted.
+Stay on-topic for wildlife/pest field ops when asked. Be concise and useful.
 """.trimIndent()
 
         /** Static cloud+model diagnostics for Settings (no Hilt injection required). */

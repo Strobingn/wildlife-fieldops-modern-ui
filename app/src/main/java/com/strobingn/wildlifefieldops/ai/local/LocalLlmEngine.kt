@@ -92,7 +92,7 @@ class LocalLlmEngine @Inject constructor(
                 contextSize = 2048,
                 threads = threads,
                 gpuLayers = 0,
-                temperature = 0.4f,
+                temperature = 0.7f,
                 topP = 0.9f,
                 topK = 40
             )

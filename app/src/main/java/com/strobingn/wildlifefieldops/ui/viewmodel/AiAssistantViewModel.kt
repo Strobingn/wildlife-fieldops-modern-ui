@@ -27,13 +27,15 @@ class AiAssistantViewModel @Inject constructor(
 
     private fun buildWelcome(): String = buildString {
         append("Hello — I'm your Wildlife FieldOps AI.\n\n")
-        append("Answers come from a real LLM only:\n")
-        append("• Cloud (SpaceXAI / Grok) when a key is baked into the APK\n")
-        append("• On-device llama.cpp (abliterated GGUF) (${LocalLlmModelManager.MODEL_DISPLAY_NAME}) otherwise\n\n")
-        append("Canned keyword / \"field knowledge\" stub lists have been removed.\n\n")
+        append("Backend preference (chat):\n")
+        append("1) On-device abliterated LLM when downloaded (${LocalLlmModelManager.MODEL_DISPLAY_NAME}) — preferred\n")
+        append("2) Cloud (SpaceXAI / Grok) only if local is not ready\n\n")
+        append("Responses are labeled 📱 On-device or ☁️ Cloud so you can tell which answered.\n\n")
         append(aiService.configDiagnostics())
-        if (!aiService.isConfigured && !localLlm.isReady) {
-            append("\n\n⬇ Tap \"Download local model\" below (~503 MB, one-time) to install the default Qwen3.5-0.8B abliterated GGUF.")
+        if (!localLlm.isReady) {
+            append("\n\n⬇ Tap \"Download local model\" below (~503 MB) for preferred on-device answers (cloud Grok often refuses).")
+        } else {
+            append("\n\n✅ Local model ready — chat will use on-device first.")
         }
     }
 
