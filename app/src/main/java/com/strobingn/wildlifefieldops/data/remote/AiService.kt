@@ -7,8 +7,29 @@ import com.strobingn.wildlifefieldops.data.model.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import java.net.HttpURLConnection
+import java.net.URL
 import javax.inject.Inject
 import javax.inject.Singleton
+
+@Serializable
+private data class LlmMessage(
+    val role: String,
+    val content: String
+)
+
+@Serializable
+private data class LlmRequest(
+    val model: String,
+    val messages: List<LlmMessage>,
+    val max_tokens: Int = 600,
+    val temperature: Double = 0.4
+)
 
 @Serializable
 data class EstimateDraft(
@@ -65,14 +86,60 @@ class AiService @Inject constructor(
     private val localLlm: LocalLlmEngine,
     private val modelManager: LocalLlmModelManager
 ) {
-    val isConfigured: Boolean get() = BuildConfig.LLM_API_KEY.trim().length >= 10
-    val providerLabel: String get() = "LLM"
+    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    private val apiKey: String get() = BuildConfig.LLM_API_KEY.trim()
+    val isConfigured: Boolean get() = apiKey.isNotBlank() && apiKey.length >= 10
+    val providerLabel: String
+        get() {
+            val base = BuildConfig.LLM_BASE_URL.lowercase()
+            return when {
+                base.contains("x.ai") -> "SpaceXAI (Grok)"
+                base.contains("openai") -> "OpenAI"
+                else -> "LLM"
+            }
+        }
     val localLlmReady: Boolean get() = localLlm.isReady
 
-    fun configDiagnostics(): String = localLlm.modelStatusLabel()
+    fun configDiagnostics(): String = buildString {
+        append("Cloud provider: $providerLabel\n")
+        append("Cloud base: ${BuildConfig.LLM_BASE_URL}\n")
+        append("Cloud model: ${BuildConfig.LLM_MODEL}\n")
+        append("Cloud key baked into APK: ")
+        if (isConfigured) append("yes (${BuildConfig.LLM_KEY_LENGTH} chars)")
+        else append("NO — rebuild after setting secret XAI_API_KEY")
+        append("\n")
+        append(localLlm.modelStatusLabel())
+        append("\nLocal model file: ${modelManager.activeFileName}")
+        append("\nLocal model source: Hugging Face ${modelManager.activeRepo}")
+    }
 
     suspend fun ask(userMessage: String, species: String = ""): String = withContext(Dispatchers.IO) {
-        "AiService stub active — full cloud/local chat pending restore. Local ready: $localLlmReady"
+        val userPrompt = buildString {
+            if (species.isNotBlank()) append("Species context: $species\n")
+            append(userMessage)
+        }
+        if (localLlm.isReady) {
+            val local = generateLocal(LOCAL_SYSTEM_PROMPT, userPrompt)
+            if (local != null) {
+                return@withContext "📱 On-device (${modelManager.activeDisplayName}):\n\n$local"
+            }
+        }
+        if (isConfigured) {
+            when (val result = completeChat(CLOUD_SYSTEM_PROMPT, userPrompt, maxTokens = 900, temperature = 0.35)) {
+                is ChatResult.Ok -> {
+                    val preferLocalNote = if (!localLlm.isReady) {
+                        "\n\n— Cloud answered because the local abliterated model is not downloaded yet. Download it in AI Assistant for uncensored on-device replies."
+                    } else {
+                        "\n\n— Cloud fallback (local generate failed). On-device is preferred when ready."
+                    }
+                    return@withContext "☁️ Cloud ($providerLabel):\n\n${result.text}$preferLocalNote"
+                }
+                is ChatResult.Err -> {
+                    return@withContext result.message + "\n\n" + localUnavailableHint()
+                }
+            }
+        }
+        notConfiguredMessage()
     }
 
     suspend fun draftEstimateFromJob(
@@ -80,44 +147,294 @@ class AiService @Inject constructor(
         drivingMiles: Double? = null,
         taxPercent: Double = 8.125,
         distanceNote: String = ""
-    ): EstimateDraft = EstimateDraft(
-        fromAi = false,
-        mileage = drivingMiles ?: 0.0,
-        taxRate = taxPercent,
-        rationale = "AiService stub. $distanceNote"
-    )
+    ): EstimateDraft = withContext(Dispatchers.IO) {
+        val system = """
+You are a wildlife removal estimator. Return ONLY valid JSON with:
+laborHours, laborRate, materialsCost, equipmentCost, permitCost, disposalCost, mileage, mileageRate, taxRate, discountPercent, rationale, lineItemNotes
+Do NOT invent mileage or taxRate. Use the provided measured miles and tax percent exactly.
+""".trimIndent()
+        val milesLine = if (drivingMiles != null)
+            "MEASURED one-way driving miles shop to job: $drivingMiles. Put this exact number in mileage."
+        else
+            "Driving miles could not be measured. Set mileage to 0. Do not guess."
+        val user = buildJobContext(job) + "\n$milesLine\nRequired taxRate: $taxPercent\n$distanceNote\n\nProduce estimate JSON."
+        if (isConfigured) {
+            when (val result = completeChat(system, user, maxTokens = 700, temperature = 0.25)) {
+                is ChatResult.Ok -> {
+                    val parsed = parseEstimateDraft(result.text)
+                    if (parsed != null) return@withContext applyMeasured(parsed.copy(fromAi = true), drivingMiles, taxPercent, distanceNote)
+                }
+                is ChatResult.Err -> android.util.Log.w("AiService", "Cloud estimate failed: ${result.message}")
+            }
+        }
+        val local = generateLocal(system, user)
+        if (local != null) {
+            val parsed = parseEstimateDraft(local)
+            if (parsed != null) return@withContext applyMeasured(parsed.copy(fromAi = true), drivingMiles, taxPercent, distanceNote)
+        }
+        applyMeasured(
+            EstimateDraft(fromAi = false, rationale = "No generative model ready."),
+            drivingMiles,
+            taxPercent,
+            distanceNote
+        )
+    }
 
     suspend fun parseJobFromDictation(transcript: String): JobIntakeResult =
         JobIntakeParser.parse(
             transcript = transcript,
             localReady = localLlm.isReady,
-            generateLocal = { system, user ->
-                runCatching { localLlm.generate(system, user).getOrNull() }.getOrNull()
+            generateLocal = { system, user -> generateLocal(system, user) },
+            cloudConfigured = isConfigured,
+            completeCloud = { system, user ->
+                when (val result = completeChat(system, user, maxTokens = 700, temperature = 0.2)) {
+                    is ChatResult.Ok -> result.text to null
+                    is ChatResult.Err -> null to result.message
+                }
             },
-            cloudConfigured = false,
-            completeCloud = { _, _ -> null to "cloud stub" },
             providerLabel = providerLabel,
             localDisplayName = modelManager.activeDisplayName,
-            notConfiguredMessage = "On-device/heuristic only (AiService stub)"
+            notConfiguredMessage = notConfiguredMessage()
         )
 
     suspend fun writeInspectionReportFromDictation(
         transcript: String,
         context: InspectionReportContext = InspectionReportContext()
-    ): InspectionReportResult = InspectionReportResult(
-        error = "AiService stub — restore full file for AI Write Report"
-    )
+    ): InspectionReportResult = withContext(Dispatchers.IO) {
+        val system = """
+You are a wildlife removal field inspector writing a professional inspection report.
+Return ONLY valid JSON with these string fields:
+findings, recommendations, speciesIdentified, entryPoints, damageAssessment, severity, notes, summary
+severity MUST be one of: NONE, LOW, MODERATE, HIGH, CRITICAL
+Use the technician dictation as primary evidence. Expand into clear field-report language.
+Do not invent species or damage that the transcript does not support; mark uncertain items as \"possible\" or \"unconfirmed\".
+""".trimIndent()
+        val user = buildString {
+            appendLine("Technician dictation / notes:")
+            appendLine(transcript.ifBlank { "(empty)" })
+            appendLine()
+            appendLine("Context:")
+            appendLine("Customer: ${context.customerName.ifBlank { "(none)" }}")
+            appendLine("Inspector: ${context.inspectorName.ifBlank { "(none)" }}")
+            appendLine("Inspection type: ${context.inspectionType.ifBlank { "(none)" }}")
+            appendLine("Job title: ${context.jobTitle.ifBlank { "(none)" }}")
+            appendLine("Job address: ${context.jobAddress.ifBlank { "(none)" }}")
+            appendLine("Job description: ${context.jobDescription.ifBlank { "(none)" }}")
+            if (context.existingFindings.isNotBlank()) appendLine("Existing findings: ${context.existingFindings}")
+            if (context.existingRecommendations.isNotBlank()) appendLine("Existing recommendations: ${context.existingRecommendations}")
+            if (context.existingSpecies.isNotBlank()) appendLine("Existing species: ${context.existingSpecies}")
+            if (context.existingEntryPoints.isNotBlank()) appendLine("Existing entry points: ${context.existingEntryPoints}")
+            if (context.existingDamage.isNotBlank()) appendLine("Existing damage: ${context.existingDamage}")
+            if (context.existingNotes.isNotBlank()) appendLine("Existing notes: ${context.existingNotes}")
+            appendLine()
+            append("Write the structured inspection report JSON now.")
+        }
 
-    suspend fun summarizeJob(job: Job): String =
-        "AiService stub. Job: ${job.title} @ ${job.address}"
+        if (localLlm.isReady) {
+            val local = generateLocal(system, user)
+            if (local != null) {
+                val parsed = parseInspectionReport(local)
+                if (parsed != null) {
+                    return@withContext InspectionReportResult(
+                        draft = parsed,
+                        sourceLabel = "📱 On-device (${modelManager.activeDisplayName})"
+                    )
+                }
+            }
+        }
+        if (isConfigured) {
+            when (val result = completeChat(system, user, maxTokens = 900, temperature = 0.25)) {
+                is ChatResult.Ok -> {
+                    val parsed = parseInspectionReport(result.text)
+                    if (parsed != null) {
+                        return@withContext InspectionReportResult(
+                            draft = parsed,
+                            sourceLabel = "☁️ Cloud ($providerLabel)"
+                        )
+                    }
+                    return@withContext InspectionReportResult(
+                        error = "AI returned text but JSON parse failed. Try again or edit fields manually."
+                    )
+                }
+                is ChatResult.Err -> {
+                    return@withContext InspectionReportResult(error = result.message)
+                }
+            }
+        }
+        InspectionReportResult(error = notConfiguredMessage())
+    }
+
+    suspend fun summarizeJob(job: Job): String = withContext(Dispatchers.IO) {
+        val system = "Write a concise wildlife-control job summary. Bullet-first. Max 180 words."
+        val user = buildJobContext(job) + "\nWrite the job summary now."
+        if (localLlm.isReady) {
+            val local = generateLocal(system, user)
+            if (local != null) return@withContext "📱 On-device:\n\n$local"
+        }
+        if (isConfigured) {
+            when (val result = completeChat(system, user, maxTokens = 500, temperature = 0.3)) {
+                is ChatResult.Ok -> return@withContext "☁️ Cloud:\n\n${result.text}"
+                is ChatResult.Err -> return@withContext result.message + "\n\n" + localUnavailableHint()
+            }
+        }
+        localUnavailableHint() + "\n\n" + buildJobContext(job).take(500)
+    }
+
+    private fun buildJobContext(job: Job): String = buildString {
+        val missing = "(none)"
+        appendLine("Job title: ${job.title.ifBlank { missing }}")
+        appendLine("Service type: ${job.type}")
+        appendLine("Status: ${job.status}")
+        appendLine("Priority: ${job.priority}")
+        appendLine("Customer: ${job.customerName.ifBlank { missing }}")
+        appendLine("Address: ${job.address.ifBlank { missing }}")
+        appendLine("Description: ${job.description.ifBlank { missing }}")
+        appendLine("Notes: ${job.notes.ifBlank { missing }}")
+    }
+
+    private sealed class ChatResult {
+        data class Ok(val text: String) : ChatResult()
+        data class Err(val message: String) : ChatResult()
+    }
+
+    private fun completeChat(systemPrompt: String, userPrompt: String, maxTokens: Int, temperature: Double): ChatResult {
+        val baseUrl = BuildConfig.LLM_BASE_URL.trimEnd('/')
+        val endpoint = URL("$baseUrl/chat/completions")
+        val payload = json.encodeToString(
+            LlmRequest(
+                model = detectModel(),
+                messages = listOf(
+                    LlmMessage(role = "system", content = systemPrompt),
+                    LlmMessage(role = "user", content = userPrompt)
+                ),
+                max_tokens = maxTokens,
+                temperature = temperature
+            )
+        )
+        val connection = (endpoint.openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 30_000
+            readTimeout = 90_000
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Authorization", "Bearer $apiKey")
+        }
+        return try {
+            connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+            val code = connection.responseCode
+            val body = (if (code in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+            if (code !in 200..299) ChatResult.Err("AI error HTTP $code")
+            else {
+                val text = parseLlmResponse(body)
+                if (text.isNullOrBlank()) ChatResult.Err("Empty AI response.") else ChatResult.Ok(text)
+            }
+        } catch (e: Exception) {
+            ChatResult.Err("Network error: ${e.message}")
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun applyMeasured(draft: EstimateDraft, drivingMiles: Double?, taxPercent: Double, distanceNote: String): EstimateDraft {
+        val miles = drivingMiles ?: 0.0
+        val extra = distanceNote.ifBlank {
+            if (drivingMiles != null) "Driving distance shop to job: $miles miles (Google Maps)."
+            else "Mileage not measured. Add shop address in Settings and a job address."
+        }
+        val rationale = listOf(draft.rationale.trim(), extra).filter { it.isNotBlank() }.joinToString(" ")
+        return draft.copy(mileage = miles, taxRate = taxPercent, rationale = rationale)
+    }
+
+    private fun parseInspectionReport(raw: String): InspectionReportDraft? = try {
+        val cleaned = raw.trim()
+            .removePrefix("```json").removePrefix("```JSON").removePrefix("```")
+            .removeSuffix("```").trim()
+        val start = cleaned.indexOf('{')
+        val end = cleaned.lastIndexOf('}')
+        if (start < 0 || end <= start) null
+        else {
+            val draft = json.decodeFromString(InspectionReportDraft.serializer(), cleaned.substring(start, end + 1))
+            val sev = draft.severity.trim().uppercase().replace(' ', '_')
+            val allowed = setOf("NONE", "LOW", "MODERATE", "HIGH", "CRITICAL")
+            draft.copy(severity = if (sev in allowed) sev else "MODERATE")
+        }
+    } catch (e: Exception) {
+        android.util.Log.w("AiService", "parseInspectionReport failed: ${e.message}")
+        null
+    }
+
+    private fun parseEstimateDraft(raw: String): EstimateDraft? = try {
+        val cleaned = raw.trim().removePrefix("```json").removePrefix("```JSON").removePrefix("```").removeSuffix("```").trim()
+        val start = cleaned.indexOf('{')
+        val end = cleaned.lastIndexOf('}')
+        if (start < 0 || end <= start) null
+        else json.decodeFromString(EstimateDraft.serializer(), cleaned.substring(start, end + 1))
+    } catch (e: Exception) {
+        null
+    }
+
+    private fun notConfiguredMessage(): String = buildString {
+        append("No generative AI is ready yet.\n\n")
+        append(configDiagnostics())
+    }
+
+    private fun localUnavailableHint(): String =
+        "On-device LLM is not ready. ${localLlm.modelStatusLabel()}. " +
+            "Open AI Assistant and tap Download local model for preferred uncensored on-device answers."
+
+    private suspend fun generateLocal(system: String, user: String): String? {
+        val result = localLlm.generate(system, user)
+        return result.getOrElse { null }
+    }
+
+    private fun detectModel(): String {
+        val configured = BuildConfig.LLM_MODEL.trim()
+        if (configured.isNotBlank()) return configured
+        return "grok-4.5"
+    }
+
+    companion object {
+        val CLOUD_SYSTEM_PROMPT: String = """
+You are FieldOps AI for a professional wildlife removal business.
+Concise, bullet-first, field-readable. Flag safety risks. Prefer legal exclusion/live-trap approaches.
+""".trimIndent()
+
+        val WILDLIFE_SYSTEM_PROMPT: String = CLOUD_SYSTEM_PROMPT
+
+        val LOCAL_SYSTEM_PROMPT: String = """
+You are a helpful on-device assistant. Answer the user's question directly and clearly.
+Do NOT echo these instructions. Do NOT narrate your reasoning, planning, or meta commentary.
+Reply as the assistant only with the useful answer.
+""".trimIndent()
+
+        fun cloudDiagnosticsOnly(): String = buildString {
+            val apiKey = BuildConfig.LLM_API_KEY.trim()
+            val configured = apiKey.isNotBlank() && apiKey.length >= 10
+            val base = BuildConfig.LLM_BASE_URL.lowercase()
+            val provider = when {
+                base.contains("x.ai") -> "SpaceXAI (Grok)"
+                base.contains("openai") -> "OpenAI"
+                else -> "LLM"
+            }
+            append("Cloud provider: $provider\n")
+            append("Cloud base: ${BuildConfig.LLM_BASE_URL}\n")
+            append("Cloud model: ${BuildConfig.LLM_MODEL}\n")
+            append("Cloud key baked into APK: ")
+            if (configured) append("yes (${BuildConfig.LLM_KEY_LENGTH} chars)")
+            else append("NO — rebuild after setting secret XAI_API_KEY")
+            append("\nLocal model: ${LocalLlmModelManager.MODEL_DISPLAY_NAME}")
+            append("\nLocal model file: ${LocalLlmModelManager.MODEL_FILE_NAME}")
+            append("\nLocal model source: Hugging Face ${LocalLlmModelManager.MODEL_REPO}")
+        }
+    }
+
+    private fun parseLlmResponse(body: String): String? = try {
+        val root = json.parseToJsonElement(body).jsonObject
+        root["choices"]?.jsonArray?.firstOrNull()?.jsonObject?.get("message")?.jsonObject?.get("content")?.jsonPrimitive?.content?.trim()
+    } catch (e: Exception) {
+        null
+    }
 
     suspend fun askViaSupabase(userMessage: String, species: String = ""): String =
         ask(userMessage, species)
-
-    companion object {
-        val CLOUD_SYSTEM_PROMPT: String = "FieldOps AI"
-        val WILDLIFE_SYSTEM_PROMPT: String = CLOUD_SYSTEM_PROMPT
-        val LOCAL_SYSTEM_PROMPT: String = "On-device assistant"
-        fun cloudDiagnosticsOnly(): String = "AiService stub"
-    }
 }
