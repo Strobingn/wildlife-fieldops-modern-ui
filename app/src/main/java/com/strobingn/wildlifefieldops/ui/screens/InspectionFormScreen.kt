@@ -75,6 +75,7 @@ fun InspectionFormScreen(
     val reportSource by viewModel.reportSource.collectAsState()
     val estimatePrepLoading by viewModel.estimatePrepLoading.collectAsState()
     val estimatePrepMessage by viewModel.estimatePrepMessage.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var linkedJobTitle by remember { mutableStateOf("") }
     var linkedJobAddress by remember { mutableStateOf("") }
@@ -105,6 +106,22 @@ fun InspectionFormScreen(
         linkedJobAddress = job.address
         linkedJobDescription = job.description
         if (customerName.isBlank()) customerName = job.customerName
+    }
+
+
+    LaunchedEffect(reportSource) {
+        val src = reportSource ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar("Report filled · $src")
+    }
+    LaunchedEffect(reportError) {
+        val err = reportError ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(err)
+        viewModel.clearReportError()
+    }
+    LaunchedEffect(estimatePrepMessage) {
+        val msg = estimatePrepMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(msg)
+        viewModel.clearEstimatePrepMessage()
     }
 
     val speechRecognizer = remember {
@@ -264,6 +281,7 @@ fun InspectionFormScreen(
     }.trim()
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -283,46 +301,23 @@ fun InspectionFormScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = BackgroundDark)
             )
         },
-        containerColor = BackgroundDark
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // --- Dictate card ---
-            Card(
-                colors = CardDefaults.cardColors(containerColor = BackgroundCard),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
+        bottomBar = {
+            Surface(color = BackgroundCard, shadowElevation = 10.dp) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        "Dictate inspection",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        "Hold the mic toggle on while you walk the property. Speech accumulates across pauses.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
                             onClick = { toggleDictate() },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isListening) ErrorRed else PrimaryGreen,
+                                containerColor = if (isListening) ErrorRed else AccentBlue,
                                 contentColor = Color.White
                             ),
                             shape = RoundedCornerShape(12.dp),
@@ -330,47 +325,13 @@ fun InspectionFormScreen(
                         ) {
                             Icon(
                                 if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
-                                contentDescription = null
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
                             )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                if (isListening) "Listening… tap to stop" else "Dictate",
-                                fontWeight = FontWeight.Bold
-                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (isListening) "Stop" else "Dictate", fontWeight = FontWeight.Bold)
                         }
-                        if (isListening) {
-                            Box(
-                                modifier = Modifier
-                                    .size(14.dp)
-                                    .background(ErrorRed, CircleShape)
-                            )
-                        }
-                    }
-                    if (!partialDictation.isNullOrBlank()) {
-                        Text(
-                            "Hearing: $partialDictation",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = PrimaryGreenLight
-                        )
-                    }
-                    if (!dictationError.isNullOrBlank()) {
-                        Text(dictationError!!, color = ErrorRed, style = MaterialTheme.typography.labelMedium)
-                    }
-                    OutlinedTextField(
-                        value = dictationNotes,
-                        onValueChange = { dictationNotes = it },
-                        label = { Text("Dictation transcript (editable)") },
-                        colors = fieldColors(),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 100.dp),
-                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                        shape = RoundedCornerShape(12.dp),
-                        minLines = 3,
-                        maxLines = 8
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(
+                        Button(
                             onClick = {
                                 viewModel.writeReportFromDictation(
                                     transcript = dictationNotes,
@@ -407,65 +368,206 @@ fun InspectionFormScreen(
                                 contentColor = Color.White
                             ),
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1.15f)
                         ) {
                             if (reportLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Color.White
-                                )
-                                Spacer(Modifier.width(8.dp))
+                                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
                             } else {
-                                Icon(Icons.Default.AutoAwesome, contentDescription = null)
-                                Spacer(Modifier.width(8.dp))
+                                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
                             }
-                            Text("AI Write Report", fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(6.dp))
+                            Text("AI Report", fontWeight = FontWeight.Bold)
                         }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         if (linkedJobId.isNotBlank() && onNavigateToEstimate != null) {
                             OutlinedButton(
                                 onClick = {
                                     viewModel.prepareJobForEstimate(
                                         jobId = linkedJobId,
                                         reportText = buildReportBlob()
-                                    ) { jobId ->
-                                        onNavigateToEstimate(jobId)
-                                    }
+                                    ) { jobId -> onNavigateToEstimate(jobId) }
                                 },
                                 enabled = !estimatePrepLoading && buildReportBlob().isNotBlank(),
                                 shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGreen),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentBlue),
                                 modifier = Modifier.weight(1f)
                             ) {
                                 if (estimatePrepLoading) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(18.dp),
-                                        strokeWidth = 2.dp,
-                                        color = PrimaryGreen
-                                    )
+                                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = AccentBlue)
                                 } else {
-                                    Icon(Icons.Default.Calculate, contentDescription = null)
+                                    Icon(Icons.Default.Calculate, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(6.dp))
                                     Text("AI Estimate")
                                 }
                             }
                         }
+                        Button(
+                            onClick = {
+                                stopListeningSession()
+                                val base = existing
+                                if (base != null) {
+                                    viewModel.updateInspection(
+                                        base.copy(
+                                            jobId = linkedJobId.ifBlank { base.jobId },
+                                            customerName = customerName,
+                                            inspectorName = inspectorName,
+                                            inspectionType = selectedType,
+                                            inspectionDate = scheduledAt,
+                                            findings = findings,
+                                            recommendations = recommendations,
+                                            severity = selectedSeverity,
+                                            speciesIdentified = speciesIdentified,
+                                            entryPoints = entryPoints,
+                                            damageAssessment = damageAssessment,
+                                            followUpRequired = followUpRequired,
+                                            followUpDate = if (followUpRequired) {
+                                                base.followUpDate ?: (System.currentTimeMillis() + 7 * 86400000L)
+                                            } else null,
+                                            weatherConditions = weatherConditions,
+                                            notes = notes,
+                                            isSynced = false
+                                        )
+                                    )
+                                } else {
+                                    viewModel.createInspection(
+                                        jobId = linkedJobId,
+                                        customerId = "",
+                                        customerName = customerName,
+                                        inspectorName = inspectorName,
+                                        inspectionType = selectedType,
+                                        inspectionDate = scheduledAt,
+                                        findings = findings,
+                                        recommendations = recommendations,
+                                        severity = selectedSeverity,
+                                        speciesIdentified = speciesIdentified,
+                                        entryPoints = entryPoints,
+                                        damageAssessment = damageAssessment,
+                                        followUpRequired = followUpRequired,
+                                        followUpDate = if (followUpRequired) System.currentTimeMillis() + 7 * 86400000L else null,
+                                        weatherConditions = weatherConditions,
+                                        notes = notes
+                                    )
+                                }
+                                onBack()
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
+                            shape = RoundedCornerShape(12.dp),
+                            enabled = customerName.isNotBlank()
+                        ) {
+                            Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Save", fontWeight = FontWeight.Bold)
+                        }
                     }
-                    if (!reportSource.isNullOrBlank()) {
-                        Text(reportSource!!, color = PrimaryGreen, style = MaterialTheme.typography.labelMedium)
-                    }
-                    if (!reportError.isNullOrBlank()) {
-                        Text(reportError!!, color = ErrorRed, style = MaterialTheme.typography.labelMedium)
-                    }
-                    if (!estimatePrepMessage.isNullOrBlank()) {
-                        Text(estimatePrepMessage!!, color = PrimaryGreenLight, style = MaterialTheme.typography.labelMedium)
-                    }
-                    if (linkedJobId.isBlank()) {
+                }
+            }
+        },
+        containerColor = BackgroundDark
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = if (linkedJobId.isNotBlank()) AccentBlue.copy(alpha = 0.12f) else BackgroundCard
+                ),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        if (linkedJobId.isNotBlank()) "Linked job" else "No job linked",
+                        color = if (linkedJobId.isNotBlank()) AccentBlue else TextSecondary,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    if (linkedJobId.isNotBlank()) {
                         Text(
-                            "Tip: open Inspect from a Job to enable AI Estimate navigation.",
+                            (linkedJobTitle.ifBlank { "Job" }) + " · ID " + linkedJobId.take(8) + "…",
+                            color = TextPrimary,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        if (linkedJobAddress.isNotBlank()) {
+                            Text(linkedJobAddress, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Text(
+                            "AI Estimate uses this linked job. Open Inspect from Job detail to attach.",
                             color = TextTertiary,
                             style = MaterialTheme.typography.labelSmall
                         )
+                    } else {
+                        Text(
+                            "Open Inspect from a Job to link jobId for AI Estimate and richer context.",
+                            color = TextSecondary,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = BackgroundCard),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "Voice notes",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Sticky bar: Dictate → edit transcript → AI Report. Speech accumulates across pauses.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    if (isListening) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(10.dp).background(ErrorRed, CircleShape))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Listening…", color = ErrorRed, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    if (partialDictation.isNotBlank()) {
+                        Text("Hearing: $partialDictation", style = MaterialTheme.typography.bodySmall, color = PrimaryGreenLight)
+                    }
+                    if (!dictationError.isNullOrBlank()) {
+                        Text(dictationError!!, color = ErrorRed, style = MaterialTheme.typography.labelMedium)
+                    }
+                    OutlinedTextField(
+                        value = dictationNotes,
+                        onValueChange = { dictationNotes = it },
+                        label = { Text("Dictation transcript (editable)") },
+                        colors = fieldColors(),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp),
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                        shape = RoundedCornerShape(12.dp),
+                        minLines = 3,
+                        maxLines = 8
+                    )
+                    if (reportLoading) {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = AccentBlue,
+                            trackColor = BorderDark
+                        )
+                    }
+                    if (!reportSource.isNullOrBlank()) {
+                        Text(reportSource!!, color = PrimaryGreen, style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -585,9 +687,7 @@ fun InspectionFormScreen(
                 onValueChange = { findings = it },
                 label = { Text("Findings") },
                 colors = fieldColors(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp),
+                modifier = Modifier.fillMaxWidth().height(120.dp),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 shape = RoundedCornerShape(12.dp),
                 maxLines = 5
@@ -598,9 +698,7 @@ fun InspectionFormScreen(
                 onValueChange = { recommendations = it },
                 label = { Text("Recommendations") },
                 colors = fieldColors(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp),
+                modifier = Modifier.fillMaxWidth().height(100.dp),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 shape = RoundedCornerShape(12.dp),
                 maxLines = 4
@@ -642,9 +740,7 @@ fun InspectionFormScreen(
                 onValueChange = { notes = it },
                 label = { Text("Notes / Summary") },
                 colors = fieldColors(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp),
+                modifier = Modifier.fillMaxWidth().height(100.dp),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 shape = RoundedCornerShape(12.dp),
                 maxLines = 4
@@ -666,68 +762,7 @@ fun InspectionFormScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Button(
-                onClick = {
-                    stopListeningSession()
-                    val base = existing
-                    if (base != null) {
-                        viewModel.updateInspection(
-                            base.copy(
-                                jobId = linkedJobId.ifBlank { base.jobId },
-                                customerName = customerName,
-                                inspectorName = inspectorName,
-                                inspectionType = selectedType,
-                                inspectionDate = scheduledAt,
-                                findings = findings,
-                                recommendations = recommendations,
-                                severity = selectedSeverity,
-                                speciesIdentified = speciesIdentified,
-                                entryPoints = entryPoints,
-                                damageAssessment = damageAssessment,
-                                followUpRequired = followUpRequired,
-                                followUpDate = if (followUpRequired) {
-                                    base.followUpDate ?: (System.currentTimeMillis() + 7 * 86400000L)
-                                } else null,
-                                weatherConditions = weatherConditions,
-                                notes = notes,
-                                isSynced = false
-                            )
-                        )
-                    } else {
-                        viewModel.createInspection(
-                            jobId = linkedJobId,
-                            customerId = "",
-                            customerName = customerName,
-                            inspectorName = inspectorName,
-                            inspectionType = selectedType,
-                            inspectionDate = scheduledAt,
-                            findings = findings,
-                            recommendations = recommendations,
-                            severity = selectedSeverity,
-                            speciesIdentified = speciesIdentified,
-                            entryPoints = entryPoints,
-                            damageAssessment = damageAssessment,
-                            followUpRequired = followUpRequired,
-                            followUpDate = if (followUpRequired) System.currentTimeMillis() + 7 * 86400000L else null,
-                            weatherConditions = weatherConditions,
-                            notes = notes
-                        )
-                    }
-                    onBack()
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
-                shape = RoundedCornerShape(12.dp),
-                enabled = customerName.isNotBlank()
-            ) {
-                Icon(Icons.Default.Save, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Save Inspection", fontWeight = FontWeight.Bold)
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
@@ -735,12 +770,12 @@ fun InspectionFormScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun fieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = PrimaryGreen,
+    focusedBorderColor = AccentBlue,
     unfocusedBorderColor = BorderDark,
     focusedTextColor = TextPrimary,
     unfocusedTextColor = TextPrimary,
     focusedContainerColor = BackgroundDark,
     unfocusedContainerColor = BackgroundDark,
-    focusedLabelColor = PrimaryGreen,
-    cursorColor = PrimaryGreen
+    focusedLabelColor = AccentBlue,
+    cursorColor = AccentBlue
 )
