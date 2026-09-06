@@ -14,55 +14,55 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = PrimaryGreen,
-    onPrimary = Color(0xFF111111),
-    primaryContainer = PrimaryContainer,
-    onPrimaryContainer = OnPrimaryContainer,
-    secondary = AccentBlue,
-    onSecondary = Color(0xFF111111),
-    secondaryContainer = SurfaceVariant,
-    onSecondaryContainer = TextPrimary,
-    tertiary = AccentAmber,
-    onTertiary = Color(0xFF111111),
-    tertiaryContainer = SurfaceVariant,
-    onTertiaryContainer = TextPrimary,
-    background = BackgroundDark,
-    onBackground = TextPrimary,
-    surface = SurfaceDark,
-    onSurface = TextPrimary,
-    surfaceVariant = SurfaceVariant,
-    onSurfaceVariant = TextSecondary,
-    surfaceBright = SurfaceBright,
-    surfaceContainerLowest = BackgroundDark,
-    surfaceContainerLow = BackgroundCard,
-    surfaceContainer = BackgroundElevated,
-    surfaceContainerHigh = SurfaceVariant,
-    surfaceContainerHighest = SurfaceBright,
-    error = ErrorRed,
+    primary = Color(0xFF1565C0),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFF0A2744),
+    onPrimaryContainer = Color(0xFFD6E4F5),
+    secondary = Color(0xFF42A5F5),
+    onSecondary = Color(0xFF0A1628),
+    secondaryContainer = Color(0xFF0D47A1),
+    onSecondaryContainer = Color(0xFFD6E4F5),
+    tertiary = Color(0xFF64B5F6),
+    onTertiary = Color(0xFF0A1628),
+    tertiaryContainer = Color(0xFF1565C0),
+    onTertiaryContainer = Color(0xFFFFFFFF),
+    background = Color(0xFF0D0D0D),
+    onBackground = Color(0xFFF5F5F5),
+    surface = Color(0xFF171717),
+    onSurface = Color(0xFFF5F5F5),
+    surfaceVariant = Color(0xFF292929),
+    onSurfaceVariant = Color(0xFFBDBDBD),
+    surfaceBright = Color(0xFF383838),
+    surfaceContainerLowest = Color(0xFF0D0D0D),
+    surfaceContainerLow = Color(0xFF171717),
+    surfaceContainer = Color(0xFF222222),
+    surfaceContainerHigh = Color(0xFF292929),
+    surfaceContainerHighest = Color(0xFF383838),
+    error = Color(0xFFF0F0F0),
     onError = Color(0xFF111111),
-    errorContainer = SurfaceVariant,
-    onErrorContainer = TextPrimary,
-    outline = BorderDark,
-    outlineVariant = DividerDark,
-    scrim = ScrimDark,
+    errorContainer = Color(0xFF292929),
+    onErrorContainer = Color(0xFFF5F5F5),
+    outline = Color(0xFF3D3D3D),
+    outlineVariant = Color(0xFF252525),
+    scrim = Color(0xCC000000),
     inverseSurface = Color(0xFFE5E5E5),
     inverseOnSurface = Color(0xFF111111),
-    inversePrimary = PrimaryGreenDark
+    inversePrimary = Color(0xFF1565C0)
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = PrimaryGreenDark,
+    primary = Color(0xFF0D47A1),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFE5E5E5),
-    onPrimaryContainer = Color(0xFF111111),
-    secondary = Color(0xFF555555),
+    primaryContainer = Color(0xFFD6E4F5),
+    onPrimaryContainer = Color(0xFF0A2744),
+    secondary = Color(0xFF1565C0),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFE5E5E5),
-    onSecondaryContainer = Color(0xFF111111),
-    tertiary = Color(0xFF727272),
+    secondaryContainer = Color(0xFFE3F2FD),
+    onSecondaryContainer = Color(0xFF0A2744),
+    tertiary = Color(0xFF1976D2),
     onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFE5E5E5),
-    onTertiaryContainer = Color(0xFF111111),
+    tertiaryContainer = Color(0xFFBBDEFB),
+    onTertiaryContainer = Color(0xFF0A2744),
     background = Color(0xFFF6F6F6),
     onBackground = Color(0xFF111111),
     surface = Color.White,
@@ -75,7 +75,7 @@ private val LightColorScheme = lightColorScheme(
     surfaceContainer = Color(0xFFEAEAEA),
     surfaceContainerHigh = Color(0xFFE3E3E3),
     surfaceContainerHighest = Color(0xFFDADADA),
-    error = ErrorRedDark,
+    error = Color(0xFF5C5C5C),
     onError = Color.White,
     errorContainer = Color(0xFFE5E5E5),
     onErrorContainer = Color(0xFF111111),
@@ -84,7 +84,7 @@ private val LightColorScheme = lightColorScheme(
     scrim = Color.Black,
     inverseSurface = Color(0xFF292929),
     inverseOnSurface = Color(0xFFF7F7F7),
-    inversePrimary = PrimaryGreen
+    inversePrimary = Color(0xFF42A5F5)
 )
 
 private fun Context.findActivity(): Activity? {
@@ -102,7 +102,8 @@ fun WildlifeFieldOpsTheme(
     @Suppress("UNUSED_PARAMETER") dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    // Dynamic Material You colors are intentionally disabled: the product is grayscale-only.
+    ThemeMode.isDark = darkTheme
+    // Dynamic Material You off — greyscale chrome with dark-blue primary accents.
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
     val view = LocalView.current

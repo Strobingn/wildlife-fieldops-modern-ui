@@ -13,7 +13,7 @@ Field operations app for wildlife removal:
 - Offline-first Room database
 - Cloud sync via Supabase
 - Weather (OpenWeather, optional)
-- AI assistant (Supabase Edge Function + on-device fallback)
+- AI assistant (cloud LLM and/or **real on-device abliterated llama.cpp GGUF** — no canned tip lists)
 
 ## Build the APK (GitHub Actions)
 
@@ -67,11 +67,52 @@ Legacy web / Capacitor folders may still exist in the repo history for reference
 - Schema applied: `supabase/migrations/20260710153000_native_sync_fix.sql` (customers table + RLS/grants for `anon`).
 - Verified: REST insert/select/delete for `customers` + `jobs` works with the app anon key.
 
-## AI
+## AI (real generative only)
 
-- Prefer Supabase function `ai-assistant` (set LLM keys in Supabase Edge Function secrets).
-- If the function is offline, the app uses built-in field knowledge so the chat still works.
+The chat / estimate / summary paths never answer from hardcoded keyword tip lists.
 
+### Cloud LLM
+- Bake `XAI_API_KEY` (or `LLM_API_KEY`) into the APK at build time for SpaceXAI / Grok.
+- Optional: deploy Supabase Edge Function `ai-assistant` with a real provider key (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`, etc.). Demo/canned responses are disabled when no key is set.
+
+### On-device llama.cpp + **abliterated** GGUF (default: Qwen2.5 3B; optional 7B v3)
+- Stack: [`dev.ffmpegkit-maintained:llama-android:0.1.1`](https://central.sonatype.com/artifact/dev.ffmpegkit-maintained/llama-android) (prebuilt llama.cpp JNI, no NDK in this app).
+- Prompts use **ChatML** (Qwen2.5 Instruct). Selection is persisted; switching unloads the previous llama weights.
+- **Default — Qwen2.5-3B-Instruct-abliterated Q4_K_M:**
+  - Upstream: [`huihui-ai/Qwen2.5-3B-Instruct-abliterated`](https://huggingface.co/huihui-ai/Qwen2.5-3B-Instruct-abliterated)
+  - Quant repo: [`mradermacher/Qwen2.5-3B-Instruct-abliterated-GGUF`](https://huggingface.co/mradermacher/Qwen2.5-3B-Instruct-abliterated-GGUF)
+  - File: **`Qwen2.5-3B-Instruct-Abliterated.Q4_K_M.gguf`** (exact **2,104,933,600** bytes ≈ **2.1 GB**, LFS SHA256 `d0b449b22bc346ab75c63d91447e3a65e7735bbcbf102b5e008d8c75028cbb3f`)
+- **Optional — Qwen2.5-7B-Instruct-abliterated-v3 Q4_K_M** (bigger / slower):
+  - Upstream: [`huihui-ai/Qwen2.5-7B-Instruct-abliterated-v3`](https://huggingface.co/huihui-ai/Qwen2.5-7B-Instruct-abliterated-v3)
+  - Quant repo: [`mradermacher/Qwen2.5-7B-Instruct-abliterated-v3-GGUF`](https://huggingface.co/mradermacher/Qwen2.5-7B-Instruct-abliterated-v3-GGUF)
+  - File: **`Qwen2.5-7B-Instruct-abliterated-v3.Q4_K_M.gguf`** (exact **4,683,074,560** bytes ≈ **4.7 GB**, LFS SHA256 `fb4821c8707f89b03bd6738c07a382744184a3f15bd6668e6500cb313fbcaa75`)
+- Delivery: download-once from Hugging Face (too large for APK `assets/`). Open **AI Assistant** → pick **3B** or **7B v3** → **Download**. Cached under `files/local_llm/<filename>.gguf`.
+- On refresh, legacy **Qwen3.5-0.8B** / 1.5B / MediaPipe `.task` files are deleted so the app re-downloads the new default.
+- Abliteration removes safety-refusal directions so the field assistant generates freely instead of stock chat refusals.
+- Build notes: no NDK/CMake. Native libs ship for **`arm64-v8a`**. `android:largeHeap` is enabled; prefer ≥6 GB RAM for 3B and ≥8 GB for 7B.
+- Catalog / URLs live in `LocalLlmModelManager` (`QWEN25_3B`, `QWEN25_7B_V3`).
+
+### Priority order
+1. On-device abliterated llama.cpp GGUF when the selected model file is installed (local-first for chat)  
+2. Cloud chat completions when a key is present in the APK  
+3. Clear setup error (never fake “field knowledge” bullets)
+
+
+
+
+## Offline maps (what works)
+
+Full Google Maps **offline tile regions** (Play Services OfflineRegion) are **not** bundled — they are heavy and need Play Console / custom tile management.
+
+What **does** work offline in this app:
+
+1. **Job markers from Room** — any job/customer with saved lat/lng still renders pins without network.
+2. **Last camera** — Map camera lat/lng/zoom is persisted to DataStore and restored on reopen.
+3. **Marker cache** — MapViewModel auto-saves recent located jobs to `map_offline_cache`; tap **Cache** on the map controls to force a snapshot.
+4. **Offline banner** — when ConnectivityManager reports no network, Map shows an “Offline map mode” banner. Map **tiles** still need network (or the device’s own Maps cached tiles); pins/routes from local data remain usable.
+5. **Online maps unchanged** — with network, GoogleMap tiles + style load normally.
+
+Voice job intake and AI report paths prefer the **on-device LLM** when downloaded, so field forms can still fill without cloud.
 
 ## V2.5 route planner and visual system
 

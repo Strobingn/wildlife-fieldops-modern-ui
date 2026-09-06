@@ -6,3 +6,9 @@ dist/
 .env
 .env.kimi
 .gradle/
+
+app/build/
+build/
+*.apk
+local.properties
+

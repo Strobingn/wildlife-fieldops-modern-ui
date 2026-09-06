@@ -24,6 +24,7 @@ import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
 @Composable
 fun EstimateScreen(
     jobId: String,
+    autoDraft: Boolean = false,
     onBack: () -> Unit,
     jobsViewModel: JobsViewModel = hiltViewModel(),
     jobAiViewModel: JobAiViewModel = hiltViewModel()
@@ -32,6 +33,15 @@ fun EstimateScreen(
     val draft by jobAiViewModel.estimateDraft.collectAsState()
     val estimateLoading by jobAiViewModel.estimateLoading.collectAsState()
     val aiMessage by jobAiViewModel.message.collectAsState()
+    var autoDraftFired by remember { mutableStateOf(false) }
+
+    LaunchedEffect(job, autoDraft) {
+        val current = job
+        if (autoDraft && !autoDraftFired && current != null && !estimateLoading) {
+            autoDraftFired = true
+            jobAiViewModel.draftEstimate(current)
+        }
+    }
 
     var laborHours by remember { mutableStateOf("2.0") }
     var laborRate by remember { mutableStateOf("85.00") }
@@ -41,12 +51,11 @@ fun EstimateScreen(
     var disposalCost by remember { mutableStateOf("0.00") }
     var mileage by remember { mutableStateOf("0") }
     var mileageRate by remember { mutableStateOf("0.65") }
-    var taxRate by remember { mutableStateOf("8.0") }
+    var taxRate by remember { mutableStateOf("8.125") }
     var discountPercent by remember { mutableStateOf("0") }
     var draftRationale by remember { mutableStateOf("") }
     var lineItemNotes by remember { mutableStateOf("") }
 
-    // Apply AI draft when it arrives
     LaunchedEffect(draft) {
         val d = draft ?: return@LaunchedEffect
         laborHours = formatNum(d.laborHours)
@@ -61,14 +70,6 @@ fun EstimateScreen(
         discountPercent = formatNum(d.discountPercent)
         draftRationale = d.rationale
         lineItemNotes = d.lineItemNotes
-    }
-
-    // Seed estimate value from job if present
-    LaunchedEffect(job?.id) {
-        val j = job ?: return@LaunchedEffect
-        if (j.estimatedValue > 0 && laborHours == "2.0" && materialsCost == "0.00") {
-            // soft seed only when still at defaults
-        }
     }
 
     val laborTotal = laborHours.toDoubleOrNull()?.times(laborRate.toDoubleOrNull() ?: 0.0) ?: 0.0
@@ -95,23 +96,9 @@ fun EstimateScreen(
                 actions = {
                     val current = job
                     if (current != null) {
-                        IconButton(
-                            onClick = { jobAiViewModel.draftEstimate(current) },
-                            enabled = !estimateLoading
-                        ) {
-                            if (estimateLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp,
-                                    color = PrimaryGreen
-                                )
-                            } else {
-                                Icon(
-                                    Icons.Default.AutoAwesome,
-                                    contentDescription = "AI draft from notes",
-                                    tint = PrimaryGreen
-                                )
-                            }
+                        IconButton(onClick = { jobAiViewModel.draftEstimate(current) }, enabled = !estimateLoading) {
+                            if (estimateLoading) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = PrimaryGreen)
+                            else Icon(Icons.Default.AutoAwesome, contentDescription = "AI draft from notes", tint = PrimaryGreen)
                         }
                     }
                 },
@@ -121,179 +108,94 @@ fun EstimateScreen(
         containerColor = BackgroundDark
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             job?.let {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = BackgroundCard),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Card(colors = CardDefaults.cardColors(containerColor = BackgroundCard), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(it.title, style = MaterialTheme.typography.titleMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
                         Text(it.customerName, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                        if (it.notes.isNotBlank() || it.description.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                (it.description.ifBlank { it.notes }).take(160),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextTertiary
-                            )
-                        }
+                        if (it.address.isNotBlank()) Text(it.address, style = MaterialTheme.typography.bodySmall, color = TextTertiary)
                     }
                 }
             }
-
-            // AI draft CTA
             Button(
                 onClick = { job?.let { jobAiViewModel.draftEstimate(it) } },
                 enabled = job != null && !estimateLoading,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AccentPurple,
-                    contentColor = Color.White
-                ),
+                colors = ButtonDefaults.buttonColors(containerColor = AccentPurple, contentColor = Color.White),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 if (estimateLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp
-                    )
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Drafting estimate…")
+                    Text("Looking up miles + drafting…")
                 } else {
                     Icon(Icons.Default.AutoAwesome, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        "AI draft from job notes",
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text("AI draft from job notes", fontWeight = FontWeight.SemiBold)
                 }
             }
-            Text(
-                "Uses title, service type, description, and notes · ${jobAiViewModel.providerLabel}",
-                style = MaterialTheme.typography.labelSmall,
-                color = TextTertiary
-            )
-            if (!aiMessage.isNullOrBlank()) {
-                Text(aiMessage!!, style = MaterialTheme.typography.labelMedium, color = PrimaryGreen)
-            }
+            if (!aiMessage.isNullOrBlank()) Text(aiMessage!!, style = MaterialTheme.typography.labelMedium, color = PrimaryGreen)
             if (draftRationale.isNotBlank()) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = BackgroundCard),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Card(colors = CardDefaults.cardColors(containerColor = BackgroundCard), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text("Draft rationale", style = MaterialTheme.typography.labelMedium, color = TextPrimary)
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(draftRationale, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                        if (lineItemNotes.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(lineItemNotes, style = MaterialTheme.typography.bodySmall, color = TextTertiary)
-                        }
                     }
                 }
             }
-
-            // Labor
-            EstimateSection(title = "Labor") {
+            EstimateSection("Labor") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     EstimateField("Hours", laborHours, { laborHours = it }, Modifier.weight(1f))
                     EstimateField("Rate/hr", laborRate, { laborRate = it }, Modifier.weight(1f))
                 }
-                Text(
-                    "Subtotal: $${String.format("%.2f", laborTotal)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = AccentBlue,
-                    modifier = Modifier.align(Alignment.End)
-                )
             }
-
-            // Materials & Equipment
-            EstimateSection(title = "Materials & Equipment") {
+            EstimateSection("Materials & Equipment") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     EstimateField("Materials", materialsCost, { materialsCost = it }, Modifier.weight(1f))
                     EstimateField("Equipment", equipmentCost, { equipmentCost = it }, Modifier.weight(1f))
                 }
             }
-
-            // Other Costs
-            EstimateSection(title = "Other Costs") {
+            EstimateSection("Other Costs") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     EstimateField("Permits", permitCost, { permitCost = it }, Modifier.weight(1f))
                     EstimateField("Disposal", disposalCost, { disposalCost = it }, Modifier.weight(1f))
                 }
             }
-
-            // Mileage
-            EstimateSection(title = "Mileage") {
+            EstimateSection("Mileage") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     EstimateField("Miles", mileage, { mileage = it }, Modifier.weight(1f))
                     EstimateField("Rate/mi", mileageRate, { mileageRate = it }, Modifier.weight(1f))
                 }
             }
-
-            // Tax and Discount
-            EstimateSection(title = "Adjustments") {
+            EstimateSection("Adjustments") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     EstimateField("Tax %", taxRate, { taxRate = it }, Modifier.weight(1f))
                     EstimateField("Discount %", discountPercent, { discountPercent = it }, Modifier.weight(1f))
                 }
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Total Summary
-            Card(
-                colors = CardDefaults.cardColors(containerColor = PrimaryGreen.copy(alpha = 0.1f)),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Card(colors = CardDefaults.cardColors(containerColor = PrimaryGreen.copy(alpha = 0.1f)), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     SummaryRow("Subtotal", subtotal)
-                    if (discountAmount > 0) {
-                        SummaryRow("Discount (${discountPercent}%)", -discountAmount, color = SuccessGreen)
-                    }
+                    if (discountAmount > 0) SummaryRow("Discount", -discountAmount, color = SuccessGreen)
                     SummaryRow("Tax (${taxRate}%)", taxAmount)
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = BorderDark)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("TOTAL", style = MaterialTheme.typography.titleLarge, color = TextPrimary, fontWeight = FontWeight.Bold)
-                        Text(
-                            "$${String.format("%.2f", total)}",
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = PrimaryGreen,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text("$${String.format("%.2f", total)}", style = MaterialTheme.typography.headlineSmall, color = PrimaryGreen, fontWeight = FontWeight.Bold)
                     }
                 }
             }
-
-            // Push total into job estimated value
             job?.let { j ->
                 OutlinedButton(
                     onClick = {
                         jobsViewModel.updateJobDetails(
-                            jobId = j.id,
-                            title = j.title,
-                            description = j.description,
-                            customerId = j.customerId,
-                            customerName = j.customerName,
-                            address = j.address,
-                            type = j.type,
-                            priority = j.priority,
-                            estimatedValue = total,
-                            notes = j.notes
+                            jobId = j.id, title = j.title, description = j.description,
+                            customerId = j.customerId, customerName = j.customerName, address = j.address,
+                            type = j.type, priority = j.priority, estimatedValue = total, notes = j.notes
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -304,24 +206,18 @@ fun EstimateScreen(
                     Text("Save total as job estimated value")
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
 
 private fun formatNum(value: Double): String {
     return if (value == value.toLong().toDouble()) value.toLong().toString()
-    else String.format("%.2f", value)
+    else String.format("%.3f", value).trimEnd('0').trimEnd('.')
 }
 
 @Composable
 private fun EstimateSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = BackgroundCard),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    Card(colors = CardDefaults.cardColors(containerColor = BackgroundCard), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall, color = TextPrimary, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.height(8.dp))
@@ -337,12 +233,9 @@ private fun EstimateField(label: String, value: String, onChange: (String) -> Un
         onValueChange = { onChange(it.filter { c -> c.isDigit() || c == '.' }) },
         label = { Text(label) },
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = PrimaryGreen,
-            unfocusedBorderColor = BorderDark,
-            focusedTextColor = TextPrimary,
-            unfocusedTextColor = TextPrimary,
-            focusedContainerColor = BackgroundDark,
-            unfocusedContainerColor = BackgroundDark
+            focusedBorderColor = PrimaryGreen, unfocusedBorderColor = BorderDark,
+            focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary,
+            focusedContainerColor = BackgroundDark, unfocusedContainerColor = BackgroundDark
         ),
         modifier = modifier,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -353,17 +246,8 @@ private fun EstimateField(label: String, value: String, onChange: (String) -> Un
 
 @Composable
 private fun SummaryRow(label: String, amount: Double, color: Color = TextSecondary) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, style = MaterialTheme.typography.bodySmall, color = color)
-        Text(
-            "$${String.format("%.2f", amount)}",
-            style = MaterialTheme.typography.bodySmall,
-            color = if (amount < 0) SuccessGreen else TextPrimary
-        )
+        Text("$${String.format("%.2f", amount)}", style = MaterialTheme.typography.bodySmall, color = if (amount < 0) SuccessGreen else TextPrimary)
     }
 }

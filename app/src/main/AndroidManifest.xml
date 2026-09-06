@@ -3,7 +3,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.strobingn.wildlifefieldops">
 
-    <!-- Keep launch permissions minimal — request the rest in-app when needed. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -18,11 +17,12 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- Optional hardware — do not require or install will fail on some devices -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
     <uses-feature android:name="android.hardware.location.network" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <application
         android:name=".WildlifeFieldOpsApp"
@@ -35,7 +35,10 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:enableOnBackInvokedCallback="true"
         android:supportsRtl="true"
+        android:largeHeap="true"
         tools:targetApi="35">
+
+        <!-- llama.cpp native libs ship inside the llama-android AAR (arm64-v8a). -->
 
         <activity
             android:name=".MainActivity"
@@ -64,7 +67,6 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- Remove WorkManager startup (dependency not shipped; crashed process on open) -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"

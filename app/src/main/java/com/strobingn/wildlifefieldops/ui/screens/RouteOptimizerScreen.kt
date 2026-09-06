@@ -21,12 +21,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
+import com.strobingn.wildlifefieldops.data.model.Customer
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobPriority
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.data.route.RouteOptimizationEngine
 import com.strobingn.wildlifefieldops.data.route.RoutePoint
 import com.strobingn.wildlifefieldops.ui.theme.*
+import com.strobingn.wildlifefieldops.ui.viewmodel.CustomersViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
 import kotlin.math.roundToInt
 
@@ -34,20 +36,36 @@ import kotlin.math.roundToInt
 @Composable
 fun RouteOptimizerScreen(
     onBack: () -> Unit,
-    viewModel: JobsViewModel = hiltViewModel()
+    viewModel: JobsViewModel = hiltViewModel(),
+    customersViewModel: CustomersViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val jobs by viewModel.jobs.collectAsState()
-    val sourceStops = remember(jobs) {
-        jobs
+    val customers by customersViewModel.customers.collectAsState()
+    val customersById = remember(customers) { customers.associateBy { it.id } }
+
+    LaunchedEffect(jobs) { viewModel.fillMissingCoordinates() }
+
+    val candidateJobs = remember(jobs) {
+        jobs.filter {
+            it.status != JobStatus.COMPLETED &&
+                it.status != JobStatus.CANCELLED &&
+                isTodayOrOpen(it)
+        }
+    }
+
+    val sourceStops = remember(candidateJobs, customersById) {
+        candidateJobs
             .asSequence()
-            .filter { it.status != JobStatus.COMPLETED && it.status != JobStatus.CANCELLED }
-            .filter { it.latitude != null && it.longitude != null }
+            .mapNotNull { job ->
+                val (lat, lng) = resolveJobCoordinates(job, customersById[job.customerId])
+                    ?: return@mapNotNull null
+                job.toRouteStop(lat, lng)
+            }
             .sortedWith(
-                compareBy<Job> { it.scheduledDate ?: Long.MAX_VALUE }
-                    .thenByDescending { priorityRank(it.priority) }
+                compareBy<RouteStop> { it.scheduledDate ?: Long.MAX_VALUE }
+                    .thenByDescending { priorityRankLabel(it.priorityLabel) }
             )
-            .map { it.toRouteStop() }
             .toList()
     }
     var routeStops by remember(sourceStops) { mutableStateOf(sourceStops) }
@@ -56,7 +74,6 @@ fun RouteOptimizerScreen(
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(LatLng(41.50, -74.20), 9.5f)
     }
-
     val totalDistance = RouteOptimizationEngine.totalDistanceMiles(
         routeStops.map { it.toRoutePoint() },
         returnToStart
@@ -64,10 +81,10 @@ fun RouteOptimizerScreen(
     val travelMinutes = (totalDistance / 35.0 * 60.0).roundToInt()
     val serviceMinutes = routeStops.size * 45
     val totalMinutes = travelMinutes + serviceMinutes
-    val missingCoordinates = jobs.count {
-        it.status != JobStatus.COMPLETED &&
-            it.status != JobStatus.CANCELLED &&
-            (it.latitude == null || it.longitude == null)
+    val missingCoordinates = remember(candidateJobs, customersById) {
+        candidateJobs.count { job ->
+            resolveJobCoordinates(job, customersById[job.customerId]) == null
+        }
     }
 
     Scaffold(
@@ -77,7 +94,7 @@ fun RouteOptimizerScreen(
                     Column {
                         Text("Route planner", fontWeight = FontWeight.SemiBold)
                         Text(
-                            if (isOptimized) "Optimized local driving order" else "Jobs with saved map locations",
+                            if (isOptimized) "Optimized local driving order" else "Today's jobs with map pins",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -104,7 +121,6 @@ fun RouteOptimizerScreen(
             )
             return@Scaffold
         }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -131,7 +147,6 @@ fun RouteOptimizerScreen(
                     )
                 }
             }
-
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -149,10 +164,9 @@ fun RouteOptimizerScreen(
                 ) {
                     RouteStat(routeStops.size.toString(), "Stops")
                     RouteStat(String.format("%.1f", totalDistance), "Miles")
-                    RouteStat("${totalMinutes}", "Minutes")
+                    RouteStat("$totalMinutes", "Minutes")
                 }
             }
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -189,7 +203,6 @@ fun RouteOptimizerScreen(
                     Icon(Icons.Default.RestartAlt, contentDescription = "Reset")
                 }
             }
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -206,7 +219,6 @@ fun RouteOptimizerScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -237,14 +249,12 @@ fun RouteOptimizerScreen(
                     Text("Navigate")
                 }
             }
-
             Text(
                 "Stops",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
             )
-
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
@@ -276,11 +286,31 @@ private data class RouteStop(
     val scheduledDate: Long?
 )
 
-private fun Job.toRouteStop() = RouteStop(
+/**
+ * Prefer job coordinates; fall back to the linked customer when the job row
+ * has no usable lat/lng (same rule as MapViewModel). Address alone is not
+ * treated as a pin — no fake 0,0.
+ */
+private fun resolveJobCoordinates(
+    job: Job,
+    customer: Customer?
+): Pair<Double, Double>? {
+    val latitude = job.latitude ?: customer?.latitude
+    val longitude = job.longitude ?: customer?.longitude
+    if (latitude == null || longitude == null ||
+        !latitude.isFinite() || !longitude.isFinite() ||
+        latitude !in -90.0..90.0 || longitude !in -180.0..180.0
+    ) {
+        return null
+    }
+    return latitude to longitude
+}
+
+private fun Job.toRouteStop(latitude: Double, longitude: Double) = RouteStop(
     id = id,
     address = address.ifBlank { customerName.ifBlank { "Job location" } },
-    latitude = latitude ?: 0.0,
-    longitude = longitude ?: 0.0,
+    latitude = latitude,
+    longitude = longitude,
     serviceType = type.ifBlank { title.ifBlank { "Wildlife service" } },
     priorityLabel = priority.name,
     scheduledDate = scheduledDate
@@ -288,11 +318,25 @@ private fun Job.toRouteStop() = RouteStop(
 
 private fun RouteStop.toRoutePoint() = RoutePoint(id, latitude, longitude)
 
-private fun priorityRank(priority: JobPriority): Int = when (priority) {
-    JobPriority.URGENT -> 4
-    JobPriority.HIGH -> 3
-    JobPriority.MEDIUM -> 2
-    JobPriority.LOW -> 1
+private fun isTodayOrOpen(job: Job): Boolean {
+    val start = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR_OF_DAY, 0)
+        set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis
+    val end = start + 24L * 60 * 60 * 1000
+    val scheduled = job.scheduledDate
+    return if (scheduled != null) scheduled in start until end
+    else job.status == JobStatus.PENDING || job.status == JobStatus.IN_PROGRESS
+}
+
+private fun priorityRankLabel(priorityLabel: String): Int = when (priorityLabel) {
+    JobPriority.URGENT.name -> 4
+    JobPriority.HIGH.name -> 3
+    JobPriority.MEDIUM.name -> 2
+    JobPriority.LOW.name -> 1
+    else -> 0
 }
 
 private fun openGoogleMaps(context: Context, stops: List<RouteStop>) {
@@ -301,11 +345,15 @@ private fun openGoogleMaps(context: Context, stops: List<RouteStop>) {
         .dropLast(1)
         .joinToString("|") { Uri.encode(it.address) }
     val waypointQuery = if (waypoints.isBlank()) "" else "&waypoints=$waypoints"
-    val uri = Uri.parse(
-        "https://www.google.com/maps/dir/?api=1&destination=${destination}" +
-            "&travelmode=driving${waypointQuery}"
+    context.startActivity(
+        Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse(
+                "https://www.google.com/maps/dir/?api=1&destination=$destination" +
+                    "&travelmode=driving$waypointQuery"
+            )
+        )
     )
-    context.startActivity(Intent(Intent.ACTION_VIEW, uri))
 }
 
 @Composable
@@ -400,13 +448,20 @@ private fun RouteEmptyState(
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(16.dp))
-        Text("No routable jobs yet", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Looking up today's stops",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold
+        )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             if (missingCoordinates > 0) {
-                "${missingCoordinates} active job(s) are missing saved map coordinates. Open each job and save its location before optimizing."
+                "$missingCoordinates job(s) still lack map pins on both the job and its customer. " +
+                    "Customer locations are used when the job has none; address-only jobs are looked up automatically. " +
+                    "Leave this screen open a few seconds, then come back."
             } else {
-                "Active jobs with saved coordinates will appear here automatically."
+                "Today's jobs with job or customer coordinates will appear here. " +
+                    "Address-only jobs get a pin lookup when you open this screen."
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant

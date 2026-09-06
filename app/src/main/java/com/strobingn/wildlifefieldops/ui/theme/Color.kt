@@ -1,56 +1,61 @@
 package com.strobingn.wildlifefieldops.ui.theme
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 
-// Grayscale field-operations palette.
-// Legacy names remain for source compatibility; every value is intentionally neutral.
-val PrimaryGreen = Color(0xFFE5E5E5)
-val PrimaryGreenDark = Color(0xFF1A1A1A)
-val PrimaryGreenLight = Color(0xFFF5F5F5)
-val PrimaryContainer = Color(0xFF333333)
-val OnPrimaryContainer = Color(0xFFF5F5F5)
+/** Screens read these vals during composition; flipping isDark recomposes them. */
+object ThemeMode {
+    var isDark by mutableStateOf(true)
+}
 
-// Surfaces
-val BackgroundDark = Color(0xFF0D0D0D)
-val BackgroundCard = Color(0xFF171717)
-val BackgroundElevated = Color(0xFF222222)
-val SurfaceDark = Color(0xFF171717)
-val SurfaceVariant = Color(0xFF292929)
-val SurfaceBright = Color(0xFF383838)
+private fun pick(dark: Color, light: Color): Color = if (ThemeMode.isDark) dark else light
 
-// Text
-val TextPrimary = Color(0xFFF5F5F5)
-val TextSecondary = Color(0xFFBDBDBD)
-val TextTertiary = Color(0xFF858585)
+// Field-ops chrome stays greyscale; accent/highlight tokens are dark blue.
+// Legacy name PrimaryGreen kept for source compatibility — values are dark blue.
+val PrimaryGreen: Color get() = pick(Color(0xFF1565C0), Color(0xFF0D47A1))
+val PrimaryGreenDark: Color get() = pick(Color(0xFF0D47A1), Color(0xFF002171))
+val PrimaryGreenLight: Color get() = pick(Color(0xFF42A5F5), Color(0xFF1565C0))
+val PrimaryContainer: Color get() = pick(Color(0xFF0A2744), Color(0xFFD6E4F5))
+val OnPrimaryContainer: Color get() = pick(Color(0xFFD6E4F5), Color(0xFF0A2744))
 
-// Status — neutral contrast levels instead of semantic colors
-val StatusPending = Color(0xFFD6D6D6)
-val StatusInProgress = Color(0xFFB8B8B8)
-val StatusCompleted = Color(0xFFECECEC)
-val StatusCancelled = Color(0xFF8F8F8F)
-val StatusUrgent = Color(0xFFF8F8F8)
+val BackgroundDark: Color get() = pick(Color(0xFF0D0D0D), Color(0xFFF6F6F6))
+val BackgroundCard: Color get() = pick(Color(0xFF171717), Color(0xFFFFFFFF))
+val BackgroundElevated: Color get() = pick(Color(0xFF222222), Color(0xFFF0F0F0))
+val SurfaceDark: Color get() = pick(Color(0xFF171717), Color(0xFFFFFFFF))
+val SurfaceVariant: Color get() = pick(Color(0xFF292929), Color(0xFFE5E5E5))
+val SurfaceBright: Color get() = pick(Color(0xFF383838), Color(0xFFFFFFFF))
 
-// Accents — grayscale contrast levels kept under existing names
-val AccentBlue = Color(0xFFC7C7C7)
-val AccentPurple = Color(0xFFAFAFAF)
-val AccentOrange = Color(0xFFD9D9D9)
-val AccentCyan = Color(0xFF9E9E9E)
-val AccentPink = Color(0xFFE7E7E7)
-val AccentAmber = Color(0xFFCECECE)
+val TextPrimary: Color get() = pick(Color(0xFFF5F5F5), Color(0xFF111111))
+val TextSecondary: Color get() = pick(Color(0xFFBDBDBD), Color(0xFF555555))
+val TextTertiary: Color get() = pick(Color(0xFF858585), Color(0xFF727272))
 
-// Borders / chrome
-val BorderDark = Color(0xFF3D3D3D)
-val DividerDark = Color(0xFF252525)
-val ScrimDark = Color(0xCC000000)
+// Status — distinguishable greyscale luminance steps (not rainbow)
+val StatusPending: Color get() = Color(0xFFD6D6D6)
+val StatusInProgress: Color get() = Color(0xFFB8B8B8)
+val StatusCompleted: Color get() = Color(0xFFECECEC)
+val StatusCancelled: Color get() = Color(0xFF8F8F8F)
+val StatusUrgent: Color get() = Color(0xFFF8F8F8)
 
-// Semantic
-val ErrorRed = Color(0xFFF0F0F0)
-val ErrorRedDark = Color(0xFF5C5C5C)
-val SuccessGreen = Color(0xFFF0F0F0)
-val WarningYellow = Color(0xFFD6D6D6)
-val InfoBlue = Color(0xFFB8B8B8)
+// Accents — dark blue family under existing names
+val AccentBlue: Color get() = Color(0xFF1976D2)
+val AccentPurple: Color get() = Color(0xFF1565C0)
+val AccentOrange: Color get() = Color(0xFF42A5F5)
+val AccentCyan: Color get() = Color(0xFF0288D1)
+val AccentPink: Color get() = Color(0xFF5C6BC0)
+val AccentAmber: Color get() = Color(0xFF1E88E5)
 
-// Grayscale gradients
-val GradientStart = Color(0xFF121212)
-val GradientMid = Color(0xFF2B2B2B)
-val GradientEnd = Color(0xFF606060)
+val BorderDark: Color get() = pick(Color(0xFF3D3D3D), Color(0xFFBDBDBD))
+val DividerDark: Color get() = pick(Color(0xFF252525), Color(0xFFDADADA))
+val ScrimDark: Color get() = pick(Color(0xCC000000), Color(0x66000000))
+
+val ErrorRed: Color get() = Color(0xFFEF5350)
+val ErrorRedDark: Color get() = Color(0xFFC62828)
+val SuccessGreen: Color get() = Color(0xFF1565C0)
+val WarningYellow: Color get() = Color(0xFF42A5F5)
+val InfoBlue: Color get() = Color(0xFF1976D2)
+
+val GradientStart: Color get() = pick(Color(0xFF0A1628), Color(0xFF0D47A1))
+val GradientMid: Color get() = pick(Color(0xFF0D47A1), Color(0xFF1565C0))
+val GradientEnd: Color get() = pick(Color(0xFF1565C0), Color(0xFF42A5F5))

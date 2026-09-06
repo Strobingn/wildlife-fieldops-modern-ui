@@ -14,18 +14,14 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 14
-        versionName = "2.1.4-xai-key-bake"
+        versionCode = 25
+        versionName = "2.2.7-inspection-polish"
 
-        // Real keys from env/secrets (Supabase + Maps hooked)
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
         val supabaseKey = System.getenv("SUPABASE_ANON_KEY") ?: "your-anon-key"
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseKey\"")
 
-        // Normalize the repository secret into the native build variable. The
-        // VITE name is supported because it is the existing documented secret;
-        // GOOGLE_MAPS_API remains the preferred native/local name.
         val mapsKey = sequenceOf(
             "GOOGLE_MAPS_API",
             "GOOGLE_MAPS_API_KEY",
@@ -39,10 +35,8 @@ android {
         val weatherKey = System.getenv("OPENWEATHER_API_KEY") ?: ""
         buildConfigField("String", "OPENWEATHER_API_KEY", "\"$weatherKey\"")
 
-        // SpaceXAI (xAI Grok) — keys are baked in at BUILD time from CI env / secrets.
-        // Prefer XAI_API_KEY; LLM_API_KEY is a fallback alias.
         fun envTrim(name: String): String =
-            System.getenv(name)?.trim()?.trim('"')?.trim('\'').orEmpty()
+            System.getenv(name)?.trim()?.trim('"')?.trim('\'') .orEmpty()
         fun escapeBuildConfig(value: String): String =
             value
                 .replace("\\", "\\\\")
@@ -58,7 +52,6 @@ android {
             .ifBlank { envTrim("XAI_MODEL") }
             .ifBlank { "grok-4.5" }
 
-        // Log presence only (never the key) so CI makes missing secrets obvious.
         logger.lifecycle(
             "LLM config: keyChars=${llmKey.length} base=$llmBase model=$llmModel " +
                 "(XAI_API_KEY ${if (envTrim("XAI_API_KEY").isNotEmpty()) "set" else "empty"}, " +
@@ -70,10 +63,8 @@ android {
         buildConfigField("String", "LLM_MODEL", "\"${escapeBuildConfig(llmModel)}\"")
         buildConfigField("int", "LLM_KEY_LENGTH", "${llmKey.length}")
 
-        // Manifest placeholder for Google Maps meta-data
         manifestPlaceholders["GOOGLE_MAPS_API"] = mapsKey
 
-        // Help 16 KB page-size devices (Android 15 / many S24 Ultra builds)
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
         }
@@ -93,7 +84,7 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false // keep install simple until Play release signing is set
+            isMinifyEnabled = false
             isShrinkResources = false
             val keystorePath = System.getenv("KEYSTORE_PATH")
             if (keystorePath != null && file(keystorePath).exists()) {
@@ -102,7 +93,6 @@ android {
         }
         debug {
             isDebuggable = true
-            // No applicationIdSuffix — one package name for installs on your phone
         }
     }
 
@@ -140,7 +130,6 @@ android {
             )
         }
         jniLibs {
-            // Uncompressed native libs — better compatibility on Android 15 page-size devices
             useLegacyPackaging = false
         }
     }
@@ -156,7 +145,6 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation("androidx.appcompat:appcompat:1.6.1")
 
-    // Keep BOM aligned with Kotlin 1.9.22 / compose compiler 1.5.10
     val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)
@@ -188,7 +176,6 @@ dependencies {
 
     implementation("io.coil-kt:coil-compose:2.5.0")
 
-    // Splash screen + animations
     implementation("androidx.core:core-splashscreen:1.0.1")
 
     val supabaseVersion = "2.6.1"
@@ -198,6 +185,9 @@ dependencies {
     implementation("io.ktor:ktor-client-android:2.3.12")
 
     implementation("com.google.code.gson:gson:2.10.1")
+
+    // On-device generative LLM (llama.cpp + abliterated Qwen2.5-3B/7B GGUF)
+    implementation("dev.ffmpegkit-maintained:llama-android:0.1.1")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

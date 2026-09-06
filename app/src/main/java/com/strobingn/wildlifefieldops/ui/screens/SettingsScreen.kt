@@ -11,7 +11,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.ui.theme.*
@@ -26,7 +28,6 @@ fun SettingsScreen(
     val darkTheme by viewModel.darkTheme.collectAsState(initial = true)
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsState(initial = true)
     val autoSync by viewModel.autoSync.collectAsState(initial = true)
-    val syncInterval by viewModel.syncInterval.collectAsState(initial = 15)
     val companyName by viewModel.companyName.collectAsState(initial = "Wildlife Whisperer LLC")
     val technicianName by viewModel.technicianName.collectAsState(initial = "")
     val defaultTaxRate by viewModel.defaultTaxRate.collectAsState(initial = 0f)
@@ -80,15 +81,7 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                val aiDiag = remember {
-                    try {
-                        com.strobingn.wildlifefieldops.data.remote.AiService().configDiagnostics()
-                    } catch (_: Exception) {
-                        "AI diagnostics unavailable"
-                    }
-                }
-                Text("AI / Grok", color = TextPrimary, style = MaterialTheme.typography.labelMedium)
-                Text(aiDiag, color = TextTertiary, style = MaterialTheme.typography.bodySmall)
+                SettingsAiDiagnosticsBlock()
                 if (!syncMessage.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(syncMessage!!, color = PrimaryGreen, style = MaterialTheme.typography.bodySmall)
@@ -96,7 +89,6 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-
             SettingsSectionTitle("AI Command Center")
             SettingsCard {
                 Text(
@@ -108,17 +100,14 @@ fun SettingsScreen(
                 Button(
                     onClick = { showAiOperations = true },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.Black)
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White)
                 ) {
                     Icon(Icons.Default.AutoAwesome, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Open AI Operations", fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = { showDiagnostics = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                OutlinedButton(onClick = { showDiagnostics = true }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.BugReport, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("AI and App Diagnostics")
@@ -126,49 +115,21 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-
-            // Company Info
             SettingsSectionTitle("Company Information")
             SettingsCard {
-                OutlinedTextField(
-                    value = companyName,
-                    onValueChange = viewModel::setCompanyName,
-                    label = { Text("Company Name") },
-                    leadingIcon = { Icon(Icons.Default.Business, contentDescription = null, tint = TextSecondary) },
-                    colors = settingFieldColors(),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    singleLine = true
-                )
+                SettingPlainField(storedValue = companyName, label = "Company Name", onCommit = viewModel::setCompanyName)
                 Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = technicianName,
-                    onValueChange = viewModel::setTechnicianName,
-                    label = { Text("Default Technician Name") },
-                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = TextSecondary) },
-                    colors = settingFieldColors(),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    singleLine = true
-                )
+                SettingPlainField(storedValue = technicianName, label = "Default Technician Name", onCommit = viewModel::setTechnicianName)
                 Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = defaultTaxRate.toString(),
-                    onValueChange = {
-                        it.toFloatOrNull()?.let { rate -> viewModel.setDefaultTaxRate(rate) }
-                    },
-                    label = { Text("Default Tax Rate (%)") },
-                    leadingIcon = { Icon(Icons.Default.Percent, contentDescription = null, tint = TextSecondary) },
-                    colors = settingFieldColors(),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    singleLine = true
+                SettingPlainField(
+                    storedValue = if (defaultTaxRate == 0f) "8.125" else defaultTaxRate.toString(),
+                    label = "Default Tax Rate (%)",
+                    keyboardType = KeyboardType.Decimal,
+                    onCommit = viewModel::setDefaultTaxRateText
                 )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-
-            // Service types
             SettingsSectionTitle("Service Types")
             SettingsCard {
                 val serviceTypesVm: com.strobingn.wildlifefieldops.ui.viewmodel.ServiceTypesViewModel =
@@ -177,9 +138,8 @@ fun SettingsScreen(
                 val serviceMsg by serviceTypesVm.lastMessage.collectAsState(initial = null)
                 var newService by remember { mutableStateOf("") }
                 var pendingDelete by remember { mutableStateOf<String?>(null) }
-
                 Text(
-                    "Built-in wildlife services are always available on jobs. Add your own types below. Deleting a custom type reassigns any jobs using it to “Inspection”.",
+                    "Built-in wildlife services are always available on jobs. Add your own types below.",
                     color = TextTertiary,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -188,8 +148,6 @@ fun SettingsScreen(
                     value = newService,
                     onValueChange = { newService = it },
                     label = { Text("New service type") },
-                    placeholder = { Text("e.g. Gutter guard install") },
-                    leadingIcon = { Icon(Icons.Default.Build, contentDescription = null, tint = TextSecondary) },
                     colors = settingFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -205,7 +163,7 @@ fun SettingsScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = newService.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.Black),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
@@ -216,56 +174,31 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(serviceMsg!!, color = PrimaryGreen, style = MaterialTheme.typography.bodySmall)
                 }
-                if (customTypes.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        "Your custom types (tap trash to delete)",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = TextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    customTypes.forEach { type ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(type, color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
-                            IconButton(onClick = { pendingDelete = type }) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "Remove $type",
-                                    tint = ErrorRed
-                                )
-                            }
+                customTypes.forEach { type ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(type, color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
+                        IconButton(onClick = { pendingDelete = type }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Remove $type", tint = ErrorRed)
                         }
                     }
                 }
-
                 if (pendingDelete != null) {
                     AlertDialog(
                         onDismissRequest = { pendingDelete = null },
                         title = { Text("Delete service type?", color = TextPrimary) },
-                        text = {
-                            Text(
-                                "Remove “$pendingDelete” from your list? Any jobs using this service will be set to “Inspection”. You can change them again when editing the job.",
-                                color = TextSecondary
-                            )
-                        },
+                        text = { Text("Remove this custom type? Jobs using it become Inspection.", color = TextSecondary) },
                         confirmButton = {
                             TextButton(onClick = {
                                 serviceTypesVm.removeCustomType(pendingDelete!!)
                                 pendingDelete = null
-                            }) {
-                                Text("Delete", color = ErrorRed)
-                            }
+                            }) { Text("Delete", color = ErrorRed) }
                         },
                         dismissButton = {
-                            TextButton(onClick = { pendingDelete = null }) {
-                                Text("Cancel", color = TextSecondary)
-                            }
+                            TextButton(onClick = { pendingDelete = null }) { Text("Cancel", color = TextSecondary) }
                         },
                         containerColor = BackgroundCard
                     )
@@ -273,62 +206,22 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-
-            // Appearance
             SettingsSectionTitle("Appearance")
             SettingsCard {
-                SettingsSwitchItem(
-                    title = "Dark Theme",
-                    subtitle = "Use dark color scheme",
-                    icon = Icons.Default.DarkMode,
-                    checked = darkTheme,
-                    onCheckedChange = viewModel::setDarkTheme
-                )
+                SettingsSwitchItem("Dark Theme", "Use dark color scheme", Icons.Default.DarkMode, darkTheme, viewModel::setDarkTheme)
             }
-
             Spacer(modifier = Modifier.height(8.dp))
-
-            // Notifications
             SettingsSectionTitle("Notifications")
             SettingsCard {
-                SettingsSwitchItem(
-                    title = "Enable Notifications",
-                    subtitle = "Receive alerts and reminders",
-                    icon = Icons.Default.Notifications,
-                    checked = notificationsEnabled,
-                    onCheckedChange = viewModel::setNotificationsEnabled
-                )
+                SettingsSwitchItem("Enable Notifications", "Receive alerts and reminders", Icons.Default.Notifications, notificationsEnabled, viewModel::setNotificationsEnabled)
             }
-
             Spacer(modifier = Modifier.height(8.dp))
-
-            // Sync & Data
             SettingsSectionTitle("Sync & Data")
             SettingsCard {
-                SettingsSwitchItem(
-                    title = "Auto Sync",
-                    subtitle = "Automatically sync with cloud",
-                    icon = Icons.Default.Sync,
-                    checked = autoSync,
-                    onCheckedChange = viewModel::setAutoSync
-                )
-                SettingsSwitchItem(
-                    title = "Offline Mode",
-                    subtitle = "Work without internet connection",
-                    icon = Icons.Default.CloudOff,
-                    checked = offlineMode,
-                    onCheckedChange = viewModel::setOfflineMode
-                )
-                SettingsSwitchItem(
-                    title = "High Accuracy GPS",
-                    subtitle = "Use GPS for precise location",
-                    icon = Icons.Default.GpsFixed,
-                    checked = highAccuracyGps,
-                    onCheckedChange = viewModel::setHighAccuracyGps
-                )
-
+                SettingsSwitchItem("Auto Sync", "Automatically sync with cloud", Icons.Default.Sync, autoSync, viewModel::setAutoSync)
+                SettingsSwitchItem("Offline Mode", "Work without internet connection", Icons.Default.CloudOff, offlineMode, viewModel::setOfflineMode)
+                SettingsSwitchItem("High Accuracy GPS", "Use GPS for precise location", Icons.Default.GpsFixed, highAccuracyGps, viewModel::setHighAccuracyGps)
                 Spacer(modifier = Modifier.height(8.dp))
-
                 Button(
                     onClick = { viewModel.triggerManualSync() },
                     modifier = Modifier.fillMaxWidth(),
@@ -336,48 +229,14 @@ fun SettingsScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    if (isSyncing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(Icons.Default.Sync, contentDescription = null)
-                    }
+                    if (isSyncing) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                    else Icon(Icons.Default.Sync, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(if (isSyncing) "Syncing…" else "Sync Now", fontWeight = FontWeight.Bold)
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = { viewModel.exportData() },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Download, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Export")
-                    }
-                    OutlinedButton(
-                        onClick = { viewModel.importData() },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Upload, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Import")
-                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-
-            // Danger Zone
             SettingsSectionTitle("Danger Zone")
             SettingsCard {
                 Button(
@@ -391,14 +250,8 @@ fun SettingsScreen(
                     Text("Clear All Data", fontWeight = FontWeight.Bold)
                 }
             }
-
             Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                "Wildlife FieldOps v2.0.1",
-                style = MaterialTheme.typography.labelSmall,
-                color = TextTertiary,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
+            Text("Wildlife FieldOps v2.0.1", style = MaterialTheme.typography.labelSmall, color = TextTertiary, modifier = Modifier.align(Alignment.CenterHorizontally))
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
@@ -407,19 +260,14 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showClearDataDialog = false },
             title = { Text("Clear All Data?", color = TextPrimary) },
-            text = { Text("This will permanently delete all jobs, customers, inspections, and photos. This action cannot be undone.", color = TextSecondary) },
+            text = { Text("This will permanently delete all jobs, customers, inspections, and photos.", color = TextSecondary) },
             confirmButton = {
-                TextButton(onClick = {
-                    viewModel.clearAllData()
-                    showClearDataDialog = false
-                }) {
+                TextButton(onClick = { viewModel.clearAllData(); showClearDataDialog = false }) {
                     Text("Delete Everything", color = ErrorRed)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showClearDataDialog = false }) {
-                    Text("Cancel", color = TextSecondary)
-                }
+                TextButton(onClick = { showClearDataDialog = false }) { Text("Cancel", color = TextSecondary) }
             },
             containerColor = BackgroundCard
         )
@@ -428,25 +276,13 @@ fun SettingsScreen(
 
 @Composable
 private fun SettingsSectionTitle(title: String) {
-    Text(
-        title,
-        style = MaterialTheme.typography.titleSmall,
-        color = PrimaryGreen,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(vertical = 8.dp)
-    )
+    Text(title, style = MaterialTheme.typography.titleSmall, color = PrimaryGreen, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp))
 }
 
 @Composable
 private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = BackgroundCard),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            content()
-        }
+    Card(colors = CardDefaults.cardColors(containerColor = BackgroundCard), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), content = content)
     }
 }
 
@@ -458,13 +294,7 @@ private fun SettingsSwitchItem(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
             Icon(icon, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(22.dp))
             Spacer(modifier = Modifier.width(16.dp))
@@ -473,11 +303,7 @@ private fun SettingsSwitchItem(
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = TextTertiary)
             }
         }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(checkedThumbColor = PrimaryGreen, checkedTrackColor = PrimaryGreen.copy(alpha = 0.5f))
-        )
+        Switch(checked = checked, onCheckedChange = onCheckedChange, colors = SwitchDefaults.colors(checkedThumbColor = PrimaryGreen, checkedTrackColor = PrimaryGreen.copy(alpha = 0.5f)))
     }
 }
 

@@ -51,7 +51,7 @@ fun InventoryScreen(
             FloatingActionButton(
                 onClick = { showAddDialog = true },
                 containerColor = PrimaryGreen,
-                contentColor = Color.Black
+                contentColor = Color.White
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Item")
             }
@@ -253,7 +253,7 @@ private fun LowStockItemCard(item: InventoryItem, onAdjust: (Double) -> Unit) {
                         newQty.toDoubleOrNull()?.let { onAdjust(it) }
                         showAdjust = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.Black)
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White)
                 ) {
                     Text("Update")
                 }
@@ -316,7 +316,7 @@ private fun AddInventoryDialog(
                     onSave(item)
                     onDismiss()
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.Black),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
                 enabled = name.isNotBlank()
             ) {
                 Text("Save", fontWeight = FontWeight.Bold)

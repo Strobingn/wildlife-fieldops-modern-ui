@@ -10,6 +10,9 @@ interface JobDao {
     @Query("SELECT * FROM jobs ORDER BY createdAt DESC")
     fun getAll(): Flow<List<Job>>
 
+    @Query("SELECT * FROM jobs ORDER BY createdAt DESC")
+    suspend fun getAllOnce(): List<Job>
+
     @Query("SELECT * FROM jobs WHERE status = :status ORDER BY createdAt DESC")
     fun getByStatus(status: JobStatus): Flow<List<Job>>
 
