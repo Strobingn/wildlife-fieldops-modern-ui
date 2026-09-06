@@ -1,0 +1,35 @@
+name: Apply Inspection Map Polish
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "tools/polish-chunks/MapScreen.git.patch"
+      - "tools/polish-chunks/InspectionFormScreen.git.patch.gz.b64.*"
+      - "tools/polish-chunks/apply_polish.py"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/real-local-llm-ai
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Apply polish patches
+        run: python3 tools/polish-chunks/apply_polish.py
+      - name: Commit polished screens
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/strobingn/wildlifefieldops/ui/screens/MapScreen.kt \
+                  app/src/main/java/com/strobingn/wildlifefieldops/ui/screens/InspectionFormScreen.kt || true
+          if git diff --staged --quiet; then
+            echo "No screen changes to commit"
+          else
+            git commit -m "feat: sticky inspection Dictate/AI bar + map offline banner/cache UI"
+            git push origin HEAD:feat/real-local-llm-ai
+          fi
