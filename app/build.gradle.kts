@@ -14,8 +14,8 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 24
-        versionName = "2.2.6-aiservice-restore"
+        versionCode = 25
+        versionName = "2.2.7-inspection-polish"
 
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
         val supabaseKey = System.getenv("SUPABASE_ANON_KEY") ?: "your-anon-key"
@@ -36,7 +36,7 @@ android {
         buildConfigField("String", "OPENWEATHER_API_KEY", "\"$weatherKey\"")
 
         fun envTrim(name: String): String =
-            System.getenv(name)?.trim()?.trim('"')?.trim('\'').orEmpty()
+            System.getenv(name)?.trim()?.trim('"')?.trim('\'') .orEmpty()
         fun escapeBuildConfig(value: String): String =
             value
                 .replace("\\", "\\\\")
