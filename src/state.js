@@ -9,7 +9,6 @@
  */
 
 import { STORAGE_KEY, THEME_KEY } from './constants.js';
-import { deepClone } from './utils.js';
 
 // ═══════════════════════════════════════════════════
 // createStore Factory
@@ -17,6 +16,8 @@ import { deepClone } from './utils.js';
 
 /**
  * Create a reactive state store.
+ * Optimization: Avoid expensive O(N) JSON deep-cloning on every state access/update/notify.
+ * Uses immutable shallow freezing for O(1) state snapshots.
  *
  * @template T
  * @param {T} initialState - Starting state object
@@ -32,17 +33,17 @@ export function createStore(initialState) {
     throw new TypeError('createStore: initialState must be an object');
   }
 
-  let state = deepClone(initialState);
+  let state = Object.freeze({ ...initialState });
   const listeners = new Set();
   let isNotifying = false;
 
   return {
     /**
-     * Get a deep-cloned snapshot of current state.
+     * Get current state snapshot (O(1)).
      * @returns {T}
      */
     getState() {
-      return deepClone(state);
+      return state;
     },
 
     /**
@@ -51,17 +52,18 @@ export function createStore(initialState) {
      */
     setState(updater) {
       const prev = state;
-      const next = typeof updater === 'function'
-        ? /** @type {any} */(updater)(deepClone(prev))
-        : { ...prev, ...updater };
+      const next = typeof updater === 'function' ? /** @type {any} */ (updater)(prev) : { ...prev, ...updater };
       state = Object.freeze(next);
 
       // Notify subscribers (copy set to handle mutations during iteration)
       if (!isNotifying) {
         isNotifying = true;
-        const snapshot = deepClone(state);
         for (const fn of [...listeners]) {
-          try { fn(snapshot); } catch (err) { console.error('Store subscriber error:', err); }
+          try {
+            fn(state);
+          } catch (err) {
+            console.error('Store subscriber error:', err);
+          }
         }
         isNotifying = false;
       }
@@ -76,8 +78,14 @@ export function createStore(initialState) {
       if (typeof fn !== 'function') throw new TypeError('subscribe: fn must be a function');
       listeners.add(fn);
       // Immediately invoke with current state so subscriber is in sync
-      try { fn(deepClone(state)); } catch (err) { console.error('Store initial subscriber error:', err); }
-      return () => { listeners.delete(fn); };
+      try {
+        fn(state);
+      } catch (err) {
+        console.error('Store initial subscriber error:', err);
+      }
+      return () => {
+        listeners.delete(fn);
+      };
     },
 
     /**
@@ -88,8 +96,8 @@ export function createStore(initialState) {
      */
     select(selector) {
       if (typeof selector !== 'function') throw new TypeError('select: selector must be a function');
-      return selector(deepClone(state));
-    },
+      return selector(state);
+    }
   };
 }
 
@@ -133,7 +141,7 @@ function buildInitialState() {
     lastSyncAt: null,
 
     // ── UI ──
-    theme: localStorage.getItem(THEME_KEY) || 'dark',
+    theme: (typeof localStorage !== 'undefined' ? localStorage.getItem(THEME_KEY) : null) || 'dark',
     page: 'dashboard',
     previousPage: null,
     loading: false,
@@ -147,12 +155,12 @@ function buildInitialState() {
       species: '',
       tech: '',
       town: '',
-      priority: '',
+      priority: ''
     },
 
     // ── Modals ──
     activeModal: null, // string | null — which modal is open
-    modalData: null,   // any — data passed to the active modal
+    modalData: null, // any — data passed to the active modal
 
     // ── GPS ──
     pendingGPS: null, // { lat: number, lng: number, accuracy: number } | null
@@ -172,7 +180,7 @@ function buildInitialState() {
 
     // ── Pagination ──
     jobsPage: 1,
-    jobsPerPage: 25,
+    jobsPerPage: 25
   };
 }
 
@@ -186,6 +194,7 @@ function buildInitialState() {
  */
 function loadPersistedState() {
   try {
+    if (typeof localStorage === 'undefined') return null;
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
@@ -205,7 +214,7 @@ function loadPersistedState() {
       communications: parsed.communications ?? [],
       inventory: parsed.inventory ?? [],
       equipment: parsed.equipment ?? [],
-      syncQueue: parsed.queue ?? [],
+      syncQueue: parsed.queue ?? []
     };
   } catch {
     console.warn('Failed to hydrate state from localStorage');
@@ -221,9 +230,7 @@ const persisted = loadPersistedState();
 const initial = buildInitialState();
 
 /** @type {ReturnType<typeof createStore>} */
-export const store = createStore(
-  persisted ? { ...initial, ...persisted } : initial
-);
+export const store = createStore(persisted ? { ...initial, ...persisted } : initial);
 
 // ═══════════════════════════════════════════════════
 // Persistence Middleware
@@ -240,6 +247,7 @@ export function persistState() {
   clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
     try {
+      if (typeof localStorage === 'undefined') return;
       const s = store.getState();
       const payload = {
         jobs: s.jobs,
@@ -258,7 +266,7 @@ export function persistState() {
         inventory: s.inventory,
         equipment: s.equipment,
         queue: s.syncQueue,
-        savedAt: new Date().toISOString(),
+        savedAt: new Date().toISOString()
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
       localStorage.setItem(`${STORAGE_KEY}_last`, new Date().toISOString());
@@ -269,7 +277,7 @@ export function persistState() {
 }
 
 // Auto-persist whenever state changes (collections only)
-store.subscribe((state) => {
+store.subscribe(state => {
   // Only persist if we have data to avoid overwriting with empty state on init
   if (state.jobs?.length >= 0) {
     persistState();
@@ -287,6 +295,7 @@ let snapshotTimer = null;
  */
 export function saveSnapshot() {
   try {
+    if (typeof localStorage === 'undefined') return;
     const s = store.getState();
     const snapshot = {
       saved: new Date().toISOString(),
@@ -306,8 +315,8 @@ export function saveSnapshot() {
         communications: s.communications,
         inventory: s.inventory,
         equipment: s.equipment,
-        queue: s.syncQueue,
-      },
+        queue: s.syncQueue
+      }
     };
     localStorage.setItem(`${STORAGE_KEY}_bak`, JSON.stringify(snapshot));
   } catch (err) {
@@ -330,7 +339,10 @@ export function startSnapshots(intervalMs = 30000) {
  * Stop automatic snapshotting.
  */
 export function stopSnapshots() {
-  if (snapshotTimer) { clearInterval(snapshotTimer); snapshotTimer = null; }
+  if (snapshotTimer) {
+    clearInterval(snapshotTimer);
+    snapshotTimer = null;
+  }
 }
 
 // ═══════════════════════════════════════════════════
@@ -347,7 +359,7 @@ export function showToast(message, type = 'success', duration = 3000) {
   store.setState({ toast: { message, type, duration } });
   // Auto-clear toast
   setTimeout(() => {
-    store.setState((s) => {
+    store.setState(s => {
       if (s.toast?.message === message) return { ...s, toast: null };
       return s;
     });
@@ -373,11 +385,11 @@ export function setLoading(isLoading, message = 'Loading...') {
  * @param {Record<string, any>} [extra]
  */
 export function navigateTo(page, extra = {}) {
-  store.setState((s) => ({
+  store.setState(s => ({
     ...s,
     previousPage: s.page,
     page,
-    ...extra,
+    ...extra
   }));
 }
 
@@ -401,5 +413,5 @@ export function closeModal() {
  * Toggle the navigation drawer.
  */
 export function toggleDrawer() {
-  store.setState((s) => ({ drawerOpen: !s.drawerOpen }));
+  store.setState(s => ({ drawerOpen: !s.drawerOpen }));
 }

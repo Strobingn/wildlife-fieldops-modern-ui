@@ -44,7 +44,7 @@ export function onConnectionChange(callback) {
 
 function notifyConnectionChange(connected) {
   isConnected = connected;
-  connectionListeners.forEach((cb) => {
+  connectionListeners.forEach(cb => {
     try {
       cb(connected);
     } catch (e) {
@@ -78,7 +78,7 @@ async function interceptedFetch(url, init = {}) {
   try {
     const response = await fetch(url, {
       ...init,
-      signal: controller.signal,
+      signal: controller.signal
     });
 
     clearTimeout(timeoutId);
@@ -127,20 +127,20 @@ if (config.hasSupabase) {
       storage: localStorage,
       autoRefreshToken: true,
       persistSession: true,
-      detectSessionInUrl: true,
+      detectSessionInUrl: true
     },
     realtime: {
       params: {
-        eventsPerSecond: 10,
-      },
+        eventsPerSecond: 10
+      }
     },
     global: {
       fetch: interceptedFetch,
       headers: {
         'X-Client-Name': 'wildlife-fieldops',
-        'X-Client-Version': '3.0.0',
-      },
-    },
+        'X-Client-Version': '3.0.0'
+      }
+    }
   });
 
   // ─── Realtime Connection Monitor ─────────────────────────────────────────────
@@ -154,7 +154,7 @@ if (config.hasSupabase) {
     console.warn('[supabaseClient] Realtime connection closed');
   });
 
-  supabase.realtime?.onError?.((error) => {
+  supabase.realtime?.onError?.(error => {
     console.error('[supabaseClient] Realtime error:', error);
     notifyConnectionChange(false);
   });
@@ -169,22 +169,22 @@ if (config.hasSupabase) {
       delete: () => ({ data: null, error: new Error('Supabase not configured') }),
       eq: () => ({ data: [], error: null }),
       order: () => ({ data: [], error: null }),
-      limit: () => ({ data: [], error: null }),
+      limit: () => ({ data: [], error: null })
     }),
     storage: {
       from: () => ({
         upload: () => ({ data: null, error: new Error('Supabase not configured') }),
         getPublicUrl: () => ({ data: { publicUrl: '' } }),
-        remove: () => ({ data: null, error: null }),
-      }),
+        remove: () => ({ data: null, error: null })
+      })
     },
     auth: {
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
       getSession: () => Promise.resolve({ data: { session: null } }),
       signInWithPassword: () => Promise.resolve({ data: null, error: new Error('Supabase not configured') }),
-      signOut: () => Promise.resolve({ error: null }),
+      signOut: () => Promise.resolve({ error: null })
     },
-    realtime: {},
+    realtime: {}
   };
 }
 
@@ -198,10 +198,7 @@ export async function checkHealth() {
   const start = performance.now();
   try {
     // Lightweight query: just check the connection
-    const { error } = await supabase
-      .from('jobs')
-      .select('id', { count: 'exact', head: true })
-      .limit(1);
+    const { error } = await supabase.from('jobs').select('id', { count: 'exact', head: true }).limit(1);
 
     const latencyMs = Math.round(performance.now() - start);
 
@@ -234,7 +231,7 @@ export function startHealthChecks() {
   }
   healthCheckInterval = setInterval(() => {
     if (navigator.onLine) {
-      checkHealth().catch((err) => {
+      checkHealth().catch(err => {
         console.warn('[supabaseClient] Background health check error:', err.message);
       });
     }
@@ -248,8 +245,6 @@ export function startHealthChecks() {
     }
   };
 }
-
-
 
 // ─── Network Event Listeners ─────────────────────────────────────────────────
 
@@ -306,12 +301,10 @@ export function applyJobFilters(query, filters = {}) {
  */
 export async function uploadToStorage(bucket, path, file, options = {}) {
   try {
-    const { error } = await supabase.storage
-      .from(bucket)
-      .upload(path, file, {
-        contentType: options.contentType || file.type || 'application/octet-stream',
-        upsert: true,
-      });
+    const { error } = await supabase.storage.from(bucket).upload(path, file, {
+      contentType: options.contentType || file.type || 'application/octet-stream',
+      upsert: true
+    });
 
     if (error) {
       console.error(`[supabaseClient] Storage upload error [${bucket}/${path}]:`, error.message);
@@ -321,7 +314,7 @@ export async function uploadToStorage(bucket, path, file, options = {}) {
     const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(path);
     return {
       path,
-      publicUrl: urlData?.publicUrl || null,
+      publicUrl: urlData?.publicUrl || null
     };
   } catch (err) {
     console.error(`[supabaseClient] Storage upload failed [${bucket}/${path}]:`, err.message);

@@ -29,9 +29,9 @@ export function E(str) {
     '<': '&lt;',
     '>': '&gt;',
     '"': '&quot;',
-    "'": '&#39;',
+    "'": '&#39;'
   };
-  return s.replace(/[&<>"']/g, (ch) => map[ch]);
+  return s.replace(/[&<>"']/g, ch => map[ch]);
 }
 
 /**
@@ -45,7 +45,7 @@ export function money(amount) {
   return n.toLocaleString('en-US', {
     style: 'currency',
     currency: 'USD',
-    minimumFractionDigits: 2,
+    minimumFractionDigits: 2
   });
 }
 
@@ -86,7 +86,7 @@ export function formatDate(date) {
   return d.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
-    day: 'numeric',
+    day: 'numeric'
   });
 }
 
@@ -252,7 +252,7 @@ export function groupBy(array, key) {
     const group = item?.[key] ?? 'undefined';
     (acc[group] ??= []).push(item);
     return acc;
-  }, /** @type {Record<string, T[]>} */({}));
+  }, /** @type {Record<string, T[]>} */ ({}));
 }
 
 /**
@@ -293,13 +293,13 @@ export function deepClone(obj) {
     return JSON.parse(JSON.stringify(obj));
   } catch {
     // Fallback for non-serializable structures
-    if (obj instanceof Date) return /** @type {any} */(new Date(obj.getTime()));
-    if (Array.isArray(obj)) return /** @type {any} */(obj.map(deepClone));
+    if (obj instanceof Date) return /** @type {any} */ (new Date(obj.getTime()));
+    if (Array.isArray(obj)) return /** @type {any} */ (obj.map(deepClone));
     const cloned = {};
     for (const k of Object.keys(obj)) {
       cloned[k] = deepClone(obj[k]);
     }
-    return /** @type {any} */(cloned);
+    return /** @type {any} */ (cloned);
   }
 }
 
@@ -315,7 +315,7 @@ export function mergeArrays(local, server, key) {
   if (!Array.isArray(local) || !Array.isArray(server)) return [...(local || [])];
   const merged = [...local];
   for (const sItem of server) {
-    const idx = merged.findIndex((item) => item?.[key] === sItem?.[key]);
+    const idx = merged.findIndex(item => item?.[key] === sItem?.[key]);
     if (idx >= 0) merged[idx] = deepClone(sItem);
     else merged.push(deepClone(sItem));
   }
@@ -350,7 +350,10 @@ export function compressImage(dataUrl, maxWidth = 1200, quality = 0.7) {
       canvas.width = w;
       canvas.height = h;
       const ctx = canvas.getContext('2d');
-      if (!ctx) { reject(new Error('Canvas 2D context not available')); return; }
+      if (!ctx) {
+        reject(new Error('Canvas 2D context not available'));
+        return;
+      }
       ctx.drawImage(img, 0, 0, w, h);
       resolve(canvas.toDataURL('image/jpeg', quality));
     };
@@ -410,10 +413,13 @@ export function generatePDF(job, services = [], photos = []) {
     const lines = doc.splitTextToSize(text, pageW - 90);
     doc.text(lines, 70, y);
     y += 6 * lines.length;
-    if (y > 270) { doc.addPage(); y = 20; }
+    if (y > 270) {
+      doc.addPage();
+      y = 20;
+    }
   };
 
-  const addSection = (title) => {
+  const addSection = title => {
     y += 4;
     doc.setFontSize(12);
     doc.setFont(undefined, 'bold');
@@ -452,7 +458,10 @@ export function generatePDF(job, services = [], photos = []) {
     addSection('Services');
     const total = services.reduce((s, svc) => s + Number(svc.total || svc.price * svc.qty || 0), 0);
     for (const svc of services) {
-      addLine(svc.service ?? svc.name, `${svc.qty ?? 1} x ${money(svc.unit_price ?? svc.price)} = ${money(svc.total ?? (svc.qty ?? 1) * (svc.unit_price ?? svc.price ?? 0))}`);
+      addLine(
+        svc.service ?? svc.name,
+        `${svc.qty ?? 1} x ${money(svc.unit_price ?? svc.price)} = ${money(svc.total ?? (svc.qty ?? 1) * (svc.unit_price ?? svc.price ?? 0))}`
+      );
     }
     doc.setFont(undefined, 'bold');
     doc.text(`Services Total: ${money(total)}`, 20, y);
@@ -499,8 +508,12 @@ export function searchJobs(jobs, query) {
   const term = query.toLowerCase().trim();
   if (!term) return jobs;
   const fields = ['title', 'customer', 'address', 'town', 'species', 'scope', 'status', 'phone'];
-  return jobs.filter((j) =>
-    fields.some((f) => String(j?.[f] ?? '').toLowerCase().includes(term))
+  return jobs.filter(j =>
+    fields.some(f =>
+      String(j?.[f] ?? '')
+        .toLowerCase()
+        .includes(term)
+    )
   );
 }
 
@@ -513,7 +526,7 @@ export function searchJobs(jobs, query) {
 export function filterJobs(jobs, filters) {
   if (!Array.isArray(jobs)) return [];
   if (!filters || typeof filters !== 'object') return jobs;
-  return jobs.filter((j) =>
+  return jobs.filter(j =>
     Object.entries(filters).every(([key, val]) => {
       if (!val) return true;
       return String(j?.[key] ?? '').toLowerCase() === String(val).toLowerCase();

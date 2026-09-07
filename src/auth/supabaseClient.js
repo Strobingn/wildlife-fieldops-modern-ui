@@ -12,9 +12,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   },
   realtime: {
     params: {
-      eventsPerSecond: 10,
-    },
-  },
+      eventsPerSecond: 10
+    }
+  }
 });
 
 export { supabase };

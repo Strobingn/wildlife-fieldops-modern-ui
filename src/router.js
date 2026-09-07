@@ -167,7 +167,9 @@ export class Router {
         showToast('Page load error', 'error');
       }
     } else if (this.fallbackHandler) {
-      try { this.fallbackHandler({ path }, query); } catch (err) {
+      try {
+        this.fallbackHandler({ path }, query);
+      } catch (err) {
         console.error('Fallback handler error:', err);
       }
     } else {
@@ -177,7 +179,11 @@ export class Router {
 
     // ── Run after hooks ──
     for (const hook of this.afterHooks) {
-      try { hook(path, from); } catch (err) { console.error('Router afterEach error:', err); }
+      try {
+        hook(path, from);
+      } catch (err) {
+        console.error('Router afterEach error:', err);
+      }
     }
   }
 
@@ -290,12 +296,12 @@ export function registerRoutes() {
     .add('/', () => navigateTo('dashboard'))
     .add('/jobs', () => navigateTo('jobs'))
     .add('/jobs/new', () => navigateTo('job-form'))
-    .add('/jobs/:id', (params) => navigateTo('job-detail', { selectedJobId: params.id }))
-    .add('/jobs/:id/edit', (params) => navigateTo('job-form', { selectedJobId: params.id }))
+    .add('/jobs/:id', params => navigateTo('job-detail', { selectedJobId: params.id }))
+    .add('/jobs/:id/edit', params => navigateTo('job-form', { selectedJobId: params.id }))
     .add('/customers', () => navigateTo('customers'))
     .add('/customers/new', () => navigateTo('customer-form'))
-    .add('/customers/:id', (params) => navigateTo('customer-form', { selectedCustomerId: params.id }))
-    .add('/customers/:id/edit', (params) => navigateTo('customer-form', { selectedCustomerId: params.id }))
+    .add('/customers/:id', params => navigateTo('customer-form', { selectedCustomerId: params.id }))
+    .add('/customers/:id/edit', params => navigateTo('customer-form', { selectedCustomerId: params.id }))
     .add('/estimate', () => navigateTo('estimate'))
     .add('/photos', () => navigateTo('photos'))
     .add('/gps', () => navigateTo('gps'))
@@ -309,7 +315,7 @@ export function registerRoutes() {
     .add('/ai', () => navigateTo('ai'))
     .add('/inspections', () => navigateTo('inspections'))
     .add('/inspections/new', () => navigateTo('inspection-form'))
-    .add('/inspections/:id', (params) => navigateTo('inspection-form', { selectedInspectionId: params.id }))
-    .add('/inspections/:id/edit', (params) => navigateTo('inspection-form', { selectedInspectionId: params.id }))
+    .add('/inspections/:id', params => navigateTo('inspection-form', { selectedInspectionId: params.id }))
+    .add('/inspections/:id/edit', params => navigateTo('inspection-form', { selectedInspectionId: params.id }))
     .setFallback(() => navigateTo('dashboard'));
 }
