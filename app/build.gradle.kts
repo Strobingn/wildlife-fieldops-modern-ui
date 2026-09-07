@@ -14,8 +14,8 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 25
-        versionName = "2.2.7-inspection-polish"
+        versionCode = 26
+        versionName = "2.2.8-test-arcore-1.56"
 
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
         val supabaseKey = System.getenv("SUPABASE_ANON_KEY") ?: "your-anon-key"
@@ -170,7 +170,7 @@ dependencies {
 
     implementation("com.google.android.gms:play-services-maps:18.2.0")
     implementation("com.google.maps.android:maps-compose:4.3.0")
-    implementation("com.google.ar:core:1.45.0")
+    implementation("com.google.ar:core:1.56.0")
     implementation("com.google.mlkit:image-labeling:17.0.9")
     implementation("com.google.mlkit:object-detection:17.0.2")
 
