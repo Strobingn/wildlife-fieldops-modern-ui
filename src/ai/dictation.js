@@ -15,7 +15,7 @@ export function initDictation(onResult, onError) {
   recognition.interimResults = true;
   recognition.lang = 'en-US';
 
-  recognition.onresult = (event) => {
+  recognition.onresult = event => {
     let finalTranscript = '';
     for (let i = event.resultIndex; i < event.results.length; ++i) {
       if (event.results[i].isFinal) {
@@ -28,7 +28,7 @@ export function initDictation(onResult, onError) {
     isListening = false;
   };
 
-  recognition.onerror = (event) => {
+  recognition.onerror = event => {
     isListening = false;
     let message = 'Dictation error';
     if (event.error === 'not-allowed' || event.error === 'permission-denied') {

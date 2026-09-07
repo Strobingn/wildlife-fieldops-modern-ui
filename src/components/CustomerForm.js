@@ -4,7 +4,10 @@
  */
 
 function E(s) {
-  return String(s || "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[m]));
+  return String(s || '').replace(
+    /[&<>"']/g,
+    m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]
+  );
 }
 
 function id() {
@@ -18,23 +21,23 @@ export const CustomerForm = {
   _editId: null,
 
   render(state) {
-    const isEdit = state.page === "customers/edit" || state.selectedCustomerId;
-    const existing = isEdit ? (state.customers || []).find((c) => c.id === state.selectedCustomerId) : null;
+    const isEdit = state.page === 'customers/edit' || state.selectedCustomerId;
+    const existing = isEdit ? (state.customers || []).find(c => c.id === state.selectedCustomerId) : null;
     this._editId = existing?.id || null;
 
-    const nameVal = existing?.name || "";
-    const phoneVal = existing?.phone || "";
-    const emailVal = existing?.email || "";
-    const addressVal = existing?.address || "";
-    const townVal = existing?.town || "";
-    const stateVal = existing?.state || "";
-    const zipVal = existing?.zip || "";
-    const notesVal = existing?.notes || "";
+    const nameVal = existing?.name || '';
+    const phoneVal = existing?.phone || '';
+    const emailVal = existing?.email || '';
+    const addressVal = existing?.address || '';
+    const townVal = existing?.town || '';
+    const stateVal = existing?.state || '';
+    const zipVal = existing?.zip || '';
+    const notesVal = existing?.notes || '';
 
     return /* html */ `
       <div class="card stack">
-        <h2>${isEdit ? "✏️ Edit Customer" : "👤 New Customer"}</h2>
-        <p class="tiny">${isEdit ? "Update customer details below." : "Add a new customer to your database."}</p>
+        <h2>${isEdit ? '✏️ Edit Customer' : '👤 New Customer'}</h2>
+        <p class="tiny">${isEdit ? 'Update customer details below.' : 'Add a new customer to your database.'}</p>
       </div>
 
       <div class="card">
@@ -49,7 +52,7 @@ export const CustomerForm = {
           aria-required="true"
           autocomplete="name"
         >
-        ${this._errors.name ? `<div class="form-error">${E(this._errors.name)}</div>` : ""}
+        ${this._errors.name ? `<div class="form-error">${E(this._errors.name)}</div>` : ''}
 
         <div class="form-row">
           <div>
@@ -74,7 +77,7 @@ export const CustomerForm = {
           </div>
         </div>
 
-        ${this._errors.duplicate ? `<div class="form-error">${E(this._errors.duplicate)}</div>` : ""}
+        ${this._errors.duplicate ? `<div class="form-error">${E(this._errors.duplicate)}</div>` : ''}
       </div>
 
       <div class="card">
@@ -132,48 +135,54 @@ export const CustomerForm = {
         >${E(notesVal)}</textarea>
       </div>
 
-      ${Object.keys(this._errors).length
-        ? `<div class="alert" role="alert"><span>Please fix the errors above before saving.</span></div>`
-        : ""
+      ${
+        Object.keys(this._errors).length
+          ? `<div class="alert" role="alert"><span>Please fix the errors above before saving.</span></div>`
+          : ''
       }
 
-      <button class="action" data-action="save-customer">${isEdit ? "💾 Update Customer" : "✅ Create Customer"}</button>
+      <button class="action" data-action="save-customer">${isEdit ? '💾 Update Customer' : '✅ Create Customer'}</button>
       <button class="action dark" data-action="cancel-customer">Cancel</button>
     `;
   },
 
   afterRender(state) {
     // Mark dirty on input
-    document.querySelectorAll("input, select, textarea").forEach((el) => {
-      const handler = () => { this._isDirty = true; };
-      el.addEventListener("input", handler);
-      this._listeners.push({ el, type: "input", fn: handler });
+    document.querySelectorAll('input, select, textarea').forEach(el => {
+      const handler = () => {
+        this._isDirty = true;
+      };
+      el.addEventListener('input', handler);
+      this._listeners.push({ el, type: 'input', fn: handler });
     });
 
     // Actions
-    document.querySelectorAll("[data-action]").forEach((btn) => {
+    document.querySelectorAll('[data-action]').forEach(btn => {
       const handler = () => {
         const action = btn.dataset.action;
 
-        if (action === "save-customer") {
+        if (action === 'save-customer') {
           this._save(state);
         }
 
-        if (action === "cancel-customer") {
-          if (this._isDirty && !confirm("Discard unsaved changes?")) return;
-          state.navigate?.(this._editId ? `customers/${this._editId}` : "customers");
+        if (action === 'cancel-customer') {
+          if (this._isDirty && !confirm('Discard unsaved changes?')) return;
+          state.navigate?.(this._editId ? `customers/${this._editId}` : 'customers');
         }
       };
-      btn.addEventListener("click", handler);
-      this._listeners.push({ el: btn, type: "click", fn: handler });
+      btn.addEventListener('click', handler);
+      this._listeners.push({ el: btn, type: 'click', fn: handler });
     });
 
     // Before unload warning
-    const beforeUnload = (e) => {
-      if (this._isDirty) { e.preventDefault(); e.returnValue = ""; }
+    const beforeUnload = e => {
+      if (this._isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
     };
-    window.addEventListener("beforeunload", beforeUnload);
-    this._listeners.push({ el: window, type: "beforeunload", fn: beforeUnload });
+    window.addEventListener('beforeunload', beforeUnload);
+    this._listeners.push({ el: window, type: 'beforeunload', fn: beforeUnload });
   },
 
   unmount() {
@@ -186,19 +195,16 @@ export const CustomerForm = {
 
   _save(state) {
     const errors = {};
-    const name = document.getElementById("custName")?.value?.trim();
-    const phone = document.getElementById("custPhone")?.value?.trim() || "";
-    const email = document.getElementById("custEmail")?.value?.trim() || "";
+    const name = document.getElementById('custName')?.value?.trim();
+    const phone = document.getElementById('custPhone')?.value?.trim() || '';
+    const email = document.getElementById('custEmail')?.value?.trim() || '';
 
-    if (!name || name.length < 2) errors.name = "Name required (min 2 characters)";
+    if (!name || name.length < 2) errors.name = 'Name required (min 2 characters)';
 
     // Check for duplicates (by name + phone or name + email)
     const customers = state.customers || [];
     const duplicate = customers.find(
-      (c) =>
-        c.id !== this._editId &&
-        c.name?.toLowerCase() === name?.toLowerCase() &&
-        (!phone || c.phone === phone)
+      c => c.id !== this._editId && c.name?.toLowerCase() === name?.toLowerCase() && (!phone || c.phone === phone)
     );
     if (duplicate && !this._editId) {
       errors.duplicate = `A customer named "${duplicate.name}" already exists. Continue anyway?`;
@@ -222,16 +228,16 @@ export const CustomerForm = {
       name,
       phone,
       email,
-      address: document.getElementById("custAddress")?.value?.trim() || "",
-      town: document.getElementById("custTown")?.value?.trim() || "",
-      state: document.getElementById("custState")?.value?.trim() || "",
-      zip: document.getElementById("custZip")?.value?.trim() || "",
-      notes: document.getElementById("custNotes")?.value?.trim() || "",
+      address: document.getElementById('custAddress')?.value?.trim() || '',
+      town: document.getElementById('custTown')?.value?.trim() || '',
+      state: document.getElementById('custState')?.value?.trim() || '',
+      zip: document.getElementById('custZip')?.value?.trim() || '',
+      notes: document.getElementById('custNotes')?.value?.trim() || '',
       updated_at: new Date().toISOString(),
-      ...(this._editId ? {} : { created_at: new Date().toISOString() }),
+      ...(this._editId ? {} : { created_at: new Date().toISOString() })
     };
 
     this._isDirty = false;
     state.onSaveCustomer?.(payload, this._editId);
-  },
+  }
 };
