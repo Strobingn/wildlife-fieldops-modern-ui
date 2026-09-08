@@ -67,7 +67,7 @@ export async function compressImage(file, maxWidth = DEFAULT_MAX_WIDTH, quality 
       ctx.drawImage(img, 0, 0, width, height);
 
       canvas.toBlob(
-        (blob) => {
+        blob => {
           if (!blob) {
             reject(new Error('Canvas toBlob returned null'));
             return;
@@ -84,7 +84,9 @@ export async function compressImage(file, maxWidth = DEFAULT_MAX_WIDTH, quality 
 
     if (file instanceof File || file instanceof Blob) {
       const reader = new FileReader();
-      reader.onload = (e) => { img.src = e.target.result; };
+      reader.onload = e => {
+        img.src = e.target.result;
+      };
       reader.onerror = () => reject(new Error('Failed to read file'));
       reader.readAsDataURL(file);
     } else if (typeof file === 'string' && file.startsWith('data:')) {
@@ -113,7 +115,7 @@ export async function uploadPhotoLegacy(jobId, file, tag = 'General', notes = ''
 
   const photoId = generateId();
   const now = new Date().toISOString();
-  const ext = file instanceof File ? (file.name.split('.').pop() || 'jpg') : 'jpg';
+  const ext = file instanceof File ? file.name.split('.').pop() || 'jpg' : 'jpg';
   const storagePath = `jobs/${jobId}/${photoId}.${ext}`;
 
   // 1. Compress image
@@ -146,7 +148,7 @@ export async function uploadPhotoLegacy(jobId, file, tag = 'General', notes = ''
     storage_path: storagePath,
     image_url: null, // Will be set after upload
     created_at: now,
-    updated_at: now,
+    updated_at: now
   };
 
   // 4. Optimistic: store locally
@@ -160,14 +162,14 @@ export async function uploadPhotoLegacy(jobId, file, tag = 'General', notes = ''
       syncQueue.enqueue({
         table: 'photos',
         action: 'insert',
-        payload: photoMeta,
+        payload: photoMeta
       });
       return { ...photoMeta, _localData: localDataUrl, _syncStatus: 'pending' };
     }
 
     // Upload to Supabase Storage
     const uploadResult = await uploadToStorage(STORAGE_BUCKET, storagePath, compressedBlob, {
-      contentType: 'image/jpeg',
+      contentType: 'image/jpeg'
     });
 
     if (uploadResult?.publicUrl) {
@@ -179,9 +181,7 @@ export async function uploadPhotoLegacy(jobId, file, tag = 'General', notes = ''
     if (error) throw error;
 
     // Update cache with server data
-    const updated = loadCache().map((p) =>
-      p.id === photoId ? { ...data, _localData: null } : p
-    );
+    const updated = loadCache().map(p => (p.id === photoId ? { ...data, _localData: null } : p));
     saveCache(updated);
 
     return { ...data, _syncStatus: 'synced' };
@@ -190,7 +190,7 @@ export async function uploadPhotoLegacy(jobId, file, tag = 'General', notes = ''
     syncQueue.enqueue({
       table: 'photos',
       action: 'insert',
-      payload: photoMeta,
+      payload: photoMeta
     });
     return { ...photoMeta, _localData: localDataUrl, _syncStatus: 'pending', _error: err.message };
   }
@@ -207,7 +207,7 @@ export async function getPhotosByJobLegacy(jobId) {
 
   try {
     if (!navigator.onLine) {
-      return loadCache().filter((p) => p.job_id === jobId);
+      return loadCache().filter(p => p.job_id === jobId);
     }
 
     const { data, error } = await supabase
@@ -220,19 +220,17 @@ export async function getPhotosByJobLegacy(jobId) {
 
     // Merge with local cache (include any pending uploads)
     const serverPhotos = data || [];
-    const localPhotos = loadCache().filter(
-      (p) => p.job_id === jobId && p._syncStatus === 'pending'
-    );
+    const localPhotos = loadCache().filter(p => p.job_id === jobId && p._syncStatus === 'pending');
     const merged = [...localPhotos, ...serverPhotos];
 
     // Update cache
-    const otherPhotos = loadCache().filter((p) => p.job_id !== jobId);
+    const otherPhotos = loadCache().filter(p => p.job_id !== jobId);
     saveCache([...merged, ...otherPhotos]);
 
     return merged;
   } catch (err) {
     console.error(`[photos] getPhotosByJob(${jobId}) error:`, err.message);
-    return loadCache().filter((p) => p.job_id === jobId);
+    return loadCache().filter(p => p.job_id === jobId);
   }
 }
 
@@ -247,10 +245,10 @@ export async function deletePhotoLegacy(photoId) {
 
   // Find the photo to get storage path
   const cached = loadCache();
-  const photo = cached.find((p) => p.id === photoId);
+  const photo = cached.find(p => p.id === photoId);
 
   // Optimistic: remove from cache
-  saveCache(cached.filter((p) => p.id !== photoId));
+  saveCache(cached.filter(p => p.id !== photoId));
 
   try {
     if (!navigator.onLine) {
@@ -268,7 +266,7 @@ export async function deletePhotoLegacy(photoId) {
 
     // Delete storage file if we have the path
     if (photo?.storage_path) {
-      await deleteFromStorage(STORAGE_BUCKET, photo.storage_path).catch((err) => {
+      await deleteFromStorage(STORAGE_BUCKET, photo.storage_path).catch(err => {
         console.warn(`[photos] Storage delete warning for ${photo.storage_path}:`, err.message);
       });
     }
@@ -291,7 +289,7 @@ export async function deletePhotoLegacy(photoId) {
 function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = (e) => resolve(e.target.result);
+    reader.onload = e => resolve(e.target.result);
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
@@ -370,12 +368,10 @@ export async function uploadPhoto(jobId, file, metadata = {}) {
   // Upload to Supabase Storage
   if (config.hasSupabase) {
     try {
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from(bucket)
-        .upload(path, file, {
-          contentType: file.type || 'image/jpeg',
-          upsert: false,
-        });
+      const { data: uploadData, error: uploadError } = await supabase.storage.from(bucket).upload(path, file, {
+        contentType: file.type || 'image/jpeg',
+        upsert: false
+      });
 
       if (uploadError) {
         console.error(`[photos] Upload failed:`, uploadError.message);
@@ -395,7 +391,7 @@ export async function uploadPhoto(jobId, file, metadata = {}) {
         notes: metadata.notes || '',
         file_size: file.size,
         content_type: file.type || 'image/jpeg',
-        created_at: new Date().toISOString(),
+        created_at: new Date().toISOString()
       };
 
       try {
@@ -406,7 +402,7 @@ export async function uploadPhoto(jobId, file, metadata = {}) {
 
       return {
         data: { path, publicUrl, photoId },
-        error: null,
+        error: null
       };
     } catch (err) {
       console.error('[photos] Upload exception:', err.message);
@@ -415,12 +411,12 @@ export async function uploadPhoto(jobId, file, metadata = {}) {
   }
 
   // Offline fallback: return local data URL
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const reader = new FileReader();
     reader.onload = () => {
       resolve({
         data: { path: `local://${path}`, publicUrl: reader.result, photoId },
-        error: null,
+        error: null
       });
     };
     reader.onerror = () => {
@@ -460,7 +456,7 @@ export async function getPhotosByJob(jobId) {
   try {
     const raw = localStorage.getItem('ww_rockstar_photos');
     const all = raw ? JSON.parse(raw) : [];
-    return { data: all.filter((p) => p.job_id === jobId), error: null };
+    return { data: all.filter(p => p.job_id === jobId), error: null };
   } catch {
     return { data: [], error: null };
   }
@@ -493,7 +489,7 @@ export async function deletePhoto(photoId, storagePath) {
     const raw = localStorage.getItem('ww_rockstar_photos');
     if (raw) {
       const all = JSON.parse(raw);
-      const filtered = all.filter((p) => p.id !== photoId);
+      const filtered = all.filter(p => p.id !== photoId);
       localStorage.setItem('ww_rockstar_photos', JSON.stringify(filtered));
     }
   } catch (e) {

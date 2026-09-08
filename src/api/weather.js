@@ -67,15 +67,24 @@ function getWeatherIconUrl(iconCode, size = '@2x') {
 
 function mapWeatherCondition(code, description) {
   const conditions = {
-    '01d': 'Clear', '01n': 'Clear',
-    '02d': 'Partly Cloudy', '02n': 'Partly Cloudy',
-    '03d': 'Cloudy', '03n': 'Cloudy',
-    '04d': 'Overcast', '04n': 'Overcast',
-    '09d': 'Showers', '09n': 'Showers',
-    '10d': 'Rain', '10n': 'Rain',
-    '11d': 'Thunderstorm', '11n': 'Thunderstorm',
-    '13d': 'Snow', '13n': 'Snow',
-    '50d': 'Mist', '50n': 'Mist',
+    '01d': 'Clear',
+    '01n': 'Clear',
+    '02d': 'Partly Cloudy',
+    '02n': 'Partly Cloudy',
+    '03d': 'Cloudy',
+    '03n': 'Cloudy',
+    '04d': 'Overcast',
+    '04n': 'Overcast',
+    '09d': 'Showers',
+    '09n': 'Showers',
+    '10d': 'Rain',
+    '10n': 'Rain',
+    '11d': 'Thunderstorm',
+    '11n': 'Thunderstorm',
+    '13d': 'Snow',
+    '13n': 'Snow',
+    '50d': 'Mist',
+    '50n': 'Mist'
   };
   return conditions[code] || description || 'Unknown';
 }
@@ -149,7 +158,7 @@ export async function getWeather(lat, lng) {
       location: raw.name || '',
       lat,
       lng,
-      fetchedAt: new Date().toISOString(),
+      fetchedAt: new Date().toISOString()
     };
 
     // Cache result
@@ -213,7 +222,7 @@ export async function getForecast(lat, lng) {
 
     // Group by day
     const daily = {};
-    raw.list.forEach((item) => {
+    raw.list.forEach(item => {
       const date = item.dt_txt.split(' ')[0];
       if (!daily[date]) {
         daily[date] = {
@@ -223,7 +232,7 @@ export async function getForecast(lat, lng) {
           icons: [],
           descriptions: [],
           humidity: [],
-          wind: [],
+          wind: []
         };
       }
       daily[date].temps.push(item.main.temp);
@@ -235,25 +244,29 @@ export async function getForecast(lat, lng) {
     });
 
     // Build daily summaries
-    const forecast = Object.values(daily).slice(0, 5).map((day) => {
-      const conditionCounts = {};
-      day.conditions.forEach((c) => { conditionCounts[c] = (conditionCounts[c] || 0) + 1; });
-      const dominantCondition = Object.entries(conditionCounts).sort((a, b) => b[1] - a[1])[0][0];
-      const middayIcon = day.icons[Math.floor(day.icons.length / 2)] || day.icons[0];
+    const forecast = Object.values(daily)
+      .slice(0, 5)
+      .map(day => {
+        const conditionCounts = {};
+        day.conditions.forEach(c => {
+          conditionCounts[c] = (conditionCounts[c] || 0) + 1;
+        });
+        const dominantCondition = Object.entries(conditionCounts).sort((a, b) => b[1] - a[1])[0][0];
+        const middayIcon = day.icons[Math.floor(day.icons.length / 2)] || day.icons[0];
 
-      return {
-        date: day.date,
-        tempMin: Math.round(Math.min(...day.temps)),
-        tempMax: Math.round(Math.max(...day.temps)),
-        tempAvg: Math.round(day.temps.reduce((a, b) => a + b, 0) / day.temps.length),
-        condition: dominantCondition,
-        description: day.descriptions[Math.floor(day.descriptions.length / 2)] || '',
-        icon: getWeatherIconUrl(middayIcon),
-        iconCode: middayIcon,
-        humidity: Math.round(day.humidity.reduce((a, b) => a + b, 0) / day.humidity.length),
-        windSpeed: Math.round(Math.max(...day.wind)),
-      };
-    });
+        return {
+          date: day.date,
+          tempMin: Math.round(Math.min(...day.temps)),
+          tempMax: Math.round(Math.max(...day.temps)),
+          tempAvg: Math.round(day.temps.reduce((a, b) => a + b, 0) / day.temps.length),
+          condition: dominantCondition,
+          description: day.descriptions[Math.floor(day.descriptions.length / 2)] || '',
+          icon: getWeatherIconUrl(middayIcon),
+          iconCode: middayIcon,
+          humidity: Math.round(day.humidity.reduce((a, b) => a + b, 0) / day.humidity.length),
+          windSpeed: Math.round(Math.max(...day.wind))
+        };
+      });
 
     const result = {
       location: raw.city?.name || '',
@@ -261,7 +274,7 @@ export async function getForecast(lat, lng) {
       lat,
       lng,
       days: forecast,
-      fetchedAt: new Date().toISOString(),
+      fetchedAt: new Date().toISOString()
     };
 
     cache[cacheKey] = { data: result, timestamp: Date.now() };

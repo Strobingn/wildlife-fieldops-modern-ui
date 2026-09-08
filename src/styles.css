@@ -67,8 +67,8 @@
   --space-2xl: 32px;
 
   /* Typography */
-  --font-sans: 'Inter', Arial, Helvetica, sans-serif;
-  --font-mono: 'SF Mono', 'Fira Code', Consolas, monospace;
+  --font-sans: "Inter", Arial, Helvetica, sans-serif;
+  --font-mono: "SF Mono", "Fira Code", Consolas, monospace;
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 14px;
@@ -235,8 +235,13 @@ body {
 }
 
 @keyframes splashPulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -581,16 +586,35 @@ body {
 /* ---------------------------------------------------------------------------
    Typography
    --------------------------------------------------------------------------- */
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-weight: 700;
   line-height: var(--leading-tight);
   color: var(--text);
 }
 
-h1 { font-size: var(--text-2xl); margin-bottom: var(--space-md); }
-h2 { font-size: var(--text-xl); margin-bottom: var(--space-md); }
-h3 { font-size: var(--text-lg); margin-bottom: var(--space-md); font-weight: 600; }
-h4 { font-size: var(--text-md); margin-bottom: var(--space-sm); font-weight: 600; }
+h1 {
+  font-size: var(--text-2xl);
+  margin-bottom: var(--space-md);
+}
+h2 {
+  font-size: var(--text-xl);
+  margin-bottom: var(--space-md);
+}
+h3 {
+  font-size: var(--text-lg);
+  margin-bottom: var(--space-md);
+  font-weight: 600;
+}
+h4 {
+  font-size: var(--text-md);
+  margin-bottom: var(--space-sm);
+  font-weight: 600;
+}
 
 p {
   margin-bottom: var(--space-md);
@@ -1284,7 +1308,9 @@ button.action.green {
   z-index: 9998;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.3s ease, visibility 0.3s ease;
+  transition:
+    opacity 0.3s ease,
+    visibility 0.3s ease;
 }
 
 .drawer-backdrop.open {
@@ -1928,7 +1954,7 @@ a:focus-visible {
 }
 
 .toggle-input::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 2px;
   left: 2px;
@@ -2595,7 +2621,9 @@ a:focus-visible {
 .reveal {
   opacity: 0;
   transform: translateY(24px);
-  transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .reveal.visible {
@@ -2603,10 +2631,18 @@ a:focus-visible {
   transform: translateY(0);
 }
 
-.reveal.delay-1 { transition-delay: 0.1s; }
-.reveal.delay-2 { transition-delay: 0.2s; }
-.reveal.delay-3 { transition-delay: 0.3s; }
-.reveal.delay-4 { transition-delay: 0.4s; }
+.reveal.delay-1 {
+  transition-delay: 0.1s;
+}
+.reveal.delay-2 {
+  transition-delay: 0.2s;
+}
+.reveal.delay-3 {
+  transition-delay: 0.3s;
+}
+.reveal.delay-4 {
+  transition-delay: 0.4s;
+}
 
 /* ---------------------------------------------------------------------------
    Alerts
@@ -2806,7 +2842,8 @@ a:focus-visible {
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -2824,8 +2861,14 @@ a:focus-visible {
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes fadeInUp {
@@ -2869,19 +2912,28 @@ a:focus-visible {
 }
 
 @keyframes shake {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateX(0);
   }
-  10%, 30%, 50%, 70%, 90% {
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
     transform: translateX(-4px);
   }
-  20%, 40%, 60%, 80% {
+  20%,
+  40%,
+  60%,
+  80% {
     transform: translateX(4px);
   }
 }
 
 @keyframes bounce {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0);
   }
   50% {
@@ -2942,12 +2994,7 @@ a:focus-visible {
    Skeleton Loading
    --------------------------------------------------------------------------- */
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--card2) 25%,
-    var(--card3) 50%,
-    var(--card2) 75%
-  );
+  background: linear-gradient(90deg, var(--card2) 25%, var(--card3) 50%, var(--card2) 75%);
   background-size: 200% 100%;
   animation: skeleton-loading 1.5s infinite;
   border-radius: var(--radius-sm);
@@ -3250,7 +3297,9 @@ a:focus-visible {
     page-break-inside: avoid;
   }
 
-  h1, h2, h3 {
+  h1,
+  h2,
+  h3 {
     page-break-after: avoid;
   }
 
@@ -3473,7 +3522,6 @@ a:focus-visible {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-
 
 /* ═════════════════════════════════════════════════════════════════════════════
    MISSING STYLES — Added in bulk fix pass
