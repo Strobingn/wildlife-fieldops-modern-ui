@@ -14,11 +14,12 @@ Observations: ${observations || 'No additional observations provided.'}
 Provide a concise, actionable inspection hint covering attic/chimney/latrine patterns, rub marks, nesting zones, insulation damage, entry points, and safety notes. Keep it under 180 words, professional and field-ready.`;
 
   try {
-    const response = await fetch('https://api.x.ai/v1/chat/completions', {  // or https://api.openai.com/v1/chat/completions
+    const response = await fetch('https://api.x.ai/v1/chat/completions', {
+      // or https://api.openai.com/v1/chat/completions
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         model: 'grok-3', // or 'gpt-4o-mini'

@@ -3,10 +3,13 @@
  * Theme toggle, tax rate, company info, sync URL, import/export, data recovery, wipe
  */
 
-import { APP_VERSION, STORAGE_KEY } from "../constants.js";
+import { APP_VERSION, STORAGE_KEY } from '../constants.js';
 
 function E(s) {
-  return String(s || "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[m]));
+  return String(s || '').replace(
+    /[&<>"']/g,
+    m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]
+  );
 }
 
 export const SettingsPage = {
@@ -14,13 +17,13 @@ export const SettingsPage = {
 
   render(state) {
     const settings = state.settings || {};
-    const theme = state.theme || "dark";
-    const syncUrl = settings.syncUrl || "";
+    const theme = state.theme || 'dark';
+    const syncUrl = settings.syncUrl || '';
     const taxRate = settings.taxRate !== undefined ? settings.taxRate : 0.08;
-    const companyName = settings.companyName || "Wildlife Whisperer LLC";
-    const companyPhone = settings.companyPhone || "";
-    const companyEmail = settings.companyEmail || "";
-    const companyAddress = settings.companyAddress || "";
+    const companyName = settings.companyName || 'Wildlife Whisperer LLC';
+    const companyPhone = settings.companyPhone || '';
+    const companyEmail = settings.companyEmail || '';
+    const companyAddress = settings.companyAddress || '';
 
     return /* html */ `
       <div class="card stack">
@@ -35,8 +38,8 @@ export const SettingsPage = {
           <div class="setting">
             <label>Theme</label>
             <div style="display:flex;gap:8px;">
-              <button class="${theme === "dark" ? "action" : "action dark"}" data-action="set-theme" data-theme="dark" style="margin-top:0;flex:1;">🌙 Dark</button>
-              <button class="${theme === "light" ? "action" : "action dark"}" data-action="set-theme" data-theme="light" style="margin-top:0;flex:1;">☀️ Light</button>
+              <button class="${theme === 'dark' ? 'action' : 'action dark'}" data-action="set-theme" data-theme="dark" style="margin-top:0;flex:1;">🌙 Dark</button>
+              <button class="${theme === 'light' ? 'action' : 'action dark'}" data-action="set-theme" data-theme="light" style="margin-top:0;flex:1;">☀️ Light</button>
             </div>
           </div>
         </div>
@@ -156,70 +159,77 @@ export const SettingsPage = {
   },
 
   afterRender(state) {
-    document.querySelectorAll("[data-action]").forEach((btn) => {
+    document.querySelectorAll('[data-action]').forEach(btn => {
       const handler = () => {
         const action = btn.dataset.action;
 
-        if (action === "set-theme") {
+        if (action === 'set-theme') {
           const newTheme = btn.dataset.theme;
-          document.documentElement.setAttribute("data-theme", newTheme);
-          localStorage.setItem("ww_theme", newTheme);
+          document.documentElement.setAttribute('data-theme', newTheme);
+          localStorage.setItem('ww_theme', newTheme);
           state.onSetTheme?.(newTheme);
         }
 
-        if (action === "save-company") {
+        if (action === 'save-company') {
           state.onSaveSettings?.({
-            companyName: document.getElementById("setCompanyName")?.value?.trim(),
-            companyPhone: document.getElementById("setCompanyPhone")?.value?.trim(),
-            companyEmail: document.getElementById("setCompanyEmail")?.value?.trim(),
-            companyAddress: document.getElementById("setCompanyAddress")?.value?.trim(),
+            companyName: document.getElementById('setCompanyName')?.value?.trim(),
+            companyPhone: document.getElementById('setCompanyPhone')?.value?.trim(),
+            companyEmail: document.getElementById('setCompanyEmail')?.value?.trim(),
+            companyAddress: document.getElementById('setCompanyAddress')?.value?.trim()
           });
         }
 
-        if (action === "save-tax") {
-          const rate = parseFloat(document.getElementById("taxRate")?.value || 8);
+        if (action === 'save-tax') {
+          const rate = parseFloat(document.getElementById('taxRate')?.value || 8);
           state.onSaveSettings?.({ taxRate: rate / 100 });
         }
 
-        if (action === "save-sync-url") {
-          const url = document.getElementById("syncUrl")?.value?.trim();
+        if (action === 'save-sync-url') {
+          const url = document.getElementById('syncUrl')?.value?.trim();
           state.onSaveSettings?.({ syncUrl: url });
-          localStorage.setItem(STORAGE_KEY + "_syncUrl", url);
+          localStorage.setItem(STORAGE_KEY + '_syncUrl', url);
         }
 
-        if (action === "sync-now") {
+        if (action === 'sync-now') {
           state.onSyncNow?.();
         }
 
-        if (action === "export-data") {
+        if (action === 'export-data') {
           state.onExportData?.();
         }
 
-        if (action === "import-data") {
-          const json = document.getElementById("importData")?.value?.trim();
-          if (!json) { state.showToast?.("Paste JSON data first", "warn"); return; }
+        if (action === 'import-data') {
+          const json = document.getElementById('importData')?.value?.trim();
+          if (!json) {
+            state.showToast?.('Paste JSON data first', 'warn');
+            return;
+          }
           state.onImportData?.(json);
         }
 
-        if (action === "recover-data") {
+        if (action === 'recover-data') {
           state.onRecoverData?.();
         }
 
-        if (action === "wipe-data") {
-          if (confirm("⚠️ WARNING: This will permanently delete ALL data including jobs, customers, photos, and visits.\n\nAre you absolutely sure?")) {
+        if (action === 'wipe-data') {
+          if (
+            confirm(
+              '⚠️ WARNING: This will permanently delete ALL data including jobs, customers, photos, and visits.\n\nAre you absolutely sure?'
+            )
+          ) {
             if (confirm("Final confirmation: Type 'DELETE' to proceed.\n\nThis action CANNOT be undone.")) {
               state.onWipeData?.();
             }
           }
         }
       };
-      btn.addEventListener("click", handler);
-      this._listeners.push({ el: btn, type: "click", fn: handler });
+      btn.addEventListener('click', handler);
+      this._listeners.push({ el: btn, type: 'click', fn: handler });
     });
   },
 
   unmount() {
     this._listeners.forEach(({ el, type, fn }) => el.removeEventListener(type, fn));
     this._listeners = [];
-  },
+  }
 };
