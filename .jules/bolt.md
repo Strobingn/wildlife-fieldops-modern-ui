@@ -1,0 +1,3 @@
+## 2025-05-18 - Avoid deep cloning on immutable state store operations
+**Learning:** `createStore` in `src/state.js` was using `deepClone` (`JSON.parse(JSON.stringify)`) on every `getState()`, `setState()`, `subscribe()`, and `select()` call. As state size grew with jobs and base64 photo payloads, every state read or write took several milliseconds. Returning the frozen state directly avoids defensive JSON deep cloning overhead. Note that `Object.freeze` is shallow at the root object level, so store updaters and callers should treat state as read-only.
+**Action:** Always return or pass frozen state objects directly in pub/sub stores instead of deep-cloning state snapshots on every getState/setState/select/subscribe invocation.
