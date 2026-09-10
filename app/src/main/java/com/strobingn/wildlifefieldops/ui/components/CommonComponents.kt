@@ -1,5 +1,9 @@
 package com.strobingn.wildlifefieldops.ui.components
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.strobingn.wildlifefieldops.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -363,24 +367,14 @@ fun BrandMark(
     modifier: Modifier = Modifier,
     size: Int = 40
 ) {
-    Box(
+    Image(
+        painter = painterResource(R.drawable.wildlife_whisperer_logo),
+        contentDescription = "Wildlife Whisperer",
         modifier = modifier
             .size(size.dp)
-            .clip(RoundedCornerShapeCompat(size * 0.3f))
-            .background(
-                Brush.linearGradient(
-                    listOf(GradientStart, GradientMid, GradientEnd)
-                )
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            "W",
-            style = MaterialTheme.typography.titleLarge,
-            color = Color.White,
-            fontWeight = FontWeight.Bold
-        )
-    }
+            .clip(CircleShape),
+        contentScale = ContentScale.Crop
+    )
 }
 
 /** Avoid importing shape if already present — simple dp-based radius helper. */

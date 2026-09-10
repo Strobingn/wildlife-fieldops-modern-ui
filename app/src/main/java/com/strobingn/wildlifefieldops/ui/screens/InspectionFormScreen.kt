@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,6 +36,7 @@ import com.strobingn.wildlifefieldops.ui.components.ScheduleDateTimeField
 import com.strobingn.wildlifefieldops.ui.components.defaultAppointmentTime
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.InspectionsViewModel
+import com.strobingn.wildlifefieldops.util.WildlifeWhispererInspectionReportPdf
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,6 +78,7 @@ fun InspectionFormScreen(
     val estimatePrepLoading by viewModel.estimatePrepLoading.collectAsState()
     val estimatePrepMessage by viewModel.estimatePrepMessage.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     var linkedJobTitle by remember { mutableStateOf("") }
     var linkedJobAddress by remember { mutableStateOf("") }
@@ -404,6 +407,46 @@ fun InspectionFormScreen(
                                     Text("AI Estimate")
                                 }
                             }
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                try {
+                                    val path = WildlifeWhispererInspectionReportPdf.generate(
+                                        context = context,
+                                        fields = WildlifeWhispererInspectionReportPdf.ReportFields(
+                                            customerName = customerName,
+                                            inspectorName = inspectorName,
+                                            inspectionType = selectedType.name,
+                                            inspectionDate = scheduledAt,
+                                            jobTitle = linkedJobTitle,
+                                            jobAddress = linkedJobAddress,
+                                            species = speciesIdentified,
+                                            findings = findings,
+                                            entryPoints = entryPoints,
+                                            damage = damageAssessment,
+                                            recommendations = recommendations,
+                                            severity = selectedSeverity.name,
+                                            notes = notes,
+                                            weather = weatherConditions,
+                                            followUpRequired = followUpRequired
+                                        )
+                                    )
+                                    WildlifeWhispererInspectionReportPdf.share(context, path)
+                                } catch (e: Exception) {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            e.message?.take(80) ?: "Could not create report PDF"
+                                        )
+                                    }
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGreen),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Share PDF")
                         }
                         Button(
                             onClick = {

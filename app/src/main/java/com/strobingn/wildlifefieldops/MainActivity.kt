@@ -354,8 +354,8 @@ private fun AppDrawer(onNavigate: (String) -> Unit, onClose: () -> Unit) {
                     BrandMark(size = 48)
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Wildlife FieldOps", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
-                        Text("Field operations center", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.75f))
+                        Text("Wildlife Whisperer", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("FieldOps · Cornwall, NY", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.75f))
                     }
                     IconButton(onClick = onClose) {
                         Text("✕", color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.titleMedium)
