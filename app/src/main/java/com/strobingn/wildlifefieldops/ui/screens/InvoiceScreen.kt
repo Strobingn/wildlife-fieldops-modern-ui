@@ -36,6 +36,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import com.strobingn.wildlifefieldops.util.ContractDocumentType
+import com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.model.*
 import com.strobingn.wildlifefieldops.ui.theme.*
@@ -467,158 +469,31 @@ private fun generateInvoicePDF(
     technicianSignature: Bitmap?,
     customerSignature: Bitmap?
 ): String {
-    val pdfDocument = PdfDocument()
-    val pageInfo = PdfDocument.PageInfo.Builder(612, 792, 1).create()
-    val page = pdfDocument.startPage(pageInfo)
-    val canvas = page.canvas
-
-    val paint = Paint().apply { isAntiAlias = true }
-    val titlePaint = Paint(paint).apply { textSize = 24f; color = AndroidColor.BLACK; typeface = android.graphics.Typeface.DEFAULT_BOLD }
-    val headerPaint = Paint(paint).apply { textSize = 14f; color = AndroidColor.BLACK; typeface = android.graphics.Typeface.DEFAULT_BOLD }
-    val normalPaint = Paint(paint).apply { textSize = 12f; color = AndroidColor.DKGRAY }
-    val smallPaint = Paint(paint).apply { textSize = 10f; color = AndroidColor.GRAY }
-    val linePaint = Paint(paint).apply { color = AndroidColor.LTGRAY; strokeWidth = 1f }
-
-    var y = 40f
-
-    // Header
-    canvas.drawText("WILDLIFE FIELDOPS INVOICE", 306f, y, titlePaint.apply { textAlign = Paint.Align.CENTER })
-    y += 30f
-    canvas.drawLine(40f, y, 572f, y, linePaint)
-    y += 20f
-
-    // Company and Invoice Info
-    canvas.drawText("Wildlife Whisperer LLC", 40f, y, headerPaint)
-    val dateFormat = SimpleDateFormat("MM/dd/yyyy", Locale.getDefault())
-    canvas.drawText("Invoice #: INV-${System.currentTimeMillis() % 100000}", 400f, y, normalPaint)
-    y += 16f
-    canvas.drawText("Field Operations Division", 40f, y, smallPaint)
-    canvas.drawText("Date: ${dateFormat.format(Date())}", 400f, y, normalPaint)
-    y += 16f
-    canvas.drawText("Phone: (555) 123-4567", 40f, y, smallPaint)
-    y += 20f
-    canvas.drawLine(40f, y, 572f, y, linePaint)
-    y += 20f
-
-    // Bill To
-    canvas.drawText("BILL TO:", 40f, y, headerPaint)
-    y += 16f
-    canvas.drawText(job.customerName, 40f, y, normalPaint)
-    y += 14f
-    canvas.drawText(job.address, 40f, y, normalPaint)
-    y += 14f
-    canvas.drawText("Job: ${job.title}", 40f, y, normalPaint)
-    y += 20f
-    canvas.drawLine(40f, y, 572f, y, linePaint)
-    y += 20f
-
-    // Line Items Header
-    canvas.drawText("Description", 40f, y, headerPaint)
-    canvas.drawText("Qty", 350f, y, headerPaint)
-    canvas.drawText("Unit Price", 400f, y, headerPaint)
-    canvas.drawText("Amount", 490f, y, headerPaint)
-    y += 14f
-    canvas.drawLine(40f, y, 572f, y, linePaint)
-    y += 16f
-
-    // Line Items
-    lineItems.forEach { item ->
-        canvas.drawText(item.description.take(40), 40f, y, normalPaint)
-        canvas.drawText(String.format("%.1f", item.quantity), 350f, y, normalPaint)
-        canvas.drawText("$${String.format("%.2f", item.unitPrice)}", 400f, y, normalPaint)
-        canvas.drawText("$${String.format("%.2f", item.calculateTotal())}", 490f, y, normalPaint)
-        y += 16f
-    }
-
-    y += 10f
-    canvas.drawLine(40f, y, 572f, y, linePaint)
-    y += 20f
-
-    // Totals
-    val totalX = 420f
-    canvas.drawText("Subtotal:", totalX, y, normalPaint)
-    canvas.drawText("$${String.format("%.2f", subtotal)}", 572f, y, normalPaint.apply { textAlign = Paint.Align.RIGHT })
-    normalPaint.textAlign = Paint.Align.LEFT
-    y += 16f
-
-    if (discountAmount > 0) {
-        canvas.drawText("Discount:", totalX, y, normalPaint)
-        canvas.drawText("-$${String.format("%.2f", discountAmount)}", 572f, y, normalPaint.apply { textAlign = Paint.Align.RIGHT })
-        normalPaint.textAlign = Paint.Align.LEFT
-        y += 16f
-    }
-
-    canvas.drawText("Tax (${taxRate}%):", totalX, y, normalPaint)
-    canvas.drawText("$${String.format("%.2f", taxAmount)}", 572f, y, normalPaint.apply { textAlign = Paint.Align.RIGHT })
-    normalPaint.textAlign = Paint.Align.LEFT
-    y += 18f
-
-    canvas.drawText("TOTAL:", totalX, y, headerPaint)
-    canvas.drawText("$${String.format("%.2f", total)}", 572f, y, headerPaint.apply { textAlign = Paint.Align.RIGHT })
-    headerPaint.textAlign = Paint.Align.LEFT
-    y += 20f
-
-    canvas.drawLine(40f, y, 572f, y, linePaint)
-    y += 16f
-
-    // Notes and Terms
-    if (notes.isNotBlank()) {
-        canvas.drawText("Notes:", 40f, y, headerPaint)
-        y += 14f
-        canvas.drawText(notes.take(100), 40f, y, smallPaint)
-        y += 20f
-    }
-
-    canvas.drawText("Payment Terms:", 40f, y, headerPaint)
-    y += 14f
-    canvas.drawText(terms.take(120), 40f, y, smallPaint)
-    y += 30f
-
-    // Signatures
-    val sigY = 720f
-    if (technicianSignature != null) {
-        val scaledSig = Bitmap.createScaledBitmap(technicianSignature, 150, 50, true)
-        canvas.drawBitmap(scaledSig, 40f, sigY - 40f, null)
-    }
-    canvas.drawLine(40f, sigY, 200f, sigY, linePaint)
-    canvas.drawText("Technician Signature", 40f, sigY + 14f, smallPaint)
-
-    if (customerSignature != null) {
-        val scaledSig = Bitmap.createScaledBitmap(customerSignature, 150, 50, true)
-        canvas.drawBitmap(scaledSig, 350f, sigY - 40f, null)
-    }
-    canvas.drawLine(350f, sigY, 510f, sigY, linePaint)
-    canvas.drawText("Customer Signature", 350f, sigY + 14f, smallPaint)
-
-    pdfDocument.finishPage(page)
-
-    val fileName = "invoice_${job.customerName.replace(" ", "_")}_${System.currentTimeMillis()}.pdf"
-    val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), fileName)
-    pdfDocument.writeTo(FileOutputStream(file))
-    pdfDocument.close()
-
-    return file.absolutePath
+    // terms retained for call-site compatibility; acceptance blurb lives in shared contract PDF
+    @Suppress("UNUSED_PARAMETER")
+    val _terms = terms
+    return WildlifeWhispererContractPdf.generate(
+        context = context,
+        documentType = ContractDocumentType.INVOICE,
+        job = job,
+        lineItems = lineItems,
+        subtotal = subtotal,
+        taxRate = taxRate,
+        taxAmount = taxAmount,
+        discountAmount = discountAmount,
+        total = total,
+        notes = notes,
+        technicianSignature = technicianSignature,
+        customerSignature = customerSignature
+    )
 }
 
 private fun sharePDF(context: Context, path: String) {
-    val file = File(path)
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "application/pdf"
-        putExtra(Intent.EXTRA_STREAM, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    context.startActivity(Intent.createChooser(intent, "Share Invoice"))
+    WildlifeWhispererContractPdf.share(context, path, "Share Invoice")
 }
 
 private fun viewPDF(context: Context, path: String) {
-    val file = File(path)
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-    val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, "application/pdf")
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    context.startActivity(intent)
+    WildlifeWhispererContractPdf.view(context, path)
 }
 
 @Composable

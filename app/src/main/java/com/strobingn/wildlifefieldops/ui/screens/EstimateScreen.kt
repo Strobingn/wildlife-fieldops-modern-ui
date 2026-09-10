@@ -1,5 +1,11 @@
 package com.strobingn.wildlifefieldops.ui.screens
 
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
+import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
+import com.strobingn.wildlifefieldops.util.ContractDocumentType
+import com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -83,6 +89,9 @@ fun EstimateScreen(
     val taxableAmount = subtotal - discountAmount
     val taxAmount = taxableAmount * (taxRate.toDoubleOrNull() ?: 0.0) / 100.0
     val total = taxableAmount + taxAmount
+    val context = LocalContext.current
+    var pdfPath by remember { mutableStateOf("") }
+    var showPdfShare by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -205,9 +214,107 @@ fun EstimateScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Save total as job estimated value")
                 }
+                Button(
+                    onClick = {
+                        val items = buildEstimateLineItems(
+                            laborHours = laborHours.toDoubleOrNull() ?: 0.0,
+                            laborRate = laborRate.toDoubleOrNull() ?: 0.0,
+                            materialsCost = materialsCost.toDoubleOrNull() ?: 0.0,
+                            equipmentCost = equipmentCost.toDoubleOrNull() ?: 0.0,
+                            permitCost = permitCost.toDoubleOrNull() ?: 0.0,
+                            disposalCost = disposalCost.toDoubleOrNull() ?: 0.0,
+                            mileage = mileage.toDoubleOrNull() ?: 0.0,
+                            mileageRate = mileageRate.toDoubleOrNull() ?: 0.0,
+                            lineItemNotes = lineItemNotes,
+                            draftRationale = draftRationale
+                        )
+                        pdfPath = WildlifeWhispererContractPdf.generate(
+                            context = context,
+                            documentType = ContractDocumentType.ESTIMATE,
+                            job = j,
+                            lineItems = items,
+                            subtotal = subtotal,
+                            taxRate = taxRate.toDoubleOrNull() ?: 0.0,
+                            taxAmount = taxAmount,
+                            discountAmount = discountAmount,
+                            total = total,
+                            notes = listOf(lineItemNotes, draftRationale).filter { it.isNotBlank() }.joinToString("\n")
+                        )
+                        showPdfShare = true
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.PictureAsPdf, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Generate contract PDF", fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
+
+    if (showPdfShare && pdfPath.isNotBlank()) {
+        AlertDialog(
+            onDismissRequest = { showPdfShare = false },
+            title = { Text("Estimate PDF ready", color = TextPrimary) },
+            text = { Text("PDF saved. Share or view the Wildlife Whisperer service contract.", color = TextSecondary) },
+            confirmButton = {
+                TextButton(onClick = { WildlifeWhispererContractPdf.share(context, pdfPath, "Share Estimate") }) {
+                    Text("Share", color = PrimaryGreen)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    WildlifeWhispererContractPdf.view(context, pdfPath)
+                    showPdfShare = false
+                }) {
+                    Text("View PDF", color = AccentBlue)
+                }
+            },
+            containerColor = BackgroundCard
+        )
+    }
+}
+
+private fun buildEstimateLineItems(
+    laborHours: Double,
+    laborRate: Double,
+    materialsCost: Double,
+    equipmentCost: Double,
+    permitCost: Double,
+    disposalCost: Double,
+    mileage: Double,
+    mileageRate: Double,
+    lineItemNotes: String,
+    draftRationale: String
+): List<InvoiceLineItem> {
+    val items = mutableListOf<InvoiceLineItem>()
+    if (laborHours > 0 && laborRate > 0) {
+        items += InvoiceLineItem(description = "Labor / Trap Service", quantity = laborHours, unit = "hr", unitPrice = laborRate)
+    }
+    if (materialsCost > 0) {
+        items += InvoiceLineItem(description = "Materials / Exclusion & Repairs", quantity = 1.0, unit = "ea", unitPrice = materialsCost)
+    }
+    if (equipmentCost > 0) {
+        items += InvoiceLineItem(description = "Equipment", quantity = 1.0, unit = "ea", unitPrice = equipmentCost)
+    }
+    if (permitCost > 0) {
+        items += InvoiceLineItem(description = "Permits", quantity = 1.0, unit = "ea", unitPrice = permitCost)
+    }
+    if (disposalCost > 0) {
+        items += InvoiceLineItem(description = "Disposal", quantity = 1.0, unit = "ea", unitPrice = disposalCost)
+    }
+    if (mileage > 0 && mileageRate > 0) {
+        items += InvoiceLineItem(description = "Mileage", quantity = mileage, unit = "mi", unitPrice = mileageRate)
+    }
+    if (items.isEmpty() && lineItemNotes.isNotBlank()) {
+        items += InvoiceLineItem(description = lineItemNotes.take(80), quantity = 1.0, unit = "ea", unitPrice = 0.0)
+    }
+    if (items.isEmpty() && draftRationale.isNotBlank()) {
+        items += InvoiceLineItem(description = "Inspection / estimate", quantity = 1.0, unit = "ea", unitPrice = 0.0)
+    }
+    return items
 }
 
 private fun formatNum(value: Double): String {
