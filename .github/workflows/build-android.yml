@@ -113,23 +113,45 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: Set release tag from branch
+        if: success() && github.event_name == 'push'
+        id: apk_tag
+        run: |
+          RAW="${GITHUB_REF_NAME}"
+          SAFE="$(printf '%s' "$RAW" | tr '/' '-' | tr -cd 'A-Za-z0-9._-')"
+          if [ "$RAW" = "main" ] || [ "$RAW" = "master" ]; then
+            TAG="debug-latest"
+            TITLE="Wildlife Field Ops Debug APK"
+          else
+            TAG="apk-${SAFE}-latest"
+            TITLE="Wildlife FieldOps APK (${RAW})"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "title=$TITLE" >> "$GITHUB_OUTPUT"
+          echo "Publishing release tag: $TAG"
+
       - name: Publish APK on Releases (easy download)
-        if: success() && github.ref == 'refs/heads/main'
+        if: success() && github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: debug-latest
-          name: Wildlife Field Ops Debug APK
+          tag_name: ${{ steps.apk_tag.outputs.tag }}
+          name: ${{ steps.apk_tag.outputs.title }}
           files: app/build/outputs/apk/debug/*.apk
           fail_on_unmatched_files: true
-          make_latest: true
+          make_latest: false
           body: |
-            Native Kotlin / Jetpack Compose debug APK from `${{ github.sha }}` (run ${{ github.run_number }}).
-            Unzip is not needed here — download the `.apk` asset and install on device (unknown sources).
+            Native Kotlin / Jetpack Compose debug APK from `${{ github.sha }}` (run ${{ github.run_number }}, branch `${{ github.ref_name }}`).
+            Direct download: the `.apk` asset on this release (no unzip).
             Actions artifact name remains `wildlife-field-ops-debug-apk`.
 
       - name: Summary
         if: success()
         run: |
           echo "Wildlife Field Ops Debug APK built successfully."
-          echo "Download from this run: Artifacts → wildlife-field-ops-debug-apk"
-          echo "Or from repo Releases: tag debug-latest"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${{ steps.apk_tag.outputs.tag }}"
+            echo "Public download: https://github.com/${{ github.repository }}/releases/download/${TAG}/app-debug.apk"
+          else
+            echo "PR builds upload Artifacts only (no Releases publish)."
+          fi
+
