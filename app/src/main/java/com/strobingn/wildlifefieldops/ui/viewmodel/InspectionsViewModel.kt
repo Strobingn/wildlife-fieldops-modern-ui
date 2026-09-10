@@ -2,8 +2,10 @@ package com.strobingn.wildlifefieldops.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.strobingn.wildlifefieldops.data.local.DeletedRecordDao
 import com.strobingn.wildlifefieldops.data.local.InspectionDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
+import com.strobingn.wildlifefieldops.data.model.DeletedRecord
 import com.strobingn.wildlifefieldops.data.model.FindingSeverity
 import com.strobingn.wildlifefieldops.data.model.Inspection
 import com.strobingn.wildlifefieldops.data.model.InspectionType
@@ -11,6 +13,7 @@ import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.remote.AiService
 import com.strobingn.wildlifefieldops.data.remote.InspectionReportContext
 import com.strobingn.wildlifefieldops.data.remote.InspectionReportDraft
+import com.strobingn.wildlifefieldops.data.repository.SyncRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -20,6 +23,8 @@ import javax.inject.Inject
 class InspectionsViewModel @Inject constructor(
     private val inspectionDao: InspectionDao,
     private val jobDao: JobDao,
+    private val deletedRecordDao: DeletedRecordDao,
+    private val syncRepository: SyncRepository,
     private val aiService: AiService
 ) : ViewModel() {
 
@@ -100,7 +105,15 @@ class InspectionsViewModel @Inject constructor(
     }
 
     fun deleteInspection(inspection: Inspection) = viewModelScope.launch {
+        deletedRecordDao.insert(
+            DeletedRecord(
+                id = inspection.id,
+                entityType = DeletedRecord.TYPE_INSPECTION,
+                synced = false
+            )
+        )
         inspectionDao.delete(inspection)
+        syncRepository.tryRemoteDelete(DeletedRecord.TYPE_INSPECTION, inspection.id)
     }
 
     fun clearReportError() {
