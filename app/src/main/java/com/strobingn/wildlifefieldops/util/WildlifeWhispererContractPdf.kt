@@ -169,7 +169,7 @@ object WildlifeWhispererContractPdf {
         val feeRows = mapFeeRows(lineItems)
         feeRows.forEach { (label, amount) ->
             c.drawText(label, 40f, y, normalPaint)
-            val amountText = if (amount != null) "$${String.format(Locale.US, "%.2f", amount)}" else "$______________"
+            val amountText = if (amount != null) "$${String.format(Locale.US, "%.2f", amount)}" else ("$" + "______________")
             c.drawText(amountText, PAGE_W - 40f, y, moneyPaint)
             y += 13f
         }
