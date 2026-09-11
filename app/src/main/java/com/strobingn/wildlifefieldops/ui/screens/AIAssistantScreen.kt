@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package com.strobingn.wildlifefieldops.ui.screens
 
 import androidx.compose.foundation.clickable
@@ -206,6 +207,7 @@ fun AIAssistantScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LocalModelBanner(
     modelState: LocalLlmModelManager.ModelState,
