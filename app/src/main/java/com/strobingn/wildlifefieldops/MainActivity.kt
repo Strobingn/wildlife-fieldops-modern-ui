@@ -275,6 +275,9 @@ private fun AppNavHost(
         composable(Screen.PhotoGallery.route) {
             PhotoGalleryScreen(onBack = { navController.popBackStack() }, viewModel = hiltViewModel())
         }
+        composable(Screen.LiveCapture.route) {
+            LiveCaptureScreen(onBack = { navController.popBackStack() })
+        }
         composable(Screen.Settings.route) {
             SettingsScreen(onBack = { navController.popBackStack() })
         }

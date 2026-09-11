@@ -52,6 +52,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
         fun createRoute(jobId: String) = "invoice/$jobId"
     }
     object PhotoGallery : Screen("photos", "Photo Gallery", Icons.Default.PhotoCamera)
+    object LiveCapture : Screen("live_capture", "Live Capture", Icons.Default.Videocam)
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
     object AIAssistant : Screen("ai_assistant", "AI Assistant", Icons.Default.Psychology)
     object AIOperations : Screen("ai_operations", "AI Operations", Icons.Default.AutoAwesome)
@@ -69,6 +70,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
             CustomerList,
             Map,
             PhotoGallery,
+            LiveCapture,
             Expense,
             Inventory,
             RouteOptimizer,
