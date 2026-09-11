@@ -14,8 +14,8 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 25
-        versionName = "2.2.7-inspection-polish"
+        versionCode = 26
+        versionName = "2.2.8-llm-download-resume"
 
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
         val supabaseKey = System.getenv("SUPABASE_ANON_KEY") ?: "your-anon-key"
@@ -62,6 +62,9 @@ android {
         buildConfigField("String", "LLM_BASE_URL", "\"${escapeBuildConfig(llmBase)}\"")
         buildConfigField("String", "LLM_MODEL", "\"${escapeBuildConfig(llmModel)}\"")
         buildConfigField("int", "LLM_KEY_LENGTH", "${llmKey.length}")
+
+        val hfToken = envTrim("HF_TOKEN").ifBlank { envTrim("HUGGING_FACE_HUB_TOKEN") }
+        buildConfigField("String", "HF_TOKEN", "\"${escapeBuildConfig(hfToken)}\"")
 
         manifestPlaceholders["GOOGLE_MAPS_API"] = mapsKey
 

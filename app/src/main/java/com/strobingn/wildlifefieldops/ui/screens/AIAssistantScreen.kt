@@ -2,6 +2,7 @@ package com.strobingn.wildlifefieldops.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -25,7 +26,7 @@ import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.AiAssistantViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.ChatMessage
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AIAssistantScreen(
     onBack: () -> Unit,
@@ -233,13 +234,14 @@ private fun LocalModelBanner(
                     style = MaterialTheme.typography.labelLarge
                 )
                 Text(
-                    "Default 3B (~2.1 GB) or optional 7B v3 (~4.7 GB). ChatML Instruct. Switching unloads the previous GGUF.",
+                    "Abliterated GGUFs: 1.5B (~0.9 GB, easiest download), default 3B (~2.1 GB), Llama-3.2-3B (~2.2 GB), or 7B v3 (~4.7 GB). Downloads resume if they stall. Switching unloads the previous model.",
                     color = TextSecondary,
                     style = MaterialTheme.typography.bodySmall
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(
+                FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     catalog.forEach { option ->
