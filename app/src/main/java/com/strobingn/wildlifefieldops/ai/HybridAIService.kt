@@ -44,6 +44,12 @@ class HybridAIService @Inject constructor(
         val complianceFlags: List<String> = emptyList()
     )
 
+    data class CaptureNarration(
+        val techNotes: String,
+        val customerSummary: String,
+        val source: String
+    )
+
     suspend fun analyzePhotoAndFillForm(
         context: Context,
         imageUri: Uri,
@@ -84,8 +90,7 @@ class HybridAIService @Inject constructor(
 
         return vision.copy(
             suggestedNotes = vision.suggestedNotes +
-                "
-Generative LLM unavailable — download on-device model or configure XAI_API_KEY."
+                "\nGenerative LLM unavailable — download on-device model or configure XAI_API_KEY."
         )
     }
 
@@ -99,7 +104,7 @@ Generative LLM unavailable — download on-device model or configure XAI_API_KEY
             runCatching { return callGrokText(prompt) }
         }
         val local = localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
-        if (local != null) return "📱 On-device LLM estimate:\n\n$local"
+        if (local != null) return "On-device LLM estimate:\n\n$local"
         return "No generative LLM ready. Download the on-device model in AI Assistant or set XAI_API_KEY."
     }
 
@@ -119,13 +124,6 @@ Generative LLM unavailable — download on-device model or configure XAI_API_KEY
         }
         return listOf("No generative LLM ready for compliance analysis.")
     }
-
-
-    data class CaptureNarration(
-        val techNotes: String,
-        val customerSummary: String,
-        val source: String
-    )
 
     /**
      * Phase 3: after policy ACCEPT + vision/form draft, LLM writes tech notes + customer summary.
