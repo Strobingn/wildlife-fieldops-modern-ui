@@ -2,16 +2,18 @@ package com.strobingn.wildlifefieldops.ai
 
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
+import android.util.Log
 import com.google.mlkit.vision.common.InputImage
 import com.google.android.gms.tasks.Task
 import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import com.google.mlkit.vision.objects.ObjectDetection
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resumeWithException
-// Note: kotlinx-coroutines-play-services dependency not included.
-// Using a suspend helper that bridges Google Play Services Tasks to coroutines.
 
 data class AiAnalysisResult(
     val species: List<String> = emptyList(),
@@ -24,7 +26,9 @@ data class AiAnalysisResult(
     val estimatedPriceLow: Double = 0.0,
     val estimatedPriceHigh: Double = 0.0,
     val objectDetections: List<String> = emptyList(),
-    val source: String = "offline_ml"
+    val source: String = "offline_ml",
+    /** Wall-clock ms for this still-photo analysis (labeler ∥ detector). */
+    val analysisDurationMs: Long = 0L
 ) {
     val serviceType: String get() = suggestedServiceType
     val priority: String get() = suggestedPriority
@@ -33,6 +37,8 @@ data class AiAnalysisResult(
 }
 
 object PhotoAIHelper {
+    private const val TAG = "PhotoAIHelper"
+
     private val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
     private val objectDetector = ObjectDetection.getClient(
         ObjectDetectorOptions.Builder()
@@ -43,15 +49,20 @@ object PhotoAIHelper {
     )
 
     suspend fun analyzePhotoForFormFilling(context: Context, imageUri: Uri): AiAnalysisResult {
+        val startedAt = SystemClock.elapsedRealtime()
         return try {
             val image = InputImage.fromFilePath(context, imageUri)
-            val labels = awaitTask(labeler.process(image))
+            // Labeler and detector are independent — run in parallel to cut wall-clock latency.
+            val (labels, objects) = coroutineScope {
+                val labelsDeferred = async { awaitTask(labeler.process(image)) }
+                val objectsDeferred = async { awaitTask(objectDetector.process(image)) }
+                labelsDeferred.await() to objectsDeferred.await()
+            }
             val knownSpecies = setOf("raccoon", "bat", "squirrel", "opossum", "snake", "bird", "rodent")
             val knownDamage = setOf("damage", "hole", "entry point", "chew marks", "nesting", "droppings", "scratching")
             val accepted = labels.filter { it.confidence > 0.55f }.map { it.text.lowercase() }
             val species = accepted.filter { it in knownSpecies }.distinct()
             val damage = accepted.filter { it in knownDamage }.distinct()
-            val objects = awaitTask(objectDetector.process(image))
             val objectNames = objects.mapNotNull { it.labels.firstOrNull()?.text?.lowercase() }.distinct()
 
             val service = when {
@@ -76,6 +87,9 @@ object PhotoAIHelper {
                 else -> Triple(200.0, 600.0, "$200 - $600")
             }
 
+            val durationMs = SystemClock.elapsedRealtime() - startedAt
+            Log.i(TAG, "still-photo analysis ${durationMs}ms (labeler∥detector)")
+
             AiAnalysisResult(
                 species = species,
                 damageTypes = damage,
@@ -87,10 +101,16 @@ object PhotoAIHelper {
                 estimatedPriceLow = prices.first,
                 estimatedPriceHigh = prices.second,
                 objectDetections = objectNames,
-                source = "offline_ml"
+                source = "offline_ml",
+                analysisDurationMs = durationMs
             )
         } catch (e: Exception) {
-            AiAnalysisResult(suggestedNotes = "Photo analysis failed: ${e.message}. Manual entry required.")
+            val durationMs = SystemClock.elapsedRealtime() - startedAt
+            Log.w(TAG, "still-photo analysis failed after ${durationMs}ms", e)
+            AiAnalysisResult(
+                suggestedNotes = "Photo analysis failed: ${e.message}. Manual entry required.",
+                analysisDurationMs = durationMs
+            )
         }
     }
 }
@@ -100,4 +120,3 @@ private suspend fun <T> awaitTask(task: Task<T>): T = suspendCancellableCoroutin
     task.addOnSuccessListener { result -> cont.resume(result) {} }
     task.addOnFailureListener { exception -> cont.resumeWithException(exception) }
 }
-
