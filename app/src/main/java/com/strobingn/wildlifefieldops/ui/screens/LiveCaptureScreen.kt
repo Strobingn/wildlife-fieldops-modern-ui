@@ -15,6 +15,7 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,7 +24,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,6 +41,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.strobingn.wildlifefieldops.ai.camera.CaptureGuidance
 import com.strobingn.wildlifefieldops.ai.camera.CaptureGuidanceAction
+import com.strobingn.wildlifefieldops.ai.camera.ChecklistSession
 import com.strobingn.wildlifefieldops.ai.camera.LiveCameraAnalyzer
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundDark
 import com.strobingn.wildlifefieldops.ui.theme.PrimaryGreen
@@ -83,6 +87,9 @@ fun LiveCaptureScreen(
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
 
     val smartCapture by viewModel.smartCapture.collectAsState()
+    val checklistEnabled by viewModel.checklistEnabled.collectAsState()
+    val checklist by viewModel.checklist.collectAsState()
+
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val analyzer = remember {
@@ -162,12 +169,27 @@ fun LiveCaptureScreen(
     }
 
     val acceptReady = guidance?.action == CaptureGuidanceAction.ACCEPT
-    val busy = smartCapture is SmartCaptureState.Capturing || smartCapture is SmartCaptureState.Analyzing
+    val busy = smartCapture is SmartCaptureState.Capturing ||
+        smartCapture is SmartCaptureState.Analyzing ||
+        smartCapture is SmartCaptureState.Narrating
+    val activeTitle = checklist.active?.def?.title
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Live capture", color = TextPrimary) },
+                title = {
+                    Column {
+                        Text("Live capture", color = TextPrimary)
+                        if (checklistEnabled) {
+                            Text(
+                                "Inspection ${checklist.progressLabel}" +
+                                    if (checklist.allDone) " · done" else "",
+                                color = TextSecondary,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
@@ -199,9 +221,7 @@ fun LiveCaptureScreen(
                                 )
                             },
                             colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
-                        ) {
-                            Text("Force capture")
-                        }
+                        ) { Text("Force capture") }
                     }
                     ExtendedFloatingActionButton(
                         onClick = {
@@ -222,16 +242,18 @@ fun LiveCaptureScreen(
                         text = {
                             Text(
                                 when {
-                                    busy && smartCapture is SmartCaptureState.Capturing -> "Saving…"
-                                    busy -> "AI analyzing…"
+                                    smartCapture is SmartCaptureState.Capturing -> "Saving…"
+                                    smartCapture is SmartCaptureState.Analyzing -> "AI form…"
+                                    smartCapture is SmartCaptureState.Narrating -> "AI notes…"
+                                    acceptReady && checklistEnabled && activeTitle != null ->
+                                        "Capture: $activeTitle"
                                     acceptReady -> "AI capture"
                                     else -> "Wait for ACCEPT"
                                 }
                             )
                         },
                         containerColor = if (acceptReady && !busy) PrimaryGreen else Color(0xFF455A64),
-                        contentColor = if (acceptReady && !busy) Color.Black else TextPrimary,
-                        modifier = Modifier
+                        contentColor = if (acceptReady && !busy) Color.Black else TextPrimary
                     )
                 }
             }
@@ -261,12 +283,29 @@ fun LiveCaptureScreen(
                     modifier = Modifier.fillMaxSize()
                 )
 
+                Column(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                ) {
+                    ChecklistBar(
+                        enabled = checklistEnabled,
+                        session = checklist,
+                        onToggle = { viewModel.setChecklistEnabled(it) },
+                        onSelect = { viewModel.selectChecklistItem(it) },
+                        onSkip = { viewModel.skipChecklistItem() },
+                        onReset = { viewModel.resetChecklist() }
+                    )
+                }
+
                 GuidanceHud(
                     guidance = guidance,
                     dropHint = lastDrop,
                     framesSeen = framesSeen,
                     framesDropped = framesDropped,
                     smartBusy = busy,
+                    checklistHint = if (checklistEnabled) activeTitle else null,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
@@ -278,7 +317,7 @@ fun LiveCaptureScreen(
                         err,
                         color = Color(0xFFFF8A80),
                         modifier = Modifier
-                            .align(Alignment.TopCenter)
+                            .align(Alignment.Center)
                             .padding(12.dp)
                             .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
                             .padding(8.dp)
@@ -290,6 +329,7 @@ fun LiveCaptureScreen(
                 is SmartCaptureState.Ready -> {
                     SmartCaptureResultSheet(
                         state = s,
+                        checklistProgress = if (checklistEnabled) checklist.progressLabel else null,
                         onDismiss = { viewModel.clearSmartCapture() }
                     )
                 }
@@ -309,10 +349,100 @@ fun LiveCaptureScreen(
     }
 }
 
+@Composable
+private fun ChecklistBar(
+    enabled: Boolean,
+    session: ChecklistSession,
+    onToggle: (Boolean) -> Unit,
+    onSelect: (Int) -> Unit,
+    onSkip: () -> Unit,
+    onReset: () -> Unit
+) {
+    Surface(
+        color = Color.Black.copy(alpha = 0.75f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(10.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Guided inspection",
+                    color = TextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.labelLarge
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("On", color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+                    Switch(
+                        checked = enabled,
+                        onCheckedChange = onToggle,
+                        colors = SwitchDefaults.colors(checkedTrackColor = PrimaryGreen)
+                    )
+                }
+            }
+            if (enabled) {
+                Text(
+                    session.active?.def?.hint ?: "All checklist items done",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    session.items.forEachIndexed { index, item ->
+                        val selected = index == session.activeIndex
+                        FilterChip(
+                            selected = selected,
+                            onClick = { onSelect(index) },
+                            label = {
+                                Text(
+                                    buildString {
+                                        if (item.completed) append("✓ ")
+                                        else if (item.skipped) append("– ")
+                                        append(item.def.title)
+                                    }
+                                )
+                            },
+                            leadingIcon = if (item.completed) {
+                                { Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                            } else null,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = PrimaryGreen.copy(alpha = 0.3f),
+                                selectedLabelColor = TextPrimary,
+                                labelColor = TextSecondary
+                            )
+                        )
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onSkip) {
+                        Icon(Icons.Default.SkipNext, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Skip item")
+                    }
+                    TextButton(onClick = onReset) { Text("Reset") }
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SmartCaptureResultSheet(
     state: SmartCaptureState.Ready,
+    checklistProgress: String?,
     onDismiss: () -> Unit
 ) {
     val a = state.analysis
@@ -333,7 +463,7 @@ private fun SmartCaptureResultSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "AI form draft",
+                    "AI capture pack",
                     color = TextPrimary,
                     fontWeight = FontWeight.SemiBold,
                     style = MaterialTheme.typography.titleLarge
@@ -343,7 +473,12 @@ private fun SmartCaptureResultSheet(
                 }
             }
             Text(
-                "Saved evidence · frame=${state.frameId} · policy=${state.guidanceAction}/${state.reasonCode} · src=${a.source}",
+                buildString {
+                    append("frame=${state.frameId} · policy=${state.guidanceAction}/${state.reasonCode}")
+                    append(" · form=${a.source} · notes=${state.narrationSource.ifBlank { "—" }}")
+                    state.checklistTitle?.let { append(" · item=$it") }
+                    checklistProgress?.let { append(" · checklist $it") }
+                },
                 color = TextSecondary,
                 style = MaterialTheme.typography.labelMedium
             )
@@ -353,13 +488,23 @@ private fun SmartCaptureResultSheet(
             ResultRow("Species", a.species.joinToString().ifBlank { "—" })
             ResultRow("Damage", a.damageTypes.joinToString().ifBlank { "—" })
             ResultRow("Price range", a.estimatedPriceRange.ifBlank { "—" })
-            ResultRow("Confidence", "${"%.0f".format(a.confidence * 100)}%")
-            Spacer(Modifier.height(8.dp))
-            Text("Notes", color = TextSecondary, style = MaterialTheme.typography.labelLarge)
-            Text(a.suggestedNotes.ifBlank { "—" }, color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(10.dp))
+            Text("Tech notes", color = TextSecondary, style = MaterialTheme.typography.labelLarge)
+            Text(
+                state.techNotes.ifBlank { a.suggestedNotes },
+                color = TextPrimary,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(Modifier.height(10.dp))
+            Text("Customer summary", color = TextSecondary, style = MaterialTheme.typography.labelLarge)
+            Text(
+                state.customerSummary.ifBlank { "—" },
+                color = TextPrimary,
+                style = MaterialTheme.typography.bodyMedium
+            )
             Spacer(Modifier.height(16.dp))
             Text(
-                "Photo kept in gallery as Evidence. Policy owned accept; AI only drafted the form fields.",
+                "Policy owned accept/checklist advance; AI only drafted form fields and notes.",
                 color = TextSecondary,
                 style = MaterialTheme.typography.bodySmall
             )
@@ -368,9 +513,7 @@ private fun SmartCaptureResultSheet(
                 onClick = onDismiss,
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.Black),
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Done")
-            }
+            ) { Text("Done — next checklist item") }
         }
     }
 }
@@ -416,6 +559,7 @@ private fun GuidanceHud(
     framesSeen: Long,
     framesDropped: Long,
     smartBusy: Boolean,
+    checklistHint: String?,
     modifier: Modifier = Modifier
 ) {
     val action = guidance?.action ?: CaptureGuidanceAction.WAIT
@@ -434,7 +578,8 @@ private fun GuidanceHud(
         Column(Modifier.padding(14.dp)) {
             Text(
                 when {
-                    smartBusy -> "Smart capture in progress…"
+                    smartBusy -> "Smart capture / AI notes in progress…"
+                    checklistHint != null -> "${guidance?.userMessage ?: "Analyzing…"} · need: $checklistHint"
                     else -> guidance?.userMessage ?: "Starting live analyzer…"
                 },
                 color = if (smartBusy) PrimaryGreen else accent,
@@ -451,29 +596,16 @@ private fun GuidanceHud(
                 )
                 Text(
                     "resultAge=${g.resultAgeFromArrivalMs}ms · analysis=${g.analysisDurationMs}ms · " +
-                        "luma=${"%.0f".format(g.signals.meanLuma)} · sharp=${"%.0f".format(g.signals.sharpness)} · " +
-                        "cover=${"%.0f".format(g.signals.subjectCoverage * 100)}%",
+                        "luma=${"%.0f".format(g.signals.meanLuma)} · sharp=${"%.0f".format(g.signals.sharpness)}",
                     color = TextSecondary,
                     style = MaterialTheme.typography.labelSmall
                 )
-                if (g.signals.labelHints.isNotEmpty()) {
-                    Text(
-                        "hints: ${g.signals.labelHints.joinToString()}",
-                        color = TextSecondary,
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
             }
             Text(
                 "frames=$framesSeen dropped=$framesDropped" +
                     (dropHint?.let { " lastDrop=$it" } ?: "") +
                     " · KEEP_ONLY_LATEST",
                 color = TextSecondary,
-                style = MaterialTheme.typography.labelSmall
-            )
-            Text(
-                "AI Capture saves still + runs photo→form when policy = ACCEPT",
-                color = TextSecondary.copy(alpha = 0.9f),
                 style = MaterialTheme.typography.labelSmall
             )
         }

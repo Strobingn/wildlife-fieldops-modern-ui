@@ -84,7 +84,8 @@ class HybridAIService @Inject constructor(
 
         return vision.copy(
             suggestedNotes = vision.suggestedNotes +
-                "\nGenerative LLM unavailable — download on-device model or configure XAI_API_KEY."
+                "
+Generative LLM unavailable — download on-device model or configure XAI_API_KEY."
         )
     }
 
@@ -98,7 +99,9 @@ class HybridAIService @Inject constructor(
             runCatching { return callGrokText(prompt) }
         }
         val local = localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
-        if (local != null) return "📱 On-device LLM estimate:\n\n$local"
+        if (local != null) return "📱 On-device LLM estimate:
+
+$local"
         return "No generative LLM ready. Download the on-device model in AI Assistant or set XAI_API_KEY."
     }
 
@@ -119,6 +122,71 @@ class HybridAIService @Inject constructor(
         return listOf("No generative LLM ready for compliance analysis.")
     }
 
+
+    data class CaptureNarration(
+        val techNotes: String,
+        val customerSummary: String,
+        val source: String
+    )
+
+    /**
+     * Phase 3: after policy ACCEPT + vision/form draft, LLM writes tech notes + customer summary.
+     * Does not decide capture acceptance.
+     */
+    suspend fun narrateAcceptedCapture(
+        analysis: AiAnalysisResult,
+        checklistTitle: String? = null,
+        reasonCode: String = "QUALITY_OK",
+        jobContext: String = ""
+    ): CaptureNarration {
+        val prompt = GrokPrompts.liveCaptureNarration(
+            checklistTitle = checklistTitle,
+            species = analysis.species,
+            damage = analysis.damageTypes,
+            serviceType = analysis.suggestedServiceType,
+            visionNotes = analysis.suggestedNotes,
+            reasonCode = reasonCode,
+            jobContext = jobContext
+        )
+        val raw = when {
+            hasDirectKey() -> runCatching { callGrokText(prompt) }.getOrNull()
+            else -> null
+        } ?: localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
+
+        if (raw.isNullOrBlank()) {
+            return CaptureNarration(
+                techNotes = buildString {
+                    append("• Evidence captured for ")
+                    append(checklistTitle ?: "inspection")
+                    append("\n• Review on site; confirm species and entry points.")
+                    append("\n• Download on-device model or set API key for fuller AI notes.")
+                },
+                customerSummary = "We documented the area during inspection and will review findings with you.",
+                source = "template"
+            )
+        }
+        return parseNarration(raw, if (hasDirectKey()) "grok" else "local_llm")
+    }
+
+    private fun parseNarration(raw: String, source: String): CaptureNarration {
+        val text = raw.trim()
+        val techMarker = Regex("(?i)TECH_NOTES\s*:")
+        val custMarker = Regex("(?i)CUSTOMER_SUMMARY\s*:")
+        val techIdx = techMarker.find(text)?.range?.last?.plus(1) ?: -1
+        val custMatch = custMarker.find(text)
+        val custIdx = custMatch?.range?.last?.plus(1) ?: -1
+        val tech = when {
+            techIdx >= 0 && custMatch != null -> text.substring(techIdx, custMatch.range.first).trim()
+            techIdx >= 0 -> text.substring(techIdx).trim()
+            else -> text.take(600)
+        }
+        val cust = when {
+            custIdx >= 0 -> text.substring(custIdx).trim()
+            else -> "We documented conditions during the inspection and will follow up with recommendations."
+        }
+        return CaptureNarration(techNotes = tech, customerSummary = cust, source = source)
+    }
+
     private fun enrich(vision: AiAnalysisResult, form: GrokFormResponse, source: String): AiAnalysisResult {
         return vision.copy(
             species = form.species.split(',').map { it.trim() }.filter { it.isNotBlank() }
@@ -128,11 +196,13 @@ class HybridAIService @Inject constructor(
             suggestedNotes = buildString {
                 append(form.notes.ifBlank { vision.suggestedNotes })
                 if (form.recommendedActions.isNotEmpty()) {
-                    append("\nRecommended actions: ")
+                    append("
+Recommended actions: ")
                     append(form.recommendedActions.joinToString("; "))
                 }
                 if (form.complianceFlags.isNotEmpty()) {
-                    append("\nCompliance flags: ")
+                    append("
+Compliance flags: ")
                     append(form.complianceFlags.joinToString("; "))
                 }
             },

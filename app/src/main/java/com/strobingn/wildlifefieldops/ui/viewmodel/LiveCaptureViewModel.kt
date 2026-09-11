@@ -11,6 +11,8 @@ import androidx.lifecycle.viewModelScope
 import com.strobingn.wildlifefieldops.ai.AiAnalysisResult
 import com.strobingn.wildlifefieldops.ai.HybridAIService
 import com.strobingn.wildlifefieldops.ai.camera.CaptureGuidanceAction
+import com.strobingn.wildlifefieldops.ai.camera.ChecklistSession
+import com.strobingn.wildlifefieldops.ai.camera.InspectionCaptureChecklist
 import com.strobingn.wildlifefieldops.data.local.PhotoDao
 import com.strobingn.wildlifefieldops.data.model.Photo
 import com.strobingn.wildlifefieldops.data.model.PhotoCategory
@@ -20,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -36,12 +39,18 @@ sealed class SmartCaptureState {
     data object Idle : SmartCaptureState()
     data object Capturing : SmartCaptureState()
     data object Analyzing : SmartCaptureState()
+    data object Narrating : SmartCaptureState()
     data class Ready(
         val photo: Photo,
         val analysis: AiAnalysisResult,
         val guidanceAction: CaptureGuidanceAction,
         val reasonCode: String,
-        val frameId: Long
+        val frameId: Long,
+        val checklistItemId: String? = null,
+        val checklistTitle: String? = null,
+        val techNotes: String = "",
+        val customerSummary: String = "",
+        val narrationSource: String = ""
     ) : SmartCaptureState()
     data class Error(val message: String) : SmartCaptureState()
 }
@@ -56,13 +65,46 @@ class LiveCaptureViewModel @Inject constructor(
     private val _smartCapture = MutableStateFlow<SmartCaptureState>(SmartCaptureState.Idle)
     val smartCapture: StateFlow<SmartCaptureState> = _smartCapture.asStateFlow()
 
+    private val _checklistEnabled = MutableStateFlow(true)
+    val checklistEnabled: StateFlow<Boolean> = _checklistEnabled.asStateFlow()
+
+    private val _checklist = MutableStateFlow(InspectionCaptureChecklist.newSession())
+    val checklist: StateFlow<ChecklistSession> = _checklist.asStateFlow()
+
     fun clearSmartCapture() {
         _smartCapture.value = SmartCaptureState.Idle
     }
 
+    fun setChecklistEnabled(enabled: Boolean) {
+        _checklistEnabled.value = enabled
+        if (enabled && _checklist.value.items.isEmpty()) {
+            _checklist.value = InspectionCaptureChecklist.newSession()
+        }
+    }
+
+    fun resetChecklist() {
+        _checklist.value = InspectionCaptureChecklist.newSession()
+    }
+
+    fun selectChecklistItem(index: Int) {
+        val session = _checklist.value
+        if (index !in session.items.indices) return
+        _checklist.value = session.copy(activeIndex = index)
+    }
+
+    fun skipChecklistItem() {
+        val session = _checklist.value
+        val i = session.activeIndex
+        val item = session.items.getOrNull(i) ?: return
+        val updated = session.items.toMutableList()
+        updated[i] = item.copy(completed = false, skipped = true, reasonCode = "SKIPPED")
+        val next = ((i + 1) until updated.size).firstOrNull { !updated[it].completed && !updated[it].skipped } ?: i
+        _checklist.value = session.copy(items = updated, activeIndex = next)
+    }
+
     /**
-     * Policy-gated smart capture: still → Room photo → hybrid photo→form AI.
-     * [requireAccept] enforces CaptureGuidancePolicy ACCEPT (caller may pass false for forced capture).
+     * Policy-gated smart capture: still → Room photo → hybrid form AI → LLM narration.
+     * When checklist mode is on, ACCEPT capture completes the active checklist item.
      */
     fun smartCapture(
         imageCapture: ImageCapture?,
@@ -85,10 +127,14 @@ class LiveCaptureViewModel @Inject constructor(
             return
         }
         if (_smartCapture.value is SmartCaptureState.Capturing ||
-            _smartCapture.value is SmartCaptureState.Analyzing
+            _smartCapture.value is SmartCaptureState.Analyzing ||
+            _smartCapture.value is SmartCaptureState.Narrating
         ) {
             return
         }
+
+        val checklistOn = _checklistEnabled.value
+        val activeItem = if (checklistOn) _checklist.value.active else null
 
         viewModelScope.launch {
             try {
@@ -98,9 +144,16 @@ class LiveCaptureViewModel @Inject constructor(
                     filePath = uri.toString(),
                     localPath = file.absolutePath,
                     jobId = jobId,
-                    category = PhotoCategory.EVIDENCE,
+                    category = if (checklistOn) PhotoCategory.INSPECTION else PhotoCategory.EVIDENCE,
                     description = buildString {
                         append("Live smart capture")
+                        if (activeItem != null) {
+                            append(" · checklist=")
+                            append(activeItem.def.id)
+                            append(" (")
+                            append(activeItem.def.title)
+                            append(")")
+                        }
                         if (frameId > 0) append(" · frame=$frameId")
                         append(" · policy=${guidanceAction ?: "FORCE"}/$reasonCode")
                         append(" · ${SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date())}")
@@ -114,6 +167,17 @@ class LiveCaptureViewModel @Inject constructor(
                 val analysis = withContext(Dispatchers.IO) {
                     hybridAI.analyzePhotoAndFillForm(appContext, uri, jobContext)
                 }
+
+                _smartCapture.value = SmartCaptureState.Narrating
+                val narration = withContext(Dispatchers.IO) {
+                    hybridAI.narrateAcceptedCapture(
+                        analysis = analysis,
+                        checklistTitle = activeItem?.def?.title,
+                        reasonCode = reasonCode,
+                        jobContext = jobContext
+                    )
+                }
+
                 val enriched = photo.copy(
                     description = buildString {
                         append(photo.description)
@@ -125,21 +189,57 @@ class LiveCaptureViewModel @Inject constructor(
                         }
                         append(" · src=")
                         append(analysis.source)
+                        append("\nTECH:\n")
+                        append(narration.techNotes)
+                        append("\nCUSTOMER:\n")
+                        append(narration.customerSummary)
                     }
                 )
                 photoDao.update(enriched)
+
+                if (checklistOn && activeItem != null && requireAccept) {
+                    completeActiveChecklistItem(
+                        photoId = enriched.id,
+                        reasonCode = reasonCode,
+                        frameId = frameId
+                    )
+                }
 
                 _smartCapture.value = SmartCaptureState.Ready(
                     photo = enriched,
                     analysis = analysis,
                     guidanceAction = guidanceAction ?: CaptureGuidanceAction.ACCEPT,
                     reasonCode = reasonCode,
-                    frameId = frameId
+                    frameId = frameId,
+                    checklistItemId = activeItem?.def?.id,
+                    checklistTitle = activeItem?.def?.title,
+                    techNotes = narration.techNotes,
+                    customerSummary = narration.customerSummary,
+                    narrationSource = narration.source
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "smartCapture failed", e)
                 _smartCapture.value = SmartCaptureState.Error(e.message ?: "Smart capture failed")
             }
+        }
+    }
+
+    private fun completeActiveChecklistItem(photoId: String, reasonCode: String, frameId: Long) {
+        _checklist.update { session ->
+            val i = session.activeIndex
+            val item = session.items.getOrNull(i) ?: return@update session
+            val updated = session.items.toMutableList()
+            updated[i] = item.copy(
+                completed = true,
+                skipped = false,
+                photoId = photoId,
+                reasonCode = reasonCode,
+                frameId = frameId
+            )
+            val next = ((i + 1) until updated.size).firstOrNull { !updated[it].completed && !updated[it].skipped }
+                ?: updated.indexOfFirst { !it.completed && !it.skipped }.takeIf { it >= 0 }
+                ?: i
+            session.copy(items = updated, activeIndex = next)
         }
     }
 

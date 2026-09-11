@@ -30,3 +30,28 @@ Return a bullet list of issues and recommendations.
     fun arMeasurementToReport(measurements: String, species: String, damageType: String): String = "Create report from $measurements for $species $damageType"
 }
 
+    fun liveCaptureNarration(
+        checklistTitle: String?,
+        species: List<String>,
+        damage: List<String>,
+        serviceType: String,
+        visionNotes: String,
+        reasonCode: String,
+        jobContext: String = ""
+    ): String = """
+You are writing field notes after a policy-accepted Live Capture still.
+Checklist item: ${checklistTitle ?: "general evidence"}
+Species tags: ${species.joinToString()}
+Damage tags: ${damage.joinToString()}
+Service suggestion: $serviceType
+Vision notes: $visionNotes
+Policy reason: $reasonCode
+Job context: $jobContext
+
+Return plain text with exactly two sections and these headers:
+TECH_NOTES:
+(3-6 concise technician bullets: evidence, access, hazards, next field action)
+
+CUSTOMER_SUMMARY:
+(2-4 short customer-safe sentences; no internal pricing strategy; calm and professional)
+"""
