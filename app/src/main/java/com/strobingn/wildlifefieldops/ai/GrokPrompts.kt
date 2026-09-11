@@ -28,7 +28,6 @@ Return a bullet list of issues and recommendations.
     fun predictTrapCheckPriority(trapHistory: String, species: String, weather: String, season: String): String = "Predict trap check priority for $species based on $weather $season $trapHistory"
 
     fun arMeasurementToReport(measurements: String, species: String, damageType: String): String = "Create report from $measurements for $species $damageType"
-}
 
     fun liveCaptureNarration(
         checklistTitle: String?,
@@ -55,3 +54,4 @@ TECH_NOTES:
 CUSTOMER_SUMMARY:
 (2-4 short customer-safe sentences; no internal pricing strategy; calm and professional)
 """
+}

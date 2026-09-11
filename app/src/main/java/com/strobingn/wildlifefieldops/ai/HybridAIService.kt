@@ -99,9 +99,7 @@ Generative LLM unavailable — download on-device model or configure XAI_API_KEY
             runCatching { return callGrokText(prompt) }
         }
         val local = localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
-        if (local != null) return "📱 On-device LLM estimate:
-
-$local"
+        if (local != null) return "📱 On-device LLM estimate:\n\n$local"
         return "No generative LLM ready. Download the on-device model in AI Assistant or set XAI_API_KEY."
     }
 
@@ -170,8 +168,8 @@ $local"
 
     private fun parseNarration(raw: String, source: String): CaptureNarration {
         val text = raw.trim()
-        val techMarker = Regex("(?i)TECH_NOTES\s*:")
-        val custMarker = Regex("(?i)CUSTOMER_SUMMARY\s*:")
+        val techMarker = Regex("(?i)TECH_NOTES\\s*:")
+        val custMarker = Regex("(?i)CUSTOMER_SUMMARY\\s*:")
         val techIdx = techMarker.find(text)?.range?.last?.plus(1) ?: -1
         val custMatch = custMarker.find(text)
         val custIdx = custMatch?.range?.last?.plus(1) ?: -1
@@ -196,13 +194,11 @@ $local"
             suggestedNotes = buildString {
                 append(form.notes.ifBlank { vision.suggestedNotes })
                 if (form.recommendedActions.isNotEmpty()) {
-                    append("
-Recommended actions: ")
+                    append("\nRecommended actions: ")
                     append(form.recommendedActions.joinToString("; "))
                 }
                 if (form.complianceFlags.isNotEmpty()) {
-                    append("
-Compliance flags: ")
+                    append("\nCompliance flags: ")
                     append(form.complianceFlags.joinToString("; "))
                 }
             },
