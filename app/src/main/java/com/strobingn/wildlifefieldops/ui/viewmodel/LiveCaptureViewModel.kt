@@ -1,0 +1,181 @@
+package com.strobingn.wildlifefieldops.ui.viewmodel
+
+import android.content.Context
+import android.net.Uri
+import android.util.Log
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.core.content.FileProvider
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.strobingn.wildlifefieldops.ai.AiAnalysisResult
+import com.strobingn.wildlifefieldops.ai.HybridAIService
+import com.strobingn.wildlifefieldops.ai.camera.CaptureGuidanceAction
+import com.strobingn.wildlifefieldops.data.local.PhotoDao
+import com.strobingn.wildlifefieldops.data.model.Photo
+import com.strobingn.wildlifefieldops.data.model.PhotoCategory
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.Executor
+import javax.inject.Inject
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+
+sealed class SmartCaptureState {
+    data object Idle : SmartCaptureState()
+    data object Capturing : SmartCaptureState()
+    data object Analyzing : SmartCaptureState()
+    data class Ready(
+        val photo: Photo,
+        val analysis: AiAnalysisResult,
+        val guidanceAction: CaptureGuidanceAction,
+        val reasonCode: String,
+        val frameId: Long
+    ) : SmartCaptureState()
+    data class Error(val message: String) : SmartCaptureState()
+}
+
+@HiltViewModel
+class LiveCaptureViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
+    private val hybridAI: HybridAIService,
+    private val photoDao: PhotoDao
+) : ViewModel() {
+
+    private val _smartCapture = MutableStateFlow<SmartCaptureState>(SmartCaptureState.Idle)
+    val smartCapture: StateFlow<SmartCaptureState> = _smartCapture.asStateFlow()
+
+    fun clearSmartCapture() {
+        _smartCapture.value = SmartCaptureState.Idle
+    }
+
+    /**
+     * Policy-gated smart capture: still → Room photo → hybrid photo→form AI.
+     * [requireAccept] enforces CaptureGuidancePolicy ACCEPT (caller may pass false for forced capture).
+     */
+    fun smartCapture(
+        imageCapture: ImageCapture?,
+        executor: Executor,
+        guidanceAction: CaptureGuidanceAction?,
+        reasonCode: String,
+        frameId: Long,
+        requireAccept: Boolean = true,
+        jobId: String? = null,
+        jobContext: String = ""
+    ) {
+        if (imageCapture == null) {
+            _smartCapture.value = SmartCaptureState.Error("Camera still capture not ready")
+            return
+        }
+        if (requireAccept && guidanceAction != CaptureGuidanceAction.ACCEPT) {
+            _smartCapture.value = SmartCaptureState.Error(
+                "Policy says ${guidanceAction ?: "WAIT"} ($reasonCode) — wait for ACCEPT or force capture"
+            )
+            return
+        }
+        if (_smartCapture.value is SmartCaptureState.Capturing ||
+            _smartCapture.value is SmartCaptureState.Analyzing
+        ) {
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                _smartCapture.value = SmartCaptureState.Capturing
+                val (uri, file) = takeStill(imageCapture, executor)
+                val photo = Photo(
+                    filePath = uri.toString(),
+                    localPath = file.absolutePath,
+                    jobId = jobId,
+                    category = PhotoCategory.EVIDENCE,
+                    description = buildString {
+                        append("Live smart capture")
+                        if (frameId > 0) append(" · frame=$frameId")
+                        append(" · policy=${guidanceAction ?: "FORCE"}/$reasonCode")
+                        append(" · ${SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date())}")
+                    },
+                    takenAt = System.currentTimeMillis(),
+                    fileSize = file.length()
+                )
+                photoDao.insert(photo)
+
+                _smartCapture.value = SmartCaptureState.Analyzing
+                val analysis = withContext(Dispatchers.IO) {
+                    hybridAI.analyzePhotoAndFillForm(appContext, uri, jobContext)
+                }
+                val enriched = photo.copy(
+                    description = buildString {
+                        append(photo.description)
+                        append("\nAI: ")
+                        append(analysis.suggestedServiceType)
+                        if (analysis.species.isNotEmpty()) {
+                            append(" · ")
+                            append(analysis.species.joinToString())
+                        }
+                        append(" · src=")
+                        append(analysis.source)
+                    }
+                )
+                photoDao.update(enriched)
+
+                _smartCapture.value = SmartCaptureState.Ready(
+                    photo = enriched,
+                    analysis = analysis,
+                    guidanceAction = guidanceAction ?: CaptureGuidanceAction.ACCEPT,
+                    reasonCode = reasonCode,
+                    frameId = frameId
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "smartCapture failed", e)
+                _smartCapture.value = SmartCaptureState.Error(e.message ?: "Smart capture failed")
+            }
+        }
+    }
+
+    private suspend fun takeStill(
+        imageCapture: ImageCapture,
+        executor: Executor
+    ): Pair<Uri, File> = suspendCancellableCoroutine { cont ->
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val storageDir = File(appContext.filesDir, "photos").apply { mkdirs() }
+        val file = File(storageDir, "LIVE_${timeStamp}.jpg")
+        val output = ImageCapture.OutputFileOptions.Builder(file).build()
+        imageCapture.takePicture(
+            output,
+            executor,
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                    try {
+                        val uri = FileProvider.getUriForFile(
+                            appContext,
+                            "${appContext.packageName}.provider",
+                            file
+                        )
+                        cont.resume(uri to file)
+                    } catch (e: Exception) {
+                        cont.resumeWithException(e)
+                    }
+                }
+
+                override fun onError(exception: ImageCaptureException) {
+                    cont.resumeWithException(exception)
+                }
+            }
+        )
+    }
+
+    companion object {
+        private const val TAG = "LiveCaptureVM"
+    }
+}
