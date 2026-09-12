@@ -59,9 +59,9 @@ class DistanceService @Inject constructor() {
                 val root = json.parseToJsonElement(body).jsonObject
                 val status = root["status"]?.jsonPrimitive?.content.orEmpty()
                 if (status != "OK") {
-                    val err = root["error_message"]?.jsonPrimitive?.content.orEmpty()
+                    // Keep short — full Google error_message dumps pollute estimate UI/rationale
                     return@withContext Result.failure(
-                        IllegalStateException("Distance lookup $status ${err.take(160)}".trim())
+                        IllegalStateException("Distance lookup $status")
                     )
                 }
                 val element = root["rows"]
