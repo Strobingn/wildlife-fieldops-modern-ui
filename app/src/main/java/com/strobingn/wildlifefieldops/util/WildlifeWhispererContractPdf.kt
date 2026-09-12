@@ -143,13 +143,8 @@ object WildlifeWhispererContractPdf {
         var y = 36f
 
         // —— Header: logo LEFT, company RIGHT ——
-        val logo = WildlifeWhispererBrand.loadLogo(context)
         val logoSize = 110
-        if (logo != null) {
-            val scaled = Bitmap.createScaledBitmap(logo, logoSize, logoSize, true)
-            c.drawBitmap(scaled, MARGIN, y, null)
-            if (scaled !== logo) scaled.recycle()
-        }
+        WildlifeWhispererBrand.drawLogo(c, context, MARGIN, y, logoSize)
 
         var rightY = y + 18f
         c.drawText(WildlifeWhispererBrand.COMPANY_UPPER, CONTENT_RIGHT, rightY, companyNamePaint)

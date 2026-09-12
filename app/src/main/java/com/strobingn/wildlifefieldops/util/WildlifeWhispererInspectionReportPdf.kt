@@ -108,13 +108,8 @@ object WildlifeWhispererInspectionReportPdf {
         c.drawColor(Color.WHITE)
         var y = 36f
 
-        val logo = WildlifeWhispererBrand.loadLogo(context)
         val logoSize = 100
-        if (logo != null) {
-            val scaled = Bitmap.createScaledBitmap(logo, logoSize, logoSize, true)
-            c.drawBitmap(scaled, MARGIN, y, null)
-            if (scaled !== logo) scaled.recycle()
-        }
+        WildlifeWhispererBrand.drawLogo(c, context, MARGIN, y, logoSize)
 
         var rightY = y + 16f
         c.drawText(WildlifeWhispererBrand.COMPANY_UPPER, CONTENT_RIGHT, rightY, companyNamePaint)
