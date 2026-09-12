@@ -91,6 +91,24 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
+            SettingsSectionTitle("Mileage / shop base")
+            SettingsCard {
+                Text(
+                    "AI uses this address to measure driving miles to each job for estimates.",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                SettingPlainField(
+                    storedValue = companyAddress,
+                    label = "Shop address",
+                    onCommit = viewModel::setCompanyAddress,
+                    singleLine = false,
+                    supportingText = "Home base for shop → job mileage. Example: 210 Willow Avenue, Cornwall, NY 12518"
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
             SettingsSectionTitle("AI Command Center")
             SettingsCard {
                 Text(
