@@ -41,7 +41,7 @@ fun WeatherBanner(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    CircularProgressIndicator(Modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = PrimaryGreen)
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = PrimaryGreen)
                     Text("Loading $title…", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
                 }
             }
