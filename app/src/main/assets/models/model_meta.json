@@ -63,7 +63,96 @@
     }
   ],
   "normalization": "float32 /255.0 NHWC",
-  "architecture": "MobileNetV2 ImageNet transfer + softmax head (dynamic-range quantized)",
-  "size_bytes": 2725024,
-  "source": "Wikimedia Commons photos + synthetic augmentation; tools/wildlife_tflite/train_and_export.py"
+  "architecture": "MobileNetV2 ImageNet transfer; frozen head then fine-tune last ~50 layers; dense(128)+softmax; dynamic-range quantized",
+  "size_bytes": 2879552,
+  "val_accuracy": 0.7916666865348816,
+  "best_val_accuracy": 0.7916666865348816,
+  "dataset_summary": {
+    "raccoon": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "bat": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "squirrel": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "woodchuck": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "skunk": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "opossum": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "bird": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "droppings": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "hole_entry": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "trap_cage": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "nest": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "other": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    }
+  },
+  "source": "Wikimedia Commons photos (maximized search) + minimal synthetic fill; tools/wildlife_tflite/train_and_export.py",
+  "retrain": "2.3.3-wildlife-retrain"
 }
