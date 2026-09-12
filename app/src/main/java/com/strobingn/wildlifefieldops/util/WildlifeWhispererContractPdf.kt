@@ -1,1 +1,1 @@
-LOAD_FROM_/tmp/only_kotlin.kt
+file:///tmp/field_content.txt
