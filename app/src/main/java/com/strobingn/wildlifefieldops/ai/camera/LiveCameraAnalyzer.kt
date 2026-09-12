@@ -29,7 +29,9 @@ class LiveCameraAnalyzer(
     private val policy = CaptureGuidancePolicy()
     private val wildlifeHints = setOf(
         "raccoon", "bat", "squirrel", "opossum", "snake", "bird", "rodent",
-        "animal", "mammal", "wildlife", "hole", "nest", "cat", "dog"
+        "animal", "mammal", "wildlife", "hole", "nest", "cat", "dog",
+        "skunk", "groundhog", "coyote", "fox", "beaver", "pigeon", "goose",
+        "trap", "cage", "netting", "chimney", "vent", "ladder", "mesh"
     )
 
     private val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
@@ -110,11 +112,13 @@ class LiveCameraAnalyzer(
                     evidence.species.map { it.label } +
                         evidence.entries.map { it.label } +
                         evidence.damage.map { it.label } +
+                        evidence.equipment.map { it.label } +
                         labels.filter { it.confidence >= 0.5f }.map { it.text.lowercase() }
                             .filter { h -> wildlifeHints.any { h.contains(it) } }
-                    ).distinct().take(6)
+                    ).distinct().take(8)
                 val coverage = when {
                     evidence.entries.isNotEmpty() || evidence.species.isNotEmpty() -> 0.14f
+                    evidence.equipment.isNotEmpty() -> 0.13f
                     hints.isNotEmpty() -> 0.12f
                     labels.any { it.confidence >= 0.65f } -> 0.06f
                     else -> 0f
@@ -154,7 +158,9 @@ class LiveCameraAnalyzer(
                         analysisDurationMs = trace.analysisDurationMs,
                         evidenceSummary = evidence.topSummary,
                         evidenceSpecies = evidence.species.map { it.label },
-                        evidenceEntries = evidence.entries.map { it.label }
+                        evidenceEntries = evidence.entries.map { it.label },
+                        evidenceEquipment = evidence.equipment.map { it.label },
+                        evidenceDamage = evidence.damage.map { it.label }
                     )
                 )
             }

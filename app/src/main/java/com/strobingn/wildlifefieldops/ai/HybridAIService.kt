@@ -57,9 +57,17 @@ class HybridAIService @Inject constructor(
         voiceTranscript: String = "",
         evidenceSummary: String = "",
         entryTags: List<String> = emptyList(),
-        arMeasurement: String = ""
+        arMeasurement: String = "",
+        equipmentTags: List<String> = emptyList(),
+        repairScope: String = ""
     ): AiAnalysisResult {
-        val vision = PhotoAIHelper.analyzePhotoForFormFilling(context, imageUri)
+        val vision = try {
+            PhotoAIHelper.analyzePhotoForFormFilling(context, imageUri)
+        } catch (t: Throwable) {
+            android.util.Log.w("HybridAIService", "vision failed: ${t.message}")
+            AiAnalysisResult(suggestedNotes = "Vision unavailable: ${t.message}. Manual entry required.")
+        }
+        return try {
         val prompt = GrokPrompts.photoToFormFill(
             speciesTags = vision.species,
             damageTags = vision.damageTypes,
@@ -67,7 +75,9 @@ class HybridAIService @Inject constructor(
             voiceTranscript = voiceTranscript,
             evidenceSummary = evidenceSummary.ifBlank { vision.suggestedNotes },
             entryTags = entryTags,
-            arMeasurement = arMeasurement
+            arMeasurement = arMeasurement,
+            equipmentTags = equipmentTags,
+            repairScope = repairScope
         )
 
         if (hasDirectKey()) {
@@ -100,6 +110,10 @@ class HybridAIService @Inject constructor(
             suggestedNotes = vision.suggestedNotes +
                 "\nGenerative LLM unavailable — download on-device model or configure XAI_API_KEY."
         )
+        } catch (t: Throwable) {
+            android.util.Log.w("HybridAIService", "form fill failed: ${t.message}")
+            vision.copy(suggestedNotes = vision.suggestedNotes + "\nAI enrich failed: ${t.message}")
+        }
     }
 
     suspend fun generateTieredEstimate(
@@ -144,7 +158,9 @@ class HybridAIService @Inject constructor(
         jobContext: String = "",
         voiceTranscript: String = "",
         evidenceSummary: String = "",
-        arMeasurement: String = ""
+        arMeasurement: String = "",
+        equipmentTags: List<String> = emptyList(),
+        repairScope: String = ""
     ): CaptureNarration {
         val prompt = GrokPrompts.liveCaptureNarration(
             checklistTitle = checklistTitle,
@@ -156,7 +172,9 @@ class HybridAIService @Inject constructor(
             jobContext = jobContext,
             voiceTranscript = voiceTranscript,
             evidenceSummary = evidenceSummary,
-            arMeasurement = arMeasurement
+            arMeasurement = arMeasurement,
+            equipmentTags = equipmentTags,
+            repairScope = repairScope
         )
         val raw = when {
             hasDirectKey() -> runCatching { callGrokText(prompt) }.getOrNull()

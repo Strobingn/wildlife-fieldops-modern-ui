@@ -1,7 +1,10 @@
 package com.strobingn.wildlifefieldops.ui.viewmodel
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.strobingn.wildlifefieldops.ai.WalkthroughVideoAnalyzer
 import com.strobingn.wildlifefieldops.data.local.DeletedRecordDao
 import com.strobingn.wildlifefieldops.data.local.InspectionDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
@@ -45,6 +48,12 @@ class InspectionsViewModel @Inject constructor(
 
     private val _lastReportDraft = MutableStateFlow<InspectionReportDraft?>(null)
     val lastReportDraft = _lastReportDraft.asStateFlow()
+
+    private val _walkthroughLoading = MutableStateFlow(false)
+    val walkthroughLoading = _walkthroughLoading.asStateFlow()
+
+    private val _walkthroughHint = MutableStateFlow<String?>(null)
+    val walkthroughHint = _walkthroughHint.asStateFlow()
 
     private val _estimatePrepLoading = MutableStateFlow(false)
     val estimatePrepLoading = _estimatePrepLoading.asStateFlow()
@@ -211,6 +220,54 @@ class InspectionsViewModel @Inject constructor(
             _estimatePrepLoading.value = false
             _estimatePrepMessage.value = "Job notes updated with inspection report — opening Estimate."
             onReady(jobId)
+        }
+    }
+
+
+    /**
+     * E) Walkthrough video → frame sample → vision → editable InspectionReportDraft.
+     * Uses existing AI path when available; always produces an offline lexicon draft.
+     */
+    fun analyzeWalkthroughVideo(
+        context: Context,
+        videoUri: Uri,
+        reportContext: InspectionReportContext,
+        onFilled: (InspectionReportDraft) -> Unit
+    ) {
+        if (_walkthroughLoading.value) return
+        _walkthroughLoading.value = true
+        _reportError.value = null
+        _walkthroughHint.value = "Sampling ~${WalkthroughVideoAnalyzer.GUIDANCE_SECONDS_MIN}–${WalkthroughVideoAnalyzer.GUIDANCE_SECONDS_MAX}s walkthrough…"
+        viewModelScope.launch {
+            try {
+                val result = WalkthroughVideoAnalyzer.analyze(
+                    context = context,
+                    videoUri = videoUri,
+                    enrichWithAi = { transcript ->
+                        val ai = aiService.writeInspectionReportFromDictation(
+                            transcript = transcript,
+                            context = reportContext
+                        )
+                        ai.draft
+                    }
+                )
+                _walkthroughLoading.value = false
+                _lastReportDraft.value = result.draft
+                _reportSource.value = result.sourceLabel
+                _walkthroughHint.value = buildString {
+                    append(result.guidanceHint)
+                    append(" · frames=")
+                    append(result.framesSampled)
+                    append(" · ")
+                    append(result.evidenceSummary)
+                    if (result.offline) append(" · offline draft")
+                }
+                onFilled(result.draft)
+            } catch (t: Throwable) {
+                _walkthroughLoading.value = false
+                _reportError.value = t.message ?: "Walkthrough analysis failed"
+                _walkthroughHint.value = "Record a ${WalkthroughVideoAnalyzer.GUIDANCE_SECONDS_MIN}–${WalkthroughVideoAnalyzer.GUIDANCE_SECONDS_MAX}s walkthrough and retry (works offline)."
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 package com.strobingn.wildlifefieldops.ui.screens
 
 import android.Manifest
+import android.net.Uri
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -81,6 +82,8 @@ fun InspectionFormScreen(
     val reportSource by viewModel.reportSource.collectAsState()
     val estimatePrepLoading by viewModel.estimatePrepLoading.collectAsState()
     val estimatePrepMessage by viewModel.estimatePrepMessage.collectAsState()
+    val walkthroughLoading by viewModel.walkthroughLoading.collectAsState()
+    val walkthroughHint by viewModel.walkthroughHint.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -119,6 +122,10 @@ fun InspectionFormScreen(
     LaunchedEffect(reportSource) {
         val src = reportSource ?: return@LaunchedEffect
         snackbarHostState.showSnackbar("Report filled · $src")
+    }
+    LaunchedEffect(walkthroughHint) {
+        val hint = walkthroughHint ?: return@LaunchedEffect
+        if (hint.isNotBlank()) snackbarHostState.showSnackbar(hint.take(180))
     }
     LaunchedEffect(reportError) {
         val err = reportError ?: return@LaunchedEffect
@@ -286,6 +293,47 @@ fun InspectionFormScreen(
         if (notes.isNotBlank()) appendLine("Notes: $notes")
         if (dictationNotes.isNotBlank()) appendLine("Dictation: $dictationNotes")
     }.trim()
+
+
+    val walkthroughPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        viewModel.analyzeWalkthroughVideo(
+            context = context,
+            videoUri = uri,
+            reportContext = InspectionReportContext(
+                customerName = customerName,
+                inspectorName = inspectorName,
+                inspectionType = selectedType.name,
+                jobTitle = linkedJobTitle,
+                jobAddress = linkedJobAddress,
+                jobDescription = linkedJobDescription,
+                existingFindings = findings,
+                existingRecommendations = recommendations,
+                existingSpecies = speciesIdentified,
+                existingEntryPoints = entryPoints,
+                existingDamage = damageAssessment,
+                existingNotes = notes
+            )
+        ) { draft ->
+            if (draft.findings.isNotBlank()) findings = draft.findings
+            if (draft.recommendations.isNotBlank()) recommendations = draft.recommendations
+            if (draft.speciesIdentified.isNotBlank()) speciesIdentified = draft.speciesIdentified
+            if (draft.entryPoints.isNotBlank()) entryPoints = draft.entryPoints
+            if (draft.damageAssessment.isNotBlank()) damageAssessment = draft.damageAssessment
+            selectedSeverity = runCatching { FindingSeverity.valueOf(draft.severity.trim().uppercase()) }
+                .getOrDefault(FindingSeverity.MODERATE)
+            val summaryBits = listOf(draft.notes, draft.summary)
+                .filter { it.isNotBlank() }
+                .joinToString("\n")
+            if (summaryBits.isNotBlank()) {
+                notes = if (notes.isBlank()) summaryBits else notes.trimEnd() + "\n" + summaryBits
+            }
+        }
+    }
+
+
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -615,6 +663,61 @@ fun InspectionFormScreen(
                     }
                     if (!reportSource.isNullOrBlank()) {
                         Text(reportSource!!, color = PrimaryGreen, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = BackgroundCard),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "Walkthrough video",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Record a ~60–90s property walkthrough (overview → entries → attic/crawl). " +
+                            "FieldOps samples frames, runs on-device vision, and fills an editable report draft. Works offline.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    Button(
+                        onClick = { walkthroughPicker.launch("video/*") },
+                        enabled = !walkthroughLoading && !reportLoading,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AccentBlue,
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (walkthroughLoading) {
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Analyzing walkthrough…")
+                        } else {
+                            Icon(Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Import walkthrough video", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (walkthroughLoading) {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = AccentBlue,
+                            trackColor = BorderDark
+                        )
+                    }
+                    if (!walkthroughHint.isNullOrBlank()) {
+                        Text(walkthroughHint!!, color = PrimaryGreen, style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }

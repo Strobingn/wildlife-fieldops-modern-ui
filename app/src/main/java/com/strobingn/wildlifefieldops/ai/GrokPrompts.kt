@@ -11,18 +11,22 @@ object GrokPrompts {
         voiceTranscript: String = "",
         evidenceSummary: String = "",
         entryTags: List<String> = emptyList(),
-        arMeasurement: String = ""
+        arMeasurement: String = "",
+        equipmentTags: List<String> = emptyList(),
+        repairScope: String = ""
     ): String = """
-Analyze wildlife job photo evidence.
+Analyze wildlife job photo evidence (Wildlife Whisperer / NY FieldOps).
 Species tags: ${speciesTags.joinToString()}
 Damage tags: ${damageTags.joinToString()}
 Entry tags: ${entryTags.joinToString()}
+Trap/equipment tags: ${equipmentTags.joinToString()}
 Evidence summary: $evidenceSummary
 AR / span measurement: $arMeasurement
+Repair scope autofill: $repairScope
 Voice dictation during capture: $voiceTranscript
 Location / job context: $location
 Recent jobs: $recentJobs
-Merge vision + voice. Prefer FieldOps species/entry vocabulary.
+Merge vision + voice. Prefer NY wildlife + trap/equipment vocabulary.
 Return strict JSON with species, serviceType, priority, notes, recommendedActions, estimatedPriceLow, estimatedPriceHigh, complianceFlags.
 """
 
@@ -60,23 +64,27 @@ Return a bullet list of issues and recommendations.
         jobContext: String = "",
         voiceTranscript: String = "",
         evidenceSummary: String = "",
-        arMeasurement: String = ""
+        arMeasurement: String = "",
+        equipmentTags: List<String> = emptyList(),
+        repairScope: String = ""
     ): String = """
-You are writing field notes after a policy-accepted Live Capture still.
+You are writing field notes after a policy-accepted Live Capture still (Wildlife Whisperer).
 Checklist item: ${checklistTitle ?: "general evidence"}
 Species tags: ${species.joinToString()}
 Damage tags: ${damage.joinToString()}
+Trap/equipment tags: ${equipmentTags.joinToString()}
 Evidence summary: $evidenceSummary
 Service suggestion: $serviceType
 Vision notes: $visionNotes
 AR / span measurement: $arMeasurement
+Repair scope: $repairScope
 Voice dictation (merge with vision; resolve conflicts conservatively): $voiceTranscript
 Policy reason: $reasonCode
 Job context: $jobContext
 
 Return plain text with exactly two sections and these headers:
 TECH_NOTES:
-(3-6 concise technician bullets: evidence, access, hazards, measurements, next field action; weave in voice cues)
+(3-6 concise technician bullets: evidence, access, hazards, measurements, traps/equipment, next field action; weave in voice cues)
 
 CUSTOMER_SUMMARY:
 (2-4 short customer-safe sentences; no internal pricing strategy; calm and professional)

@@ -1,19 +1,27 @@
 package com.strobingn.wildlifefieldops.ai
 
 import android.content.Context
+import android.util.Log
 import com.google.ar.core.ArCoreApk
 import com.google.ar.core.Config
 import com.google.ar.core.Pose
 import com.google.ar.core.Session
-import com.google.ar.core.exceptions.UnavailableException
 import kotlin.math.sqrt
 
 object ARMeasurementHelper {
+    private const val TAG = "ARMeasurementHelper"
 
+    /**
+     * Safe ARCore availability probe. Catches Throwable (not just Exception) because
+     * missing native libs / absent Play Services for AR often throw UnsatisfiedLinkError
+     * or ExceptionInInitializerError — those used to crash Live Capture on ViewModel init.
+     */
     fun isARCoreSupported(context: Context): Boolean {
         return try {
-            ArCoreApk.getInstance().checkAvailability(context).isSupported
-        } catch (_: Exception) {
+            val availability = ArCoreApk.getInstance().checkAvailability(context)
+            availability != null && availability.isSupported
+        } catch (t: Throwable) {
+            Log.i(TAG, "ARCore not available: ${t.javaClass.simpleName}: ${t.message}")
             false
         }
     }
@@ -28,9 +36,8 @@ object ARMeasurementHelper {
             config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
             session.configure(config)
             session
-        } catch (_: UnavailableException) {
-            null
-        } catch (_: Exception) {
+        } catch (t: Throwable) {
+            Log.i(TAG, "AR session create failed: ${t.javaClass.simpleName}: ${t.message}")
             null
         }
     }

@@ -121,6 +121,8 @@ fun LiveCaptureScreen(
     val linkedJob by viewModel.linkedJob.collectAsState()
     val voiceTranscript by viewModel.voiceTranscript.collectAsState()
     val arMeasurement by viewModel.arMeasurement.collectAsState()
+    val repairScope by viewModel.repairScope.collectAsState()
+    val lastEquipmentTags by viewModel.lastEquipmentTags.collectAsState()
     val recentJobs by viewModel.recentJobs.collectAsState()
 
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
@@ -131,6 +133,9 @@ fun LiveCaptureScreen(
                 mainHandler.post {
                     guidance = g
                     framesSeen = g.frameId
+                    if (g.evidenceEquipment.isNotEmpty()) {
+                        viewModel.rememberEquipmentTags(g.evidenceEquipment)
+                    }
                 }
             },
             onTrace = { trace ->
@@ -156,9 +161,16 @@ fun LiveCaptureScreen(
     }
 
     val speechRecognizer = remember {
-        if (SpeechRecognizer.isRecognitionAvailable(context)) {
-            SpeechRecognizer.createSpeechRecognizer(context)
-        } else null
+        try {
+            if (SpeechRecognizer.isRecognitionAvailable(context)) {
+                SpeechRecognizer.createSpeechRecognizer(context)
+            } else {
+                null
+            }
+        } catch (t: Throwable) {
+            Log.w("LiveCapture", "SpeechRecognizer create failed", t)
+            null
+        }
     }
 
     fun buildRecognizerIntent(): Intent =
@@ -173,47 +185,68 @@ fun LiveCaptureScreen(
     DisposableEffect(speechRecognizer) {
         val sr = speechRecognizer
         if (sr != null) {
-            sr.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
-                    isListening = true
-                    dictationError = null
-                }
-                override fun onBeginningOfSpeech() {}
-                override fun onRmsChanged(rmsdB: Float) {}
-                override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() {
-                    isListening = false
-                }
-                override fun onError(error: Int) {
-                    isListening = false
-                    dictationError = when (error) {
-                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission required"
-                        SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
-                            "No speech — tap Mic again"
-                        else -> "Dictate error ($error)"
+            try {
+                sr.setRecognitionListener(object : RecognitionListener {
+                    private fun onMain(block: () -> Unit) {
+                        if (Looper.myLooper() == Looper.getMainLooper()) block()
+                        else mainHandler.post(block)
                     }
-                }
-                override fun onResults(results: Bundle?) {
-                    isListening = false
-                    val texts = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
-                    val best = texts.firstOrNull().orEmpty()
-                    if (best.isNotBlank()) {
-                        viewModel.appendVoice(best)
-                        partialVoice = ""
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        onMain {
+                            isListening = true
+                            dictationError = null
+                        }
                     }
-                }
-                override fun onPartialResults(partialResults: Bundle?) {
-                    val texts = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
-                    partialVoice = texts.firstOrNull().orEmpty()
-                }
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            })
+                    override fun onBeginningOfSpeech() {}
+                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onEndOfSpeech() {
+                        onMain { isListening = false }
+                    }
+                    override fun onError(error: Int) {
+                        onMain {
+                            isListening = false
+                            dictationError = when (error) {
+                                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission required"
+                                SpeechRecognizer.ERROR_CLIENT,
+                                SpeechRecognizer.ERROR_RECOGNIZER_BUSY ->
+                                    "Dictate busy — tap Mic again"
+                                SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
+                                    "No speech — tap Mic again"
+                                else -> "Dictate error ($error)"
+                            }
+                        }
+                    }
+                    override fun onResults(results: Bundle?) {
+                        val texts = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
+                        val best = texts.firstOrNull().orEmpty()
+                        onMain {
+                            isListening = false
+                            if (best.isNotBlank()) {
+                                viewModel.appendVoice(best)
+                                partialVoice = ""
+                            }
+                        }
+                    }
+                    override fun onPartialResults(partialResults: Bundle?) {
+                        val texts = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
+                        val partial = texts.firstOrNull().orEmpty()
+                        onMain { partialVoice = partial }
+                    }
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                })
+            } catch (t: Throwable) {
+                Log.w("LiveCapture", "setRecognitionListener failed", t)
+            }
         }
         onDispose {
             try {
                 sr?.cancel()
+            } catch (_: Throwable) {
+            }
+            try {
                 sr?.destroy()
-            } catch (_: Exception) {
+            } catch (_: Throwable) {
             }
         }
     }
@@ -233,8 +266,8 @@ fun LiveCaptureScreen(
             sr.startListening(buildRecognizerIntent())
             isListening = true
             dictationError = null
-        } catch (e: Exception) {
-            dictationError = e.message ?: "Could not start dictate"
+        } catch (t: Throwable) {
+            dictationError = t.message ?: "Could not start dictate"
             isListening = false
         }
     }
@@ -242,18 +275,34 @@ fun LiveCaptureScreen(
     fun stopDictate() {
         try {
             speechRecognizer?.stopListening()
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
+        }
+        try {
+            speechRecognizer?.cancel()
+        } catch (_: Throwable) {
         }
         isListening = false
     }
 
     DisposableEffect(Unit) {
         onDispose {
-            analyzer.close()
-            analysisExecutor.shutdown()
             try {
-                ProcessCameraProvider.getInstance(context).get().unbindAll()
-            } catch (_: Exception) {
+                analyzer.close()
+            } catch (_: Throwable) {
+            }
+            try {
+                analysisExecutor.shutdown()
+            } catch (_: Throwable) {
+            }
+            try {
+                val future = ProcessCameraProvider.getInstance(context)
+                future.addListener({
+                    try {
+                        future.get().unbindAll()
+                    } catch (_: Throwable) {
+                    }
+                }, ContextCompat.getMainExecutor(context))
+            } catch (_: Throwable) {
             }
         }
     }
@@ -285,7 +334,7 @@ fun LiveCaptureScreen(
             val still = ImageCapture.Builder()
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                 .build()
-            val selector = if (useFront) {
+            val preferred = if (useFront) {
                 CameraSelector.DEFAULT_FRONT_CAMERA
             } else {
                 CameraSelector.DEFAULT_BACK_CAMERA
@@ -294,11 +343,28 @@ fun LiveCaptureScreen(
             analyzer.reset()
             framesDropped = 0L
             lastDrop = null
-            cameraProvider.bindToLifecycle(lifecycleOwner, selector, preview, analysis, still)
+            try {
+                cameraProvider.bindToLifecycle(lifecycleOwner, preferred, preview, analysis, still)
+            } catch (frontOrBack: Throwable) {
+                if (useFront) {
+                    Log.w("LiveCapture", "front camera bind failed, falling back to back", frontOrBack)
+                    useFront = false
+                    cameraProvider.unbindAll()
+                    cameraProvider.bindToLifecycle(
+                        lifecycleOwner,
+                        CameraSelector.DEFAULT_BACK_CAMERA,
+                        preview,
+                        analysis,
+                        still
+                    )
+                } else {
+                    throw frontOrBack
+                }
+            }
             imageCapture = still
-        } catch (e: Exception) {
-            Log.e("LiveCapture", "bind failed", e)
-            bindError = e.message ?: "Camera bind failed"
+        } catch (t: Throwable) {
+            Log.e("LiveCapture", "bind failed", t)
+            bindError = t.message ?: "Camera bind failed"
             imageCapture = null
         }
     }
@@ -319,17 +385,38 @@ fun LiveCaptureScreen(
             requireAccept = !force,
             evidenceSummary = guidance?.evidenceSummary.orEmpty(),
             evidenceEntries = guidance?.evidenceEntries.orEmpty(),
+            evidenceEquipment = guidance?.evidenceEquipment.orEmpty(),
+            evidenceSpecies = guidance?.evidenceSpecies.orEmpty(),
+            evidenceDamage = guidance?.evidenceDamage.orEmpty(),
             subjectCoverage = guidance?.signals?.subjectCoverage ?: 0f
         )
     }
 
     if (showArMeasure) {
+        val arOk = try {
+            viewModel.arSupported
+        } catch (_: Throwable) {
+            false
+        }
         ArMeasureScreen(
-            arSupported = viewModel.arSupported,
-            suggestedInches = ARMeasurementHelper.suggestEntryInches(guidance?.signals?.subjectCoverage ?: 0f, checklist.active?.def?.id),
+            arSupported = arOk,
+            suggestedInches = try {
+                ARMeasurementHelper.suggestEntryInches(
+                    guidance?.signals?.subjectCoverage ?: 0f,
+                    checklist.active?.def?.id
+                )
+            } catch (_: Throwable) {
+                12f
+            },
             onBack = { showArMeasure = false },
             onConfirm = { result ->
-                viewModel.setArMeasurement(result)
+                viewModel.setArMeasurement(
+                    result = result,
+                    entryTags = guidance?.evidenceEntries.orEmpty(),
+                    species = guidance?.evidenceSpecies.orEmpty(),
+                    damageTags = guidance?.evidenceDamage.orEmpty(),
+                    equipmentTags = guidance?.evidenceEquipment.orEmpty()
+                )
                 showArMeasure = false
             }
         )
@@ -394,11 +481,7 @@ fun LiveCaptureScreen(
                     ExtendedFloatingActionButton(
                         onClick = {
                             if (!acceptReady || busy) return@ExtendedFloatingActionButton
-                            if (arMeasurement == null) {
-                                showArMeasure = true
-                            } else {
-                                runSmartCapture(force = false)
-                            }
+                            runSmartCapture(force = false)
                         },
                         expanded = true,
                         icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
@@ -408,7 +491,6 @@ fun LiveCaptureScreen(
                                     smartCapture is SmartCaptureState.Capturing -> "Saving…"
                                     smartCapture is SmartCaptureState.Analyzing -> "AI form…"
                                     smartCapture is SmartCaptureState.Narrating -> "AI notes…"
-                                    acceptReady && arMeasurement == null -> "Measure then capture"
                                     acceptReady && checklistEnabled && activeTitle != null ->
                                         "Capture: $activeTitle"
                                     acceptReady -> "AI capture"
@@ -456,6 +538,8 @@ fun LiveCaptureScreen(
                     JobBanner(
                         job = linkedJob,
                         arLabel = arMeasurement?.feetLabel.orEmpty(),
+                        repairLabel = repairScope?.let { "${it.title} · ~${String.format("%.1f", it.laborHoursEstimate)}h" }.orEmpty(),
+                        equipmentPreview = (guidance?.evidenceEquipment?.takeIf { it.isNotEmpty() } ?: lastEquipmentTags).take(4).joinToString(),
                         voicePreview = (partialVoice.ifBlank { voiceTranscript }).take(120),
                         listening = isListening,
                         dictationError = dictationError,
@@ -548,6 +632,8 @@ fun LiveCaptureScreen(
 private fun JobBanner(
     job: Job?,
     arLabel: String,
+    repairLabel: String = "",
+    equipmentPreview: String = "",
     voicePreview: String,
     listening: Boolean,
     dictationError: String?,
@@ -583,6 +669,12 @@ private fun JobBanner(
             }
             if (arLabel.isNotBlank()) {
                 Text("AR span · $arLabel", color = PrimaryGreen, style = MaterialTheme.typography.labelSmall)
+            }
+            if (repairLabel.isNotBlank()) {
+                Text("Repair scope · $repairLabel", color = PrimaryGreen, style = MaterialTheme.typography.labelSmall)
+            }
+            if (equipmentPreview.isNotBlank()) {
+                Text("Trap/equipment · $equipmentPreview", color = Color(0xFF80CBC4), style = MaterialTheme.typography.labelSmall)
             }
             if (listening || voicePreview.isNotBlank()) {
                 Text(
@@ -780,8 +872,15 @@ private fun SmartCaptureResultSheet(
             ResultRow("Evidence", state.evidenceSummary.ifBlank { a.evidenceSummary }.ifBlank { "—" })
             ResultRow("Entry tags", a.entryTypes.joinToString().ifBlank { "—" })
             ResultRow("AR span", state.arMeasurementLabel.ifBlank { "—" })
+            ResultRow("Trap/equipment", state.equipmentTags.joinToString().ifBlank { "—" })
+            ResultRow("Repair scope", state.repairScopeLabel.ifBlank { "—" })
             ResultRow("Voice", state.voiceTranscript.ifBlank { "—" })
             ResultRow("Price range", a.estimatedPriceRange.ifBlank { "—" })
+            if (state.repairScopeNotes.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text("Repair scope autofill", color = TextSecondary, style = MaterialTheme.typography.labelLarge)
+                Text(state.repairScopeNotes, color = TextPrimary, style = MaterialTheme.typography.bodySmall)
+            }
             Spacer(Modifier.height(10.dp))
             Text("Tech notes", color = TextSecondary, style = MaterialTheme.typography.labelLarge)
             Text(
@@ -898,6 +997,13 @@ private fun GuidanceHud(
                     Text(
                         "evidence · ${g.evidenceSummary}",
                         color = PrimaryGreen,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+                if (g.evidenceEquipment.isNotEmpty()) {
+                    Text(
+                        "trap/equipment · ${g.evidenceEquipment.take(4).joinToString()}",
+                        color = Color(0xFF80CBC4),
                         style = MaterialTheme.typography.labelSmall
                     )
                 }

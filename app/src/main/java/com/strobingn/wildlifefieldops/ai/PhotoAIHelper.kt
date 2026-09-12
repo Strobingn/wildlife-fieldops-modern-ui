@@ -10,6 +10,7 @@ import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import com.google.mlkit.vision.objects.ObjectDetection
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
+import com.strobingn.wildlifefieldops.ai.camera.CustomEvidenceModel
 import com.strobingn.wildlifefieldops.ai.camera.WildlifeEvidenceDetector
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -30,7 +31,9 @@ data class AiAnalysisResult(
     val source: String = "offline_ml",
     val analysisDurationMs: Long = 0L,
     val evidenceSummary: String = "",
-    val entryTypes: List<String> = emptyList()
+    val entryTypes: List<String> = emptyList(),
+    val equipmentTypes: List<String> = emptyList(),
+    val repairScopeSuggestion: String = ""
 ) {
     val serviceType: String get() = suggestedServiceType
     val priority: String get() = suggestedPriority
@@ -59,16 +62,25 @@ object PhotoAIHelper {
                 val objectsDeferred = async { awaitTask(objectDetector.process(image)) }
                 labelsDeferred.await() to objectsDeferred.await()
             }
-            val evidence = WildlifeEvidenceDetector.detect(labels, objects)
+            val custom = try {
+                CustomEvidenceModel.tryInfer(context)
+            } catch (_: Throwable) {
+                emptyList()
+            }
+            val evidence = WildlifeEvidenceDetector.detect(labels, objects, customHits = custom)
             val objectNames = objects.mapNotNull { it.labels.firstOrNull()?.text?.lowercase() }.distinct()
             val species = evidence.species.map { it.label }.distinct()
             val damage = evidence.damage.map { it.label }.distinct()
             val entries = evidence.entries.map { it.label }
+            val equipment = evidence.equipment.map { it.label }.distinct()
 
             val service = when {
                 species.any { it.contains("bat", ignoreCase = true) } -> "Bat Exclusion & Removal"
                 species.any { it.contains("raccoon", ignoreCase = true) } -> "Raccoon Removal & Exclusion"
                 species.any { it.contains("squirrel", ignoreCase = true) } -> "Squirrel Removal & Exclusion"
+                species.any { it.contains("skunk", ignoreCase = true) } -> "Skunk Removal & Exclusion"
+                species.any { it.contains("groundhog", ignoreCase = true) || it.contains("woodchuck", ignoreCase = true) } -> "Groundhog / Woodchuck Control"
+                equipment.any { it.contains("trap", ignoreCase = true) } -> "Trapping & Monitoring"
                 entries.isNotEmpty() -> "Entry Point Sealing & Repair"
                 else -> "Wildlife Inspection & Removal"
             }
@@ -76,6 +88,7 @@ object PhotoAIHelper {
             val confidence = listOf(
                 evidence.species.maxOfOrNull { it.score } ?: 0f,
                 evidence.entries.maxOfOrNull { it.score } ?: 0f,
+                evidence.equipment.maxOfOrNull { it.score } ?: 0f,
                 labels.maxOfOrNull { it.confidence } ?: 0f
             ).max()
             val notes = buildString {
@@ -83,6 +96,7 @@ object PhotoAIHelper {
                 if (species.isNotEmpty()) append("Species: ${species.joinToString()}. ")
                 if (entries.isNotEmpty()) append("Entry: ${entries.joinToString()}. ")
                 if (damage.isNotEmpty()) append("Damage: ${damage.joinToString()}. ")
+                if (equipment.isNotEmpty()) append("Trap/equipment: ${equipment.joinToString()}. ")
                 append("On-device confidence: ${String.format("%.0f", confidence * 100)}%. ")
                 append("Verify on site.")
             }
@@ -109,9 +123,10 @@ object PhotoAIHelper {
                 source = "offline_ml",
                 analysisDurationMs = durationMs,
                 evidenceSummary = evidence.topSummary,
-                entryTypes = entries
+                entryTypes = entries,
+                equipmentTypes = equipment
             )
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             val durationMs = SystemClock.elapsedRealtime() - startedAt
             Log.w(TAG, "still-photo analysis failed after ${durationMs}ms", e)
             AiAnalysisResult(

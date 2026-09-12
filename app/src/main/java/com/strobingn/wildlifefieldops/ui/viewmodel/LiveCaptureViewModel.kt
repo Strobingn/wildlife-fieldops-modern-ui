@@ -9,6 +9,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.strobingn.wildlifefieldops.ai.ARMeasurementHelper
+import com.strobingn.wildlifefieldops.ai.RepairScopeHelper
 import com.strobingn.wildlifefieldops.ai.AiAnalysisResult
 import com.strobingn.wildlifefieldops.ai.HybridAIService
 import com.strobingn.wildlifefieldops.ai.camera.CaptureGuidanceAction
@@ -58,7 +59,10 @@ sealed class SmartCaptureState {
         val narrationSource: String = "",
         val voiceTranscript: String = "",
         val evidenceSummary: String = "",
-        val arMeasurementLabel: String = ""
+        val arMeasurementLabel: String = "",
+        val equipmentTags: List<String> = emptyList(),
+        val repairScopeLabel: String = "",
+        val repairScopeNotes: String = ""
     ) : SmartCaptureState()
     data class Error(val message: String) : SmartCaptureState()
 }
@@ -95,20 +99,40 @@ class LiveCaptureViewModel @Inject constructor(
     private val _arMeasurement = MutableStateFlow<ARMeasurementHelper.MeasurementResult?>(null)
     val arMeasurement: StateFlow<ARMeasurementHelper.MeasurementResult?> = _arMeasurement.asStateFlow()
 
+    private val _repairScope = MutableStateFlow<RepairScopeHelper.RepairScopeDraft?>(null)
+    val repairScope: StateFlow<RepairScopeHelper.RepairScopeDraft?> = _repairScope.asStateFlow()
+
+    private val _lastEquipmentTags = MutableStateFlow<List<String>>(emptyList())
+    val lastEquipmentTags: StateFlow<List<String>> = _lastEquipmentTags.asStateFlow()
+
     val recentJobs = jobDao.getAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val arSupported: Boolean = ARMeasurementHelper.isARCoreSupported(appContext)
+    /** Lazy — never probe ARCore during ViewModel construction (native link crashes). */
+    val arSupported: Boolean by lazy {
+        try {
+            ARMeasurementHelper.isARCoreSupported(appContext)
+        } catch (_: Throwable) {
+            false
+        }
+    }
 
     fun clearSmartCapture() {
         _smartCapture.value = SmartCaptureState.Idle
     }
 
     fun bindJob(jobId: String?, inspectionId: String? = null) {
-        _jobId.value = jobId?.takeIf { it.isNotBlank() && it != "null" }
-        _inspectionId.value = inspectionId?.takeIf { it.isNotBlank() && it != "null" }
+        val safeJob = jobId?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+        val safeInsp = inspectionId?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+        _jobId.value = safeJob
+        _inspectionId.value = safeInsp
         viewModelScope.launch {
-            _linkedJob.value = _jobId.value?.let { jobDao.getById(it) }
+            _linkedJob.value = try {
+                safeJob?.let { jobDao.getById(it) }
+            } catch (t: Throwable) {
+                Log.w(TAG, "bindJob lookup failed for $safeJob", t)
+                null
+            }
         }
     }
 
@@ -124,30 +148,69 @@ class LiveCaptureViewModel @Inject constructor(
         _voiceTranscript.value = ""
     }
 
-    fun setArMeasurement(result: ARMeasurementHelper.MeasurementResult?) {
+    fun setArMeasurement(
+        result: ARMeasurementHelper.MeasurementResult?,
+        entryTags: List<String> = emptyList(),
+        species: List<String> = emptyList(),
+        damageTags: List<String> = emptyList(),
+        equipmentTags: List<String> = emptyList()
+    ) {
         _arMeasurement.value = result
+        if (result != null) {
+            try {
+                val draft = RepairScopeHelper.fromMeasurementResult(
+                    result = result,
+                    entryTags = entryTags,
+                    species = species,
+                    damageTags = damageTags,
+                    equipmentTags = equipmentTags.ifEmpty { _lastEquipmentTags.value }
+                )
+                _repairScope.value = draft
+            } catch (t: Throwable) {
+                Log.w(TAG, "repair scope from AR failed", t)
+            }
+        }
     }
 
     fun clearArMeasurement() {
         _arMeasurement.value = null
+        _repairScope.value = null
     }
 
     fun clearArMeasurementKeepVoice() {
         _arMeasurement.value = null
+        // keep repair scope suggestion until next measure
+    }
+
+    fun rememberEquipmentTags(tags: List<String>) {
+        if (tags.isNotEmpty()) {
+            _lastEquipmentTags.value = tags.distinct().take(6)
+        }
     }
 
     fun applySuggestedArSpan(subjectCoverage: Float) {
-        val inches = ARMeasurementHelper.suggestEntryInches(
-            subjectCoverage = subjectCoverage,
-            checklistId = _checklist.value.active?.def?.id
-        )
-        val meters = inches / 39.3701f
-        _arMeasurement.value = ARMeasurementHelper.MeasurementResult(
-            distanceMeters = meters,
-            confidence = 0.55f,
-            planeType = "suggested",
-            notes = "Suggested entry/damage span from live coverage (~${String.format("%.0f", inches)} in). Confirm with AR or tape."
-        )
+        try {
+            val inches = ARMeasurementHelper.suggestEntryInches(
+                subjectCoverage = subjectCoverage,
+                checklistId = _checklist.value.active?.def?.id
+            )
+            val meters = inches / 39.3701f
+            val result = ARMeasurementHelper.MeasurementResult(
+                distanceMeters = meters,
+                confidence = 0.55f,
+                planeType = "suggested",
+                notes = "Suggested entry/damage span from live coverage (~${String.format("%.0f", inches)} in). Confirm with AR or tape."
+            )
+            _arMeasurement.value = result
+            _repairScope.value = RepairScopeHelper.fromMeasurementResult(
+                result = result,
+                entryTags = emptyList(),
+                species = emptyList(),
+                equipmentTags = _lastEquipmentTags.value
+            )
+        } catch (t: Throwable) {
+            Log.w(TAG, "applySuggestedArSpan failed", t)
+        }
     }
 
     fun setChecklistEnabled(enabled: Boolean) {
@@ -186,6 +249,9 @@ class LiveCaptureViewModel @Inject constructor(
         requireAccept: Boolean = true,
         evidenceSummary: String = "",
         evidenceEntries: List<String> = emptyList(),
+        evidenceEquipment: List<String> = emptyList(),
+        evidenceSpecies: List<String> = emptyList(),
+        evidenceDamage: List<String> = emptyList(),
         subjectCoverage: Float = 0f
     ) {
         if (imageCapture == null) {
@@ -227,6 +293,25 @@ class LiveCaptureViewModel @Inject constructor(
         }
         val arLabel = ar?.feetLabel.orEmpty()
         val arNotes = ar?.notes.orEmpty()
+        val equipment = evidenceEquipment.ifEmpty { _lastEquipmentTags.value }.distinct().take(6)
+        if (equipment.isNotEmpty()) _lastEquipmentTags.value = equipment
+        var repair = _repairScope.value
+        if (repair == null && ar != null) {
+            try {
+                repair = RepairScopeHelper.fromMeasurementResult(
+                    result = ar,
+                    entryTags = evidenceEntries,
+                    species = evidenceSpecies,
+                    damageTags = evidenceDamage,
+                    equipmentTags = equipment
+                )
+                _repairScope.value = repair
+            } catch (t: Throwable) {
+                Log.w(TAG, "repair scope build failed", t)
+            }
+        }
+        val repairLabel = repair?.let { RepairScopeHelper.stampLine(it) }.orEmpty()
+        val repairNotes = repair?.stampedNotes.orEmpty()
 
         viewModelScope.launch {
             try {
@@ -250,6 +335,8 @@ class LiveCaptureViewModel @Inject constructor(
                         if (frameId > 0) append(" · frame=$frameId")
                         append(" · policy=${guidanceAction ?: "FORCE"}/$reasonCode")
                         if (arLabel.isNotBlank()) append(" · span=$arLabel")
+                        if (equipment.isNotEmpty()) append(" · gear=${equipment.joinToString()}")
+                        if (repairLabel.isNotBlank()) append(" · repair=$repairLabel")
                         if (voice.isNotBlank()) append(" · voice=yes")
                         append(" · ${SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date())}")
                     },
@@ -269,7 +356,9 @@ class LiveCaptureViewModel @Inject constructor(
                         voiceTranscript = voice,
                         evidenceSummary = evidenceSummary,
                         entryTags = evidenceEntries,
-                        arMeasurement = listOf(arLabel, arNotes).filter { it.isNotBlank() }.joinToString(" — ")
+                        arMeasurement = listOf(arLabel, arNotes).filter { it.isNotBlank() }.joinToString(" — "),
+                        equipmentTags = equipment,
+                        repairScope = repairNotes
                     )
                 }
 
@@ -282,7 +371,9 @@ class LiveCaptureViewModel @Inject constructor(
                         jobContext = jobContext,
                         voiceTranscript = voice,
                         evidenceSummary = evidenceSummary.ifBlank { analysis.evidenceSummary },
-                        arMeasurement = listOf(arLabel, arNotes).filter { it.isNotBlank() }.joinToString(" — ")
+                        arMeasurement = listOf(arLabel, arNotes).filter { it.isNotBlank() }.joinToString(" — "),
+                        equipmentTags = equipment,
+                        repairScope = repairNotes
                     )
                 }
 
@@ -299,6 +390,14 @@ class LiveCaptureViewModel @Inject constructor(
                         }
                         append(" · src=")
                         append(analysis.source)
+                        if (equipment.isNotEmpty()) {
+                            append("\nTRAP/EQUIPMENT: ")
+                            append(equipment.joinToString())
+                        }
+                        if (repairNotes.isNotBlank()) {
+                            append("\n")
+                            append(repairNotes)
+                        }
                         if (voice.isNotBlank()) {
                             append("\nVOICE:\n")
                             append(voice.take(1200))
@@ -310,6 +409,33 @@ class LiveCaptureViewModel @Inject constructor(
                     }
                 )
                 photoDao.update(enriched)
+
+                // B) Repair-scope autofill onto linked job notes (Whisperer branding).
+                val jid = _jobId.value
+                if (!jid.isNullOrBlank() && repairNotes.isNotBlank()) {
+                    try {
+                        val linked = jobDao.getById(jid)
+                        if (linked != null) {
+                            val stamp = "\n\n--- Repair scope (Live Capture) ---\n" + repairNotes.trim()
+                            val notes = if (linked.notes.contains("--- Repair scope (Live Capture) ---")) {
+                                val idx = linked.notes.indexOf("--- Repair scope (Live Capture) ---")
+                                linked.notes.substring(0, idx).trimEnd() + stamp
+                            } else {
+                                linked.notes + stamp
+                            }
+                            jobDao.insert(
+                                linked.copy(
+                                    notes = notes.trim(),
+                                    updatedAt = System.currentTimeMillis(),
+                                    isSynced = false
+                                )
+                            )
+                            _linkedJob.value = linked.copy(notes = notes.trim())
+                        }
+                    } catch (t: Throwable) {
+                        Log.w(TAG, "repair scope job autofill failed", t)
+                    }
+                }
 
                 if (checklistOn && activeItem != null && requireAccept) {
                     completeActiveChecklistItem(enriched.id, reasonCode, frameId)
@@ -328,11 +454,14 @@ class LiveCaptureViewModel @Inject constructor(
                     narrationSource = narration.source,
                     voiceTranscript = voice,
                     evidenceSummary = analysis.evidenceSummary.ifBlank { evidenceSummary },
-                    arMeasurementLabel = arLabel
+                    arMeasurementLabel = arLabel,
+                    equipmentTags = equipment.ifEmpty { analysis.equipmentTypes },
+                    repairScopeLabel = repairLabel,
+                    repairScopeNotes = repairNotes
                 )
-            } catch (e: Exception) {
-                Log.e(TAG, "smartCapture failed", e)
-                _smartCapture.value = SmartCaptureState.Error(e.message ?: "Smart capture failed")
+            } catch (t: Throwable) {
+                Log.e(TAG, "smartCapture failed", t)
+                _smartCapture.value = SmartCaptureState.Error(t.message ?: "Smart capture failed")
             }
         }
     }
