@@ -198,6 +198,7 @@ private fun AppNavHost(
                 onNavigateToInvoice = { navController.navigate(Screen.Invoice.createRoute(jobId)) },
                 onNavigateToEstimate = { navController.navigate(Screen.Estimate.createRoute(jobId)) },
                 onNavigateToInspectionForm = { jid -> navController.navigate(Screen.InspectionForm.createRoute(jobId = jid)) },
+                onNavigateToLiveCapture = { jid -> navController.navigate(Screen.LiveCapture.createRoute(jobId = jid)) },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -275,8 +276,20 @@ private fun AppNavHost(
         composable(Screen.PhotoGallery.route) {
             PhotoGalleryScreen(onBack = { navController.popBackStack() }, viewModel = hiltViewModel())
         }
-        composable(Screen.LiveCapture.route) {
-            LiveCaptureScreen(onBack = { navController.popBackStack() })
+        composable(
+            route = Screen.LiveCapture.route,
+            arguments = listOf(
+                navArgument("jobId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("inspectionId") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )
+        ) { backStackEntry ->
+            val jobId = backStackEntry.arguments?.getString("jobId")
+            val inspectionId = backStackEntry.arguments?.getString("inspectionId")
+            LiveCaptureScreen(
+                onBack = { navController.popBackStack() },
+                jobId = jobId,
+                inspectionId = inspectionId
+            )
         }
         composable(Screen.Settings.route) {
             SettingsScreen(onBack = { navController.popBackStack() })
@@ -374,11 +387,12 @@ private fun AppDrawer(onNavigate: (String) -> Unit, onClose: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
             )
             Screen.drawerItems.forEach { screen ->
+                val dest = if (screen is Screen.LiveCapture) Screen.LiveCapture.createRoute() else screen.route
                 NavigationDrawerItem(
                     icon = { screen.icon?.let { Icon(it, contentDescription = screen.title) } },
                     label = { Text(screen.title, style = MaterialTheme.typography.bodyLarge) },
                     selected = false,
-                    onClick = { onNavigate(screen.route) },
+                    onClick = { onNavigate(dest) },
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
                     shape = FieldShapes.button,
                     colors = NavigationDrawerItemDefaults.colors(

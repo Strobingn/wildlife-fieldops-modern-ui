@@ -14,8 +14,8 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 30
-        versionName = "2.2.12-live-ai-phases"
+        versionCode = 31
+        versionName = "2.2.13-rockstar-vision"
 
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
         val supabaseKey = System.getenv("SUPABASE_ANON_KEY") ?: "your-anon-key"

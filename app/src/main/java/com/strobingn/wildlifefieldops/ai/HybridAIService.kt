@@ -53,13 +53,21 @@ class HybridAIService @Inject constructor(
     suspend fun analyzePhotoAndFillForm(
         context: Context,
         imageUri: Uri,
-        jobContext: String = ""
+        jobContext: String = "",
+        voiceTranscript: String = "",
+        evidenceSummary: String = "",
+        entryTags: List<String> = emptyList(),
+        arMeasurement: String = ""
     ): AiAnalysisResult {
         val vision = PhotoAIHelper.analyzePhotoForFormFilling(context, imageUri)
         val prompt = GrokPrompts.photoToFormFill(
             speciesTags = vision.species,
             damageTags = vision.damageTypes,
-            location = jobContext
+            location = jobContext,
+            voiceTranscript = voiceTranscript,
+            evidenceSummary = evidenceSummary.ifBlank { vision.suggestedNotes },
+            entryTags = entryTags,
+            arMeasurement = arMeasurement
         )
 
         if (hasDirectKey()) {
@@ -133,7 +141,10 @@ class HybridAIService @Inject constructor(
         analysis: AiAnalysisResult,
         checklistTitle: String? = null,
         reasonCode: String = "QUALITY_OK",
-        jobContext: String = ""
+        jobContext: String = "",
+        voiceTranscript: String = "",
+        evidenceSummary: String = "",
+        arMeasurement: String = ""
     ): CaptureNarration {
         val prompt = GrokPrompts.liveCaptureNarration(
             checklistTitle = checklistTitle,
@@ -142,7 +153,10 @@ class HybridAIService @Inject constructor(
             serviceType = analysis.suggestedServiceType,
             visionNotes = analysis.suggestedNotes,
             reasonCode = reasonCode,
-            jobContext = jobContext
+            jobContext = jobContext,
+            voiceTranscript = voiceTranscript,
+            evidenceSummary = evidenceSummary,
+            arMeasurement = arMeasurement
         )
         val raw = when {
             hasDirectKey() -> runCatching { callGrokText(prompt) }.getOrNull()

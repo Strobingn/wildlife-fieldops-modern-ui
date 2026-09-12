@@ -52,7 +52,17 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
         fun createRoute(jobId: String) = "invoice/$jobId"
     }
     object PhotoGallery : Screen("photos", "Photo Gallery", Icons.Default.PhotoCamera)
-    object LiveCapture : Screen("live_capture", "Live Capture", Icons.Default.Videocam)
+    object LiveCapture : Screen(
+        "live_capture?jobId={jobId}&inspectionId={inspectionId}",
+        "Live Capture",
+        Icons.Default.Videocam
+    ) {
+        fun createRoute(jobId: String? = null, inspectionId: String? = null): String {
+            val j = jobId?.takeIf { it.isNotBlank() && it != "null" }.orEmpty()
+            val i = inspectionId?.takeIf { it.isNotBlank() && it != "null" }.orEmpty()
+            return "live_capture?jobId=$j&inspectionId=$i"
+        }
+    }
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
     object AIAssistant : Screen("ai_assistant", "AI Assistant", Icons.Default.Psychology)
     object AIOperations : Screen("ai_operations", "AI Operations", Icons.Default.AutoAwesome)

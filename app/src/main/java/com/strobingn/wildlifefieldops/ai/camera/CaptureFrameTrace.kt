@@ -65,5 +65,8 @@ data class CaptureGuidance(
     val signals: CaptureQualitySignals,
     val frameId: Long,
     val resultAgeFromArrivalMs: Long,
-    val analysisDurationMs: Long
+    val analysisDurationMs: Long,
+    val evidenceSummary: String = "",
+    val evidenceSpecies: List<String> = emptyList(),
+    val evidenceEntries: List<String> = emptyList()
 )

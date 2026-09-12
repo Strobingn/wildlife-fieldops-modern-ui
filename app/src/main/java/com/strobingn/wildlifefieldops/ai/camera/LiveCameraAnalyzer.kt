@@ -7,6 +7,7 @@ import androidx.camera.core.ImageProxy
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
+import com.strobingn.wildlifefieldops.ai.camera.WildlifeEvidenceDetector
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
@@ -92,14 +93,16 @@ class LiveCameraAnalyzer(
         labeler.process(input)
             .addOnSuccessListener { labels ->
                 val analysisEnd = SystemClock.elapsedRealtimeNanos()
-                val hints = labels
-                    .filter { it.confidence >= 0.5f }
-                    .map { it.text.lowercase() }
-                    .filter { h -> wildlifeHints.any { h.contains(it) } }
-                    .distinct()
-                    .take(4)
-                // Coverage proxy from label confidence until a dedicated detector bbox path is added
+                val evidence = WildlifeEvidenceDetector.detect(labels)
+                val hints = (
+                    evidence.species.map { it.label } +
+                        evidence.entries.map { it.label } +
+                        evidence.damage.map { it.label } +
+                        labels.filter { it.confidence >= 0.5f }.map { it.text.lowercase() }
+                            .filter { h -> wildlifeHints.any { h.contains(it) } }
+                    ).distinct().take(6)
                 val coverage = when {
+                    evidence.entries.isNotEmpty() || evidence.species.isNotEmpty() -> 0.14f
                     hints.isNotEmpty() -> 0.12f
                     labels.any { it.confidence >= 0.65f } -> 0.06f
                     else -> 0f
@@ -136,7 +139,10 @@ class LiveCameraAnalyzer(
                         signals = signals,
                         frameId = frameId,
                         resultAgeFromArrivalMs = trace.resultAgeFromArrivalMs,
-                        analysisDurationMs = trace.analysisDurationMs
+                        analysisDurationMs = trace.analysisDurationMs,
+                        evidenceSummary = evidence.topSummary,
+                        evidenceSpecies = evidence.species.map { it.label },
+                        evidenceEntries = evidence.entries.map { it.label }
                     )
                 )
             }

@@ -1,9 +1,14 @@
 package com.strobingn.wildlifefieldops.ui.screens
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.util.Log
 import android.view.ViewGroup
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -26,7 +31,11 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.Straighten
+import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,16 +48,20 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.strobingn.wildlifefieldops.ai.ARMeasurementHelper
 import com.strobingn.wildlifefieldops.ai.camera.CaptureGuidance
+import com.strobingn.wildlifefieldops.ai.ARMeasurementHelper
 import com.strobingn.wildlifefieldops.ai.camera.CaptureGuidanceAction
 import com.strobingn.wildlifefieldops.ai.camera.ChecklistSession
 import com.strobingn.wildlifefieldops.ai.camera.LiveCameraAnalyzer
+import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundDark
 import com.strobingn.wildlifefieldops.ui.theme.PrimaryGreen
 import com.strobingn.wildlifefieldops.ui.theme.TextPrimary
 import com.strobingn.wildlifefieldops.ui.theme.TextSecondary
 import com.strobingn.wildlifefieldops.ui.viewmodel.LiveCaptureViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.SmartCaptureState
+import java.util.Locale
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -59,7 +72,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 fun LiveCaptureScreen(
     onBack: () -> Unit,
     jobId: String? = null,
-    jobContext: String = "",
+    inspectionId: String? = null,
     viewModel: LiveCaptureViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -70,12 +83,24 @@ fun LiveCaptureScreen(
                 PackageManager.PERMISSION_GRANTED
         )
     }
-    val permissionLauncher = rememberLauncherForActivityResult(
+    var hasMic by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted -> hasCamera = granted }
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> hasMic = granted }
 
     LaunchedEffect(Unit) {
-        if (!hasCamera) permissionLauncher.launch(Manifest.permission.CAMERA)
+        if (!hasCamera) cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+    }
+    LaunchedEffect(jobId, inspectionId) {
+        viewModel.bindJob(jobId, inspectionId)
     }
 
     var guidance by remember { mutableStateOf<CaptureGuidance?>(null) }
@@ -85,10 +110,19 @@ fun LiveCaptureScreen(
     var framesDropped by remember { mutableLongStateOf(0L) }
     var lastDrop by remember { mutableStateOf<String?>(null) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+    var showJobPicker by remember { mutableStateOf(false) }
+    var showArMeasure by remember { mutableStateOf(false) }
+    var isListening by remember { mutableStateOf(false) }
+    var partialVoice by remember { mutableStateOf("") }
+    var dictationError by remember { mutableStateOf<String?>(null) }
 
     val smartCapture by viewModel.smartCapture.collectAsState()
     val checklistEnabled by viewModel.checklistEnabled.collectAsState()
     val checklist by viewModel.checklist.collectAsState()
+    val linkedJob by viewModel.linkedJob.collectAsState()
+    val voiceTranscript by viewModel.voiceTranscript.collectAsState()
+    val arMeasurement by viewModel.arMeasurement.collectAsState()
+    val recentJobs by viewModel.recentJobs.collectAsState()
 
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
@@ -122,6 +156,98 @@ fun LiveCaptureScreen(
         }
     }
 
+    val speechRecognizer = remember {
+        if (SpeechRecognizer.isRecognitionAvailable(context)) {
+            SpeechRecognizer.createSpeechRecognizer(context)
+        } else null
+    }
+
+    fun buildRecognizerIntent(): Intent =
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+        }
+
+    DisposableEffect(speechRecognizer) {
+        val sr = speechRecognizer
+        if (sr != null) {
+            sr.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {
+                    isListening = true
+                    dictationError = null
+                }
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {
+                    isListening = false
+                }
+                override fun onError(error: Int) {
+                    isListening = false
+                    dictationError = when (error) {
+                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission required"
+                        SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
+                            "No speech — tap Mic again"
+                        else -> "Dictate error ($error)"
+                    }
+                }
+                override fun onResults(results: Bundle?) {
+                    isListening = false
+                    val texts = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
+                    val best = texts.firstOrNull().orEmpty()
+                    if (best.isNotBlank()) {
+                        viewModel.appendVoice(best)
+                        partialVoice = ""
+                    }
+                }
+                override fun onPartialResults(partialResults: Bundle?) {
+                    val texts = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
+                    partialVoice = texts.firstOrNull().orEmpty()
+                }
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+        }
+        onDispose {
+            try {
+                sr?.cancel()
+                sr?.destroy()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun startDictate() {
+        val sr = speechRecognizer
+        if (sr == null) {
+            dictationError = "Speech recognition not available on this device"
+            return
+        }
+        if (!hasMic) {
+            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
+        try {
+            sr.cancel()
+            sr.startListening(buildRecognizerIntent())
+            isListening = true
+            dictationError = null
+        } catch (e: Exception) {
+            dictationError = e.message ?: "Could not start dictate"
+            isListening = false
+        }
+    }
+
+    fun stopDictate() {
+        try {
+            speechRecognizer?.stopListening()
+        } catch (_: Exception) {
+        }
+        isListening = false
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             analyzer.close()
@@ -133,8 +259,18 @@ fun LiveCaptureScreen(
         }
     }
 
-    LaunchedEffect(hasCamera, useFront) {
+    LaunchedEffect(hasCamera, useFront, showArMeasure) {
         if (!hasCamera) return@LaunchedEffect
+        if (showArMeasure) {
+            try {
+                ProcessCameraProvider.getInstance(context)
+                    .await(ContextCompat.getMainExecutor(context))
+                    .unbindAll()
+            } catch (_: Exception) {
+            }
+            imageCapture = null
+            return@LaunchedEffect
+        }
         bindError = null
         try {
             val cameraProvider = ProcessCameraProvider.getInstance(context)
@@ -174,6 +310,33 @@ fun LiveCaptureScreen(
         smartCapture is SmartCaptureState.Narrating
     val activeTitle = checklist.active?.def?.title
 
+    fun runSmartCapture(force: Boolean) {
+        viewModel.smartCapture(
+            imageCapture = imageCapture,
+            executor = analysisExecutor,
+            guidanceAction = guidance?.action,
+            reasonCode = guidance?.reasonCode ?: if (force) "FORCE" else "UNKNOWN",
+            frameId = guidance?.frameId ?: 0L,
+            requireAccept = !force,
+            evidenceSummary = guidance?.evidenceSummary.orEmpty(),
+            evidenceEntries = guidance?.evidenceEntries.orEmpty(),
+            subjectCoverage = guidance?.signals?.subjectCoverage ?: 0f
+        )
+    }
+
+    if (showArMeasure) {
+        ArMeasureScreen(
+            arSupported = viewModel.arSupported,
+            suggestedInches = ARMeasurementHelper.suggestEntryInches(guidance?.signals?.subjectCoverage ?: 0f, checklist.active?.def?.id),
+            onBack = { showArMeasure = false },
+            onConfirm = { result ->
+                viewModel.setArMeasurement(result)
+                showArMeasure = false
+            }
+        )
+        return
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -196,6 +359,23 @@ fun LiveCaptureScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showJobPicker = true }) {
+                        Icon(Icons.Default.Work, contentDescription = "Link job", tint = TextPrimary)
+                    }
+                    IconButton(
+                        onClick = {
+                            if (isListening) stopDictate() else startDictate()
+                        }
+                    ) {
+                        Icon(
+                            if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
+                            contentDescription = "Dictate",
+                            tint = if (isListening) PrimaryGreen else TextPrimary
+                        )
+                    }
+                    IconButton(onClick = { showArMeasure = true }) {
+                        Icon(Icons.Default.Straighten, contentDescription = "AR measure", tint = TextPrimary)
+                    }
                     IconButton(onClick = { useFront = !useFront }) {
                         Icon(Icons.Default.Cameraswitch, contentDescription = "Flip camera", tint = TextPrimary)
                     }
@@ -208,34 +388,18 @@ fun LiveCaptureScreen(
                 Column(horizontalAlignment = Alignment.End) {
                     if (!acceptReady && !busy) {
                         TextButton(
-                            onClick = {
-                                viewModel.smartCapture(
-                                    imageCapture = imageCapture,
-                                    executor = analysisExecutor,
-                                    guidanceAction = guidance?.action,
-                                    reasonCode = guidance?.reasonCode ?: "FORCE",
-                                    frameId = guidance?.frameId ?: 0L,
-                                    requireAccept = false,
-                                    jobId = jobId,
-                                    jobContext = jobContext
-                                )
-                            },
+                            onClick = { runSmartCapture(force = true) },
                             colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
                         ) { Text("Force capture") }
                     }
                     ExtendedFloatingActionButton(
                         onClick = {
                             if (!acceptReady || busy) return@ExtendedFloatingActionButton
-                            viewModel.smartCapture(
-                                imageCapture = imageCapture,
-                                executor = analysisExecutor,
-                                guidanceAction = guidance?.action,
-                                reasonCode = guidance?.reasonCode ?: "UNKNOWN",
-                                frameId = guidance?.frameId ?: 0L,
-                                requireAccept = true,
-                                jobId = jobId,
-                                jobContext = jobContext
-                            )
+                            if (arMeasurement == null) {
+                                showArMeasure = true
+                            } else {
+                                runSmartCapture(force = false)
+                            }
                         },
                         expanded = true,
                         icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
@@ -245,6 +409,7 @@ fun LiveCaptureScreen(
                                     smartCapture is SmartCaptureState.Capturing -> "Saving…"
                                     smartCapture is SmartCaptureState.Analyzing -> "AI form…"
                                     smartCapture is SmartCaptureState.Narrating -> "AI notes…"
+                                    acceptReady && arMeasurement == null -> "Measure then capture"
                                     acceptReady && checklistEnabled && activeTitle != null ->
                                         "Capture: $activeTitle"
                                     acceptReady -> "AI capture"
@@ -273,7 +438,7 @@ fun LiveCaptureScreen(
                 ) {
                     Text("Camera permission needed for live guidance.", color = TextSecondary)
                     Spacer(Modifier.height(12.dp))
-                    Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
+                    Button(onClick = { cameraPermissionLauncher.launch(Manifest.permission.CAMERA) }) {
                         Text("Grant camera")
                     }
                 }
@@ -289,6 +454,16 @@ fun LiveCaptureScreen(
                         .fillMaxWidth()
                         .padding(12.dp)
                 ) {
+                    JobBanner(
+                        job = linkedJob,
+                        arLabel = arMeasurement?.feetLabel.orEmpty(),
+                        voicePreview = (partialVoice.ifBlank { voiceTranscript }).take(120),
+                        listening = isListening,
+                        dictationError = dictationError,
+                        onClearVoice = { viewModel.clearVoice() },
+                        onPickJob = { showJobPicker = true }
+                    )
+                    Spacer(Modifier.height(8.dp))
                     ChecklistBar(
                         enabled = checklistEnabled,
                         session = checklist,
@@ -330,7 +505,11 @@ fun LiveCaptureScreen(
                     SmartCaptureResultSheet(
                         state = s,
                         checklistProgress = if (checklistEnabled) checklist.progressLabel else null,
-                        onDismiss = { viewModel.clearSmartCapture() }
+                        onDismiss = { viewModel.clearSmartCapture() },
+                        onCaptureMore = {
+                            viewModel.clearSmartCapture()
+                            viewModel.clearArMeasurementKeepVoice()
+                        }
                     )
                 }
                 is SmartCaptureState.Error -> {
@@ -345,8 +524,119 @@ fun LiveCaptureScreen(
                 }
                 else -> Unit
             }
+
+            if (showJobPicker) {
+                JobPickerDialog(
+                    jobs = recentJobs,
+                    selectedId = linkedJob?.id,
+                    onDismiss = { showJobPicker = false },
+                    onSelect = { id ->
+                        viewModel.bindJob(id, inspectionId)
+                        showJobPicker = false
+                    },
+                    onClear = {
+                        viewModel.bindJob(null, inspectionId)
+                        showJobPicker = false
+                    }
+                )
+            }
         }
     }
+}
+
+
+@Composable
+private fun JobBanner(
+    job: Job?,
+    arLabel: String,
+    voicePreview: String,
+    listening: Boolean,
+    dictationError: String?,
+    onClearVoice: () -> Unit,
+    onPickJob: () -> Unit
+) {
+    Surface(
+        color = Color.Black.copy(alpha = 0.78f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(10.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (job != null) "Job · ${job.customerName.ifBlank { "Untitled" }}" else "No job linked",
+                        color = TextPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    Text(
+                        job?.let { listOf(it.address, it.type).filter { s -> s.isNotBlank() }.joinToString(" · ") }
+                            ?: "Tap work icon to attach photos to a job",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+                TextButton(onClick = onPickJob) { Text(if (job == null) "Link" else "Change") }
+            }
+            if (arLabel.isNotBlank()) {
+                Text("AR span · $arLabel", color = PrimaryGreen, style = MaterialTheme.typography.labelSmall)
+            }
+            if (listening || voicePreview.isNotBlank()) {
+                Text(
+                    if (listening) "Listening… $voicePreview" else "Voice · $voicePreview",
+                    color = if (listening) PrimaryGreen else TextSecondary,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 2
+                )
+                if (voicePreview.isNotBlank() && !listening) {
+                    TextButton(onClick = onClearVoice) { Text("Clear voice") }
+                }
+            }
+            dictationError?.let {
+                Text(it, color = Color(0xFFFF8A80), style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun JobPickerDialog(
+    jobs: List<Job>,
+    selectedId: String?,
+    onDismiss: () -> Unit,
+    onSelect: (String) -> Unit,
+    onClear: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Link live capture to job") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                TextButton(onClick = onClear) { Text("No job (evidence only)") }
+                jobs.take(40).forEach { job ->
+                    val label = buildString {
+                        append(job.customerName.ifBlank { "Job" })
+                        if (job.address.isNotBlank()) {
+                            append(" · ")
+                            append(job.address.take(40))
+                        }
+                        if (job.id == selectedId) append(" ✓")
+                    }
+                    TextButton(onClick = { onSelect(job.id) }) { Text(label) }
+                }
+                if (jobs.isEmpty()) {
+                    Text("No jobs yet — create one first.", color = TextSecondary)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
 }
 
 @Composable
@@ -443,7 +733,8 @@ private fun ChecklistBar(
 private fun SmartCaptureResultSheet(
     state: SmartCaptureState.Ready,
     checklistProgress: String?,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onCaptureMore: () -> Unit = onDismiss
 ) {
     val a = state.analysis
     ModalBottomSheet(
@@ -487,6 +778,10 @@ private fun SmartCaptureResultSheet(
             ResultRow("Priority", a.suggestedPriority)
             ResultRow("Species", a.species.joinToString().ifBlank { "—" })
             ResultRow("Damage", a.damageTypes.joinToString().ifBlank { "—" })
+            ResultRow("Evidence", state.evidenceSummary.ifBlank { a.evidenceSummary }.ifBlank { "—" })
+            ResultRow("Entry tags", a.entryTypes.joinToString().ifBlank { "—" })
+            ResultRow("AR span", state.arMeasurementLabel.ifBlank { "—" })
+            ResultRow("Voice", state.voiceTranscript.ifBlank { "—" })
             ResultRow("Price range", a.estimatedPriceRange.ifBlank { "—" })
             Spacer(Modifier.height(10.dp))
             Text("Tech notes", color = TextSecondary, style = MaterialTheme.typography.labelLarge)
@@ -504,13 +799,13 @@ private fun SmartCaptureResultSheet(
             )
             Spacer(Modifier.height(16.dp))
             Text(
-                "Policy owned accept/checklist advance; AI only drafted form fields and notes.",
+                "Policy owned accept/checklist advance; AI merged voice + vision + AR into notes only.",
                 color = TextSecondary,
                 style = MaterialTheme.typography.bodySmall
             )
             Spacer(Modifier.height(12.dp))
             Button(
-                onClick = onDismiss,
+                onClick = onCaptureMore,
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.Black),
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Done — next checklist item") }
@@ -600,14 +895,28 @@ private fun GuidanceHud(
                     color = TextSecondary,
                     style = MaterialTheme.typography.labelSmall
                 )
+                if (g.evidenceSummary.isNotBlank()) {
+                    Text(
+                        "evidence · ${g.evidenceSummary}",
+                        color = PrimaryGreen,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+                if (g.signals.labelHints.isNotEmpty()) {
+                    Text(
+                        "labels · ${g.signals.labelHints.take(4).joinToString()}",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
             }
-            Text(
-                "frames=$framesSeen dropped=$framesDropped" +
-                    (dropHint?.let { " lastDrop=$it" } ?: "") +
-                    " · KEEP_ONLY_LATEST",
-                color = TextSecondary,
-                style = MaterialTheme.typography.labelSmall
-            )
+            dropHint?.let {
+                Text(
+                    "last drop · $it · dropped=$framesDropped / seen=$framesSeen",
+                    color = Color(0xFFFFAB91),
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
         }
     }
 }
