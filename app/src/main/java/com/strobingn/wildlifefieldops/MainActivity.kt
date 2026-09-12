@@ -279,12 +279,14 @@ private fun AppNavHost(
         composable(
             route = Screen.LiveCapture.route,
             arguments = listOf(
-                navArgument("jobId") { type = NavType.StringType; nullable = true; defaultValue = null },
-                navArgument("inspectionId") { type = NavType.StringType; nullable = true; defaultValue = null }
+                navArgument("jobId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("inspectionId") { type = NavType.StringType; defaultValue = "" }
             )
         ) { backStackEntry ->
             val jobId = backStackEntry.arguments?.getString("jobId")
+                ?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
             val inspectionId = backStackEntry.arguments?.getString("inspectionId")
+                ?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
             LiveCaptureScreen(
                 onBack = { navController.popBackStack() },
                 jobId = jobId,

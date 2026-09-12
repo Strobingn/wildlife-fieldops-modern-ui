@@ -62,7 +62,11 @@ class LiveCameraAnalyzer(
         val arrival = SystemClock.elapsedRealtimeNanos()
         val frameId = frameSeq.incrementAndGet()
         framesSeen = frameId
-        val sourceTs = image.imageInfo.timestamp
+        val sourceTs = try {
+            image.imageInfo.timestamp
+        } catch (_: Throwable) {
+            0L
+        }
 
         if (!busy.compareAndSet(false, true)) {
             framesDropped++
@@ -79,18 +83,26 @@ class LiveCameraAnalyzer(
             return
         }
 
-        val media = image.image
-        if (media == null) {
-            busy.set(false)
-            image.close()
-            return
-        }
+        try {
+            val media = image.image
+            if (media == null) {
+                busy.set(false)
+                image.close()
+                return
+            }
 
-        val analysisStart = SystemClock.elapsedRealtimeNanos()
-        val lumaSignals = LumaQualityProbe.probe(image)
-        val input = InputImage.fromMediaImage(media, image.imageInfo.rotationDegrees)
+            val analysisStart = SystemClock.elapsedRealtimeNanos()
+            val lumaSignals = LumaQualityProbe.probe(image)
+            val input = try {
+                InputImage.fromMediaImage(media, image.imageInfo.rotationDegrees)
+            } catch (t: Throwable) {
+                Log.w(TAG, "InputImage build failed frame=$frameId", t)
+                busy.set(false)
+                image.close()
+                return
+            }
 
-        labeler.process(input)
+            labeler.process(input)
             .addOnSuccessListener { labels ->
                 val analysisEnd = SystemClock.elapsedRealtimeNanos()
                 val evidence = WildlifeEvidenceDetector.detect(labels)
@@ -179,6 +191,31 @@ class LiveCameraAnalyzer(
                 busy.set(false)
                 image.close()
             }
+        } catch (t: Throwable) {
+            Log.w(TAG, "analyze crashed frame=$frameId", t)
+            lastDropReason = "ANALYZE_THROW"
+            framesDropped++
+            busy.set(false)
+            try {
+                image.close()
+            } catch (_: Throwable) {
+            }
+            try {
+                val now = SystemClock.elapsedRealtimeNanos()
+                onGuidance(
+                    CaptureGuidance(
+                        action = CaptureGuidanceAction.WAIT,
+                        reasonCode = "ANALYZE_THROW",
+                        userMessage = "Analyzer recovering…",
+                        signals = CaptureQualitySignals(0f, 0f, 0f),
+                        frameId = frameId,
+                        resultAgeFromArrivalMs = (now - arrival) / 1_000_000L,
+                        analysisDurationMs = -1L
+                    )
+                )
+            } catch (_: Throwable) {
+            }
+        }
     }
 
     companion object {
