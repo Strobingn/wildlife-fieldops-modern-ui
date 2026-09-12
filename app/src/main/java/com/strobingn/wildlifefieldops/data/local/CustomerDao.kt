@@ -9,6 +9,9 @@ interface CustomerDao {
     @Query("SELECT * FROM customers WHERE isActive = 1 ORDER BY firstName, lastName")
     fun getAll(): Flow<List<Customer>>
 
+    @Query("SELECT * FROM customers ORDER BY firstName, lastName")
+    suspend fun getAllOnce(): List<Customer>
+
     @Query("SELECT * FROM customers WHERE id = :id")
     suspend fun getById(id: String): Customer?
 

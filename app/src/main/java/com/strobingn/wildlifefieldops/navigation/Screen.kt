@@ -20,6 +20,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object JobForm : Screen("job_form/{jobId}", "Job Form") {
         fun createRoute(jobId: String? = null) = "job_form/${jobId ?: "new"}"
     }
+    object JobDictate : Screen("job_dictate", "Voice Job")
 
     // Customer Screens
     object CustomerList : Screen("customers", "Customers", Icons.Default.People)
@@ -32,9 +33,17 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object InspectionDetail : Screen("inspection_detail/{inspectionId}", "Inspection Detail") {
         fun createRoute(inspectionId: String) = "inspection_detail/$inspectionId"
     }
-    object InspectionForm : Screen("inspection_form?inspectionId={inspectionId}", "Inspection Form") {
-        fun createRoute(inspectionId: String? = null) =
-            if (inspectionId != null) "inspection_form?inspectionId=$inspectionId" else "inspection_form"
+    object InspectionForm : Screen(
+        "inspection_form?inspectionId={inspectionId}&jobId={jobId}",
+        "Inspection Form"
+    ) {
+        fun createRoute(inspectionId: String? = null, jobId: String? = null): String {
+            val params = buildList {
+                if (!inspectionId.isNullOrBlank()) add("inspectionId=$inspectionId")
+                if (!jobId.isNullOrBlank()) add("jobId=$jobId")
+            }
+            return if (params.isEmpty()) "inspection_form" else "inspection_form?${params.joinToString("&")}"
+        }
     }
 
     // Other Screens
@@ -49,8 +58,9 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object Expense : Screen("expenses", "Expenses", Icons.Default.Receipt)
     object Inventory : Screen("inventory", "Inventory", Icons.Default.Inventory)
     object RouteOptimizer : Screen("routes", "Routes", Icons.Default.Route)
-    object Estimate : Screen("estimate/{jobId}", "Estimate") {
-        fun createRoute(jobId: String) = "estimate/$jobId"
+    object Estimate : Screen("estimate/{jobId}?autoDraft={autoDraft}", "Estimate") {
+        fun createRoute(jobId: String, autoDraft: Boolean = false) =
+            if (autoDraft) "estimate/$jobId?autoDraft=true" else "estimate/$jobId"
     }
 
     companion object {

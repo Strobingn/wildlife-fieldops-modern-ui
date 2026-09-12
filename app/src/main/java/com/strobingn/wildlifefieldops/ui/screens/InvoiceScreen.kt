@@ -300,7 +300,7 @@ fun InvoiceScreen(
                         }
                     },
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.Black),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.PictureAsPdf, contentDescription = null)
@@ -719,7 +719,7 @@ private fun SignaturePadDialog(onDismiss: () -> Unit, onSave: (Bitmap) -> Unit) 
                     androidCanvas.drawPath(androidPath, paint)
                     onSave(bm)
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.Black)
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White)
             ) {
                 Text("Save Signature", fontWeight = FontWeight.Bold)
             }
@@ -744,7 +744,7 @@ private fun PdfShareDialog(pdfPath: String, onDismiss: () -> Unit, onShare: () -
         confirmButton = {
             Button(
                 onClick = onShare,
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.Black)
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White)
             ) {
                 Icon(Icons.Default.Share, contentDescription = null)
                 Spacer(modifier = Modifier.width(4.dp))

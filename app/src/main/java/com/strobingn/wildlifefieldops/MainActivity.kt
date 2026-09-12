@@ -30,6 +30,7 @@ import com.strobingn.wildlifefieldops.navigation.Screen
 import com.strobingn.wildlifefieldops.ui.components.BrandMark
 import com.strobingn.wildlifefieldops.ui.screens.*
 import com.strobingn.wildlifefieldops.ui.theme.*
+import com.strobingn.wildlifefieldops.ui.viewmodel.SettingsViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -49,7 +50,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         try {
             setContent {
-                WildlifeFieldOpsTheme {
+                val settingsVm: SettingsViewModel = hiltViewModel()
+                val darkTheme by settingsVm.darkTheme.collectAsState(initial = true)
+                SideEffect { ThemeMode.isDark = darkTheme }
+                WildlifeFieldOpsTheme(darkTheme = darkTheme) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
@@ -169,7 +173,7 @@ private fun AppNavHost(
                 onNavigateToInspections = { navController.navigate(Screen.InspectionList.route) },
                 onNavigateToSchedule = { navController.navigate(Screen.Schedule.route) },
                 onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) },
-                onNavigateToJobForm = { navController.navigate(Screen.JobForm.createRoute()) },
+                onNavigateToJobForm = { navController.navigate(Screen.JobDictate.route) },
                 onNavigateToCustomers = { navController.navigate(Screen.CustomerList.route) },
                 onNavigateToMap = { navController.navigate(Screen.Map.route) },
                 onNavigateToRoutes = { navController.navigate(Screen.RouteOptimizer.route) },
@@ -193,7 +197,7 @@ private fun AppNavHost(
                 onNavigateToEdit = { id -> navController.navigate(Screen.JobForm.createRoute(id)) },
                 onNavigateToInvoice = { navController.navigate(Screen.Invoice.createRoute(jobId)) },
                 onNavigateToEstimate = { navController.navigate(Screen.Estimate.createRoute(jobId)) },
-                onNavigateToInspectionForm = { navController.navigate(Screen.InspectionForm.createRoute()) },
+                onNavigateToInspectionForm = { jid -> navController.navigate(Screen.InspectionForm.createRoute(jobId = jid)) },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -201,6 +205,15 @@ private fun AppNavHost(
             val rawId = backStackEntry.arguments?.getString("jobId")
             val jobId = rawId?.takeUnless { it.isBlank() || it == "new" }
             JobFormScreen(jobId = jobId, onBack = { navController.popBackStack() })
+        }
+        composable(Screen.JobDictate.route) {
+            JobDictateScreen(
+                onBack = { navController.popBackStack() },
+                onCreated = {
+                    navController.popBackStack()
+                    navController.navigate(Screen.JobList.route)
+                }
+            )
         }
         composable(Screen.InspectionList.route) {
             InspectionListScreen(
@@ -210,10 +223,29 @@ private fun AppNavHost(
             )
         }
         composable(route = Screen.InspectionDetail.route, arguments = listOf(navArgument("inspectionId") { type = NavType.StringType })) { backStackEntry ->
-            InspectionFormScreen(inspectionId = backStackEntry.arguments?.getString("inspectionId"), onBack = { navController.popBackStack() })
+            InspectionFormScreen(
+                inspectionId = backStackEntry.arguments?.getString("inspectionId"),
+                onBack = { navController.popBackStack() },
+                onNavigateToEstimate = { jid ->
+                    navController.navigate(Screen.Estimate.createRoute(jid, autoDraft = true))
+                }
+            )
         }
-        composable(route = Screen.InspectionForm.route, arguments = listOf(navArgument("inspectionId") { type = NavType.StringType; nullable = true; defaultValue = null })) { backStackEntry ->
-            InspectionFormScreen(inspectionId = backStackEntry.arguments?.getString("inspectionId"), onBack = { navController.popBackStack() })
+        composable(
+            route = Screen.InspectionForm.route,
+            arguments = listOf(
+                navArgument("inspectionId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("jobId") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )
+        ) { backStackEntry ->
+            InspectionFormScreen(
+                inspectionId = backStackEntry.arguments?.getString("inspectionId"),
+                prefilledJobId = backStackEntry.arguments?.getString("jobId").orEmpty(),
+                onBack = { navController.popBackStack() },
+                onNavigateToEstimate = { jid ->
+                    navController.navigate(Screen.Estimate.createRoute(jid, autoDraft = true))
+                }
+            )
         }
         composable(Screen.Schedule.route) {
             ScheduleScreen(
@@ -261,8 +293,18 @@ private fun AppNavHost(
         composable(Screen.RouteOptimizer.route) {
             RouteOptimizerScreen(onBack = { navController.popBackStack() })
         }
-        composable(route = Screen.Estimate.route, arguments = listOf(navArgument("jobId") { type = NavType.StringType })) { backStackEntry ->
-            EstimateScreen(jobId = backStackEntry.arguments?.getString("jobId") ?: "", onBack = { navController.popBackStack() })
+        composable(
+            route = Screen.Estimate.route,
+            arguments = listOf(
+                navArgument("jobId") { type = NavType.StringType },
+                navArgument("autoDraft") { type = NavType.StringType; nullable = true; defaultValue = "false" }
+            )
+        ) { backStackEntry ->
+            EstimateScreen(
+                jobId = backStackEntry.arguments?.getString("jobId") ?: "",
+                autoDraft = backStackEntry.arguments?.getString("autoDraft") == "true",
+                onBack = { navController.popBackStack() }
+            )
         }
     }
 }

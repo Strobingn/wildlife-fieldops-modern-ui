@@ -119,37 +119,6 @@ function extractJson(text: string) {
   }
 }
 
-function getDemoResult(payload: AiRequest) {
-  const species = payload.species || payload.job?.species || "Wildlife";
-  const observation = payload.observation || payload.job?.notes || "";
-
-  return {
-    mode: payload.mode || "field_plan",
-    summary: `Demo mode: ${species} inspection noted. ${observation.slice(0, 60)}...`,
-    recommended_next_steps: [
-      "Photograph all entry points and damage.",
-      "Write detailed inspection notes before pricing.",
-      "Check for secondary access points.",
-      "Document warranty boundaries with customer.",
-      "Schedule follow-up within 48 hours.",
-    ],
-    estimate_guidance: {
-      suggested_line_items: [
-        { service: "Inspection", qty: 1, unit_price: 125, rationale: "Required for all jobs" },
-        { service: "Exclusion repair", qty: 1, unit_price: 150, rationale: "Seal entry points" },
-      ],
-      subtotal_low: 275,
-      subtotal_high: 450,
-      pricing_notes: "Demo estimate. Add a real API key for live AI.",
-    },
-    customer_message: `Hi, we inspected your property for ${species} activity. We found evidence and recommend exclusion work. We'll send a detailed estimate shortly.`,
-    invoice_notes: `Demo invoice notes. Inspection and exclusion work for ${species}.`,
-    safety_flags: ["Wear respirator when handling droppings.", "Check for electrical hazards in attic."],
-    legal_or_permit_reminders: ["Verify local wildlife regulations.", "Bat exclusions may have seasonal restrictions."],
-    confidence: "medium",
-  };
-}
-
 type AiProvider = {
   name: string;
   apiKey: string;
@@ -208,7 +177,7 @@ function getProvider(): AiProvider | null {
     };
   }
 
-  console.log("No AI API key found. Returning demo response.");
+  console.log("No AI API key found for ai-assistant.");
   return null;
 }
 
@@ -216,7 +185,10 @@ async function callAI(payload: AiRequest) {
   const provider = getProvider();
 
   if (!provider) {
-    return getDemoResult(payload);
+    // Do not return canned demo content as if it were AI.
+    throw new Error(
+      "No LLM API key configured for ai-assistant. Set OPENROUTER_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, or MOONSHOT_API_KEY / KIMI_API_KEY in Edge Function secrets. Demo/canned responses are disabled.",
+    );
   }
 
   const body: Record<string, unknown> = {
@@ -281,7 +253,7 @@ Deno.serve(async (req) => {
 
     return jsonResponse({
       ok: true,
-      provider: provider?.name || "demo",
+      provider: provider?.name || "none",
       result,
     });
   } catch (err) {

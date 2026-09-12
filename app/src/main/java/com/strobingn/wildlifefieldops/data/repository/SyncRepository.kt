@@ -3,6 +3,8 @@ package com.strobingn.wildlifefieldops.data.repository
 import com.strobingn.wildlifefieldops.data.local.CustomerDao
 import com.strobingn.wildlifefieldops.data.local.InspectionDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
+import com.strobingn.wildlifefieldops.data.model.Customer
+import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.remote.RemoteCustomerDto
 import com.strobingn.wildlifefieldops.data.remote.RemoteInspectionDto
 import com.strobingn.wildlifefieldops.data.remote.RemoteJobDto
@@ -35,14 +37,10 @@ class SyncRepository @Inject constructor(
 ) {
     fun isCloudConfigured(): Boolean = supabaseService.isConfigured
 
-    /**
-     * Always runs on IO. Never throws to the UI layer — failures become [SyncResult].
-     */
     suspend fun syncAll(): SyncResult = withContext(Dispatchers.IO) {
         try {
             doSync()
         } catch (t: Throwable) {
-            // Catch Throwable so Error subclasses (and unexpected runtime issues) don't crash the app.
             android.util.Log.e("SyncRepository", "Sync crashed", t)
             SyncResult(
                 success = false,
@@ -65,7 +63,6 @@ class SyncRepository @Inject constructor(
         var pulledCustomers = 0
         val warnings = mutableListOf<String>()
 
-        // ── Push customers ─────────────────────────────────────────────
         try {
             val unsyncedCustomers = customerDao.getUnsynced()
             if (unsyncedCustomers.isNotEmpty()) {
@@ -85,7 +82,6 @@ class SyncRepository @Inject constructor(
             warnings += "customer push: ${e.message ?: e.javaClass.simpleName}"
         }
 
-        // ── Push jobs ──────────────────────────────────────────────────
         try {
             val unsyncedJobs = jobDao.getUnsynced()
             if (unsyncedJobs.isNotEmpty()) {
@@ -106,7 +102,6 @@ class SyncRepository @Inject constructor(
             warnings += "job push: ${e.message ?: e.javaClass.simpleName}"
         }
 
-        // ── Push inspections ───────────────────────────────────────────
         try {
             val unsyncedInspections = inspectionDao.getUnsynced()
             if (unsyncedInspections.isNotEmpty()) {
@@ -131,39 +126,17 @@ class SyncRepository @Inject constructor(
             warnings += "inspection push: ${e.message ?: e.javaClass.simpleName}"
         }
 
-        // ── Pull customers ─────────────────────────────────────────────
         try {
             val remoteCustomers = client.from("customers").select().decodeList<RemoteCustomerDto>()
-            if (remoteCustomers.isNotEmpty()) {
-                val locals = remoteCustomers.mapNotNull { dto ->
-                    runCatching { dto.toLocal() }
-                        .onFailure { android.util.Log.w("SyncRepository", "Bad customer ${dto.id}: ${it.message}") }
-                        .getOrNull()
-                }
-                if (locals.isNotEmpty()) {
-                    customerDao.insertAll(locals)
-                    pulledCustomers = locals.size
-                }
-            }
+            pulledCustomers = mergeCustomers(remoteCustomers)
         } catch (e: Exception) {
             android.util.Log.w("SyncRepository", "Customer pull failed", e)
             warnings += "customer pull: ${e.message ?: e.javaClass.simpleName}"
         }
 
-        // ── Pull jobs ──────────────────────────────────────────────────
         try {
             val remoteJobs = client.from("jobs").select().decodeList<RemoteJobDto>()
-            if (remoteJobs.isNotEmpty()) {
-                val locals = remoteJobs.mapNotNull { dto ->
-                    runCatching { dto.toLocal() }
-                        .onFailure { android.util.Log.w("SyncRepository", "Bad job ${dto.id}: ${it.message}") }
-                        .getOrNull()
-                }
-                if (locals.isNotEmpty()) {
-                    jobDao.insertAll(locals)
-                    pulledJobs = locals.size
-                }
-            }
+            pulledJobs = mergeJobs(remoteJobs)
         } catch (e: Exception) {
             android.util.Log.w("SyncRepository", "Job pull failed", e)
             warnings += "job pull: ${e.message ?: e.javaClass.simpleName}"
@@ -171,13 +144,7 @@ class SyncRepository @Inject constructor(
 
         val base = "Synced. Pushed: $pushedJobs jobs, $pushedCustomers customers, $pushedInspections inspections. " +
             "Pulled: $pulledJobs jobs, $pulledCustomers customers."
-        val message = if (warnings.isEmpty()) {
-            base
-        } else {
-            "$base Warnings: ${warnings.joinToString("; ")}"
-        }
-
-        // Partial success is still success if we didn't hard-fail everything
+        val message = if (warnings.isEmpty()) base else "$base Warnings: ${warnings.joinToString("; ")}"
         return SyncResult(
             success = true,
             message = message,
@@ -187,5 +154,33 @@ class SyncRepository @Inject constructor(
             pulledJobs = pulledJobs,
             pulledCustomers = pulledCustomers
         )
+    }
+
+    private suspend fun mergeJobs(remote: List<RemoteJobDto>): Int {
+        if (remote.isEmpty()) return 0
+        val localById = jobDao.getAllOnce().associateBy { it.id }
+        val incoming = mutableListOf<Job>()
+        remote.forEach { dto ->
+            val existing = localById[dto.id]
+            if (existing != null && !existing.isSynced) return@forEach
+            val mapped = runCatching { dto.toLocal(existing) }.getOrNull() ?: return@forEach
+            incoming += mapped
+        }
+        if (incoming.isNotEmpty()) jobDao.insertAll(incoming)
+        return incoming.size
+    }
+
+    private suspend fun mergeCustomers(remote: List<RemoteCustomerDto>): Int {
+        if (remote.isEmpty()) return 0
+        val localById = customerDao.getAllOnce().associateBy { it.id }
+        val incoming = mutableListOf<Customer>()
+        remote.forEach { dto ->
+            val existing = localById[dto.id]
+            if (existing != null && !existing.isSynced) return@forEach
+            val mapped = runCatching { dto.toLocal(existing) }.getOrNull() ?: return@forEach
+            incoming += mapped
+        }
+        if (incoming.isNotEmpty()) customerDao.insertAll(incoming)
+        return incoming.size
     }
 }

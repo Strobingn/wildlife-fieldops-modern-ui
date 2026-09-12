@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.strobingn.wildlifefieldops.data.local.JobDao
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.remote.AiService
+import com.strobingn.wildlifefieldops.data.remote.DistanceService
 import com.strobingn.wildlifefieldops.data.remote.EstimateDraft
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,7 +17,9 @@ import javax.inject.Inject
 @HiltViewModel
 class JobAiViewModel @Inject constructor(
     private val aiService: AiService,
-    private val jobDao: JobDao
+    private val jobDao: JobDao,
+    private val distanceService: DistanceService,
+    private val shopSettings: ShopSettings
 ) : ViewModel() {
 
     val isConfigured: Boolean get() = aiService.isConfigured
@@ -52,13 +55,39 @@ class JobAiViewModel @Inject constructor(
         _estimateLoading.value = true
         _message.value = null
         viewModelScope.launch {
-            val draft = aiService.draftEstimateFromJob(job)
+            val shop = shopSettings.address()
+            val tax = shopSettings.taxPercent()
+            val dest = job.address.trim()
+            var miles: Double? = null
+            var note = ""
+            when {
+                shop.isBlank() -> note = "Add your shop / home-base address in Settings so mileage can be measured."
+                dest.isBlank() -> note = "Job has no address — mileage left at 0."
+                else -> {
+                    val looked = distanceService.drivingMiles(shop, dest)
+                    looked.fold(
+                        onSuccess = { d ->
+                            miles = d.miles
+                            note = "Google Maps driving distance: ${d.miles} miles one-way (${d.durationText.ifBlank { "time n/a" }}) from '$shop' to '$dest'."
+                        },
+                        onFailure = { err ->
+                            note = "Could not measure miles: ${err.message ?: err.javaClass.simpleName}"
+                        }
+                    )
+                }
+            }
+            val draft = aiService.draftEstimateFromJob(
+                job = job,
+                drivingMiles = miles,
+                taxPercent = tax,
+                distanceNote = note
+            )
             _estimateDraft.value = draft
             _estimateLoading.value = false
-            _message.value = if (draft.fromAi) {
-                "AI estimate draft ready — review before quoting."
+            _message.value = if (miles != null) {
+                "AI draft ready — mileage ${miles} mi (Maps) · tax ${tax}%. Review before quoting."
             } else {
-                "Offline/heuristic estimate draft — review carefully."
+                note.ifBlank { "AI draft ready — review mileage and tax before quoting." }
             }
         }
     }

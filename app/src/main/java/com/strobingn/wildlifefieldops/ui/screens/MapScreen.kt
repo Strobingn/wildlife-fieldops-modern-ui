@@ -1,11 +1,7 @@
 package com.strobingn.wildlifefieldops.ui.screens
 
 import android.Manifest
-import android.content.Context
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Paint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -17,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -38,29 +36,11 @@ import com.strobingn.wildlifefieldops.BuildConfig
 import com.strobingn.wildlifefieldops.R
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.ui.theme.*
-import com.strobingn.wildlifefieldops.ui.viewmodel.MapProperty
 import com.strobingn.wildlifefieldops.ui.viewmodel.MapViewModel
 import com.google.maps.android.compose.MapType
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 
-
-private fun createMonochromeMarkerIcon(status: JobStatus): com.google.android.gms.maps.model.BitmapDescriptor {
-    val size = 48
-    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap)
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = when (status) {
-            JobStatus.PENDING -> android.graphics.Color.rgb(170, 170, 170)
-            JobStatus.IN_PROGRESS -> android.graphics.Color.rgb(115, 115, 115)
-            JobStatus.COMPLETED -> android.graphics.Color.rgb(55, 55, 55)
-            JobStatus.INVOICED -> android.graphics.Color.rgb(80, 80, 80)
-            JobStatus.PAID -> android.graphics.Color.rgb(25, 25, 25)
-            JobStatus.CANCELLED -> android.graphics.Color.rgb(145, 145, 145)
-        }
-    }
-    canvas.drawCircle(size / 2f, size / 2f, size * 0.32f, paint)
-    return com.google.android.gms.maps.model.BitmapDescriptorFactory.fromBitmap(bitmap)
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,6 +54,10 @@ fun MapScreen(
     val unlocatedJobCount by viewModel.unlocatedJobCount.collectAsState()
     val isDrawing by viewModel.isDrawingBoundary.collectAsState()
     val boundaryPoints by viewModel.boundaryPoints.collectAsState()
+    val isOffline by viewModel.isOffline.collectAsState()
+    val cachedCamera by viewModel.cachedCamera.collectAsState()
+    val cacheMessage by viewModel.cacheMessage.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     val mapApiKeyConfigured = BuildConfig.GOOGLE_MAPS_API_KEY.trim().let { key ->
         key.isNotEmpty() && !key.contains("YOUR_", ignoreCase = true)
@@ -93,12 +77,48 @@ fun MapScreen(
     var hasAutoFitted by remember { mutableStateOf(false) }
     var mapInitializationTimedOut by remember { mutableStateOf(false) }
 
-    val visibleProperties = remember(properties, selectedStatus) {
-        properties.filter { selectedStatus == null || it.status == selectedStatus }
+    val visibleProperties by remember(properties, selectedStatus) {
+        derivedStateOf {
+            properties.filter { selectedStatus == null || it.status == selectedStatus }
+        }
     }
 
     val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(LatLng(41.45, -74.05), 12f)
+        val cam = cachedCamera
+        position = if (cam != null) {
+            CameraPosition.fromLatLngZoom(LatLng(cam.latitude, cam.longitude), cam.zoom)
+        } else {
+            CameraPosition.fromLatLngZoom(LatLng(41.45, -74.05), 12f)
+        }
+    }
+
+    LaunchedEffect(cachedCamera) {
+        val cam = cachedCamera ?: return@LaunchedEffect
+        if (!hasAutoFitted && properties.isEmpty()) {
+            cameraPositionState.position = CameraPosition.fromLatLngZoom(
+                LatLng(cam.latitude, cam.longitude), cam.zoom
+            )
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.refreshConnectivity()
+        snapshotFlow {
+            val p = cameraPositionState.position
+            Triple(p.target.latitude, p.target.longitude, p.zoom)
+        }
+            .distinctUntilChanged()
+            .collect { (lat, lng, zoom) ->
+                delay(750)
+                val cur = cameraPositionState.position
+                viewModel.persistCamera(cur.target.latitude, cur.target.longitude, cur.zoom)
+            }
+    }
+
+    LaunchedEffect(cacheMessage) {
+        val msg = cacheMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(msg)
+        viewModel.clearCacheMessage()
     }
 
     fun fitVisibleJobs() {
@@ -128,6 +148,7 @@ fun MapScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             if (!showSearch) {
                 TopAppBar(
@@ -159,6 +180,34 @@ fun MapScreen(
         containerColor = BackgroundDark
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            if (isOffline) {
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .zIndex(2f),
+                    colors = CardDefaults.cardColors(containerColor = AccentBlue.copy(alpha = 0.92f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.CloudOff, contentDescription = null, tint = Color.White)
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Offline map mode", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Showing Room job markers + last camera. Map tiles need network; pins still work.",
+                                color = Color.White.copy(alpha = 0.9f),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                }
+            }
+
             GoogleMap(
                 modifier = Modifier.fillMaxSize(),
                 cameraPositionState = cameraPositionState,
@@ -185,18 +234,20 @@ fun MapScreen(
             ) {
                 // Property markers
                 visibleProperties.forEach { property ->
-                    Marker(
-                        state = MarkerState(position = LatLng(property.latitude, property.longitude)),
-                        title = "${property.name} · ${property.status.name.replace('_', ' ')}",
-                        snippet = "${property.address} (${property.type})",
-                        icon = remember(property.id, property.status) {
-                            createMonochromeMarkerIcon(property.status)
-                        },
-                        onClick = {
-                            onNavigateToJobDetail(property.id)
-                            true
-                        }
-                    )
+                    key(property.id) {
+                        Marker(
+                            state = MarkerState(position = LatLng(property.latitude, property.longitude)),
+                            title = "${property.name} · ${property.status.name.replace('_', ' ')}",
+                            snippet = "${property.address} (${property.type})",
+                            icon = remember(property.id, property.status) {
+                                createMonochromeMarkerIcon(property.status)
+                            },
+                            onClick = {
+                                onNavigateToJobDetail(property.id)
+                                true
+                            }
+                        )
+                    }
                 }
 
                 // Boundary polygon
@@ -365,12 +416,14 @@ fun MapScreen(
                             )
 
                             MapControlButton(
-                                label = "Snapshot",
-                                icon = Icons.Default.CameraAlt,
+                                label = "Cache",
+                                icon = Icons.Default.CloudDownload,
                                 active = false,
                                 modifier = Modifier.weight(1f),
                                 onClick = {
-                                    // Save map snapshot functionality
+                                    val p = cameraPositionState.position
+                                    viewModel.persistCamera(p.target.latitude, p.target.longitude, p.zoom)
+                                    viewModel.snapshotOfflineCache()
                                 }
                             )
                         }

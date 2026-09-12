@@ -1,6 +1,7 @@
 package com.strobingn.wildlifefieldops.data.remote
 
 import com.strobingn.wildlifefieldops.data.model.Customer
+import com.strobingn.wildlifefieldops.data.model.CustomerType
 import com.strobingn.wildlifefieldops.data.model.Inspection
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobPriority
@@ -12,11 +13,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.time.Instant
 import java.util.UUID
-
-/**
- * DTOs match the LIVE Supabase project `wildlife_app` (hgdzmwfcghtilyqagjak).
- * Jobs table uses customer_name/title/species (NOT NULL), not the idealized schema.sql only.
- */
 
 @Serializable
 data class RemoteCustomerDto(
@@ -34,13 +30,9 @@ data class RemoteCustomerDto(
 @Serializable
 data class RemoteJobDto(
     val id: String,
-    /** Live DB required column */
     @SerialName("customer_name") val customerName: String = "",
-    /** Compatibility column used by older web clients */
     val customer: String? = null,
-    /** Live DB required column — default so partial rows don't crash decode */
     val title: String = "",
-    /** Live DB required column */
     val species: String = "Wildlife",
     @SerialName("customer_id") val customerId: String? = null,
     val phone: String? = null,
@@ -100,19 +92,30 @@ fun Customer.toRemoteDto(): RemoteCustomerDto = RemoteCustomerDto(
     notes = notes.ifBlank { null }
 )
 
-fun RemoteCustomerDto.toLocal(): Customer {
+fun RemoteCustomerDto.toLocal(existing: Customer? = null): Customer {
     val parts = name.trim().split(" ", limit = 2)
     return Customer(
         id = id,
-        firstName = parts.getOrNull(0).orEmpty(),
-        lastName = parts.getOrNull(1).orEmpty(),
-        email = email.orEmpty(),
-        phone = phone.orEmpty(),
-        address = address.orEmpty(),
-        city = town.orEmpty(),
-        state = state.orEmpty(),
-        zipCode = zip.orEmpty(),
-        notes = notes.orEmpty(),
+        firstName = parts.getOrNull(0).orEmpty().ifBlank { existing?.firstName.orEmpty() },
+        lastName = parts.getOrNull(1).orEmpty().ifBlank { existing?.lastName.orEmpty() },
+        email = email.orEmpty().ifBlank { existing?.email.orEmpty() },
+        phone = phone.orEmpty().ifBlank { existing?.phone.orEmpty() },
+        address = address.orEmpty().ifBlank { existing?.address.orEmpty() },
+        city = town.orEmpty().ifBlank { existing?.city.orEmpty() },
+        state = state.orEmpty().ifBlank { existing?.state.orEmpty() },
+        zipCode = zip.orEmpty().ifBlank { existing?.zipCode.orEmpty() },
+        notes = notes.orEmpty().ifBlank { existing?.notes.orEmpty() },
+        companyName = existing?.companyName.orEmpty(),
+        alternatePhone = existing?.alternatePhone.orEmpty(),
+        latitude = existing?.latitude,
+        longitude = existing?.longitude,
+        customerType = existing?.customerType ?: CustomerType.RESIDENTIAL,
+        billingAddress = existing?.billingAddress.orEmpty(),
+        billingContact = existing?.billingContact.orEmpty(),
+        paymentTerms = existing?.paymentTerms ?: "Net 30",
+        isActive = existing?.isActive ?: true,
+        createdAt = existing?.createdAt ?: System.currentTimeMillis(),
+        updatedAt = existing?.updatedAt ?: System.currentTimeMillis(),
         isSynced = true
     )
 }
@@ -120,7 +123,6 @@ fun RemoteCustomerDto.toLocal(): Customer {
 fun Job.toRemoteDto(): RemoteJobDto {
     val name = customerName.ifBlank { title.ifBlank { "Customer" } }
     val jobTitle = title.ifBlank { name }
-    // Prefer service type as species when description is long notes; keep short species labels
     val speciesGuess = when {
         type.isNotBlank() && type.length <= 40 -> type
         description.isNotBlank() && description.length <= 60 -> description
@@ -133,8 +135,6 @@ fun Job.toRemoteDto(): RemoteJobDto {
         title = jobTitle,
         species = speciesGuess,
         customerId = customerId.takeIf { it.isNotBlank() && isUuid(it) },
-        phone = null,
-        email = null,
         address = address.ifBlank { null },
         status = status.toRemoteStatus(),
         priority = priority.toRemotePriority(),
@@ -150,31 +150,42 @@ fun Job.toRemoteDto(): RemoteJobDto {
     )
 }
 
-fun RemoteJobDto.toLocal(): Job {
-    val displayCustomer = customerName.ifBlank { customer.orEmpty() }
+fun RemoteJobDto.toLocal(existing: Job? = null): Job {
+    val displayCustomer = customerName.ifBlank { customer.orEmpty() }.ifBlank { existing?.customerName.orEmpty() }
+    val mappedStatus = status.fromRemoteStatus()
+    val status = when {
+        existing == null -> mappedStatus
+        existing.status == JobStatus.INVOICED || existing.status == JobStatus.PAID -> existing.status
+        else -> mappedStatus
+    }
+    val mappedType = species.takeIf { it.isNotBlank() && !it.equals("Wildlife", ignoreCase = true) }
+        ?: existing?.type
+        ?: "Inspection"
     return Job(
         id = id,
-        title = title.ifBlank { displayCustomer },
-        description = species.ifBlank { scope.orEmpty() },
-        customerId = customerId.orEmpty(),
+        title = title.ifBlank { displayCustomer }.ifBlank { existing?.title.orEmpty() },
+        description = scope.orEmpty().ifBlank { existing?.description.orEmpty() },
+        customerId = customerId.orEmpty().ifBlank { existing?.customerId.orEmpty() },
         customerName = displayCustomer,
-        address = address.orEmpty(),
-        latitude = latitude?.toDoubleOrNull(),
-        longitude = longitude?.toDoubleOrNull(),
-        status = status.fromRemoteStatus(),
-        priority = priority.fromRemotePriority(),
-        type = "Inspection",
-        estimatedValue = estimate ?: 0.0,
-        actualCost = grandTotal ?: 0.0,
-        assignedTo = assignedTech.orEmpty(),
-        notes = notes.orEmpty(),
-        scheduledDate = scheduledStart?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() },
-        completedDate = completedAt?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() },
+        address = address.orEmpty().ifBlank { existing?.address.orEmpty() },
+        latitude = latitude?.toDoubleOrNull() ?: existing?.latitude,
+        longitude = longitude?.toDoubleOrNull() ?: existing?.longitude,
+        status = status,
+        priority = existing?.priority ?: priority.fromRemotePriority(),
+        type = if (existing != null && existing.type.isNotBlank()) existing.type else mappedType,
+        estimatedValue = (estimate ?: 0.0).takeIf { it > 0 } ?: (existing?.estimatedValue ?: 0.0),
+        actualCost = (grandTotal ?: 0.0).takeIf { it > 0 } ?: (existing?.actualCost ?: 0.0),
+        assignedTo = assignedTech.orEmpty().ifBlank { existing?.assignedTo.orEmpty() },
+        notes = notes.orEmpty().ifBlank { existing?.notes.orEmpty() },
+        photos = existing?.photos ?: emptyList(),
+        scheduledDate = scheduledStart?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() } ?: existing?.scheduledDate,
+        completedDate = completedAt?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() } ?: existing?.completedDate,
+        createdAt = existing?.createdAt ?: System.currentTimeMillis(),
+        updatedAt = existing?.updatedAt ?: System.currentTimeMillis(),
         isSynced = true
     )
 }
 
-/** Prefer linking to a real job UUID; otherwise store as standalone inspection row. */
 fun Inspection.toRemoteDtoOrNull(): RemoteInspectionDto {
     val findingsJson = buildJsonObject {
         put("text", findings)

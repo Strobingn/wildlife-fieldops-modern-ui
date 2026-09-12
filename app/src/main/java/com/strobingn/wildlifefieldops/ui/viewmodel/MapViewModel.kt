@@ -2,8 +2,12 @@ package com.strobingn.wildlifefieldops.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.strobingn.wildlifefieldops.data.local.CachedCamera
+import com.strobingn.wildlifefieldops.data.local.CachedMapMarker
 import com.strobingn.wildlifefieldops.data.local.CustomerDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
+import com.strobingn.wildlifefieldops.data.local.MapOfflineCache
+import com.strobingn.wildlifefieldops.data.model.JobStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -15,14 +19,15 @@ data class MapProperty(
     val address: String,
     val latitude: Double,
     val longitude: Double,
-    val status: com.strobingn.wildlifefieldops.data.model.JobStatus,
+    val status: JobStatus,
     val type: String
 )
 
 @HiltViewModel
 class MapViewModel @Inject constructor(
     private val jobDao: JobDao,
-    private val customerDao: CustomerDao
+    private val customerDao: CustomerDao,
+    private val mapOfflineCache: MapOfflineCache
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -33,6 +38,15 @@ class MapViewModel @Inject constructor(
 
     private val _boundaryPoints = MutableStateFlow<List<com.google.android.gms.maps.model.LatLng>>(emptyList())
     val boundaryPoints = _boundaryPoints.asStateFlow()
+
+    private val _isOffline = MutableStateFlow(!mapOfflineCache.isNetworkAvailable())
+    val isOffline = _isOffline.asStateFlow()
+
+    private val _cachedCamera = MutableStateFlow<CachedCamera?>(null)
+    val cachedCamera = _cachedCamera.asStateFlow()
+
+    private val _cacheMessage = MutableStateFlow<String?>(null)
+    val cacheMessage = _cacheMessage.asStateFlow()
 
     /**
      * Every job status is map-eligible, including COMPLETED, INVOICED, and PAID.
@@ -63,7 +77,7 @@ class MapViewModel @Inject constructor(
                     status = job.status,
                     type = job.type
                 )
-                }
+            }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -78,9 +92,28 @@ class MapViewModel @Inject constructor(
         if (query.isBlank()) props
         else props.filter {
             it.name.contains(query, ignoreCase = true) ||
-            it.address.contains(query, ignoreCase = true)
+                it.address.contains(query, ignoreCase = true)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    init {
+        viewModelScope.launch {
+            _cachedCamera.value = mapOfflineCache.loadCamera()
+            refreshConnectivity()
+        }
+        // Persist markers whenever Room-backed properties change (IO off main via DataStore).
+        viewModelScope.launch {
+            properties.collect { props ->
+                if (props.isNotEmpty()) {
+                    mapOfflineCache.saveMarkers(props.map { it.toCached() })
+                }
+            }
+        }
+    }
+
+    fun refreshConnectivity() {
+        _isOffline.value = !mapOfflineCache.isNetworkAvailable()
+    }
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
@@ -110,4 +143,34 @@ class MapViewModel @Inject constructor(
             _boundaryPoints.value = emptyList()
         }
     }
+
+    fun persistCamera(latitude: Double, longitude: Double, zoom: Float) {
+        viewModelScope.launch {
+            mapOfflineCache.saveCamera(latitude, longitude, zoom)
+            _cachedCamera.value = CachedCamera(latitude, longitude, zoom)
+        }
+    }
+
+    fun snapshotOfflineCache() {
+        viewModelScope.launch {
+            refreshConnectivity()
+            val props = properties.value
+            mapOfflineCache.saveMarkers(props.map { it.toCached() })
+            _cacheMessage.value = "Cached ${props.size} job markers for offline use."
+        }
+    }
+
+    fun clearCacheMessage() {
+        _cacheMessage.value = null
+    }
+
+    private fun MapProperty.toCached() = CachedMapMarker(
+        id = id,
+        name = name,
+        address = address,
+        latitude = latitude,
+        longitude = longitude,
+        status = status.name,
+        type = type
+    )
 }

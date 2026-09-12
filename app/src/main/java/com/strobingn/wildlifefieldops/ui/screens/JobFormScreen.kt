@@ -373,7 +373,7 @@ fun JobFormScreen(
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.Black),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
                 shape = RoundedCornerShape(12.dp),
                 enabled = title.isNotBlank() && !isSaving
             ) {

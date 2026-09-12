@@ -74,7 +74,7 @@ fun ScheduleScreen(
             FloatingActionButton(
                 onClick = onNavigateToJobForm,
                 containerColor = PrimaryGreen,
-                contentColor = Color.Black
+                contentColor = Color.White
             ) {
                 Icon(Icons.Default.Add, contentDescription = "New Job")
             }

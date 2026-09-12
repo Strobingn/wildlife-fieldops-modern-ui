@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import com.google.gson.Gson
 import com.strobingn.wildlifefieldops.BuildConfig
+import com.strobingn.wildlifefieldops.ai.local.LocalLlmEngine
+import com.strobingn.wildlifefieldops.data.remote.AiService
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.headers
@@ -13,8 +15,17 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
+import javax.inject.Singleton
 
-object HybridAIService {
+/**
+ * Hybrid photo → form fill: ML Kit vision labels + generative LLM
+ * (cloud Grok when configured, otherwise on-device abliterated llama.cpp GGUF).
+ */
+@Singleton
+class HybridAIService @Inject constructor(
+    private val localLlm: LocalLlmEngine
+) {
     private val client = HttpClient()
     private val gson = Gson()
 
@@ -38,40 +49,43 @@ object HybridAIService {
         imageUri: Uri,
         jobContext: String = ""
     ): AiAnalysisResult {
-        val offline = PhotoAIHelper.analyzePhotoForFormFilling(context, imageUri)
-        if (!hasDirectKey()) return offline
+        val vision = PhotoAIHelper.analyzePhotoForFormFilling(context, imageUri)
+        val prompt = GrokPrompts.photoToFormFill(
+            speciesTags = vision.species,
+            damageTags = vision.damageTypes,
+            location = jobContext
+        )
 
-        return runCatching {
-            val prompt = GrokPrompts.photoToFormFill(
-                speciesTags = offline.species,
-                damageTags = offline.damageTypes,
-                location = jobContext
-            )
-            val form = callGrokForForm(prompt)
-            offline.copy(
-                species = form.species.split(',').map { it.trim() }.filter { it.isNotBlank() }
-                    .ifEmpty { offline.species },
-                suggestedServiceType = form.serviceType.ifBlank { offline.suggestedServiceType },
-                suggestedPriority = form.priority.ifBlank { offline.suggestedPriority },
-                suggestedNotes = buildString {
-                    append(form.notes.ifBlank { offline.suggestedNotes })
-                    if (form.recommendedActions.isNotEmpty()) {
-                        append("\nRecommended actions: ")
-                        append(form.recommendedActions.joinToString("; "))
-                    }
-                    if (form.complianceFlags.isNotEmpty()) {
-                        append("\nCompliance flags: ")
-                        append(form.complianceFlags.joinToString("; "))
-                    }
-                },
-                estimatedPriceLow = form.estimatedPriceLow.takeIf { it > 0 } ?: offline.estimatedPriceLow,
-                estimatedPriceHigh = form.estimatedPriceHigh.takeIf { it > 0 } ?: offline.estimatedPriceHigh,
-                estimatedPriceRange = if (form.estimatedPriceLow > 0 && form.estimatedPriceHigh > 0) {
-                    "$${String.format("%.0f", form.estimatedPriceLow)} - $${String.format("%.0f", form.estimatedPriceHigh)}"
-                } else offline.estimatedPriceRange,
-                source = "grok"
-            )
-        }.getOrElse { offline.copy(suggestedNotes = offline.suggestedNotes + "\nLive Grok enhancement unavailable: ${it.message}") }
+        if (hasDirectKey()) {
+            runCatching {
+                val form = callGrokForForm(prompt)
+                return enrich(vision, form, source = "grok")
+            }.onFailure {
+                android.util.Log.w("HybridAIService", "Cloud form fill failed: ${it.message}")
+            }
+        }
+
+        val local = localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
+        if (local != null) {
+            val form = runCatching {
+                val cleaned = local.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+                gson.fromJson(cleaned, GrokFormResponse::class.java)
+            }.getOrElse {
+                GrokFormResponse(
+                    species = vision.species.joinToString(", "),
+                    serviceType = vision.suggestedServiceType,
+                    priority = vision.suggestedPriority,
+                    notes = local.take(800),
+                    recommendedActions = emptyList()
+                )
+            }
+            return enrich(vision, form, source = "local_llm")
+        }
+
+        return vision.copy(
+            suggestedNotes = vision.suggestedNotes +
+                "\nGenerative LLM unavailable — download on-device model or configure XAI_API_KEY."
+        )
     }
 
     suspend fun generateTieredEstimate(
@@ -79,22 +93,56 @@ object HybridAIService {
         analysis: AiAnalysisResult,
         jobContext: String = ""
     ): String {
-        if (!hasDirectKey()) {
-            return "Offline estimate\nGood: $${analysis.estimatedPriceLow}\nBetter: $${analysis.estimatedPriceHigh}\nBest: $${analysis.estimatedPriceHigh + 200}"
+        val prompt = GrokPrompts.tieredEstimatePrompt(analysis, jobContext)
+        if (hasDirectKey()) {
+            runCatching { return callGrokText(prompt) }
         }
-        return runCatching {
-            callGrokText(GrokPrompts.tieredEstimatePrompt(analysis, jobContext))
-        }.getOrElse {
-            "Live estimate unavailable. Offline range: $${analysis.estimatedPriceLow} - $${analysis.estimatedPriceHigh}"
-        }
+        val local = localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
+        if (local != null) return "📱 On-device LLM estimate:\n\n$local"
+        return "No generative LLM ready. Download the on-device model in AI Assistant or set XAI_API_KEY."
     }
 
     suspend fun analyzeFormForCompliance(formText: String): List<String> {
-        if (!hasDirectKey()) return listOf("Offline mode: manually verify state rules, permits, protected species, and pesticide labels.")
-        return runCatching {
-            val text = callGrokText(GrokPrompts.complianceAuditPrompt(formText))
-            text.lines().map { it.trim().removePrefix("-").removePrefix("•").trim() }.filter { it.isNotBlank() }
-        }.getOrElse { listOf("Compliance analysis failed: ${it.message}") }
+        val prompt = GrokPrompts.complianceAuditPrompt(formText)
+        if (hasDirectKey()) {
+            runCatching {
+                val text = callGrokText(prompt)
+                return text.lines().map { it.trim().removePrefix("-").removePrefix("•").trim() }
+                    .filter { it.isNotBlank() }
+            }
+        }
+        val local = localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
+        if (local != null) {
+            return local.lines().map { it.trim().removePrefix("-").removePrefix("•").trim() }
+                .filter { it.isNotBlank() }
+        }
+        return listOf("No generative LLM ready for compliance analysis.")
+    }
+
+    private fun enrich(vision: AiAnalysisResult, form: GrokFormResponse, source: String): AiAnalysisResult {
+        return vision.copy(
+            species = form.species.split(',').map { it.trim() }.filter { it.isNotBlank() }
+                .ifEmpty { vision.species },
+            suggestedServiceType = form.serviceType.ifBlank { vision.suggestedServiceType },
+            suggestedPriority = form.priority.ifBlank { vision.suggestedPriority },
+            suggestedNotes = buildString {
+                append(form.notes.ifBlank { vision.suggestedNotes })
+                if (form.recommendedActions.isNotEmpty()) {
+                    append("\nRecommended actions: ")
+                    append(form.recommendedActions.joinToString("; "))
+                }
+                if (form.complianceFlags.isNotEmpty()) {
+                    append("\nCompliance flags: ")
+                    append(form.complianceFlags.joinToString("; "))
+                }
+            },
+            estimatedPriceLow = form.estimatedPriceLow.takeIf { it > 0 } ?: vision.estimatedPriceLow,
+            estimatedPriceHigh = form.estimatedPriceHigh.takeIf { it > 0 } ?: vision.estimatedPriceHigh,
+            estimatedPriceRange = if (form.estimatedPriceLow > 0 && form.estimatedPriceHigh > 0) {
+                "$${String.format("%.0f", form.estimatedPriceLow)} - $${String.format("%.0f", form.estimatedPriceHigh)}"
+            } else vision.estimatedPriceRange,
+            source = source
+        )
     }
 
     private fun hasDirectKey(): Boolean = BuildConfig.LLM_API_KEY.trim().length >= 10
@@ -128,4 +176,3 @@ object HybridAIService {
             ?: error("Empty Grok response")
     }
 }
-

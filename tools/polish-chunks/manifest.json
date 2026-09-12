@@ -1,0 +1,35 @@
+{
+  "MapScreen.kt": {
+    "dest": "app/src/main/java/com/strobingn/wildlifefieldops/ui/screens/MapScreen.kt",
+    "sha256": "2b11187bef88fd6a4ab1246dc5890c2e924f45c27c40aa7aee02951a52c1d4c4",
+    "bytes": 23226,
+    "chunks": [
+      "tools/polish-chunks/MapScreen.kt.00.b64",
+      "tools/polish-chunks/MapScreen.kt.01.b64",
+      "tools/polish-chunks/MapScreen.kt.02.b64",
+      "tools/polish-chunks/MapScreen.kt.03.b64",
+      "tools/polish-chunks/MapScreen.kt.04.b64",
+      "tools/polish-chunks/MapScreen.kt.05.b64",
+      "tools/polish-chunks/MapScreen.kt.06.b64"
+    ]
+  },
+  "InspectionFormScreen.kt": {
+    "dest": "app/src/main/java/com/strobingn/wildlifefieldops/ui/screens/InspectionFormScreen.kt",
+    "sha256": "a58cdb74857e39fb8d1fc3e672e3aefbb00ff16772e62c212d1555ad662e666f",
+    "bytes": 37575,
+    "chunks": [
+      "tools/polish-chunks/InspectionFormScreen.kt.00.b64",
+      "tools/polish-chunks/InspectionFormScreen.kt.01.b64",
+      "tools/polish-chunks/InspectionFormScreen.kt.02.b64",
+      "tools/polish-chunks/InspectionFormScreen.kt.03.b64",
+      "tools/polish-chunks/InspectionFormScreen.kt.04.b64",
+      "tools/polish-chunks/InspectionFormScreen.kt.05.b64",
+      "tools/polish-chunks/InspectionFormScreen.kt.06.b64",
+      "tools/polish-chunks/InspectionFormScreen.kt.07.b64",
+      "tools/polish-chunks/InspectionFormScreen.kt.08.b64",
+      "tools/polish-chunks/InspectionFormScreen.kt.09.b64",
+      "tools/polish-chunks/InspectionFormScreen.kt.10.b64",
+      "tools/polish-chunks/InspectionFormScreen.kt.11.b64"
+    ]
+  }
+}
