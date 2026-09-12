@@ -2,21 +2,26 @@ package com.strobingn.wildlifefieldops.ai.local
 
 import android.content.Context
 import android.util.Log
+import com.strobingn.wildlifefieldops.BuildConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
+import java.io.RandomAccessFile
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Catalog entry for a downloadable on-device abliterated GGUF (mradermacher quants of huihui-ai).
+ * Catalog entry for a downloadable on-device abliterated GGUF.
  * Exact filenames + byte sizes verified from Hugging Face API (LFS).
  */
 data class LocalLlmOption(
@@ -31,18 +36,19 @@ data class LocalLlmOption(
     val approxSizeLabel: String,
     val isDefault: Boolean = false
 ) {
+    /** Prefer ?download=true so HF serves the binary (not a HTML interstitial). */
     val url: String
-        get() = "https://huggingface.co/$quantRepo/resolve/main/$fileName"
+        get() = "https://huggingface.co/$quantRepo/resolve/main/$fileName?download=true"
 }
 
 /**
  * Downloads and caches on-device **abliterated** GGUF models for llama.cpp.
  *
  * Default: Qwen2.5-3B-Instruct-abliterated Q4_K_M (mradermacher)
- * Optional: Qwen2.5-7B-Instruct-abliterated-v3 Q4_K_M (mradermacher)
+ * Also: 1.5B (easier on flaky networks), Llama-3.2-3B, optional 7B v3.
  *
- * Selection is persisted; switching unloads via [LocalLlmEngine] and uses the chosen GGUF.
- * Legacy 0.8B / 1.5B / MediaPipe files are deleted on refresh.
+ * Downloads resume via HTTP Range on `.partial` files (stalls / short timeouts
+ * no longer wipe progress). Optional HF_TOKEN raises Hub rate limits.
  */
 @Singleton
 class LocalLlmModelManager @Inject constructor(
@@ -72,7 +78,6 @@ class LocalLlmModelManager @Inject constructor(
     val selected: LocalLlmOption
         get() = optionById(_selectedId.value) ?: DEFAULT_OPTION
 
-    /** Active display name (selected model). */
     val activeDisplayName: String get() = selected.displayName
     val activeFileName: String get() = selected.fileName
     val activeRepo: String get() = selected.quantRepo
@@ -86,7 +91,7 @@ class LocalLlmModelManager @Inject constructor(
 
     fun isModelReady(option: LocalLlmOption = selected): Boolean {
         val file = modelFile(option)
-        val ready = file.exists() && file.length() >= option.minValidBytes
+        val ready = file.exists() && file.length() >= option.minValidBytes && looksLikeGguf(file)
         if (option.id == selected.id && ready && _state.value !is ModelState.Ready) {
             _state.value = ModelState.Ready(file.absolutePath)
         }
@@ -95,7 +100,7 @@ class LocalLlmModelManager @Inject constructor(
 
     fun isOptionDownloaded(option: LocalLlmOption): Boolean {
         val file = modelFile(option)
-        return file.exists() && file.length() >= option.minValidBytes
+        return file.exists() && file.length() >= option.minValidBytes && looksLikeGguf(file)
     }
 
     /**
@@ -113,15 +118,26 @@ class LocalLlmModelManager @Inject constructor(
         return changed
     }
 
+    /** Optional runtime HF token (overrides empty BuildConfig). */
+    fun setHuggingFaceToken(token: String?) {
+        val t = token?.trim().orEmpty()
+        if (t.isEmpty()) {
+            prefs.edit().remove(KEY_HF_TOKEN).apply()
+        } else {
+            prefs.edit().putString(KEY_HF_TOKEN, t).apply()
+        }
+    }
+
     fun refreshState() {
         deleteLegacyFiles()
         val file = modelFile()
         val opt = selected
         _state.value = when {
-            file.exists() && file.length() >= opt.minValidBytes -> ModelState.Ready(file.absolutePath)
-            file.exists() && file.length() > 0L && file.length() < opt.minValidBytes -> {
-                // Wrong-size / incomplete (e.g. leftover tiny legacy misnamed) — remove
-                Log.w(TAG, "Deleting undersized ${file.name} (${file.length()} bytes)")
+            file.exists() && file.length() >= opt.minValidBytes && looksLikeGguf(file) ->
+                ModelState.Ready(file.absolutePath)
+            file.exists() && file.length() > 0L &&
+                (file.length() < opt.minValidBytes || !looksLikeGguf(file)) -> {
+                Log.w(TAG, "Deleting undersized/corrupt ${file.name} (${file.length()} bytes)")
                 file.delete()
                 ModelState.Missing
             }
@@ -130,14 +146,15 @@ class LocalLlmModelManager @Inject constructor(
     }
 
     private fun deleteLegacyFiles() {
+        val keepNames = OPTIONS.map { it.fileName }.toSet()
         for (name in LEGACY_FILE_NAMES) {
+            if (name in keepNames) continue
             File(modelsDir, name).takeIf { it.exists() }?.let {
                 Log.i(TAG, "Deleting legacy local LLM file: ${it.name} (${it.length()} bytes)")
                 it.delete()
             }
             File(modelsDir, "$name.partial").takeIf { it.exists() }?.delete()
         }
-        // Also drop any leftover 0.8B-sized GGUF if somehow renamed oddly
         modelsDir.listFiles()?.forEach { f ->
             if (!f.isFile) return@forEach
             val n = f.name
@@ -155,91 +172,225 @@ class LocalLlmModelManager @Inject constructor(
         forceRedownload: Boolean = false,
         option: LocalLlmOption = selected
     ): Result<File> = withContext(Dispatchers.IO) {
-        // Ensure selection matches the option we are ensuring
         if (option.id != selected.id) {
             selectModel(option.id)
         }
         val dest = modelFile(option)
-        if (!forceRedownload && dest.exists() && dest.length() >= option.minValidBytes) {
+        if (!forceRedownload && dest.exists() && dest.length() >= option.minValidBytes && looksLikeGguf(dest)) {
             _state.value = ModelState.Ready(dest.absolutePath)
             return@withContext Result.success(dest)
         }
 
         val partial = File(modelsDir, "${option.fileName}.partial")
-        try {
-            if (forceRedownload) {
-                dest.delete()
-                partial.delete()
-            }
+        if (forceRedownload) {
+            dest.delete()
+            partial.delete()
+        }
 
-            val connection = (URL(option.url).openConnection() as HttpURLConnection).apply {
-                instanceFollowRedirects = true
-                connectTimeout = 60_000
-                readTimeout = 120_000
-                setRequestProperty("User-Agent", "WildlifeFieldOps-Android/2.2")
-                setRequestProperty("Accept", "application/octet-stream")
-            }
-
-            connection.connect()
-            val code = connection.responseCode
-            if (code !in 200..299) {
-                val err = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty().take(200)
-                val msg = "Abliterated GGUF download failed (HTTP $code). $err".trim()
+        var lastError: Exception? = null
+        repeat(MAX_ATTEMPTS) { attempt ->
+            try {
+                downloadResumable(option, dest, partial)
+                _state.value = ModelState.Ready(dest.absolutePath)
+                Log.i(TAG, "Abliterated GGUF ready: ${dest.absolutePath} (${dest.length()} bytes)")
+                return@withContext Result.success(dest)
+            } catch (e: Exception) {
+                lastError = e
+                Log.e(TAG, "ensureModel attempt ${attempt + 1}/$MAX_ATTEMPTS failed (keeping partial)", e)
+                val msg = humanizeDownloadError(e, partial.length())
                 _state.value = ModelState.Error(msg)
-                return@withContext Result.failure(IllegalStateException(msg))
-            }
-
-            val total = connection.contentLengthLong.takeIf { it > 0 } ?: option.expectedBytes
-            var read = 0L
-            _state.value = ModelState.Downloading(0L, total)
-
-            connection.inputStream.use { input ->
-                FileOutputStream(partial).use { output ->
-                    val buffer = ByteArray(1024 * 256)
-                    while (true) {
-                        val n = input.read(buffer)
-                        if (n <= 0) break
-                        output.write(buffer, 0, n)
-                        read += n
-                        _state.value = ModelState.Downloading(read, total)
-                    }
-                    output.flush()
+                if (attempt < MAX_ATTEMPTS - 1) {
+                    delay(1_500L * (attempt + 1))
                 }
             }
-            connection.disconnect()
+        }
 
-            if (read < option.minValidBytes) {
-                partial.delete()
-                val msg = "Downloaded file too small ($read bytes) — incomplete download."
-                _state.value = ModelState.Error(msg)
-                return@withContext Result.failure(IllegalStateException(msg))
-            }
+        val fail = lastError ?: IllegalStateException("Model download failed")
+        val msg = humanizeDownloadError(fail, partial.length())
+        _state.value = ModelState.Error(msg)
+        Result.failure(IllegalStateException(msg, fail))
+    }
 
-            // Soft check against exact HF size when known
-            if (option.expectedBytes > 0 &&
-                kotlin.math.abs(read - option.expectedBytes) > option.expectedBytes / 50
-            ) {
-                Log.w(
-                    TAG,
-                    "Size mismatch for ${option.fileName}: got $read, expected ${option.expectedBytes}"
-                )
-            }
-
-            if (dest.exists()) dest.delete()
-            if (!partial.renameTo(dest)) {
-                partial.copyTo(dest, overwrite = true)
-                partial.delete()
-            }
-
-            _state.value = ModelState.Ready(dest.absolutePath)
-            Log.i(TAG, "Abliterated GGUF ready: ${dest.absolutePath} (${dest.length()} bytes)")
-            Result.success(dest)
-        } catch (e: Exception) {
-            Log.e(TAG, "ensureModel failed", e)
+    private fun downloadResumable(option: LocalLlmOption, dest: File, partial: File) {
+        var existing = when {
+            partial.exists() -> partial.length()
+            else -> 0L
+        }
+        // Corrupt tiny leftovers (HTML error pages) — restart
+        if (existing in 1 until 64) {
+            Log.w(TAG, "Discarding tiny partial (${existing}B)")
             partial.delete()
-            val msg = e.message ?: "Model download failed"
-            _state.value = ModelState.Error(msg)
-            Result.failure(e)
+            existing = 0L
+        } else if (existing >= 4 && !looksLikeGguf(partial)) {
+            Log.w(TAG, "Discarding non-GGUF partial (${existing}B)")
+            partial.delete()
+            existing = 0L
+        }
+
+        val connection = openHfConnection(option.url, existing)
+        try {
+            connection.connect()
+            var code = connection.responseCode
+            // Some CDNs ignore Range and return 200 — restart from 0
+            if (code == 200 && existing > 0L) {
+                Log.i(TAG, "Server returned 200 for ranged request; restarting from 0")
+                connection.disconnect()
+                partial.delete()
+                existing = 0L
+                val fresh = openHfConnection(option.url, 0L)
+                try {
+                    fresh.connect()
+                    code = fresh.responseCode
+                    if (code !in 200..299) {
+                        throw httpFailure(fresh, code)
+                    }
+                    streamToPartial(fresh, option, partial, existingBytes = 0L)
+                } finally {
+                    fresh.disconnect()
+                }
+                finalizePartial(option, dest, partial)
+                return
+            }
+
+            if (code == HttpURLConnection.HTTP_PARTIAL || code in 200..299) {
+                val resumeFrom = if (code == HttpURLConnection.HTTP_PARTIAL) existing else 0L
+                if (code != HttpURLConnection.HTTP_PARTIAL && existing > 0L) {
+                    // Unexpected 2xx without partial — treat as full body
+                    partial.delete()
+                }
+                streamToPartial(connection, option, partial, existingBytes = resumeFrom)
+                finalizePartial(option, dest, partial)
+                return
+            }
+
+            throw httpFailure(connection, code)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun openHfConnection(url: String, existingBytes: Long): HttpURLConnection {
+        return (URL(url).openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects = true
+            connectTimeout = CONNECT_TIMEOUT_MS
+            readTimeout = READ_TIMEOUT_MS
+            setRequestProperty("User-Agent", "WildlifeFieldOps-Android/2.2")
+            setRequestProperty("Accept", "application/octet-stream,*/*")
+            hfTokenOrNull()?.let { token ->
+                setRequestProperty("Authorization", "Bearer $token")
+            }
+            if (existingBytes > 0L) {
+                setRequestProperty("Range", "bytes=$existingBytes-")
+            }
+        }
+    }
+
+    private fun hfTokenOrNull(): String? {
+        val fromPrefs = prefs.getString(KEY_HF_TOKEN, null)?.trim().orEmpty()
+        if (fromPrefs.isNotEmpty()) return fromPrefs
+        val fromBuild = BuildConfig.HF_TOKEN.trim()
+        return fromBuild.takeIf { it.isNotEmpty() }
+    }
+
+    private fun streamToPartial(
+        connection: HttpURLConnection,
+        option: LocalLlmOption,
+        partial: File,
+        existingBytes: Long
+    ) {
+        val headerTotal = parseTotalBytes(connection, existingBytes)
+        val total = headerTotal.takeIf { it > 0 } ?: option.expectedBytes
+        var read = existingBytes
+        _state.value = ModelState.Downloading(read, total)
+
+        val append = existingBytes > 0L && partial.exists()
+        connection.inputStream.use { input ->
+            FileOutputStream(partial, append).use { output ->
+                val buffer = ByteArray(256 * 1024)
+                var firstChunk = !append
+                while (true) {
+                    val n = try {
+                        input.read(buffer)
+                    } catch (e: SocketTimeoutException) {
+                        // Keep partial; outer retry resumes
+                        throw IOException(
+                            "Download stalled after ${read / (1024 * 1024)} MB " +
+                                "(will resume on retry). ${e.message ?: ""}".trim(),
+                            e
+                        )
+                    }
+                    if (n <= 0) break
+                    if (firstChunk) {
+                        firstChunk = false
+                        if (n >= 4 && !isGgufMagic(buffer, n)) {
+                            throw IOException(
+                                "Server did not return a GGUF file (got HTML/error). " +
+                                    "Check network or set HF_TOKEN for Hugging Face."
+                            )
+                        }
+                    }
+                    output.write(buffer, 0, n)
+                    read += n
+                    _state.value = ModelState.Downloading(read, total)
+                }
+                output.flush()
+            }
+        }
+    }
+
+    private fun parseTotalBytes(connection: HttpURLConnection, existingBytes: Long): Long {
+        val linked = connection.getHeaderField("X-Linked-Size")?.toLongOrNull()
+        if (linked != null && linked > 0) return linked
+        val range = connection.getHeaderField("Content-Range") // bytes a-b/total
+        if (range != null) {
+            val slash = range.substringAfterLast('/', missingDelimiterValue = "")
+            slash.toLongOrNull()?.takeIf { it > 0 }?.let { return it }
+        }
+        val len = connection.contentLengthLong
+        return when {
+            len > 0 && existingBytes > 0 &&
+                connection.responseCode == HttpURLConnection.HTTP_PARTIAL -> existingBytes + len
+            len > 0 -> len
+            else -> -1L
+        }
+    }
+
+    private fun finalizePartial(option: LocalLlmOption, dest: File, partial: File) {
+        val size = partial.length()
+        if (size < option.minValidBytes) {
+            throw IOException(
+                "Downloaded file too small ($size bytes, need ≥ ${option.minValidBytes}). " +
+                    "Partial kept — tap Retry to resume."
+            )
+        }
+        if (!looksLikeGguf(partial)) {
+            partial.delete()
+            throw IOException("Downloaded file is not a valid GGUF — deleted. Try again.")
+        }
+        if (option.expectedBytes > 0 &&
+            kotlin.math.abs(size - option.expectedBytes) > option.expectedBytes / 20
+        ) {
+            Log.w(TAG, "Size mismatch for ${option.fileName}: got $size, expected ${option.expectedBytes}")
+        }
+        if (dest.exists()) dest.delete()
+        if (!partial.renameTo(dest)) {
+            partial.copyTo(dest, overwrite = true)
+            partial.delete()
+        }
+    }
+
+    private fun httpFailure(connection: HttpURLConnection, code: Int): IOException {
+        val err = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty().take(240)
+        return IOException("Abliterated GGUF download failed (HTTP $code). $err".trim())
+    }
+
+    private fun humanizeDownloadError(e: Exception, partialBytes: Long): String {
+        val mb = partialBytes / (1024 * 1024)
+        val base = e.message ?: "Model download failed"
+        return if (partialBytes > 64L) {
+            "$base (saved ${mb} MB — tap Retry to resume)"
+        } else {
+            base
         }
     }
 
@@ -272,6 +423,24 @@ class LocalLlmModelManager @Inject constructor(
         private const val TAG = "LocalLlmModelManager"
         private const val PREFS_NAME = "local_llm_prefs"
         private const val KEY_SELECTED_ID = "selected_model_id"
+        private const val KEY_HF_TOKEN = "hf_token"
+        private const val MAX_ATTEMPTS = 4
+        private const val CONNECT_TIMEOUT_MS = 60_000
+        /** Per-read idle timeout; long enough for slow mobile, short enough to resume. */
+        private const val READ_TIMEOUT_MS = 180_000
+
+        val QWEN25_1_5B = LocalLlmOption(
+            id = "qwen25-1.5b-abliterated-q4km",
+            displayName = "Qwen2.5-1.5B-Instruct-abliterated (Q4_K_M)",
+            shortLabel = "Qwen2.5-1.5B",
+            upstreamRepo = "huihui-ai/Qwen2.5-1.5B-Instruct-abliterated",
+            quantRepo = "mradermacher/Qwen2.5-1.5B-Instruct-abliterated-GGUF",
+            fileName = "Qwen2.5-1.5B-Instruct-abliterated.Q4_K_M.gguf",
+            expectedBytes = 986_049_088L,
+            minValidBytes = 700L * 1024L * 1024L,
+            approxSizeLabel = "~0.9 GB",
+            isDefault = false
+        )
 
         /** Default on-device model: Qwen2.5-3B Instruct abliterated Q4_K_M (mradermacher). */
         val QWEN25_3B = LocalLlmOption(
@@ -280,12 +449,24 @@ class LocalLlmModelManager @Inject constructor(
             shortLabel = "Qwen2.5-3B",
             upstreamRepo = "huihui-ai/Qwen2.5-3B-Instruct-abliterated",
             quantRepo = "mradermacher/Qwen2.5-3B-Instruct-abliterated-GGUF",
-            // Exact HF filename (~2.1 GB); verified via HF tree API LFS size.
             fileName = "Qwen2.5-3B-Instruct-Abliterated.Q4_K_M.gguf",
             expectedBytes = 2_104_933_600L,
             minValidBytes = 1_500L * 1024L * 1024L,
             approxSizeLabel = "~2.1 GB",
             isDefault = true
+        )
+
+        val LLAMA32_3B = LocalLlmOption(
+            id = "llama32-3b-abliterated-q4km",
+            displayName = "Llama-3.2-3B-Instruct-abliterated (Q4_K_M)",
+            shortLabel = "Llama-3.2-3B",
+            upstreamRepo = "huihui-ai/Llama-3.2-3B-Instruct-abliterated",
+            quantRepo = "MaziyarPanahi/Llama-3.2-3B-Instruct-abliterated-GGUF",
+            fileName = "Llama-3.2-3B-Instruct-abliterated.Q4_K_M.gguf",
+            expectedBytes = 2_241_004_288L,
+            minValidBytes = 1_600L * 1024L * 1024L,
+            approxSizeLabel = "~2.2 GB",
+            isDefault = false
         )
 
         /** Optional larger model: Qwen2.5-7B Instruct abliterated v3 Q4_K_M (mradermacher). */
@@ -302,25 +483,50 @@ class LocalLlmModelManager @Inject constructor(
             isDefault = false
         )
 
-        val OPTIONS: List<LocalLlmOption> = listOf(QWEN25_3B, QWEN25_7B_V3)
+        val OPTIONS: List<LocalLlmOption> = listOf(
+            QWEN25_1_5B,
+            QWEN25_3B,
+            LLAMA32_3B,
+            QWEN25_7B_V3
+        )
         val DEFAULT_OPTION: LocalLlmOption = QWEN25_3B
 
-        // Backward-compatible aliases → default 3B (prefer instance active* for selected model).
         const val MODEL_BASE = "huihui-ai/Qwen2.5-3B-Instruct-abliterated"
         const val MODEL_REPO = "mradermacher/Qwen2.5-3B-Instruct-abliterated-GGUF"
         const val MODEL_FILE_NAME = "Qwen2.5-3B-Instruct-Abliterated.Q4_K_M.gguf"
         const val MODEL_QUANT = "Q4_K_M"
         const val MODEL_DISPLAY_NAME = "Qwen2.5-3B-Instruct-abliterated (Q4_K_M)"
         const val MODEL_URL =
-            "https://huggingface.co/mradermacher/Qwen2.5-3B-Instruct-abliterated-GGUF/resolve/main/Qwen2.5-3B-Instruct-Abliterated.Q4_K_M.gguf"
+            "https://huggingface.co/mradermacher/Qwen2.5-3B-Instruct-abliterated-GGUF/resolve/main/Qwen2.5-3B-Instruct-Abliterated.Q4_K_M.gguf?download=true"
         const val EXPECTED_BYTES = 2_104_933_600L
         const val MIN_VALID_BYTES = 1_500L * 1024L * 1024L
 
         private val LEGACY_FILE_NAMES = listOf(
             "Huihui-Qwen3.5-0.8B-abliterated.Q4_K_M.gguf",
-            "Qwen2.5-1.5B-Instruct-abliterated.Q4_K_M.gguf",
             "Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
-            "Qwen2.5-3B-Instruct-abliterated.Q4_K_M.gguf" // lowercase twin; we use Abliterated capital A
+            // lowercase twin of default 3B; we keep Abliterated capital-A as the catalog file
+            "Qwen2.5-3B-Instruct-abliterated.Q4_K_M.gguf"
         )
+
+        private fun isGgufMagic(buf: ByteArray, len: Int): Boolean {
+            if (len < 4) return false
+            return buf[0] == 'G'.code.toByte() &&
+                buf[1] == 'G'.code.toByte() &&
+                buf[2] == 'U'.code.toByte() &&
+                buf[3] == 'F'.code.toByte()
+        }
+
+        private fun looksLikeGguf(file: File): Boolean {
+            if (!file.exists() || file.length() < 4L) return false
+            return try {
+                RandomAccessFile(file, "r").use { raf ->
+                    val magic = ByteArray(4)
+                    raf.readFully(magic)
+                    isGgufMagic(magic, 4)
+                }
+            } catch (_: Exception) {
+                false
+            }
+        }
     }
 }

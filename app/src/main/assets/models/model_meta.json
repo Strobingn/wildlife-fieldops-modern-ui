@@ -1,0 +1,158 @@
+{
+  "input_size": 224,
+  "labels": [
+    {
+      "index": 0,
+      "label": "raccoon",
+      "kind": "SPECIES"
+    },
+    {
+      "index": 1,
+      "label": "bat",
+      "kind": "SPECIES"
+    },
+    {
+      "index": 2,
+      "label": "squirrel",
+      "kind": "SPECIES"
+    },
+    {
+      "index": 3,
+      "label": "woodchuck",
+      "kind": "SPECIES"
+    },
+    {
+      "index": 4,
+      "label": "skunk",
+      "kind": "SPECIES"
+    },
+    {
+      "index": 5,
+      "label": "opossum",
+      "kind": "SPECIES"
+    },
+    {
+      "index": 6,
+      "label": "bird",
+      "kind": "SPECIES"
+    },
+    {
+      "index": 7,
+      "label": "droppings",
+      "kind": "DAMAGE"
+    },
+    {
+      "index": 8,
+      "label": "hole_entry",
+      "kind": "ENTRY"
+    },
+    {
+      "index": 9,
+      "label": "trap_cage",
+      "kind": "EQUIPMENT"
+    },
+    {
+      "index": 10,
+      "label": "nest",
+      "kind": "DAMAGE"
+    },
+    {
+      "index": 11,
+      "label": "other",
+      "kind": "OTHER"
+    }
+  ],
+  "normalization": "float32 /255.0 NHWC",
+  "architecture": "MobileNetV2 ImageNet transfer; frozen head then fine-tune last ~50 layers; dense(128)+softmax; dynamic-range quantized",
+  "size_bytes": 2879552,
+  "val_accuracy": 0.7916666865348816,
+  "best_val_accuracy": 0.7916666865348816,
+  "dataset_summary": {
+    "raccoon": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "bat": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "squirrel": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "woodchuck": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "skunk": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "opossum": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "bird": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "droppings": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "hole_entry": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "trap_cage": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "nest": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    },
+    "other": {
+      "commons_ok": 40,
+      "synthetic_fill": 0,
+      "base_pool": 40,
+      "train_images": 128,
+      "val_images": 8
+    }
+  },
+  "source": "Wikimedia Commons photos (maximized search) + minimal synthetic fill; tools/wildlife_tflite/train_and_export.py",
+  "retrain": "2.3.3-wildlife-retrain"
+}

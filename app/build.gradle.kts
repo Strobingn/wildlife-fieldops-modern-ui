@@ -14,8 +14,8 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 25
-        versionName = "2.2.7-inspection-polish"
+        versionCode = 44
+        versionName = "2.3.3-wildlife-retrain"
 
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
         val supabaseKey = System.getenv("SUPABASE_ANON_KEY") ?: "your-anon-key"
@@ -62,6 +62,9 @@ android {
         buildConfigField("String", "LLM_BASE_URL", "\"${escapeBuildConfig(llmBase)}\"")
         buildConfigField("String", "LLM_MODEL", "\"${escapeBuildConfig(llmModel)}\"")
         buildConfigField("int", "LLM_KEY_LENGTH", "${llmKey.length}")
+
+        val hfToken = envTrim("HF_TOKEN").ifBlank { envTrim("HUGGING_FACE_HUB_TOKEN") }
+        buildConfigField("String", "HF_TOKEN", "\"${escapeBuildConfig(hfToken)}\"")
 
         manifestPlaceholders["GOOGLE_MAPS_API"] = mapsKey
 
@@ -142,6 +145,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation("androidx.appcompat:appcompat:1.6.1")
 
@@ -173,6 +177,19 @@ dependencies {
     implementation("com.google.ar:core:1.45.0")
     implementation("com.google.mlkit:image-labeling:17.0.9")
     implementation("com.google.mlkit:object-detection:17.0.2")
+
+    // On-device wildlife evidence classifier (TFLite Interpreter)
+    implementation("org.tensorflow:tensorflow-lite:2.14.0")
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
+    // Optional GPU delegate — safe no-op when unsupported
+    implementation("org.tensorflow:tensorflow-lite-gpu:2.14.0")
+
+    // CameraX live analyzer (capture-clock traces + KEEP_ONLY_LATEST)
+    val cameraX = "1.4.2"
+    implementation("androidx.camera:camera-core:$cameraX")
+    implementation("androidx.camera:camera-camera2:$cameraX")
+    implementation("androidx.camera:camera-lifecycle:$cameraX")
+    implementation("androidx.camera:camera-view:$cameraX")
 
     implementation("io.coil-kt:coil-compose:2.5.0")
 

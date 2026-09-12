@@ -26,6 +26,7 @@ import com.strobingn.wildlifefieldops.ui.theme.BackgroundDark
 import com.strobingn.wildlifefieldops.ui.theme.BorderDark
 import com.strobingn.wildlifefieldops.ui.theme.PrimaryGreen
 import com.strobingn.wildlifefieldops.ui.theme.TextPrimary
+import com.strobingn.wildlifefieldops.ui.theme.TextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,7 +34,9 @@ fun SettingPlainField(
     storedValue: String,
     label: String,
     onCommit: (String) -> Unit,
-    keyboardType: KeyboardType = KeyboardType.Ascii
+    keyboardType: KeyboardType = KeyboardType.Ascii,
+    singleLine: Boolean = true,
+    supportingText: String? = null
 ) {
     val focusManager = LocalFocusManager.current
     var focused by remember { mutableStateOf(false) }
@@ -50,6 +53,9 @@ fun SettingPlainField(
             onCommit(next.text)
         },
         label = { Text(label) },
+        supportingText = supportingText?.takeIf { it.isNotBlank() }?.let { tip ->
+            { Text(tip, color = TextTertiary) }
+        },
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = PrimaryGreen,
             unfocusedBorderColor = BorderDark,
@@ -65,11 +71,13 @@ fun SettingPlainField(
             .fillMaxWidth()
             .onFocusChanged { focused = it.isFocused },
         shape = RoundedCornerShape(12.dp),
-        singleLine = true,
+        singleLine = singleLine,
+        minLines = if (singleLine) 1 else 2,
+        maxLines = if (singleLine) 1 else 4,
         visualTransformation = VisualTransformation.None,
         keyboardOptions = KeyboardOptions(
             keyboardType = keyboardType,
-            imeAction = ImeAction.Done,
+            imeAction = if (singleLine) ImeAction.Done else ImeAction.Default,
             autoCorrect = false
         ),
         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })

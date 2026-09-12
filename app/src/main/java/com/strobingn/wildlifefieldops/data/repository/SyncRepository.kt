@@ -1,9 +1,11 @@
 package com.strobingn.wildlifefieldops.data.repository
 
 import com.strobingn.wildlifefieldops.data.local.CustomerDao
+import com.strobingn.wildlifefieldops.data.local.DeletedRecordDao
 import com.strobingn.wildlifefieldops.data.local.InspectionDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
 import com.strobingn.wildlifefieldops.data.model.Customer
+import com.strobingn.wildlifefieldops.data.model.DeletedRecord
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.remote.RemoteCustomerDto
 import com.strobingn.wildlifefieldops.data.remote.RemoteInspectionDto
@@ -12,6 +14,7 @@ import com.strobingn.wildlifefieldops.data.remote.SupabaseService
 import com.strobingn.wildlifefieldops.data.remote.toLocal
 import com.strobingn.wildlifefieldops.data.remote.toRemoteDto
 import com.strobingn.wildlifefieldops.data.remote.toRemoteDtoOrNull
+import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -33,7 +36,8 @@ class SyncRepository @Inject constructor(
     private val supabaseService: SupabaseService,
     private val jobDao: JobDao,
     private val customerDao: CustomerDao,
-    private val inspectionDao: InspectionDao
+    private val inspectionDao: InspectionDao,
+    private val deletedRecordDao: DeletedRecordDao
 ) {
     fun isCloudConfigured(): Boolean = supabaseService.isConfigured
 
@@ -46,6 +50,30 @@ class SyncRepository @Inject constructor(
                 success = false,
                 message = "Sync failed: ${t.message ?: t.javaClass.simpleName}. Check connection and Supabase config."
             )
+        }
+    }
+
+    /**
+     * Best-effort immediate remote delete. Offline / failure is OK — tombstone stays
+     * unsynced and [doSync] will retry.
+     */
+    suspend fun tryRemoteDelete(entityType: String, id: String) = withContext(Dispatchers.IO) {
+        val client = supabaseService.client ?: return@withContext
+        val table = when (entityType) {
+            DeletedRecord.TYPE_JOB -> "jobs"
+            DeletedRecord.TYPE_CUSTOMER -> "customers"
+            DeletedRecord.TYPE_INSPECTION -> "inspections"
+            else -> return@withContext
+        }
+        runCatching {
+            client.from(table).delete {
+                filter {
+                    eq("id", id)
+                }
+            }
+            deletedRecordDao.markSynced(id, entityType)
+        }.onFailure {
+            android.util.Log.w("SyncRepository", "Immediate remote delete failed for $entityType/$id", it)
         }
     }
 
@@ -63,17 +91,25 @@ class SyncRepository @Inject constructor(
         var pulledCustomers = 0
         val warnings = mutableListOf<String>()
 
+        // Push remote DELETEs for local tombstones before pull, so resurrected rows
+        // are removed server-side first when possible.
+        pushDeletions(client, DeletedRecord.TYPE_JOB, "jobs", warnings)
+        pushDeletions(client, DeletedRecord.TYPE_CUSTOMER, "customers", warnings)
+        pushDeletions(client, DeletedRecord.TYPE_INSPECTION, "inspections", warnings)
+
         try {
             val unsyncedCustomers = customerDao.getUnsynced()
             if (unsyncedCustomers.isNotEmpty()) {
+                val deletedCustomerIds = deletedRecordDao.getIdsByType(DeletedRecord.TYPE_CUSTOMER).toSet()
                 val dtos = unsyncedCustomers.mapNotNull { c ->
+                    if (c.id in deletedCustomerIds) return@mapNotNull null
                     runCatching { c.toRemoteDto() }
                         .onFailure { android.util.Log.w("SyncRepository", "Skip customer ${c.id}: ${it.message}") }
                         .getOrNull()
                 }
                 if (dtos.isNotEmpty()) {
                     client.from("customers").upsert(dtos)
-                    unsyncedCustomers.forEach { customerDao.markSynced(it.id) }
+                    unsyncedCustomers.filter { it.id !in deletedCustomerIds }.forEach { customerDao.markSynced(it.id) }
                     pushedCustomers = dtos.size
                 }
             }
@@ -85,7 +121,9 @@ class SyncRepository @Inject constructor(
         try {
             val unsyncedJobs = jobDao.getUnsynced()
             if (unsyncedJobs.isNotEmpty()) {
+                val deletedJobIds = deletedRecordDao.getIdsByType(DeletedRecord.TYPE_JOB).toSet()
                 val dtos = unsyncedJobs.mapNotNull { j ->
+                    if (j.id in deletedJobIds) return@mapNotNull null
                     runCatching { j.toRemoteDto() }
                         .onFailure { android.util.Log.w("SyncRepository", "Skip job ${j.id}: ${it.message}") }
                         .getOrNull()
@@ -105,9 +143,11 @@ class SyncRepository @Inject constructor(
         try {
             val unsyncedInspections = inspectionDao.getUnsynced()
             if (unsyncedInspections.isNotEmpty()) {
+                val deletedInspectionIds = deletedRecordDao.getIdsByType(DeletedRecord.TYPE_INSPECTION).toSet()
                 val dtos = mutableListOf<RemoteInspectionDto>()
                 val okIds = mutableListOf<String>()
                 unsyncedInspections.forEach { insp ->
+                    if (insp.id in deletedInspectionIds) return@forEach
                     runCatching {
                         dtos += insp.toRemoteDtoOrNull()
                         okIds += insp.id
@@ -156,11 +196,44 @@ class SyncRepository @Inject constructor(
         )
     }
 
+    private suspend fun pushDeletions(
+        client: SupabaseClient,
+        entityType: String,
+        table: String,
+        warnings: MutableList<String>
+    ) {
+        try {
+            val unsynced = deletedRecordDao.getUnsyncedByType(entityType)
+            for (tombstone in unsynced) {
+                try {
+                    client.from(table).delete {
+                        filter {
+                            eq("id", tombstone.id)
+                        }
+                    }
+                    deletedRecordDao.markSynced(tombstone.id, entityType)
+                } catch (e: Exception) {
+                    android.util.Log.w(
+                        "SyncRepository",
+                        "Remote delete failed for $entityType/${tombstone.id}",
+                        e
+                    )
+                    warnings += "$entityType delete ${tombstone.id}: ${e.message ?: e.javaClass.simpleName}"
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("SyncRepository", "Deletion push failed for $entityType", e)
+            warnings += "$entityType deletions: ${e.message ?: e.javaClass.simpleName}"
+        }
+    }
+
     private suspend fun mergeJobs(remote: List<RemoteJobDto>): Int {
         if (remote.isEmpty()) return 0
+        val deletedIds = deletedRecordDao.getIdsByType(DeletedRecord.TYPE_JOB).toSet()
         val localById = jobDao.getAllOnce().associateBy { it.id }
         val incoming = mutableListOf<Job>()
         remote.forEach { dto ->
+            if (dto.id in deletedIds) return@forEach
             val existing = localById[dto.id]
             if (existing != null && !existing.isSynced) return@forEach
             val mapped = runCatching { dto.toLocal(existing) }.getOrNull() ?: return@forEach
@@ -172,9 +245,11 @@ class SyncRepository @Inject constructor(
 
     private suspend fun mergeCustomers(remote: List<RemoteCustomerDto>): Int {
         if (remote.isEmpty()) return 0
+        val deletedIds = deletedRecordDao.getIdsByType(DeletedRecord.TYPE_CUSTOMER).toSet()
         val localById = customerDao.getAllOnce().associateBy { it.id }
         val incoming = mutableListOf<Customer>()
         remote.forEach { dto ->
+            if (dto.id in deletedIds) return@forEach
             val existing = localById[dto.id]
             if (existing != null && !existing.isSynced) return@forEach
             val mapped = runCatching { dto.toLocal(existing) }.getOrNull() ?: return@forEach

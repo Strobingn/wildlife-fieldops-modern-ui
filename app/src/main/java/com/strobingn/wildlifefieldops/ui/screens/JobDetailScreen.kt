@@ -21,7 +21,9 @@ import com.strobingn.wildlifefieldops.data.model.JobPriority
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
+import com.strobingn.wildlifefieldops.ui.components.WeatherBanner
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobAiViewModel
+import com.strobingn.wildlifefieldops.ui.viewmodel.LiveWeatherViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -34,6 +36,7 @@ fun JobDetailScreen(
     onNavigateToInvoice: (String) -> Unit,
     onNavigateToEstimate: (String) -> Unit,
     onNavigateToInspectionForm: (String) -> Unit,
+    onNavigateToLiveCapture: (String) -> Unit,
     onBack: () -> Unit,
     viewModel: JobsViewModel = hiltViewModel(),
     jobAiViewModel: JobAiViewModel = hiltViewModel()
@@ -42,10 +45,16 @@ fun JobDetailScreen(
     val summary by jobAiViewModel.summary.collectAsState()
     val summaryLoading by jobAiViewModel.summaryLoading.collectAsState()
     val aiMessage by jobAiViewModel.message.collectAsState()
+    val weatherVm: LiveWeatherViewModel = hiltViewModel()
+    val weatherState by weatherVm.state.collectAsState()
+
     var showStatusDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     job?.let { currentJob ->
+        LaunchedEffect(currentJob.id, currentJob.latitude, currentJob.longitude, currentJob.address) {
+            weatherVm.loadJobWeather(currentJob.latitude, currentJob.longitude, currentJob.address)
+        }
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -219,6 +228,17 @@ fun JobDetailScreen(
                     Text("Edit job", fontWeight = FontWeight.Bold)
                 }
 
+                Text("Site weather", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                Spacer(modifier = Modifier.height(8.dp))
+                WeatherBanner(
+                    state = weatherState,
+                    title = "Job site",
+                    onRefresh = {
+                        weatherVm.loadJobWeather(currentJob.latitude, currentJob.longitude, currentJob.address)
+                    }
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
                 // Actions
                 Text("Actions", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -242,6 +262,16 @@ fun JobDetailScreen(
                         color = AccentCyan,
                         modifier = Modifier.weight(1f),
                         onClick = { onNavigateToInspectionForm(currentJob.id) }
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionButton(
+                        label = "Live AI",
+                        icon = Icons.Default.Videocam,
+                        color = PrimaryGreen,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onNavigateToLiveCapture(currentJob.id) }
                     )
                 }
 

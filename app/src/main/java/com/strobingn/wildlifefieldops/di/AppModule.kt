@@ -58,4 +58,7 @@ object AppModule {
 
     @Provides
     fun provideInvoiceDao(database: AppDatabase) = database.invoiceDao()
+
+    @Provides
+    fun provideDeletedRecordDao(database: AppDatabase) = database.deletedRecordDao()
 }

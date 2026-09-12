@@ -198,6 +198,7 @@ private fun AppNavHost(
                 onNavigateToInvoice = { navController.navigate(Screen.Invoice.createRoute(jobId)) },
                 onNavigateToEstimate = { navController.navigate(Screen.Estimate.createRoute(jobId)) },
                 onNavigateToInspectionForm = { jid -> navController.navigate(Screen.InspectionForm.createRoute(jobId = jid)) },
+                onNavigateToLiveCapture = { jid -> navController.navigate(Screen.LiveCapture.createRoute(jobId = jid)) },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -274,6 +275,23 @@ private fun AppNavHost(
         }
         composable(Screen.PhotoGallery.route) {
             PhotoGalleryScreen(onBack = { navController.popBackStack() }, viewModel = hiltViewModel())
+        }
+        composable(
+            route = Screen.LiveCapture.route,
+            arguments = listOf(
+                navArgument("jobId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("inspectionId") { type = NavType.StringType; defaultValue = "" }
+            )
+        ) { backStackEntry ->
+            val jobId = backStackEntry.arguments?.getString("jobId")
+                ?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+            val inspectionId = backStackEntry.arguments?.getString("inspectionId")
+                ?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+            LiveCaptureScreen(
+                onBack = { navController.popBackStack() },
+                jobId = jobId,
+                inspectionId = inspectionId
+            )
         }
         composable(Screen.Settings.route) {
             SettingsScreen(onBack = { navController.popBackStack() })
@@ -354,8 +372,8 @@ private fun AppDrawer(onNavigate: (String) -> Unit, onClose: () -> Unit) {
                     BrandMark(size = 48)
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Wildlife FieldOps", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
-                        Text("Field operations center", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.75f))
+                        Text("Wildlife Whisperer", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("FieldOps · Cornwall, NY", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.75f))
                     }
                     IconButton(onClick = onClose) {
                         Text("✕", color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.titleMedium)
@@ -371,11 +389,12 @@ private fun AppDrawer(onNavigate: (String) -> Unit, onClose: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
             )
             Screen.drawerItems.forEach { screen ->
+                val dest = if (screen is Screen.LiveCapture) Screen.LiveCapture.createRoute() else screen.route
                 NavigationDrawerItem(
                     icon = { screen.icon?.let { Icon(it, contentDescription = screen.title) } },
                     label = { Text(screen.title, style = MaterialTheme.typography.bodyLarge) },
                     selected = false,
-                    onClick = { onNavigate(screen.route) },
+                    onClick = { onNavigate(dest) },
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
                     shape = FieldShapes.button,
                     colors = NavigationDrawerItemDefaults.colors(

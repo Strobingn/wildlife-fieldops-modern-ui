@@ -1,0 +1,12 @@
+0	raccoon	SPECIES
+1	bat	SPECIES
+2	squirrel	SPECIES
+3	woodchuck	SPECIES
+4	skunk	SPECIES
+5	opossum	SPECIES
+6	bird	SPECIES
+7	droppings	DAMAGE
+8	hole_entry	ENTRY
+9	trap_cage	EQUIPMENT
+10	nest	DAMAGE
+11	other	OTHER
