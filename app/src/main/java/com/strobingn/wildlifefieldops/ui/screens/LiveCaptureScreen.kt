@@ -50,7 +50,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.strobingn.wildlifefieldops.ai.ARMeasurementHelper
 import com.strobingn.wildlifefieldops.ai.camera.CaptureGuidance
-import com.strobingn.wildlifefieldops.ai.ARMeasurementHelper
 import com.strobingn.wildlifefieldops.ai.camera.CaptureGuidanceAction
 import com.strobingn.wildlifefieldops.ai.camera.ChecklistSession
 import com.strobingn.wildlifefieldops.ai.camera.LiveCameraAnalyzer
