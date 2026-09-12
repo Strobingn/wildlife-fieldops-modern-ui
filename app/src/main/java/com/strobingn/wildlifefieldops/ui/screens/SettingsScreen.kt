@@ -29,6 +29,7 @@ fun SettingsScreen(
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsState(initial = true)
     val autoSync by viewModel.autoSync.collectAsState(initial = true)
     val companyName by viewModel.companyName.collectAsState(initial = "Wildlife Whisperer LLC")
+    val companyAddress by viewModel.companyAddress.collectAsState(initial = "")
     val technicianName by viewModel.technicianName.collectAsState(initial = "")
     val defaultTaxRate by viewModel.defaultTaxRate.collectAsState(initial = 0f)
     val offlineMode by viewModel.offlineMode.collectAsState(initial = false)
@@ -118,6 +119,14 @@ fun SettingsScreen(
             SettingsSectionTitle("Company Information")
             SettingsCard {
                 SettingPlainField(storedValue = companyName, label = "Company Name", onCommit = viewModel::setCompanyName)
+                Spacer(modifier = Modifier.height(8.dp))
+                SettingPlainField(
+                    storedValue = companyAddress,
+                    label = "Shop address",
+                    onCommit = viewModel::setCompanyAddress,
+                    singleLine = false,
+                    supportingText = "Home base for AI mileage (shop → each job). Example: 210 Willow Avenue, Cornwall, NY 12518"
+                )
                 Spacer(modifier = Modifier.height(8.dp))
                 SettingPlainField(storedValue = technicianName, label = "Default Technician Name", onCommit = viewModel::setTechnicianName)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -251,7 +260,7 @@ fun SettingsScreen(
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Wildlife FieldOps v2.0.1", style = MaterialTheme.typography.labelSmall, color = TextTertiary, modifier = Modifier.align(Alignment.CenterHorizontally))
+            Text("Wildlife FieldOps v2.2.14", style = MaterialTheme.typography.labelSmall, color = TextTertiary, modifier = Modifier.align(Alignment.CenterHorizontally))
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
