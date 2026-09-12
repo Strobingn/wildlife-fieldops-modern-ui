@@ -51,6 +51,7 @@ android {
         val llmModel = envTrim("LLM_MODEL")
             .ifBlank { envTrim("XAI_MODEL") }
             .ifBlank { "grok-4.5" }
+        val hfToken = envTrim("HF_TOKEN")
 
         logger.lifecycle(
             "LLM config: keyChars=${llmKey.length} base=$llmBase model=$llmModel " +
@@ -61,6 +62,7 @@ android {
         buildConfigField("String", "LLM_API_KEY", "\"${escapeBuildConfig(llmKey)}\"")
         buildConfigField("String", "LLM_BASE_URL", "\"${escapeBuildConfig(llmBase)}\"")
         buildConfigField("String", "LLM_MODEL", "\"${escapeBuildConfig(llmModel)}\"")
+        buildConfigField("String", "HF_TOKEN", "\"${escapeBuildConfig(hfToken)}\"")
         buildConfigField("int", "LLM_KEY_LENGTH", "${llmKey.length}")
 
         manifestPlaceholders["GOOGLE_MAPS_API"] = mapsKey
