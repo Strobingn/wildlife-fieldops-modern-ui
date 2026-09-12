@@ -1,0 +1,33 @@
+name: Apply PDF dollar-sign fix
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "tools/pdf-dollar-fix/**"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Apply PDF dollar-sign fix
+        run: python3 tools/pdf-dollar-fix/apply_pdf_dollar_fix.py
+      - name: Commit fixed ContractPdf
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/strobingn/wildlifefieldops/util/WildlifeWhispererContractPdf.kt
+          if git diff --staged --quiet; then
+            echo "No ContractPdf changes to commit"
+          else
+            git commit -m "fix(pdf): escape blank fee placeholder so Kotlin stops treating $______ as a var (2.3.5-pdf-dollar-fix)"
+            git push origin HEAD:main
+          fi
