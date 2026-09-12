@@ -44,16 +44,40 @@ class HybridAIService @Inject constructor(
         val complianceFlags: List<String> = emptyList()
     )
 
+    data class CaptureNarration(
+        val techNotes: String,
+        val customerSummary: String,
+        val source: String
+    )
+
     suspend fun analyzePhotoAndFillForm(
         context: Context,
         imageUri: Uri,
-        jobContext: String = ""
+        jobContext: String = "",
+        voiceTranscript: String = "",
+        evidenceSummary: String = "",
+        entryTags: List<String> = emptyList(),
+        arMeasurement: String = "",
+        equipmentTags: List<String> = emptyList(),
+        repairScope: String = ""
     ): AiAnalysisResult {
-        val vision = PhotoAIHelper.analyzePhotoForFormFilling(context, imageUri)
+        val vision = try {
+            PhotoAIHelper.analyzePhotoForFormFilling(context, imageUri)
+        } catch (t: Throwable) {
+            android.util.Log.w("HybridAIService", "vision failed: ${t.message}")
+            AiAnalysisResult(suggestedNotes = "Vision unavailable: ${t.message}. Manual entry required.")
+        }
+        return try {
         val prompt = GrokPrompts.photoToFormFill(
             speciesTags = vision.species,
             damageTags = vision.damageTypes,
-            location = jobContext
+            location = jobContext,
+            voiceTranscript = voiceTranscript,
+            evidenceSummary = evidenceSummary.ifBlank { vision.suggestedNotes },
+            entryTags = entryTags,
+            arMeasurement = arMeasurement,
+            equipmentTags = equipmentTags,
+            repairScope = repairScope
         )
 
         if (hasDirectKey()) {
@@ -86,6 +110,10 @@ class HybridAIService @Inject constructor(
             suggestedNotes = vision.suggestedNotes +
                 "\nGenerative LLM unavailable — download on-device model or configure XAI_API_KEY."
         )
+        } catch (t: Throwable) {
+            android.util.Log.w("HybridAIService", "form fill failed: ${t.message}")
+            vision.copy(suggestedNotes = vision.suggestedNotes + "\nAI enrich failed: ${t.message}")
+        }
     }
 
     suspend fun generateTieredEstimate(
@@ -98,7 +126,7 @@ class HybridAIService @Inject constructor(
             runCatching { return callGrokText(prompt) }
         }
         val local = localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
-        if (local != null) return "📱 On-device LLM estimate:\n\n$local"
+        if (local != null) return "On-device LLM estimate:\n\n$local"
         return "No generative LLM ready. Download the on-device model in AI Assistant or set XAI_API_KEY."
     }
 
@@ -117,6 +145,74 @@ class HybridAIService @Inject constructor(
                 .filter { it.isNotBlank() }
         }
         return listOf("No generative LLM ready for compliance analysis.")
+    }
+
+    /**
+     * Phase 3: after policy ACCEPT + vision/form draft, LLM writes tech notes + customer summary.
+     * Does not decide capture acceptance.
+     */
+    suspend fun narrateAcceptedCapture(
+        analysis: AiAnalysisResult,
+        checklistTitle: String? = null,
+        reasonCode: String = "QUALITY_OK",
+        jobContext: String = "",
+        voiceTranscript: String = "",
+        evidenceSummary: String = "",
+        arMeasurement: String = "",
+        equipmentTags: List<String> = emptyList(),
+        repairScope: String = ""
+    ): CaptureNarration {
+        val prompt = GrokPrompts.liveCaptureNarration(
+            checklistTitle = checklistTitle,
+            species = analysis.species,
+            damage = analysis.damageTypes,
+            serviceType = analysis.suggestedServiceType,
+            visionNotes = analysis.suggestedNotes,
+            reasonCode = reasonCode,
+            jobContext = jobContext,
+            voiceTranscript = voiceTranscript,
+            evidenceSummary = evidenceSummary,
+            arMeasurement = arMeasurement,
+            equipmentTags = equipmentTags,
+            repairScope = repairScope
+        )
+        val raw = when {
+            hasDirectKey() -> runCatching { callGrokText(prompt) }.getOrNull()
+            else -> null
+        } ?: localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
+
+        if (raw.isNullOrBlank()) {
+            return CaptureNarration(
+                techNotes = buildString {
+                    append("• Evidence captured for ")
+                    append(checklistTitle ?: "inspection")
+                    append("\n• Review on site; confirm species and entry points.")
+                    append("\n• Download on-device model or set API key for fuller AI notes.")
+                },
+                customerSummary = "We documented the area during inspection and will review findings with you.",
+                source = "template"
+            )
+        }
+        return parseNarration(raw, if (hasDirectKey()) "grok" else "local_llm")
+    }
+
+    private fun parseNarration(raw: String, source: String): CaptureNarration {
+        val text = raw.trim()
+        val techMarker = Regex("(?i)TECH_NOTES\\s*:")
+        val custMarker = Regex("(?i)CUSTOMER_SUMMARY\\s*:")
+        val techIdx = techMarker.find(text)?.range?.last?.plus(1) ?: -1
+        val custMatch = custMarker.find(text)
+        val custIdx = custMatch?.range?.last?.plus(1) ?: -1
+        val tech = when {
+            techIdx >= 0 && custMatch != null -> text.substring(techIdx, custMatch.range.first).trim()
+            techIdx >= 0 -> text.substring(techIdx).trim()
+            else -> text.take(600)
+        }
+        val cust = when {
+            custIdx >= 0 -> text.substring(custIdx).trim()
+            else -> "We documented conditions during the inspection and will follow up with recommendations."
+        }
+        return CaptureNarration(techNotes = tech, customerSummary = cust, source = source)
     }
 
     private fun enrich(vision: AiAnalysisResult, form: GrokFormResponse, source: String): AiAnalysisResult {

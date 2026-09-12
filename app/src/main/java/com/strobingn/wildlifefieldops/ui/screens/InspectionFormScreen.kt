@@ -1,6 +1,7 @@
 package com.strobingn.wildlifefieldops.ui.screens
 
 import android.Manifest
+import android.net.Uri
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,6 +37,9 @@ import com.strobingn.wildlifefieldops.ui.components.ScheduleDateTimeField
 import com.strobingn.wildlifefieldops.ui.components.defaultAppointmentTime
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.InspectionsViewModel
+import com.strobingn.wildlifefieldops.ui.viewmodel.LiveWeatherViewModel
+import com.strobingn.wildlifefieldops.ui.viewmodel.WeatherUiState
+import com.strobingn.wildlifefieldops.util.WildlifeWhispererInspectionReportPdf
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -47,6 +52,8 @@ fun InspectionFormScreen(
     viewModel: InspectionsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
+    val weatherVm: LiveWeatherViewModel = hiltViewModel()
+    val weatherState by weatherVm.state.collectAsState()
     var customerName by remember { mutableStateOf("") }
     var inspectorName by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(InspectionType.ROUTINE) }
@@ -75,7 +82,10 @@ fun InspectionFormScreen(
     val reportSource by viewModel.reportSource.collectAsState()
     val estimatePrepLoading by viewModel.estimatePrepLoading.collectAsState()
     val estimatePrepMessage by viewModel.estimatePrepMessage.collectAsState()
+    val walkthroughLoading by viewModel.walkthroughLoading.collectAsState()
+    val walkthroughHint by viewModel.walkthroughHint.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     var linkedJobTitle by remember { mutableStateOf("") }
     var linkedJobAddress by remember { mutableStateOf("") }
@@ -112,6 +122,10 @@ fun InspectionFormScreen(
     LaunchedEffect(reportSource) {
         val src = reportSource ?: return@LaunchedEffect
         snackbarHostState.showSnackbar("Report filled · $src")
+    }
+    LaunchedEffect(walkthroughHint) {
+        val hint = walkthroughHint ?: return@LaunchedEffect
+        if (hint.isNotBlank()) snackbarHostState.showSnackbar(hint.take(180))
     }
     LaunchedEffect(reportError) {
         val err = reportError ?: return@LaunchedEffect
@@ -280,6 +294,47 @@ fun InspectionFormScreen(
         if (dictationNotes.isNotBlank()) appendLine("Dictation: $dictationNotes")
     }.trim()
 
+
+    val walkthroughPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        viewModel.analyzeWalkthroughVideo(
+            context = context,
+            videoUri = uri,
+            reportContext = InspectionReportContext(
+                customerName = customerName,
+                inspectorName = inspectorName,
+                inspectionType = selectedType.name,
+                jobTitle = linkedJobTitle,
+                jobAddress = linkedJobAddress,
+                jobDescription = linkedJobDescription,
+                existingFindings = findings,
+                existingRecommendations = recommendations,
+                existingSpecies = speciesIdentified,
+                existingEntryPoints = entryPoints,
+                existingDamage = damageAssessment,
+                existingNotes = notes
+            )
+        ) { draft ->
+            if (draft.findings.isNotBlank()) findings = draft.findings
+            if (draft.recommendations.isNotBlank()) recommendations = draft.recommendations
+            if (draft.speciesIdentified.isNotBlank()) speciesIdentified = draft.speciesIdentified
+            if (draft.entryPoints.isNotBlank()) entryPoints = draft.entryPoints
+            if (draft.damageAssessment.isNotBlank()) damageAssessment = draft.damageAssessment
+            selectedSeverity = runCatching { FindingSeverity.valueOf(draft.severity.trim().uppercase()) }
+                .getOrDefault(FindingSeverity.MODERATE)
+            val summaryBits = listOf(draft.notes, draft.summary)
+                .filter { it.isNotBlank() }
+                .joinToString("\n")
+            if (summaryBits.isNotBlank()) {
+                notes = if (notes.isBlank()) summaryBits else notes.trimEnd() + "\n" + summaryBits
+            }
+        }
+    }
+
+
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -404,6 +459,46 @@ fun InspectionFormScreen(
                                     Text("AI Estimate")
                                 }
                             }
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                try {
+                                    val path = WildlifeWhispererInspectionReportPdf.generate(
+                                        context = context,
+                                        fields = WildlifeWhispererInspectionReportPdf.ReportFields(
+                                            customerName = customerName,
+                                            inspectorName = inspectorName,
+                                            inspectionType = selectedType.name,
+                                            inspectionDate = scheduledAt,
+                                            jobTitle = linkedJobTitle,
+                                            jobAddress = linkedJobAddress,
+                                            species = speciesIdentified,
+                                            findings = findings,
+                                            entryPoints = entryPoints,
+                                            damage = damageAssessment,
+                                            recommendations = recommendations,
+                                            severity = selectedSeverity.name,
+                                            notes = notes,
+                                            weather = weatherConditions,
+                                            followUpRequired = followUpRequired
+                                        )
+                                    )
+                                    WildlifeWhispererInspectionReportPdf.share(context, path)
+                                } catch (e: Exception) {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            e.message?.take(80) ?: "Could not create report PDF"
+                                        )
+                                    }
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGreen),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Share PDF")
                         }
                         Button(
                             onClick = {
@@ -568,6 +663,61 @@ fun InspectionFormScreen(
                     }
                     if (!reportSource.isNullOrBlank()) {
                         Text(reportSource!!, color = PrimaryGreen, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = BackgroundCard),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "Walkthrough video",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Record a ~60–90s property walkthrough (overview → entries → attic/crawl). " +
+                            "FieldOps samples frames, runs on-device vision, and fills an editable report draft. Works offline.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    Button(
+                        onClick = { walkthroughPicker.launch("video/*") },
+                        enabled = !walkthroughLoading && !reportLoading,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AccentBlue,
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (walkthroughLoading) {
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Analyzing walkthrough…")
+                        } else {
+                            Icon(Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Import walkthrough video", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (walkthroughLoading) {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = AccentBlue,
+                            trackColor = BorderDark
+                        )
+                    }
+                    if (!walkthroughHint.isNullOrBlank()) {
+                        Text(walkthroughHint!!, color = PrimaryGreen, style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -760,6 +910,22 @@ fun InspectionFormScreen(
                         checkedTrackColor = PrimaryGreen.copy(alpha = 0.5f)
                     )
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(
+                        onClick = { weatherVm.loadShopWeather() },
+                        enabled = weatherState !is WeatherUiState.Loading
+                    ) { Text("Use live weather") }
+                    when (val w = weatherState) {
+                        is WeatherUiState.Ready -> {
+                            TextButton(onClick = { weatherConditions = w.snap.summaryLine }) {
+                                Text("Apply ${w.snap.tempF}°F ${w.snap.condition}")
+                            }
+                        }
+                        is WeatherUiState.Unavailable -> Text(w.reason, color = TextTertiary, style = MaterialTheme.typography.labelSmall)
+                        else -> Unit
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))

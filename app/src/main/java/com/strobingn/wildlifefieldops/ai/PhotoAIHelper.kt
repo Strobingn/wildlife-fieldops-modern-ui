@@ -1,17 +1,23 @@
 package com.strobingn.wildlifefieldops.ai
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
-import com.google.mlkit.vision.common.InputImage
+import android.os.SystemClock
+import android.util.Log
 import com.google.android.gms.tasks.Task
+import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import com.google.mlkit.vision.objects.ObjectDetection
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
+import com.strobingn.wildlifefieldops.ai.camera.CustomEvidenceModel
+import com.strobingn.wildlifefieldops.ai.camera.WildlifeEvidenceDetector
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resumeWithException
-// Note: kotlinx-coroutines-play-services dependency not included.
-// Using a suspend helper that bridges Google Play Services Tasks to coroutines.
 
 data class AiAnalysisResult(
     val species: List<String> = emptyList(),
@@ -24,7 +30,12 @@ data class AiAnalysisResult(
     val estimatedPriceLow: Double = 0.0,
     val estimatedPriceHigh: Double = 0.0,
     val objectDetections: List<String> = emptyList(),
-    val source: String = "offline_ml"
+    val source: String = "offline_ml",
+    val analysisDurationMs: Long = 0L,
+    val evidenceSummary: String = "",
+    val entryTypes: List<String> = emptyList(),
+    val equipmentTypes: List<String> = emptyList(),
+    val repairScopeSuggestion: String = ""
 ) {
     val serviceType: String get() = suggestedServiceType
     val priority: String get() = suggestedPriority
@@ -33,6 +44,8 @@ data class AiAnalysisResult(
 }
 
 object PhotoAIHelper {
+    private const val TAG = "PhotoAIHelper"
+
     private val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
     private val objectDetector = ObjectDetection.getClient(
         ObjectDetectorOptions.Builder()
@@ -43,31 +56,67 @@ object PhotoAIHelper {
     )
 
     suspend fun analyzePhotoForFormFilling(context: Context, imageUri: Uri): AiAnalysisResult {
+        val startedAt = SystemClock.elapsedRealtime()
         return try {
             val image = InputImage.fromFilePath(context, imageUri)
-            val labels = awaitTask(labeler.process(image))
-            val knownSpecies = setOf("raccoon", "bat", "squirrel", "opossum", "snake", "bird", "rodent")
-            val knownDamage = setOf("damage", "hole", "entry point", "chew marks", "nesting", "droppings", "scratching")
-            val accepted = labels.filter { it.confidence > 0.55f }.map { it.text.lowercase() }
-            val species = accepted.filter { it in knownSpecies }.distinct()
-            val damage = accepted.filter { it in knownDamage }.distinct()
-            val objects = awaitTask(objectDetector.process(image))
+            val (labels, objects) = coroutineScope {
+                val labelsDeferred = async { awaitTask(labeler.process(image)) }
+                val objectsDeferred = async { awaitTask(objectDetector.process(image)) }
+                labelsDeferred.await() to objectsDeferred.await()
+            }
+            val stillBitmap = try {
+                context.contentResolver.openInputStream(imageUri)?.use { stream ->
+                    BitmapFactory.decodeStream(stream)
+                }
+            } catch (_: Throwable) {
+                null
+            }
+            val custom = try {
+                CustomEvidenceModel.tryInfer(
+                    context = context,
+                    bitmap = stillBitmap,
+                    labelHints = labels.map { it.text }
+                )
+            } catch (_: Throwable) {
+                emptyList()
+            } finally {
+                try {
+                    stillBitmap?.takeIf { !it.isRecycled }?.recycle()
+                } catch (_: Throwable) {
+                }
+            }
+            val evidence = WildlifeEvidenceDetector.detect(labels, objects, customHits = custom)
             val objectNames = objects.mapNotNull { it.labels.firstOrNull()?.text?.lowercase() }.distinct()
+            val species = evidence.species.map { it.label }.distinct()
+            val damage = evidence.damage.map { it.label }.distinct()
+            val entries = evidence.entries.map { it.label }
+            val equipment = evidence.equipment.map { it.label }.distinct()
 
             val service = when {
-                species.any { it.contains("bat") } -> "Bat Exclusion & Removal"
-                species.any { it.contains("raccoon") } -> "Raccoon Removal & Exclusion"
-                species.any { it.contains("squirrel") } -> "Squirrel Removal & Exclusion"
-                damage.any { it.contains("entry") || it.contains("hole") } -> "Entry Point Sealing & Repair"
+                species.any { it.contains("bat", ignoreCase = true) } -> "Bat Exclusion & Removal"
+                species.any { it.contains("raccoon", ignoreCase = true) } -> "Raccoon Removal & Exclusion"
+                species.any { it.contains("squirrel", ignoreCase = true) } -> "Squirrel Removal & Exclusion"
+                species.any { it.contains("skunk", ignoreCase = true) } -> "Skunk Removal & Exclusion"
+                species.any { it.contains("groundhog", ignoreCase = true) || it.contains("woodchuck", ignoreCase = true) } -> "Groundhog / Woodchuck Control"
+                equipment.any { it.contains("trap", ignoreCase = true) } -> "Trapping & Monitoring"
+                entries.isNotEmpty() -> "Entry Point Sealing & Repair"
                 else -> "Wildlife Inspection & Removal"
             }
-            val priority = if (species.isNotEmpty() || damage.isNotEmpty()) "HIGH" else "MEDIUM"
-            val confidence = labels.maxOfOrNull { it.confidence } ?: 0f
+            val priority = if (species.isNotEmpty() || damage.isNotEmpty() || entries.isNotEmpty()) "HIGH" else "MEDIUM"
+            val confidence = listOf(
+                evidence.species.maxOfOrNull { it.score } ?: 0f,
+                evidence.entries.maxOfOrNull { it.score } ?: 0f,
+                evidence.equipment.maxOfOrNull { it.score } ?: 0f,
+                labels.maxOfOrNull { it.confidence } ?: 0f
+            ).max()
             val notes = buildString {
-                if (species.isNotEmpty()) append("Species observed: ${species.joinToString()}. ")
-                if (damage.isNotEmpty()) append("Damage noted: ${damage.joinToString()}. ")
+                append("Evidence: ${evidence.topSummary}. ")
+                if (species.isNotEmpty()) append("Species: ${species.joinToString()}. ")
+                if (entries.isNotEmpty()) append("Entry: ${entries.joinToString()}. ")
+                if (damage.isNotEmpty()) append("Damage: ${damage.joinToString()}. ")
+                if (equipment.isNotEmpty()) append("Trap/equipment: ${equipment.joinToString()}. ")
                 append("On-device confidence: ${String.format("%.0f", confidence * 100)}%. ")
-                append("Verify on site and photograph all entry points.")
+                append("Verify on site.")
             }
             val prices = when {
                 service.contains("Bat") -> Triple(450.0, 1200.0, "$450 - $1,200")
@@ -75,6 +124,8 @@ object PhotoAIHelper {
                 service.contains("Squirrel") -> Triple(275.0, 750.0, "$275 - $750")
                 else -> Triple(200.0, 600.0, "$200 - $600")
             }
+            val durationMs = SystemClock.elapsedRealtime() - startedAt
+            Log.i(TAG, "still-photo analysis ${durationMs}ms evidence=${evidence.topSummary}")
 
             AiAnalysisResult(
                 species = species,
@@ -87,17 +138,24 @@ object PhotoAIHelper {
                 estimatedPriceLow = prices.first,
                 estimatedPriceHigh = prices.second,
                 objectDetections = objectNames,
-                source = "offline_ml"
+                source = "offline_ml",
+                analysisDurationMs = durationMs,
+                evidenceSummary = evidence.topSummary,
+                entryTypes = entries,
+                equipmentTypes = equipment
             )
-        } catch (e: Exception) {
-            AiAnalysisResult(suggestedNotes = "Photo analysis failed: ${e.message}. Manual entry required.")
+        } catch (e: Throwable) {
+            val durationMs = SystemClock.elapsedRealtime() - startedAt
+            Log.w(TAG, "still-photo analysis failed after ${durationMs}ms", e)
+            AiAnalysisResult(
+                suggestedNotes = "Photo analysis failed: ${e.message}. Manual entry required.",
+                analysisDurationMs = durationMs
+            )
         }
     }
 }
 
-/** Bridge Google Play Services [Task] to Kotlin coroutines without extra dependencies. */
 private suspend fun <T> awaitTask(task: Task<T>): T = suspendCancellableCoroutine { cont ->
     task.addOnSuccessListener { result -> cont.resume(result) {} }
     task.addOnFailureListener { exception -> cont.resumeWithException(exception) }
 }
-

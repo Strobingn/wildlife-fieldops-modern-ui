@@ -2,14 +2,17 @@ package com.strobingn.wildlifefieldops.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.strobingn.wildlifefieldops.data.local.DeletedRecordDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
 import com.strobingn.wildlifefieldops.data.local.VisitDao
+import com.strobingn.wildlifefieldops.data.model.DeletedRecord
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.data.model.Visit
 import com.strobingn.wildlifefieldops.data.remote.AiService
 import com.strobingn.wildlifefieldops.data.remote.GeocodingService
 import com.strobingn.wildlifefieldops.data.remote.JobIntakeDraft
+import com.strobingn.wildlifefieldops.data.repository.SyncRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -19,6 +22,8 @@ import javax.inject.Inject
 class JobsViewModel @Inject constructor(
     private val jobDao: JobDao,
     private val visitDao: VisitDao,
+    private val deletedRecordDao: DeletedRecordDao,
+    private val syncRepository: SyncRepository,
     private val geocodingService: GeocodingService,
     private val aiService: AiService
 ) : ViewModel() {
@@ -153,11 +158,29 @@ class JobsViewModel @Inject constructor(
     }
 
     fun deleteJob(job: Job) = viewModelScope.launch {
+        deletedRecordDao.insert(
+            DeletedRecord(
+                id = job.id,
+                entityType = DeletedRecord.TYPE_JOB,
+                synced = false
+            )
+        )
+        visitDao.deletePendingForJob(job.id)
         jobDao.delete(job)
+        syncRepository.tryRemoteDelete(DeletedRecord.TYPE_JOB, job.id)
     }
 
     fun deleteJobById(id: String) = viewModelScope.launch {
+        deletedRecordDao.insert(
+            DeletedRecord(
+                id = id,
+                entityType = DeletedRecord.TYPE_JOB,
+                synced = false
+            )
+        )
+        visitDao.deletePendingForJob(id)
         jobDao.deleteById(id)
+        syncRepository.tryRemoteDelete(DeletedRecord.TYPE_JOB, id)
     }
 
     fun updateJobStatus(jobId: String, status: JobStatus) = viewModelScope.launch {

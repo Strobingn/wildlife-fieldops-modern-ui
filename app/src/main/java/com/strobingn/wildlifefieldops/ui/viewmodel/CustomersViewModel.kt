@@ -3,7 +3,10 @@ package com.strobingn.wildlifefieldops.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.strobingn.wildlifefieldops.data.local.CustomerDao
+import com.strobingn.wildlifefieldops.data.local.DeletedRecordDao
 import com.strobingn.wildlifefieldops.data.model.Customer
+import com.strobingn.wildlifefieldops.data.model.DeletedRecord
+import com.strobingn.wildlifefieldops.data.repository.SyncRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -11,7 +14,9 @@ import javax.inject.Inject
 
 @HiltViewModel
 class CustomersViewModel @Inject constructor(
-    private val customerDao: CustomerDao
+    private val customerDao: CustomerDao,
+    private val deletedRecordDao: DeletedRecordDao,
+    private val syncRepository: SyncRepository
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -46,7 +51,15 @@ class CustomersViewModel @Inject constructor(
     }
 
     fun deleteCustomer(customer: Customer) = viewModelScope.launch {
+        deletedRecordDao.insert(
+            DeletedRecord(
+                id = customer.id,
+                entityType = DeletedRecord.TYPE_CUSTOMER,
+                synced = false
+            )
+        )
         customerDao.delete(customer)
+        syncRepository.tryRemoteDelete(DeletedRecord.TYPE_CUSTOMER, customer.id)
     }
 
     fun createCustomer(

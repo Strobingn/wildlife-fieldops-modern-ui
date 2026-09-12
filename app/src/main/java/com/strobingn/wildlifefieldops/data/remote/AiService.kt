@@ -337,11 +337,26 @@ Do not invent species or damage that the transcript does not support; mark uncer
 
     private fun applyMeasured(draft: EstimateDraft, drivingMiles: Double?, taxPercent: Double, distanceNote: String): EstimateDraft {
         val miles = drivingMiles ?: 0.0
-        val extra = distanceNote.ifBlank {
-            if (drivingMiles != null) "Driving distance shop to job: $miles miles (Google Maps)."
-            else "Mileage not measured. Add shop address in Settings and a job address."
+        val cleanedNote = distanceNote
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .filterNot { it.contains("REQUEST_DENIED", ignoreCase = true) }
+            .filterNot { it.contains("API key is not authorized", ignoreCase = true) }
+            .filterNot { it.contains("Google Cloud Console", ignoreCase = true) }
+            .joinToString(" ")
+            .take(240)
+        val extra = cleanedNote.ifBlank {
+            if (drivingMiles != null) "Driving distance shop to job: $miles miles."
+            else "Mileage not measured."
         }
-        val rationale = listOf(draft.rationale.trim(), extra).filter { it.isNotBlank() }.joinToString(" ")
+        val baseRationale = draft.rationale.trim()
+            .lineSequence()
+            .filterNot { it.contains("REQUEST_DENIED", ignoreCase = true) }
+            .filterNot { it.contains("API key is not authorized", ignoreCase = true) }
+            .joinToString(" ")
+            .trim()
+        val rationale = listOf(baseRationale, extra).filter { it.isNotBlank() }.joinToString(" ")
         return draft.copy(mileage = miles, taxRate = taxPercent, rationale = rationale)
     }
 
