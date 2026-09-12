@@ -14,8 +14,8 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 42
-        versionName = "2.3.1-ar-twotap"
+        versionCode = 43
+        versionName = "2.3.2-wildlife-tflite"
 
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
         val supabaseKey = System.getenv("SUPABASE_ANON_KEY") ?: "your-anon-key"
@@ -177,6 +177,12 @@ dependencies {
     implementation("com.google.ar:core:1.45.0")
     implementation("com.google.mlkit:image-labeling:17.0.9")
     implementation("com.google.mlkit:object-detection:17.0.2")
+
+    // On-device wildlife evidence classifier (TFLite Interpreter)
+    implementation("org.tensorflow:tensorflow-lite:2.14.0")
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
+    // Optional GPU delegate — safe no-op when unsupported
+    implementation("org.tensorflow:tensorflow-lite-gpu:2.14.0")
 
     // CameraX live analyzer (capture-clock traces + KEEP_ONLY_LATEST)
     val cameraX = "1.4.2"

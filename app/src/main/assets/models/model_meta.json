@@ -1,0 +1,69 @@
+{
+  "input_size": 224,
+  "labels": [
+    {
+      "index": 0,
+      "label": "raccoon",
+      "kind": "SPECIES"
+    },
+    {
+      "index": 1,
+      "label": "bat",
+      "kind": "SPECIES"
+    },
+    {
+      "index": 2,
+      "label": "squirrel",
+      "kind": "SPECIES"
+    },
+    {
+      "index": 3,
+      "label": "woodchuck",
+      "kind": "SPECIES"
+    },
+    {
+      "index": 4,
+      "label": "skunk",
+      "kind": "SPECIES"
+    },
+    {
+      "index": 5,
+      "label": "opossum",
+      "kind": "SPECIES"
+    },
+    {
+      "index": 6,
+      "label": "bird",
+      "kind": "SPECIES"
+    },
+    {
+      "index": 7,
+      "label": "droppings",
+      "kind": "DAMAGE"
+    },
+    {
+      "index": 8,
+      "label": "hole_entry",
+      "kind": "ENTRY"
+    },
+    {
+      "index": 9,
+      "label": "trap_cage",
+      "kind": "EQUIPMENT"
+    },
+    {
+      "index": 10,
+      "label": "nest",
+      "kind": "DAMAGE"
+    },
+    {
+      "index": 11,
+      "label": "other",
+      "kind": "OTHER"
+    }
+  ],
+  "normalization": "float32 /255.0 NHWC",
+  "architecture": "MobileNetV2 ImageNet transfer + softmax head (dynamic-range quantized)",
+  "size_bytes": 2725024,
+  "source": "Wikimedia Commons photos + synthetic augmentation; tools/wildlife_tflite/train_and_export.py"
+}

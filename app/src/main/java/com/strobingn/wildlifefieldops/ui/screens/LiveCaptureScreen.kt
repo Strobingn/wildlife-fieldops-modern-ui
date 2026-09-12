@@ -129,6 +129,7 @@ fun LiveCaptureScreen(
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val analyzer = remember {
         LiveCameraAnalyzer(
+            context = context,
             onGuidance = { g ->
                 mainHandler.post {
                     guidance = g

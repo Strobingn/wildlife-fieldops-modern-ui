@@ -1,6 +1,8 @@
 package com.strobingn.wildlifefieldops.ai
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
@@ -62,10 +64,26 @@ object PhotoAIHelper {
                 val objectsDeferred = async { awaitTask(objectDetector.process(image)) }
                 labelsDeferred.await() to objectsDeferred.await()
             }
+            val stillBitmap = try {
+                context.contentResolver.openInputStream(imageUri)?.use { stream ->
+                    BitmapFactory.decodeStream(stream)
+                }
+            } catch (_: Throwable) {
+                null
+            }
             val custom = try {
-                CustomEvidenceModel.tryInfer(context)
+                CustomEvidenceModel.tryInfer(
+                    context = context,
+                    bitmap = stillBitmap,
+                    labelHints = labels.map { it.text }
+                )
             } catch (_: Throwable) {
                 emptyList()
+            } finally {
+                try {
+                    stillBitmap?.takeIf { !it.isRecycled }?.recycle()
+                } catch (_: Throwable) {
+                }
             }
             val evidence = WildlifeEvidenceDetector.detect(labels, objects, customHits = custom)
             val objectNames = objects.mapNotNull { it.labels.firstOrNull()?.text?.lowercase() }.distinct()

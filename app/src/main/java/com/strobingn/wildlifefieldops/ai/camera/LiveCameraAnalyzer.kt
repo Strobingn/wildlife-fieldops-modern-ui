@@ -1,5 +1,7 @@
 package com.strobingn.wildlifefieldops.ai.camera
 
+import android.content.Context
+import android.graphics.Bitmap
 import android.os.SystemClock
 import android.util.Log
 import androidx.camera.core.ImageAnalysis
@@ -7,9 +9,9 @@ import androidx.camera.core.ImageProxy
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
-import com.strobingn.wildlifefieldops.ai.camera.WildlifeEvidenceDetector
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.max
 
 /**
  * Live [ImageAnalysis.Analyzer] designed for [ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST].
@@ -17,13 +19,17 @@ import java.util.concurrent.atomic.AtomicLong
  * Single-flight: while ML Kit is busy, later frames are dropped with [CaptureFrameTrace.droppedReason]
  * so overlays never bind to the wrong frame. Latency uses elapsedRealtime only;
  * [CaptureFrameTrace.sourceTimestampNs] is retained for later timebase validation.
+ *
+ * Merges on-device [CustomEvidenceModel] TFLite hits with ML Kit + lexicon.
  */
 class LiveCameraAnalyzer(
+    context: Context,
     private val onGuidance: (CaptureGuidance) -> Unit,
     private val onTrace: ((CaptureFrameTrace) -> Unit)? = null,
     private val maxResultAgeBudgetMs: Long = 250L
 ) : ImageAnalysis.Analyzer {
 
+    private val appContext = context.applicationContext
     private val busy = AtomicBoolean(false)
     private val frameSeq = AtomicLong(0L)
     private val policy = CaptureGuidancePolicy()
@@ -56,6 +62,10 @@ class LiveCameraAnalyzer(
     fun close() {
         try {
             labeler.close()
+        } catch (_: Exception) {
+        }
+        try {
+            CustomEvidenceModel.close()
         } catch (_: Exception) {
         }
     }
@@ -95,10 +105,20 @@ class LiveCameraAnalyzer(
 
             val analysisStart = SystemClock.elapsedRealtimeNanos()
             val lumaSignals = LumaQualityProbe.probe(image)
+
+            // Snapshot a downscaled RGB bitmap for TFLite before ImageProxy is closed.
+            val tfliteBitmap = try {
+                scaleForModel(image.toBitmap())
+            } catch (t: Throwable) {
+                Log.d(TAG, "bitmap extract skipped frame=$frameId: ${t.message}")
+                null
+            }
+
             val input = try {
                 InputImage.fromMediaImage(media, image.imageInfo.rotationDegrees)
             } catch (t: Throwable) {
                 Log.w(TAG, "InputImage build failed frame=$frameId", t)
+                recycleQuietly(tfliteBitmap)
                 busy.set(false)
                 image.close()
                 return
@@ -107,7 +127,21 @@ class LiveCameraAnalyzer(
             labeler.process(input)
             .addOnSuccessListener { labels ->
                 val analysisEnd = SystemClock.elapsedRealtimeNanos()
-                val evidence = WildlifeEvidenceDetector.detect(labels)
+                val custom = try {
+                    CustomEvidenceModel.tryInfer(
+                        context = appContext,
+                        bitmap = tfliteBitmap,
+                        labelHints = labels.map { it.text }
+                    )
+                } catch (_: Throwable) {
+                    emptyList()
+                } finally {
+                    recycleQuietly(tfliteBitmap)
+                }
+                val evidence = WildlifeEvidenceDetector.detect(
+                    labels = labels,
+                    customHits = custom
+                )
                 val hints = (
                     evidence.species.map { it.label } +
                         evidence.entries.map { it.label } +
@@ -166,6 +200,7 @@ class LiveCameraAnalyzer(
             }
             .addOnFailureListener { e ->
                 Log.w(TAG, "live analyze failed frame=$frameId", e)
+                recycleQuietly(tfliteBitmap)
                 // Still coach from luma so the HUD stays useful offline
                 val nowMs = SystemClock.elapsedRealtime()
                 val (action, reason) = policy.evaluate(lumaSignals, nowMs)
@@ -221,6 +256,27 @@ class LiveCameraAnalyzer(
                 )
             } catch (_: Throwable) {
             }
+        }
+    }
+
+    private fun scaleForModel(src: Bitmap, maxSide: Int = 320): Bitmap {
+        val longest = max(src.width, src.height)
+        if (longest <= maxSide) return src
+        val scale = maxSide.toFloat() / longest.toFloat()
+        val w = (src.width * scale).toInt().coerceAtLeast(1)
+        val h = (src.height * scale).toInt().coerceAtLeast(1)
+        val scaled = Bitmap.createScaledBitmap(src, w, h, true)
+        if (scaled !== src) {
+            try { src.recycle() } catch (_: Throwable) {}
+        }
+        return scaled
+    }
+
+    private fun recycleQuietly(bitmap: Bitmap?) {
+        if (bitmap == null || bitmap.isRecycled) return
+        try {
+            bitmap.recycle()
+        } catch (_: Throwable) {
         }
     }
 
