@@ -14,8 +14,8 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 32
-        versionName = "2.2.14-shop-address"
+        versionCode = 33
+        versionName = "2.2.15-weather"
 
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
         val supabaseKey = System.getenv("SUPABASE_ANON_KEY") ?: "your-anon-key"

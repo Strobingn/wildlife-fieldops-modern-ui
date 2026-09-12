@@ -25,6 +25,8 @@ import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.DashboardViewModel
+import com.strobingn.wildlifefieldops.ui.viewmodel.LiveWeatherViewModel
+import com.strobingn.wildlifefieldops.ui.components.WeatherBanner
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -48,6 +50,9 @@ fun DashboardScreen(
     val recentJobs by viewModel.recentJobs.collectAsState()
     val reminders by viewModel.pendingReminders.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val weatherVm: LiveWeatherViewModel = hiltViewModel()
+    val weatherState by weatherVm.state.collectAsState()
+    LaunchedEffect(Unit) { weatherVm.loadShopWeather() }
 
     val greeting = remember {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
@@ -92,6 +97,14 @@ fun DashboardScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            item {
+                WeatherBanner(
+                    state = weatherState,
+                    title = "Shop weather",
+                    onRefresh = { weatherVm.loadShopWeather() }
+                )
+            }
+
             // ── Hero header ───────────────────────────────────────────────
             item {
                 Spacer(modifier = Modifier.height(4.dp))

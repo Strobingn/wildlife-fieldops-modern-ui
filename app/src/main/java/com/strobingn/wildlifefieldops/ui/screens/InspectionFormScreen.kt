@@ -36,6 +36,8 @@ import com.strobingn.wildlifefieldops.ui.components.ScheduleDateTimeField
 import com.strobingn.wildlifefieldops.ui.components.defaultAppointmentTime
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.InspectionsViewModel
+import com.strobingn.wildlifefieldops.ui.viewmodel.LiveWeatherViewModel
+import com.strobingn.wildlifefieldops.ui.viewmodel.WeatherUiState
 import com.strobingn.wildlifefieldops.util.WildlifeWhispererInspectionReportPdf
 import java.util.Locale
 
@@ -49,6 +51,8 @@ fun InspectionFormScreen(
     viewModel: InspectionsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
+    val weatherVm: LiveWeatherViewModel = hiltViewModel()
+    val weatherState by weatherVm.state.collectAsState()
     var customerName by remember { mutableStateOf("") }
     var inspectorName by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(InspectionType.ROUTINE) }
@@ -803,6 +807,22 @@ fun InspectionFormScreen(
                         checkedTrackColor = PrimaryGreen.copy(alpha = 0.5f)
                     )
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(
+                        onClick = { weatherVm.loadShopWeather() },
+                        enabled = weatherState !is WeatherUiState.Loading
+                    ) { Text("Use live weather") }
+                    when (val w = weatherState) {
+                        is WeatherUiState.Ready -> {
+                            TextButton(onClick = { weatherConditions = w.snap.summaryLine }) {
+                                Text("Apply ${w.snap.tempF}°F ${w.snap.condition}")
+                            }
+                        }
+                        is WeatherUiState.Unavailable -> Text(w.reason, color = TextTertiary, style = MaterialTheme.typography.labelSmall)
+                        else -> Unit
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))

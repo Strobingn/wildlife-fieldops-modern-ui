@@ -21,7 +21,9 @@ import com.strobingn.wildlifefieldops.data.model.JobPriority
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
+import com.strobingn.wildlifefieldops.ui.components.WeatherBanner
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobAiViewModel
+import com.strobingn.wildlifefieldops.ui.viewmodel.LiveWeatherViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -43,10 +45,16 @@ fun JobDetailScreen(
     val summary by jobAiViewModel.summary.collectAsState()
     val summaryLoading by jobAiViewModel.summaryLoading.collectAsState()
     val aiMessage by jobAiViewModel.message.collectAsState()
+    val weatherVm: LiveWeatherViewModel = hiltViewModel()
+    val weatherState by weatherVm.state.collectAsState()
+
     var showStatusDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     job?.let { currentJob ->
+        LaunchedEffect(currentJob.id, currentJob.latitude, currentJob.longitude, currentJob.address) {
+            weatherVm.loadJobWeather(currentJob.latitude, currentJob.longitude, currentJob.address)
+        }
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -219,6 +227,17 @@ fun JobDetailScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Edit job", fontWeight = FontWeight.Bold)
                 }
+
+                Text("Site weather", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                Spacer(modifier = Modifier.height(8.dp))
+                WeatherBanner(
+                    state = weatherState,
+                    title = "Job site",
+                    onRefresh = {
+                        weatherVm.loadJobWeather(currentJob.latitude, currentJob.longitude, currentJob.address)
+                    }
+                )
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Actions
                 Text("Actions", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
