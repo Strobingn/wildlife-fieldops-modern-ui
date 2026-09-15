@@ -1,0 +1,41 @@
+name: restore-livecapture-screen
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/capture-clock-soak]
+    paths:
+      - 'tools/patches/LiveCaptureScreen.kt.gz.b64'
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/capture-clock-soak
+      - name: Decode full LiveCaptureScreen.kt
+        run: |
+          set -euo pipefail
+          DEST=app/src/main/java/com/strobingn/wildlifefieldops/ui/screens/LiveCaptureScreen.kt
+          base64 -d tools/patches/LiveCaptureScreen.kt.gz.b64 | gzip -d > "$DEST"
+          # sanity: must contain soak + overlay wiring
+          grep -q CaptureSoakStats "$DEST"
+          grep -q overlayDrawnElapsedNs "$DEST"
+          grep -q soakLine "$DEST"
+          wc -c "$DEST"
+      - name: Commit and push if changed
+        run: |
+          set -euo pipefail
+          git config user.name "austins bot"
+          git config user.email "bot@wildlife-whisperer.local"
+          git add app/src/main/java/com/strobingn/wildlifefieldops/ui/screens/LiveCaptureScreen.kt
+          if git diff --cached --quiet; then
+            echo "No changes — already restored"
+            exit 0
+          fi
+          git commit -m "feat(camera): full LiveCaptureScreen overlay commit + soak HUD"
+          git push origin HEAD:feat/capture-clock-soak
