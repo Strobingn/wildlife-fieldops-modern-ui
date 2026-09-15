@@ -6,6 +6,7 @@ on:
     branches: [feat/capture-clock-soak]
     paths:
       - 'tools/patches/LiveCaptureScreen.kt.gz.b64'
+      - '.github/workflows/restore-livecapture-screen.yml'
 
 permissions:
   contents: write
@@ -22,7 +23,6 @@ jobs:
           set -euo pipefail
           DEST=app/src/main/java/com/strobingn/wildlifefieldops/ui/screens/LiveCaptureScreen.kt
           base64 -d tools/patches/LiveCaptureScreen.kt.gz.b64 | gzip -d > "$DEST"
-          # sanity: must contain soak + overlay wiring
           grep -q CaptureSoakStats "$DEST"
           grep -q overlayDrawnElapsedNs "$DEST"
           grep -q soakLine "$DEST"
