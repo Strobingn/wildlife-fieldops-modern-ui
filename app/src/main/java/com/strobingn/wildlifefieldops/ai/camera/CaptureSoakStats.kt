@@ -50,7 +50,7 @@ class CaptureSoakStats(
 
     private fun compactLineLocked(): String {
         val s = snapshotLocked()
-        return "soak n=${s.n} drop=${\"%.0f\".format(s.dropPct)}% " +
+        return "soak n=${s.n} drop=${"%.0f".format(s.dropPct)}% " +
             "ageP50/P95=${s.ageP50}/${s.ageP95} " +
             "analP50/P95=${s.analP50}/${s.analP95} " +
             "qP50/P95=${s.queueP50}/${s.queueP95}"
