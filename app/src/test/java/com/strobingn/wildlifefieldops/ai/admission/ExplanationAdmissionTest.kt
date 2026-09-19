@@ -27,14 +27,11 @@ class ExplanationAdmissionTest {
     }
 
     @Test
-    fun inertClaimedTraitIsRejectedOrOverlayOnly() {
+    fun inertClaimedTraitIsRejected() {
         val trials = SyntheticInterventionFactory.inertTrait("attention_blob")
         val decision = ExplanationAdmissionGate.evaluate(trials)
 
-        assertTrue(
-            decision.label == AdmissionLabel.REJECT ||
-                decision.label == AdmissionLabel.REVIEW_OVERLAY,
-        )
+        assertEquals(AdmissionLabel.REJECT, decision.label)
         assertFalse(decision.traitResults.single().passed)
         assertEquals(UiClaimKind.EVIDENCE_VISUALIZATION, decision.allowedUiClaim)
     }
@@ -84,7 +81,7 @@ class ExplanationAdmissionTest {
         val decision = ExplanationAdmissionGate.evaluate(trials)
         assertFalse(decision.traitResults.single().passed)
         assertTrue(
-            decision.traitResults.single().notes.any { it.contains("Claim withdrawal") },
+            decision.traitResults.single().notes.any { it.contains("Claim withdrawal", ignoreCase = true) },
         )
     }
 }

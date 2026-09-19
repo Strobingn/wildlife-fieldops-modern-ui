@@ -68,7 +68,7 @@ data class InterventionTrial(
 }
 
 data class GateConfig(
-    /** Minimum |Δlogit| on the claimed trait to count as load-bearing. */
+    /** Minimum directed effect on the claimed trait to count as load-bearing. */
     val minTraitAbsDelta: Double = 0.25,
     /** Claimed trait must beat matched control by at least this margin. */
     val minTraitOverControlMargin: Double = 0.15,
@@ -144,18 +144,13 @@ object ExplanationAdmissionGate {
     ): AdmissionDecision {
         require(trials.isNotEmpty()) { "trials must not be empty" }
 
-        val byTrait = trials.groupBy { it.traitId }
-        val traitResults = byTrait.map { (traitId, traitTrials) ->
+        val traitResults = trials.groupBy { it.traitId }.map { (traitId, traitTrials) ->
             evaluateTrait(traitId, traitTrials, config)
         }
 
         val failing = traitResults.filterNot { it.passed }
         val reasons = mutableListOf<String>()
         val label = when {
-            traitResults.isEmpty() -> {
-                reasons += "No trait trials supplied"
-                AdmissionLabel.REJECT
-            }
             failing.isEmpty() -> {
                 reasons += "All claimed traits beat matched controls across ≥${config.minAgreeingInterventionKinds} intervention kinds; claims withdraw when evidence is removed"
                 AdmissionLabel.EXPLANATION
@@ -194,39 +189,39 @@ object ExplanationAdmissionGate {
             )
         }
 
-        // Direction: removing a +1 trait should decrease target logit ⇒ delta < 0.
-        // We score "effect magnitude in the load-bearing direction" as -delta for +1 traits.
-        fun directedEffect(delta: Double, expectedDirection: Int): Double =
-            -expectedDirection * delta
-
-        // Infer expected direction from majority of claimed trials' baseline concept if present;
-        // default +1 (removal should hurt the predicted class).
-        val expectedDirection = +1
+        // Removing a load-bearing +1 trait should decrease target logit (delta < 0).
+        // Directed effect = how much the intervention hurt the predicted class.
+        fun directedEffect(delta: Double): Double = -delta
 
         val agreeing = mutableSetOf<InterventionKind>()
         for (kind in InterventionKind.entries) {
             val c = claimed.filter { it.kind == kind }
             val k = controls.filter { it.kind == kind }
             if (c.isEmpty() || k.isEmpty()) continue
-            val traitMean = c.map { directedEffect(it.targetLogitDelta, expectedDirection) }.average()
-            val controlMean = k.map { directedEffect(it.targetLogitDelta, expectedDirection) }.average()
+            val traitMean = c.map { directedEffect(it.targetLogitDelta) }.average()
+            val controlMean = k.map { directedEffect(it.targetLogitDelta) }.average()
             val strongEnough = traitMean >= config.minTraitAbsDelta
             val beatsControl = traitMean - controlMean >= config.minTraitOverControlMargin
             if (strongEnough && beatsControl) {
                 agreeing += kind
             } else {
-                notes += "$kind: traitMean=${"%.3f".format(traitMean)} controlMean=${"%.3f".format(controlMean)}"
+                notes += "$kind: traitMean=${\"%.3f\".format(traitMean)} controlMean=${\"%.3f\".format(controlMean)}"
             }
         }
 
         val withdrawalRate = claimed.count { it.claimWithdrawn }.toDouble() / claimed.size
         val meanTraitDelta = claimed.map { it.targetLogitDelta }.average()
-        val meanControlDelta = if (controls.isEmpty()) 0.0 else controls.map { it.targetLogitDelta }.average()
+        val meanControlDelta =
+            if (controls.isEmpty()) 0.0 else controls.map { it.targetLogitDelta }.average()
 
         val kindsOk = agreeing.size >= config.minAgreeingInterventionKinds
         val withdrawOk = withdrawalRate >= config.minClaimWithdrawalRate
-        if (!kindsOk) notes += "Agreeing intervention kinds ${agreeing.size} < ${config.minAgreeingInterventionKinds}"
-        if (!withdrawOk) notes += "Claim withdrawal rate ${"%.2f".format(withdrawalRate)} < ${config.minClaimWithdrawalRate}"
+        if (!kindsOk) {
+            notes += "Agreeing intervention kinds ${agreeing.size} < ${config.minAgreeingInterventionKinds}"
+        }
+        if (!withdrawOk) {
+            notes += "Claim withdrawal rate ${\"%.2f\".format(withdrawalRate)} < ${config.minClaimWithdrawalRate}"
+        }
 
         return TraitGateResult(
             traitId = traitId,
@@ -283,7 +278,7 @@ object SyntheticInterventionFactory {
         }
     }
 
-    /** Looks persuasive (claim present) but interventions barely move the logit — sheep-pain failure mode. */
+    /** Looks persuasive (claim present) but interventions barely move the logit. */
     fun inertTrait(
         traitId: String,
         baselineLogit: Double = 2.0,
