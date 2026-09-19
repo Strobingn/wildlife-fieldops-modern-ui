@@ -18,7 +18,8 @@ import kotlin.math.max
  *
  * Single-flight: while ML Kit is busy, later frames are dropped with [CaptureFrameTrace.droppedReason]
  * so overlays never bind to the wrong frame. Latency uses elapsedRealtime only;
- * [CaptureFrameTrace.sourceTimestampNs] is retained for later timebase validation.
+ * [CaptureFrameTrace.sourceTimestampNs] is retained and validated via [CaptureTimebaseProbe].
+ * When the probe is untrusted we never subtract ImageInfo−elapsedRealtime for pass/fail.
  *
  * Merges on-device [CustomEvidenceModel] TFLite hits with ML Kit + lexicon.
  */
@@ -33,6 +34,7 @@ class LiveCameraAnalyzer(
     private val busy = AtomicBoolean(false)
     private val frameSeq = AtomicLong(0L)
     private val policy = CaptureGuidancePolicy()
+    private val timebaseProbe = CaptureTimebaseProbe()
     private val wildlifeHints = setOf(
         "raccoon", "bat", "squirrel", "opossum", "snake", "bird", "rodent",
         "animal", "mammal", "wildlife", "hole", "nest", "cat", "dog",
@@ -51,8 +53,12 @@ class LiveCameraAnalyzer(
     @Volatile var framesDropped: Long = 0L
         private set
 
+    val timebaseTrusted: Boolean
+        get() = timebaseProbe.timebaseTrusted
+
     fun reset() {
         policy.reset()
+        timebaseProbe.reset()
         framesSeen = 0L
         framesDropped = 0L
         lastDropReason = null
@@ -81,15 +87,11 @@ class LiveCameraAnalyzer(
         }
 
         if (!busy.compareAndSet(false, true)) {
-            framesDropped++
-            lastDropReason = "ANALYZER_BUSY"
-            onTrace?.invoke(
-                CaptureFrameTrace(
-                    frameId = frameId,
-                    sourceTimestampNs = sourceTs,
-                    analyzerArrivalElapsedNs = arrival,
-                    droppedReason = "ANALYZER_BUSY"
-                )
+            emitDrop(
+                frameId = frameId,
+                sourceTs = sourceTs,
+                arrival = arrival,
+                reason = "ANALYZER_BUSY"
             )
             image.close()
             return
@@ -99,9 +101,20 @@ class LiveCameraAnalyzer(
             val media = image.image
             if (media == null) {
                 busy.set(false)
+                emitDrop(
+                    frameId = frameId,
+                    sourceTs = sourceTs,
+                    arrival = arrival,
+                    reason = "MEDIA_NULL"
+                )
                 image.close()
                 return
             }
+
+            // First N analyzed frames feed the timebase probe (not busy-drops).
+            timebaseProbe.observe(sourceTs, arrival)
+            val trusted = timebaseProbe.timebaseTrusted
+            val srcToArrival = timebaseProbe.sourceToArrivalMs(sourceTs, arrival)
 
             val analysisStart = SystemClock.elapsedRealtimeNanos()
             val lumaSignals = LumaQualityProbe.probe(image)
@@ -120,6 +133,15 @@ class LiveCameraAnalyzer(
                 Log.w(TAG, "InputImage build failed frame=$frameId", t)
                 recycleQuietly(tfliteBitmap)
                 busy.set(false)
+                emitDrop(
+                    frameId = frameId,
+                    sourceTs = sourceTs,
+                    arrival = arrival,
+                    reason = "INPUT_IMAGE_FAIL",
+                    analysisStart = analysisStart,
+                    trusted = trusted,
+                    srcToArrival = srcToArrival
+                )
                 image.close()
                 return
             }
@@ -170,7 +192,9 @@ class LiveCameraAnalyzer(
                     analyzerArrivalElapsedNs = arrival,
                     analysisStartElapsedNs = analysisStart,
                     analysisEndElapsedNs = analysisEnd,
-                    resultCommittedElapsedNs = committed
+                    resultCommittedElapsedNs = committed,
+                    timebaseTrusted = trusted,
+                    sourceToArrivalMs = srcToArrival
                 )
                 lastResultAgeMs = trace.resultAgeFromArrivalMs
                 lastDropReason = null
@@ -194,7 +218,11 @@ class LiveCameraAnalyzer(
                         evidenceSpecies = evidence.species.map { it.label },
                         evidenceEntries = evidence.entries.map { it.label },
                         evidenceEquipment = evidence.equipment.map { it.label },
-                        evidenceDamage = evidence.damage.map { it.label }
+                        evidenceDamage = evidence.damage.map { it.label },
+                        analyzerArrivalElapsedNs = arrival,
+                        resultCommittedElapsedNs = committed,
+                        timebaseTrusted = trusted,
+                        sourceToArrivalMs = srcToArrival
                     )
                 )
             }
@@ -213,9 +241,13 @@ class LiveCameraAnalyzer(
                         analysisStartElapsedNs = analysisStart,
                         analysisEndElapsedNs = committed,
                         resultCommittedElapsedNs = committed,
-                        droppedReason = "ML_FAILURE"
+                        droppedReason = "ML_FAILURE",
+                        timebaseTrusted = trusted,
+                        sourceToArrivalMs = srcToArrival
                     )
                 )
+                framesDropped++
+                lastDropReason = "ML_FAILURE"
                 onGuidance(
                     CaptureGuidance(
                         action = action,
@@ -224,7 +256,11 @@ class LiveCameraAnalyzer(
                         signals = lumaSignals,
                         frameId = frameId,
                         resultAgeFromArrivalMs = (committed - arrival) / 1_000_000L,
-                        analysisDurationMs = (committed - analysisStart) / 1_000_000L
+                        analysisDurationMs = (committed - analysisStart) / 1_000_000L,
+                        analyzerArrivalElapsedNs = arrival,
+                        resultCommittedElapsedNs = committed,
+                        timebaseTrusted = trusted,
+                        sourceToArrivalMs = srcToArrival
                     )
                 )
             }
@@ -241,8 +277,19 @@ class LiveCameraAnalyzer(
                 image.close()
             } catch (_: Throwable) {
             }
+            val now = SystemClock.elapsedRealtimeNanos()
+            onTrace?.invoke(
+                CaptureFrameTrace(
+                    frameId = frameId,
+                    sourceTimestampNs = sourceTs,
+                    analyzerArrivalElapsedNs = arrival,
+                    resultCommittedElapsedNs = now,
+                    droppedReason = "ANALYZE_THROW",
+                    timebaseTrusted = timebaseProbe.timebaseTrusted,
+                    sourceToArrivalMs = timebaseProbe.sourceToArrivalMs(sourceTs, arrival)
+                )
+            )
             try {
-                val now = SystemClock.elapsedRealtimeNanos()
                 onGuidance(
                     CaptureGuidance(
                         action = CaptureGuidanceAction.WAIT,
@@ -251,12 +298,41 @@ class LiveCameraAnalyzer(
                         signals = CaptureQualitySignals(0f, 0f, 0f),
                         frameId = frameId,
                         resultAgeFromArrivalMs = (now - arrival) / 1_000_000L,
-                        analysisDurationMs = -1L
+                        analysisDurationMs = -1L,
+                        analyzerArrivalElapsedNs = arrival,
+                        resultCommittedElapsedNs = now,
+                        timebaseTrusted = timebaseProbe.timebaseTrusted,
+                        sourceToArrivalMs = timebaseProbe.sourceToArrivalMs(sourceTs, arrival)
                     )
                 )
             } catch (_: Throwable) {
             }
         }
+    }
+
+    private fun emitDrop(
+        frameId: Long,
+        sourceTs: Long,
+        arrival: Long,
+        reason: String,
+        analysisStart: Long = 0L,
+        trusted: Boolean = timebaseProbe.timebaseTrusted,
+        srcToArrival: Long? = null
+    ) {
+        framesDropped++
+        lastDropReason = reason
+        onTrace?.invoke(
+            CaptureFrameTrace(
+                frameId = frameId,
+                sourceTimestampNs = sourceTs,
+                analyzerArrivalElapsedNs = arrival,
+                analysisStartElapsedNs = analysisStart,
+                droppedReason = reason,
+                timebaseTrusted = trusted,
+                sourceToArrivalMs = srcToArrival
+                    ?: timebaseProbe.sourceToArrivalMs(sourceTs, arrival)
+            )
+        )
     }
 
     private fun scaleForModel(src: Bitmap, maxSide: Int = 320): Bitmap {
