@@ -1,0 +1,129 @@
+diff --git a/app/src/main/java/com/strobingn/wildlifefieldops/ui/screens/LiveCaptureScreen.kt b/app/src/main/java/com/strobingn/wildlifefieldops/ui/screens/LiveCaptureScreen.kt
+index 3ad709e..8ef7ae6 100644
+--- a/app/src/main/java/com/strobingn/wildlifefieldops/ui/screens/LiveCaptureScreen.kt
++++ b/app/src/main/java/com/strobingn/wildlifefieldops/ui/screens/LiveCaptureScreen.kt
+@@ -5,6 +5,7 @@ import android.content.Intent
+ import android.content.pm.PackageManager
+ import android.os.Bundle
+ import android.os.Handler
++import android.os.SystemClock
+ import android.os.Looper
+ import android.speech.RecognitionListener
+ import android.speech.RecognizerIntent
+@@ -51,6 +52,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
+ import com.strobingn.wildlifefieldops.ai.ARMeasurementHelper
+ import com.strobingn.wildlifefieldops.ai.camera.CaptureGuidance
+ import com.strobingn.wildlifefieldops.ai.camera.CaptureGuidanceAction
++import com.strobingn.wildlifefieldops.ai.camera.CaptureSoakStats
+ import com.strobingn.wildlifefieldops.ai.camera.ChecklistSession
+ import com.strobingn.wildlifefieldops.ai.camera.LiveCameraAnalyzer
+ import com.strobingn.wildlifefieldops.data.model.Job
+@@ -108,6 +110,7 @@ fun LiveCaptureScreen(
+     var framesSeen by remember { mutableLongStateOf(0L) }
+     var framesDropped by remember { mutableLongStateOf(0L) }
+     var lastDrop by remember { mutableStateOf<String?>(null) }
++    var soakLine by remember { mutableStateOf("") }
+     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+     var showJobPicker by remember { mutableStateOf(false) }
+     var showArMeasure by remember { mutableStateOf(false) }
+@@ -127,12 +130,31 @@ fun LiveCaptureScreen(
+ 
+     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
+     val mainHandler = remember { Handler(Looper.getMainLooper()) }
++    val soakStats = remember { CaptureSoakStats() }
+     val analyzer = remember {
+         LiveCameraAnalyzer(
+             context = context,
+             onGuidance = { g ->
++                // True overlay commit: stamp when guidance is applied on the main thread.
+                 mainHandler.post {
+-                    guidance = g
++                    val drawnNs = SystemClock.elapsedRealtimeNanos()
++                    val committed = g.resultCommittedElapsedNs
++                    val arrival = g.analyzerArrivalElapsedNs
++                    val resultToOverlay = if (committed > 0L && drawnNs >= committed) {
++                        (drawnNs - committed) / 1_000_000L
++                    } else {
++                        -1L
++                    }
++                    val arrivalToOverlay = if (arrival > 0L && drawnNs >= arrival) {
++                        (drawnNs - arrival) / 1_000_000L
++                    } else {
++                        -1L
++                    }
++                    guidance = g.copy(
++                        overlayDrawnElapsedNs = drawnNs,
++                        resultToOverlayMs = resultToOverlay,
++                        arrivalToOverlayMs = arrivalToOverlay
++                    )
+                     framesSeen = g.frameId
+                     if (g.evidenceEquipment.isNotEmpty()) {
+                         viewModel.rememberEquipmentTags(g.evidenceEquipment)
+@@ -140,11 +162,16 @@ fun LiveCaptureScreen(
+                 }
+             },
+             onTrace = { trace ->
+-                if (trace.droppedReason != null) {
+-                    mainHandler.post {
++                soakStats.record(trace)
++                val line = soakStats.compactLine()
++                mainHandler.post {
++                    soakLine = line
++                    if (trace.droppedReason != null) {
+                         lastDrop = trace.droppedReason
+                         framesDropped++
+                     }
++                }
++                if (trace.droppedReason != null) {
+                     Log.d("LiveCapture", "drop frame=${trace.frameId} reason=${trace.droppedReason}")
+                 }
+             }
+@@ -565,6 +592,7 @@ fun LiveCaptureScreen(
+                     framesDropped = framesDropped,
+                     smartBusy = busy,
+                     checklistHint = if (checklistEnabled) activeTitle else null,
++                    soakLine = soakLine,
+                     modifier = Modifier
+                         .align(Alignment.BottomCenter)
+                         .fillMaxWidth()
+@@ -954,6 +982,7 @@ private fun GuidanceHud(
+     framesDropped: Long,
+     smartBusy: Boolean,
+     checklistHint: String?,
++    soakLine: String = "",
+     modifier: Modifier = Modifier
+ ) {
+     val action = guidance?.action ?: CaptureGuidanceAction.WAIT
+@@ -994,6 +1023,18 @@ private fun GuidanceHud(
+                     color = TextSecondary,
+                     style = MaterialTheme.typography.labelSmall
+                 )
++                val overlayBits = buildString {
++                    append("overlay=${g.resultToOverlayMs}ms")
++                    if (g.arrivalToOverlayMs >= 0) append(" · arrival→drawn=${g.arrivalToOverlayMs}ms")
++                    append(" · timebase=")
++                    append(if (g.timebaseTrusted) "trusted" else "untrusted")
++                    g.sourceToArrivalMs?.let { append(" · src→arr=${it}ms") }
++                }
++                Text(
++                    overlayBits,
++                    color = if (g.timebaseTrusted) PrimaryGreen else Color(0xFFFFCC80),
++                    style = MaterialTheme.typography.labelSmall
++                )
+                 if (g.evidenceSummary.isNotBlank()) {
+                     Text(
+                         "evidence · ${g.evidenceSummary}",
+@@ -1016,6 +1057,13 @@ private fun GuidanceHud(
+                     )
+                 }
+             }
++            if (soakLine.isNotBlank()) {
++                Text(
++                    soakLine,
++                    color = Color(0xFF90CAF9),
++                    style = MaterialTheme.typography.labelSmall
++                )
++            }
+             dropHint?.let {
+                 Text(
+                     "last drop · $it · dropped=$framesDropped / seen=$framesSeen",
