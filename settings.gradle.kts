@@ -18,3 +18,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "WildlifeFieldOps"
 include(":app")
+include(":observation-core")
