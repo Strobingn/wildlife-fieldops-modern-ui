@@ -38,4 +38,7 @@ class JobRepository @Inject constructor(
     fun searchJobs(query: String): Flow<List<Job>> = jobDao.search(query)
 
     suspend fun getUnsyncedJobs(): List<Job> = jobDao.getUnsynced()
+
+    suspend fun updateJobCounty(id: String, county: String?, state: String?) =
+        jobDao.updateCounty(id, county, state)
 }

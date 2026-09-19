@@ -3,6 +3,7 @@ package com.strobingn.wildlifefieldops.di
 import android.content.Context
 import androidx.room.Room
 import com.strobingn.wildlifefieldops.data.local.AppDatabase
+import com.strobingn.wildlifefieldops.data.local.Migrations
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -22,6 +23,7 @@ object AppModule {
             AppDatabase::class.java,
             "wildlife_fieldops.db"
         )
+            .addMigrations(Migrations.MIGRATION_3_4)
             .fallbackToDestructiveMigration()
             .build()
     }

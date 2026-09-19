@@ -63,4 +63,12 @@ interface JobDao {
 
     @Query("DELETE FROM jobs")
     suspend fun deleteAll()
+
+    @Query("UPDATE jobs SET county = :county, state = :state, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateCounty(
+        id: String,
+        county: String?,
+        state: String?,
+        updatedAt: Long = System.currentTimeMillis()
+    )
 }
