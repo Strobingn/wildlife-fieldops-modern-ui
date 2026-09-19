@@ -58,7 +58,6 @@ class ExplanationAdmissionTest {
             abstained = false,
             claimedTraits = setOf("claw_marks"),
         )
-        // Strong logit effect but claim text stays — fails withdrawal rule.
         val trials = InterventionKind.entries.flatMap { kind ->
             listOf(
                 InterventionTrial(

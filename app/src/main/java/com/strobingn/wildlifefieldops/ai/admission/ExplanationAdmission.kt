@@ -152,15 +152,20 @@ object ExplanationAdmissionGate {
         val reasons = mutableListOf<String>()
         val label = when {
             failing.isEmpty() -> {
-                reasons += "All claimed traits beat matched controls across ≥${config.minAgreeingInterventionKinds} intervention kinds; claims withdraw when evidence is removed"
+                reasons += "All claimed traits beat matched controls across ≥" +
+                    "${config.minAgreeingInterventionKinds} intervention kinds; " +
+                    "claims withdraw when evidence is removed"
                 AdmissionLabel.EXPLANATION
             }
             failing.size < traitResults.size -> {
-                reasons += "Partial faithfulness: failed traits=${failing.map { it.traitId }}; label as review overlay, not causal explanation"
+                reasons += "Partial faithfulness: failed traits=" +
+                    failing.map { it.traitId } +
+                    "; label as review overlay, not causal explanation"
                 AdmissionLabel.REVIEW_OVERLAY
             }
             else -> {
-                reasons += "No claimed trait passed causal checks; do not ship explanation-bearing UI for this artifact"
+                reasons += "No claimed trait passed causal checks; " +
+                    "do not ship explanation-bearing UI for this artifact"
                 AdmissionLabel.REJECT
             }
         }
@@ -205,7 +210,10 @@ object ExplanationAdmissionGate {
             if (strongEnough && beatsControl) {
                 agreeing += kind
             } else {
-                notes += "$kind: traitMean=${\"%.3f\".format(traitMean)} controlMean=${\"%.3f\".format(controlMean)}"
+                notes += kind.name + ": traitMean=" +
+                    String.format("%.3f", traitMean) +
+                    " controlMean=" +
+                    String.format("%.3f", controlMean)
             }
         }
 
@@ -217,10 +225,13 @@ object ExplanationAdmissionGate {
         val kindsOk = agreeing.size >= config.minAgreeingInterventionKinds
         val withdrawOk = withdrawalRate >= config.minClaimWithdrawalRate
         if (!kindsOk) {
-            notes += "Agreeing intervention kinds ${agreeing.size} < ${config.minAgreeingInterventionKinds}"
+            notes += "Agreeing intervention kinds " + agreeing.size +
+                " < " + config.minAgreeingInterventionKinds
         }
         if (!withdrawOk) {
-            notes += "Claim withdrawal rate ${\"%.2f\".format(withdrawalRate)} < ${config.minClaimWithdrawalRate}"
+            notes += "Claim withdrawal rate " +
+                String.format("%.2f", withdrawalRate) +
+                " < " + config.minClaimWithdrawalRate
         }
 
         return TraitGateResult(
