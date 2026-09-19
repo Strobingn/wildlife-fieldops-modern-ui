@@ -1,0 +1,51 @@
+name: restore-livecapture-screen
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/capture-clock-soak]
+    paths:
+      - '.github/workflows/restore-livecapture-screen.yml'
+      - 'tools/patches/2.3.6-livecapture-overlay-soak.patch'
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/capture-clock-soak
+          fetch-depth: 0
+      - name: Rebuild LiveCaptureScreen from main + soak patch
+        run: |
+          set -euo pipefail
+          DEST=app/src/main/java/com/strobingn/wildlifefieldops/ui/screens/LiveCaptureScreen.kt
+          git fetch origin main
+          git show origin/main:"$DEST" > "$DEST"
+          git apply --verbose tools/patches/2.3.6-livecapture-overlay-soak.patch
+          grep -q 'fun LiveCaptureScreen' "$DEST"
+          grep -q 'fun GuidanceHud' "$DEST"
+          grep -q 'PreviewView' "$DEST"
+          grep -q 'CaptureSoakStats' "$DEST"
+          grep -q 'overlayDrawnElapsedNs' "$DEST"
+          grep -q 'soakLine' "$DEST"
+          BYTES=$(wc -c < "$DEST")
+          LINES=$(wc -l < "$DEST")
+          echo "restored bytes=$BYTES lines=$LINES"
+          test "$BYTES" -gt 40000
+      - name: Commit and push if changed
+        run: |
+          set -euo pipefail
+          DEST=app/src/main/java/com/strobingn/wildlifefieldops/ui/screens/LiveCaptureScreen.kt
+          git config user.name "austins bot"
+          git config user.email "bot@wildlife-whisperer.local"
+          git add "$DEST"
+          if git diff --cached --quiet; then
+            echo "No changes — already restored"
+            exit 0
+          fi
+          git commit -m "fix(live-capture): restore full LiveCaptureScreen with overlay soak HUD"
+          git push origin HEAD:feat/capture-clock-soak
