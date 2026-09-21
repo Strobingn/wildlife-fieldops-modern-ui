@@ -10,6 +10,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * resolved NY county information can be persisted for offline invoice use.
  *
  * MIGRATION_4_5 adds `field_observations` for offline map pins (photo + GPS + note).
+ *
+ * MIGRATION_5_6 adds `voice_observations` for fail-closed voice-first logging notes.
  */
 object Migrations {
 
@@ -38,6 +40,29 @@ object Migrations {
                     createdAt INTEGER NOT NULL,
                     isSynced INTEGER NOT NULL,
                     syncError TEXT
+                )
+                """.trimIndent()
+            )
+        }
+    }
+
+    val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS voice_observations (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    jobId TEXT,
+                    observationEventId TEXT,
+                    audioLocalPath TEXT NOT NULL,
+                    audioSha256 TEXT NOT NULL,
+                    durationMs INTEGER NOT NULL,
+                    validatedTranscript TEXT NOT NULL,
+                    editedTranscript TEXT NOT NULL,
+                    winningAttemptId TEXT NOT NULL,
+                    observedAt INTEGER NOT NULL,
+                    createdAt INTEGER NOT NULL,
+                    isSynced INTEGER NOT NULL
                 )
                 """.trimIndent()
             )

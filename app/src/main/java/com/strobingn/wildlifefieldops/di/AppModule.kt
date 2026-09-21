@@ -23,7 +23,11 @@ object AppModule {
             AppDatabase::class.java,
             "wildlife_fieldops.db"
         )
-            .addMigrations(Migrations.MIGRATION_3_4, Migrations.MIGRATION_4_5)
+            .addMigrations(
+                Migrations.MIGRATION_3_4,
+                Migrations.MIGRATION_4_5,
+                Migrations.MIGRATION_5_6,
+            )
             .fallbackToDestructiveMigration()
             .build()
     }
@@ -66,4 +70,7 @@ object AppModule {
 
     @Provides
     fun provideFieldObservationDao(database: AppDatabase) = database.fieldObservationDao()
+
+    @Provides
+    fun provideVoiceObservationDao(database: AppDatabase) = database.voiceObservationDao()
 }

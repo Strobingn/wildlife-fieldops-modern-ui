@@ -19,9 +19,10 @@ import com.strobingn.wildlifefieldops.data.model.*
         Reminder::class,
         Invoice::class,
         DeletedRecord::class,
-        FieldObservation::class
+        FieldObservation::class,
+        VoiceObservation::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -39,4 +40,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun invoiceDao(): InvoiceDao
     abstract fun deletedRecordDao(): DeletedRecordDao
     abstract fun fieldObservationDao(): FieldObservationDao
+    abstract fun voiceObservationDao(): VoiceObservationDao
 }
