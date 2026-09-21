@@ -46,7 +46,10 @@ class WebMercatorTilesTest {
 
     @Test
     fun longitudeWrapStaysInRange() {
-        assertEquals(0, WebMercatorTiles.longitudeToTileX(180.0, 1))
-        assertTrue(WebMercatorTiles.longitudeToTileX(-180.0, 3) in 0 until 8)
+        val tiles = WebMercatorTiles.n(3)
+        listOf(-180.0, -179.9, 0.0, 179.9, 180.0, 540.0, -540.0).forEach { lng ->
+            val x = WebMercatorTiles.longitudeToTileX(lng, 3)
+            assertTrue("x=$x out of range for lng=$lng", x in 0 until tiles)
+        }
     }
 }
