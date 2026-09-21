@@ -21,6 +21,17 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
         fun createRoute(jobId: String? = null) = "job_form/${jobId ?: "new"}"
     }
     object JobDictate : Screen("job_dictate", "Voice Job")
+    object VoiceLog : Screen(
+        "voice_log?jobId={jobId}&observationEventId={observationEventId}",
+        "Voice Log",
+        Icons.Default.Mic
+    ) {
+        fun createRoute(jobId: String? = null, observationEventId: String? = null): String {
+            val j = jobId?.takeIf { it.isNotBlank() && it != "null" }.orEmpty()
+            val e = observationEventId?.takeIf { it.isNotBlank() && it != "null" }.orEmpty()
+            return "voice_log?jobId=$j&observationEventId=$e"
+        }
+    }
 
     // Customer Screens
     object CustomerList : Screen("customers", "Customers", Icons.Default.People)
@@ -81,6 +92,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
             Map,
             PhotoGallery,
             LiveCapture,
+            VoiceLog,
             Expense,
             Inventory,
             RouteOptimizer,

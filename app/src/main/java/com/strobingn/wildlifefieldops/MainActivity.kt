@@ -199,6 +199,7 @@ private fun AppNavHost(
                 onNavigateToEstimate = { navController.navigate(Screen.Estimate.createRoute(jobId)) },
                 onNavigateToInspectionForm = { jid -> navController.navigate(Screen.InspectionForm.createRoute(jobId = jid)) },
                 onNavigateToLiveCapture = { jid -> navController.navigate(Screen.LiveCapture.createRoute(jobId = jid)) },
+                onNavigateToVoiceLog = { jid -> navController.navigate(Screen.VoiceLog.createRoute(jobId = jid)) },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -214,6 +215,23 @@ private fun AppNavHost(
                     navController.popBackStack()
                     navController.navigate(Screen.JobList.route)
                 }
+            )
+        }
+        composable(
+            route = Screen.VoiceLog.route,
+            arguments = listOf(
+                navArgument("jobId") { type = NavType.StringType; nullable = true; defaultValue = "" },
+                navArgument("observationEventId") { type = NavType.StringType; nullable = true; defaultValue = "" }
+            )
+        ) { backStackEntry ->
+            val voiceJobId = backStackEntry.arguments?.getString("jobId")
+                ?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+            val voiceEventId = backStackEntry.arguments?.getString("observationEventId")
+                ?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+            VoiceFirstLogScreen(
+                jobId = voiceJobId,
+                observationEventId = voiceEventId,
+                onBack = { navController.popBackStack() }
             )
         }
         composable(Screen.InspectionList.route) {
@@ -389,7 +407,11 @@ private fun AppDrawer(onNavigate: (String) -> Unit, onClose: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
             )
             Screen.drawerItems.forEach { screen ->
-                val dest = if (screen is Screen.LiveCapture) Screen.LiveCapture.createRoute() else screen.route
+                val dest = when (screen) {
+                    is Screen.LiveCapture -> Screen.LiveCapture.createRoute()
+                    is Screen.VoiceLog -> Screen.VoiceLog.createRoute()
+                    else -> screen.route
+                }
                 NavigationDrawerItem(
                     icon = { screen.icon?.let { Icon(it, contentDescription = screen.title) } },
                     label = { Text(screen.title, style = MaterialTheme.typography.bodyLarge) },

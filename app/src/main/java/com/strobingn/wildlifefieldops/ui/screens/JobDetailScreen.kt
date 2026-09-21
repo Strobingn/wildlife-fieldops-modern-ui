@@ -37,6 +37,7 @@ fun JobDetailScreen(
     onNavigateToEstimate: (String) -> Unit,
     onNavigateToInspectionForm: (String) -> Unit,
     onNavigateToLiveCapture: (String) -> Unit,
+    onNavigateToVoiceLog: (String) -> Unit,
     onBack: () -> Unit,
     viewModel: JobsViewModel = hiltViewModel(),
     jobAiViewModel: JobAiViewModel = hiltViewModel()
@@ -272,6 +273,13 @@ fun JobDetailScreen(
                         color = PrimaryGreen,
                         modifier = Modifier.weight(1f),
                         onClick = { onNavigateToLiveCapture(currentJob.id) }
+                    )
+                    ActionButton(
+                        label = "Voice log",
+                        icon = Icons.Default.Mic,
+                        color = AccentBlue,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onNavigateToVoiceLog(currentJob.id) }
                     )
                 }
 
