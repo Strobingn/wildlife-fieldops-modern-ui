@@ -9,7 +9,8 @@ import java.util.UUID
  * Stays in Room until [isSynced] is flipped by [com.strobingn.wildlifefieldops.data.repository.SyncRepository].
  *
  * Distinct from the immutable species-ID [com.strobingn.wildlifefieldops.data.observation.ObservationEvent]
- * log (roadmap item 2). [speciesHint] is an optional hook for that pipeline.
+ * log. [speciesHint] is the operational ID only after a technician confirms
+ * (or corrects) an on-device suggestion.
  */
 @Entity(tableName = "field_observations")
 data class FieldObservation(

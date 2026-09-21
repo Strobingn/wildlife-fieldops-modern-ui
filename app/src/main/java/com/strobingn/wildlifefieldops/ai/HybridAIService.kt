@@ -219,6 +219,7 @@ class HybridAIService @Inject constructor(
         return vision.copy(
             species = form.species.split(',').map { it.trim() }.filter { it.isNotBlank() }
                 .ifEmpty { vision.species },
+            // Keep on-device scores; cloud prose must not become an operational ID.
             suggestedServiceType = form.serviceType.ifBlank { vision.suggestedServiceType },
             suggestedPriority = form.priority.ifBlank { vision.suggestedPriority },
             suggestedNotes = buildString {

@@ -1,10 +1,17 @@
 package com.strobingn.wildlifefieldops.ui.viewmodel
 
+import android.content.Context
 import android.location.Location
 import android.location.LocationManager
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.maps.model.TileProvider
+import com.strobingn.wildlifefieldops.ai.species.OnDeviceSpeciesClassifier
+import com.strobingn.wildlifefieldops.ai.species.SpeciesRecognition
+import com.strobingn.wildlifefieldops.ai.species.SpeciesSuggestion
 import com.strobingn.wildlifefieldops.data.local.CachedCamera
 import com.strobingn.wildlifefieldops.data.local.CachedMapMarker
 import com.strobingn.wildlifefieldops.data.local.CachedMapRegion
@@ -20,7 +27,10 @@ import com.strobingn.wildlifefieldops.data.model.FieldObservation
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.data.model.Photo
 import com.strobingn.wildlifefieldops.data.model.PhotoCategory
+import com.strobingn.wildlifefieldops.data.observation.ObservationEventStore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +38,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class MapProperty(
@@ -40,14 +51,26 @@ data class MapProperty(
     val type: String
 )
 
+data class SpeciesIdUiState(
+    val analyzing: Boolean = false,
+    val suggestion: SpeciesSuggestion? = null,
+    val technicianLabel: String = "",
+    val confirmed: Boolean = false,
+    val operationalLabel: String? = null,
+    val error: String? = null,
+    val photoUri: String? = null,
+)
+
 @HiltViewModel
 class MapViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val jobDao: JobDao,
     private val customerDao: CustomerDao,
     private val fieldObservationDao: FieldObservationDao,
     private val photoDao: PhotoDao,
     private val mapOfflineCache: MapOfflineCache,
-    private val mapTileCache: MapTileCache
+    private val mapTileCache: MapTileCache,
+    private val observationEventStore: ObservationEventStore,
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -87,6 +110,9 @@ class MapViewModel @Inject constructor(
     val cacheMessage = _cacheMessage.asStateFlow()
 
     private val _fallbackMarkers = MutableStateFlow<List<MapProperty>>(emptyList())
+
+    private val _speciesId = MutableStateFlow(SpeciesIdUiState())
+    val speciesId = _speciesId.asStateFlow()
 
     val tileProvider: TileProvider = CachedMapTileProvider(mapTileCache) {
         mapOfflineCache.isNetworkAvailable()
@@ -228,6 +254,60 @@ class MapViewModel @Inject constructor(
 
     fun cancelPendingObservation() {
         _pendingPin.value = null
+        _speciesId.value = SpeciesIdUiState()
+    }
+
+    fun classifyObservationPhoto(photoUri: Uri, @Suppress("UNUSED_PARAMETER") photoLocalPath: String) {
+        viewModelScope.launch {
+            _speciesId.value = SpeciesIdUiState(
+                analyzing = true,
+                photoUri = photoUri.toString(),
+                technicianLabel = _speciesId.value.technicianLabel
+            )
+            try {
+                val suggestion = withContext(Dispatchers.IO) {
+                    OnDeviceSpeciesClassifier.classifyStill(appContext, photoUri).second
+                }
+                _speciesId.value = SpeciesIdUiState(
+                    analyzing = false,
+                    suggestion = suggestion,
+                    technicianLabel = suggestion?.primaryLabel.orEmpty(),
+                    photoUri = photoUri.toString(),
+                    error = if (suggestion == null) {
+                        "No on-device species ID. Type a label and confirm if you can identify it."
+                    } else {
+                        null
+                    }
+                )
+            } catch (t: Throwable) {
+                _speciesId.value = SpeciesIdUiState(
+                    analyzing = false,
+                    photoUri = photoUri.toString(),
+                    error = t.message ?: "On-device ID failed"
+                )
+            }
+        }
+    }
+
+    fun setTechnicianSpeciesLabel(label: String) {
+        _speciesId.value = _speciesId.value.copy(
+            technicianLabel = label,
+            confirmed = false,
+            operationalLabel = null
+        )
+    }
+
+    fun confirmPendingSpecies() {
+        val label = _speciesId.value.technicianLabel.trim()
+        if (label.isEmpty()) {
+            _speciesId.value = _speciesId.value.copy(error = "Enter or confirm a species before treating the ID as operational.")
+            return
+        }
+        _speciesId.value = _speciesId.value.copy(
+            confirmed = true,
+            operationalLabel = label,
+            error = null
+        )
     }
 
     fun saveObservation(
@@ -255,6 +335,9 @@ class MapViewModel @Inject constructor(
             } else {
                 null
             }
+            val speciesState = _speciesId.value
+            val operational = speciesState.operationalLabel?.takeIf { speciesState.confirmed }
+                ?: speciesHint.trim().takeIf { speciesState.confirmed && it.isNotBlank() }
             val observation = FieldObservation(
                 notes = notes.ifBlank { "Field observation" },
                 latitude = pin.latitude,
@@ -262,19 +345,82 @@ class MapViewModel @Inject constructor(
                 photoLocalPath = photoLocalPath.orEmpty(),
                 photoId = photo?.id,
                 jobId = jobId,
-                speciesHint = speciesHint.trim(),
+                speciesHint = operational.orEmpty(),
                 accuracyMeters = lastKnown?.accuracy,
                 isSynced = false
             )
             fieldObservationDao.insert(observation)
+            persistSpeciesEvents(
+                entityId = observation.id,
+                mediaUri = photoUri ?: speciesState.photoUri,
+                photoLocalPath = photoLocalPath,
+                geometryTrust = lastKnown?.accuracy?.let { acc ->
+                    (1f - (acc / 50f)).coerceIn(0f, 1f)
+                } ?: 0f
+            )
             _pendingPin.value = null
             _isObserving.value = false
+            _speciesId.value = SpeciesIdUiState()
+            val idNote = when {
+                operational != null -> " Species ID confirmed: $operational."
+                speciesState.suggestion != null -> " Species suggestion stored as unreviewed (not operational)."
+                else -> ""
+            }
             _cacheMessage.value = if (_isOffline.value) {
-                "Saved offline in Room. Will sync when you are back online."
+                "Saved offline in Room. Will sync when you are back online.$idNote"
             } else {
-                "Observation saved. Sync from Settings when ready."
+                "Observation saved. Sync from Settings when ready.$idNote"
             }
         }
+    }
+
+    private suspend fun persistSpeciesEvents(
+        entityId: String,
+        mediaUri: String?,
+        photoLocalPath: String?,
+        geometryTrust: Float
+    ) {
+        val state = _speciesId.value
+        val suggestion = state.suggestion
+            ?: state.operationalLabel?.takeIf { state.confirmed }?.let { label ->
+                SpeciesRecognition.suggest(mapOf(label to 1f), backendTag = "human")
+            }
+            ?: return
+        val observedAt = System.currentTimeMillis()
+        val inference = SpeciesRecognition.recordInference(
+            entityId = entityId,
+            suggestion = suggestion,
+            observedAt = observedAt,
+            deviceId = localDeviceId(),
+            operatorId = "field-tech",
+            frameHash = OnDeviceSpeciesClassifier.frameHash(
+                pathOrUri = mediaUri ?: photoLocalPath.orEmpty(),
+                observedAt = observedAt,
+                extra = entityId
+            ),
+            modelHash = OnDeviceSpeciesClassifier.modelHash(appContext),
+            mediaUri = mediaUri,
+            captureQuality = suggestion.confidence.coerceIn(0.2f, 1f),
+            geometryTrust = geometryTrust
+        )
+        observationEventStore.append(inference)
+        if (state.confirmed) {
+            val label = state.operationalLabel?.ifBlank { state.technicianLabel } ?: return
+            val commit = SpeciesRecognition.confirm(
+                inference = inference,
+                technicianLabel = label,
+                confirmedAt = observedAt + 1
+            )
+            observationEventStore.append(commit.verificationEvent)
+            observationEventStore.applyOperationalSpeciesHint(entityId, observedAt + 1)
+        }
+    }
+
+    private fun localDeviceId(): String {
+        val androidId = runCatching {
+            Settings.Secure.getString(appContext.contentResolver, Settings.Secure.ANDROID_ID)
+        }.getOrNull().orEmpty()
+        return androidId.ifBlank { Build.MODEL.ifBlank { "android-device" } }
     }
 
     fun persistCamera(latitude: Double, longitude: Double, zoom: Float) {

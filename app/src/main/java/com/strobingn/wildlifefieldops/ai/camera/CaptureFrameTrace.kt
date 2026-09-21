@@ -91,6 +91,7 @@ data class CaptureGuidance(
     val analysisDurationMs: Long,
     val evidenceSummary: String = "",
     val evidenceSpecies: List<String> = emptyList(),
+    val evidenceSpeciesScores: List<Float> = emptyList(),
     val evidenceEntries: List<String> = emptyList(),
     val evidenceEquipment: List<String> = emptyList(),
     val evidenceDamage: List<String> = emptyList(),

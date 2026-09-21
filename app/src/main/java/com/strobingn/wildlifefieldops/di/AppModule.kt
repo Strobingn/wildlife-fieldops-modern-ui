@@ -27,6 +27,7 @@ object AppModule {
                 Migrations.MIGRATION_3_4,
                 Migrations.MIGRATION_4_5,
                 Migrations.MIGRATION_5_6,
+                Migrations.MIGRATION_6_7,
             )
             .fallbackToDestructiveMigration()
             .build()
@@ -73,4 +74,7 @@ object AppModule {
 
     @Provides
     fun provideVoiceObservationDao(database: AppDatabase) = database.voiceObservationDao()
+
+    @Provides
+    fun provideObservationEventDao(database: AppDatabase) = database.observationEventDao()
 }

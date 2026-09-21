@@ -99,9 +99,9 @@ Key fields for map marker display:
 | `alternatives` | Tap-to-expand detail sheet showing ranked alternatives |
 
 The `DerivedAssessment` is recomputed by `ObservationProjector.project()` whenever
-new `ObservationEvent`s are ingested.  Until Room schema migration is complete
-(see ADR 0002 §9), this projection runs in-memory over the full event set for
-each entity on each sync cycle.
+new `ObservationEvent`s are ingested. Room now stores the append-only event log
+(`observation_events`). Projection still runs in-memory over the full event set
+for each entity; a cached assessment table is optional.
 
 ---
 

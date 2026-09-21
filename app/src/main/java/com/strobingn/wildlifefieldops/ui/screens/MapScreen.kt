@@ -43,6 +43,7 @@ import com.strobingn.wildlifefieldops.R
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.MapViewModel
+import com.strobingn.wildlifefieldops.ui.viewmodel.SpeciesIdUiState
 import com.google.maps.android.compose.MapType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -106,8 +107,14 @@ fun MapScreen(
             pendingPhotoUri = tempPhotoFile?.let { file ->
                 FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
             }
+            val uri = pendingPhotoUri
+            val path = pendingPhotoPath
+            if (uri != null && !path.isNullOrBlank()) {
+                viewModel.classifyObservationPhoto(uri, path)
+            }
         }
     }
+    val speciesId by viewModel.speciesId.collectAsState()
 
     val visibleProperties by remember(properties, selectedStatus) {
         derivedStateOf {
@@ -583,9 +590,14 @@ fun MapScreen(
                         .zIndex(3f),
                     notes = observationNotes,
                     onNotesChange = { observationNotes = it },
-                    species = observationSpecies,
-                    onSpeciesChange = { observationSpecies = it },
+                    species = speciesId.technicianLabel.ifBlank { observationSpecies },
+                    onSpeciesChange = {
+                        observationSpecies = it
+                        viewModel.setTechnicianSpeciesLabel(it)
+                    },
                     photoPath = pendingPhotoPath,
+                    speciesId = speciesId,
+                    onConfirmSpecies = { viewModel.confirmPendingSpecies() },
                     onTakePhoto = {
                         val file = createObservationPhotoFile(context)
                         tempPhotoFile = file
@@ -610,7 +622,7 @@ fun MapScreen(
                             notes = observationNotes,
                             photoLocalPath = pendingPhotoPath,
                             photoUri = pendingPhotoUri?.toString(),
-                            speciesHint = observationSpecies,
+                            speciesHint = speciesId.technicianLabel.ifBlank { observationSpecies },
                             lastKnown = lastKnown
                         )
                         observationNotes = ""
@@ -716,6 +728,8 @@ private fun ObservationComposerCard(
     species: String,
     onSpeciesChange: (String) -> Unit,
     photoPath: String?,
+    speciesId: SpeciesIdUiState,
+    onConfirmSpecies: () -> Unit,
     onTakePhoto: () -> Unit,
     onCancel: () -> Unit,
     onSave: () -> Unit
@@ -748,22 +762,15 @@ private fun ObservationComposerCard(
                 )
             )
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = species,
-                onValueChange = onSpeciesChange,
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Species hint (optional)", color = TextTertiary) },
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = TextPrimary,
-                    unfocusedTextColor = TextPrimary,
-                    focusedBorderColor = PrimaryGreen,
-                    unfocusedBorderColor = BorderDark
-                )
+            SpeciesIdConfirmBlock(
+                speciesId = speciesId,
+                species = species,
+                onSpeciesChange = onSpeciesChange,
+                onConfirmSpecies = onConfirmSpecies
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                if (photoPath.isNullOrBlank()) "No photo attached" else "Photo ready: ${File(photoPath).name}",
+                if (photoPath.isNullOrBlank()) "No photo attached — ID runs on-device after a photo." else "Photo ready: ${File(photoPath).name}",
                 color = TextSecondary,
                 style = MaterialTheme.typography.labelSmall
             )
@@ -785,6 +792,83 @@ private fun ObservationComposerCard(
                     Text("Save")
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun SpeciesIdConfirmBlock(
+    speciesId: SpeciesIdUiState,
+    species: String,
+    onSpeciesChange: (String) -> Unit,
+    onConfirmSpecies: () -> Unit
+) {
+    val suggestion = speciesId.suggestion
+    if (speciesId.analyzing) {
+        Text(
+            "Identifying on device…",
+            color = TextSecondary,
+            style = MaterialTheme.typography.labelMedium
+        )
+        Spacer(Modifier.height(8.dp))
+    }
+    if (suggestion != null) {
+        Text(
+            "Suggested: ${suggestion.primaryLabel} · ${suggestion.confidencePercent}% (${suggestion.backendTag})",
+            color = TextPrimary,
+            fontWeight = FontWeight.Medium,
+            style = MaterialTheme.typography.bodyMedium
+        )
+        if (suggestion.alternatives.size > 1) {
+            Text(
+                "Also: ${suggestion.alternatives.drop(1).take(3).joinToString { "${it.label} ${(it.weight * 100).toInt()}%" }}",
+                color = TextSecondary,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+        suggestion.safety.notes.take(3).forEach { note ->
+            Text("• $note", color = TextTertiary, style = MaterialTheme.typography.labelSmall)
+        }
+        Spacer(Modifier.height(6.dp))
+    }
+    speciesId.error?.let {
+        Text(it, color = ErrorRed, style = MaterialTheme.typography.labelSmall)
+        Spacer(Modifier.height(4.dp))
+    }
+    OutlinedTextField(
+        value = species,
+        onValueChange = onSpeciesChange,
+        modifier = Modifier.fillMaxWidth(),
+        placeholder = { Text("Species (confirm required)", color = TextTertiary) },
+        singleLine = true,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = TextPrimary,
+            unfocusedTextColor = TextPrimary,
+            focusedBorderColor = PrimaryGreen,
+            unfocusedBorderColor = BorderDark
+        )
+    )
+    Spacer(Modifier.height(6.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            when {
+                speciesId.confirmed -> "Operational ID: ${speciesId.operationalLabel}"
+                else -> "Not operational until you confirm."
+            },
+            color = if (speciesId.confirmed) PrimaryGreen else TextSecondary,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.weight(1f)
+        )
+        Button(
+            onClick = onConfirmSpecies,
+            enabled = species.isNotBlank() && !speciesId.analyzing,
+            colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen)
+        ) {
+            Text(if (speciesId.confirmed) "Confirmed" else "Confirm ID")
         }
     }
 }
