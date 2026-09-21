@@ -12,3 +12,6 @@ build/
 *.apk
 local.properties
 
+# Cloud Agent install writes machine-local SDK/JDK exports here.
+.cursor/env.sh
+
