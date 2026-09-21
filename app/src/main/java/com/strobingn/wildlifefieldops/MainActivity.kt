@@ -177,6 +177,7 @@ private fun AppNavHost(
                 onNavigateToCustomers = { navController.navigate(Screen.CustomerList.route) },
                 onNavigateToMap = { navController.navigate(Screen.Map.route) },
                 onNavigateToRoutes = { navController.navigate(Screen.RouteOptimizer.route) },
+                onNavigateToCountyReports = { navController.navigate(Screen.CountyReports.route) },
                 onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                 onNavigateToAI = { navController.navigate(Screen.AIAssistant.route) },
                 onOpenDrawer = onOpenDrawer
@@ -287,6 +288,9 @@ private fun AppNavHost(
         }
         composable(Screen.Map.route) {
             MapScreen(onBack = { navController.popBackStack() }, onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) })
+        }
+        composable(Screen.CountyReports.route) {
+            CountyReportScreen(onBack = { navController.popBackStack() })
         }
         composable(route = Screen.Invoice.route, arguments = listOf(navArgument("jobId") { type = NavType.StringType })) { backStackEntry ->
             InvoiceScreen(jobId = backStackEntry.arguments?.getString("jobId") ?: "", onBack = { navController.popBackStack() })

@@ -41,6 +41,7 @@ fun DashboardScreen(
     onNavigateToCustomers: () -> Unit,
     onNavigateToMap: () -> Unit,
     onNavigateToRoutes: () -> Unit,
+    onNavigateToCountyReports: () -> Unit = {},
     onNavigateToSettings: () -> Unit,
     onNavigateToAI: () -> Unit,
     onOpenDrawer: () -> Unit = {},
@@ -349,7 +350,7 @@ fun DashboardScreen(
                     ) {
                         QuickActionTile("Inspect", Icons.Default.Search, AccentCyan, Modifier.weight(1f), onNavigateToInspections)
                         QuickActionTile("Routes", Icons.Default.Route, AccentBlue, Modifier.weight(1f), onNavigateToRoutes)
-                        Spacer(modifier = Modifier.weight(1f))
+                        QuickActionTile("Reports", Icons.Default.Assessment, AccentBlue, Modifier.weight(1f), onNavigateToCountyReports)
                     }
                 }
             }

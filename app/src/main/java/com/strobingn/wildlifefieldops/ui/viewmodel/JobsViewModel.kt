@@ -186,7 +186,19 @@ class JobsViewModel @Inject constructor(
     fun updateJobStatus(jobId: String, status: JobStatus) = viewModelScope.launch {
         val job = jobDao.getById(jobId)
         job?.let {
-            jobDao.update(it.copy(status = status, updatedAt = System.currentTimeMillis(), isSynced = false))
+            val now = System.currentTimeMillis()
+            val completedDate = when {
+                status == JobStatus.COMPLETED && it.completedDate == null -> now
+                else -> it.completedDate
+            }
+            jobDao.update(
+                it.copy(
+                    status = status,
+                    completedDate = completedDate,
+                    updatedAt = now,
+                    isSynced = false
+                )
+            )
         }
     }
 
