@@ -41,8 +41,10 @@ export class Router {
     this._onHashChange = () => this.resolve();
     this._onLoad = () => this.resolve();
 
-    window.addEventListener('hashchange', this._onHashChange);
-    window.addEventListener('load', this._onLoad);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('hashchange', this._onHashChange);
+      window.addEventListener('load', this._onLoad);
+    }
   }
 
   /**
