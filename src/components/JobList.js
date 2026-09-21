@@ -23,6 +23,30 @@ function estimateJob(j) {
   return Math.round(base * 1.35);
 }
 
+function buildJobStats(visits, repairs, photos, signatures) {
+  const visitCounts = {};
+  for (let i = 0; i < visits.length; i++) {
+    const id = visits[i].job_id || visits[i].jobId;
+    if (id) visitCounts[id] = (visitCounts[id] || 0) + 1;
+  }
+  const repairCounts = {};
+  for (let i = 0; i < repairs.length; i++) {
+    const id = repairs[i].job_id || repairs[i].jobId;
+    if (id) repairCounts[id] = (repairCounts[id] || 0) + 1;
+  }
+  const photoCounts = {};
+  for (let i = 0; i < photos.length; i++) {
+    const id = photos[i].job_id || photos[i].jobId;
+    if (id) photoCounts[id] = (photoCounts[id] || 0) + 1;
+  }
+  const sigSet = new Set();
+  for (let i = 0; i < signatures.length; i++) {
+    const id = signatures[i].job_id || signatures[i].jobId;
+    if (id) sigSet.add(id);
+  }
+  return { visitCounts, repairCounts, photoCounts, sigSet };
+}
+
 function scoreJob(j, visits, repairs, photos, signatures) {
   const v = visits.some((x) => x.job_id === j.id);
   const p = photos.some((x) => x.job_id === j.id);
@@ -114,14 +138,16 @@ export const JobList = {
 
       <!-- Job List -->
       <div id="jobList">
-        ${pageJobs.length
-          ? pageJobs.map((j) => this._jobCard(j, visits, repairs, photos, signatures)).join("")
-          : `<div class="empty-state">
-              <div class="empty-icon" aria-hidden="true">🔍</div>
-              <h4>${this._searchQuery || this._filters.status || this._filters.species ? "No matching jobs" : "No jobs yet"}</h4>
-              <p>${this._searchQuery || this._filters.status || this._filters.species ? "Try adjusting your search or filters." : "Create your first job to get started."}</p>
-             </div>`
-        }
+        ${(() => {
+          const stats = buildJobStats(visits, repairs, photos, signatures);
+          return pageJobs.length
+            ? pageJobs.map((j) => this._jobCard(j, stats)).join("")
+            : `<div class="empty-state">
+                <div class="empty-icon" aria-hidden="true">🔍</div>
+                <h4>${this._searchQuery || this._filters.status || this._filters.species ? "No matching jobs" : "No jobs yet"}</h4>
+                <p>${this._searchQuery || this._filters.status || this._filters.species ? "Try adjusting your search or filters." : "Create your first job to get started."}</p>
+               </div>`;
+        })()}
       </div>
 
       <!-- Load More -->
@@ -254,19 +280,20 @@ export const JobList = {
   _filterJobs(jobs) {
     const q = this._searchQuery.toLowerCase().trim();
     return jobs.filter((j) => {
-      const matchesSearch = !q ||
+      if (this._filters.status && j.status !== this._filters.status) return false;
+      if (this._filters.species && j.species !== this._filters.species) return false;
+      if (this._filters.tech && j.assigned_tech !== this._filters.tech) return false;
+      if (this._filters.town && j.town !== this._filters.town) return false;
+      if (!q) return true;
+      return (
         (j.title || "").toLowerCase().includes(q) ||
         (j.customer || "").toLowerCase().includes(q) ||
         (j.address || "").toLowerCase().includes(q) ||
         (j.town || "").toLowerCase().includes(q) ||
         (j.species || "").toLowerCase().includes(q) ||
         (j.scope || "").toLowerCase().includes(q) ||
-        (j.status || "").toLowerCase().includes(q);
-      const matchesStatus = !this._filters.status || j.status === this._filters.status;
-      const matchesSpecies = !this._filters.species || j.species === this._filters.species;
-      const matchesTech = !this._filters.tech || j.assigned_tech === this._filters.tech;
-      const matchesTown = !this._filters.town || j.town === this._filters.town;
-      return matchesSearch && matchesStatus && matchesSpecies && matchesTech && matchesTown;
+        (j.status || "").toLowerCase().includes(q)
+      );
     });
   },
 
@@ -289,13 +316,24 @@ export const JobList = {
     return sorted;
   },
 
-  _jobCard(j, visits, repairs, photos, signatures) {
+  _jobCard(j, statsOrVisits, repairs, photos, signatures) {
     const icon = SPECIES_ICONS[j.species] || "🐾";
     const sc = STATUS_STYLES[j.status] || "active";
-    const v = visits.filter((x) => x.job_id === j.id).length;
-    const r = repairs.filter((x) => x.job_id === j.id).length;
-    const p = photos.filter((x) => x.job_id === j.id).length;
-    const s = scoreJob(j, visits, repairs, photos, signatures);
+    let v, r, p, s;
+    if (statsOrVisits && typeof statsOrVisits === "object" && statsOrVisits.visitCounts) {
+      const stats = statsOrVisits;
+      v = stats.visitCounts[j.id] || 0;
+      r = stats.repairCounts[j.id] || 0;
+      p = stats.photoCounts[j.id] || 0;
+      const sig = stats.sigSet.has(j.id);
+      s = Math.min(100, (v ? 25 : 0) + (p ? 25 : 0) + (r ? 25 : 0) + (sig ? 25 : 0));
+    } else {
+      const visits = Array.isArray(statsOrVisits) ? statsOrVisits : [];
+      v = visits.filter((x) => x.job_id === j.id).length;
+      r = (repairs || []).filter((x) => x.job_id === j.id).length;
+      p = (photos || []).filter((x) => x.job_id === j.id).length;
+      s = scoreJob(j, visits, repairs || [], photos || [], signatures || []);
+    }
     const est = estimateJob(j);
 
     return /* html */ `
