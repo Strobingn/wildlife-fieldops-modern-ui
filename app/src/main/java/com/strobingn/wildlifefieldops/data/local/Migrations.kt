@@ -12,6 +12,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * MIGRATION_4_5 adds `field_observations` for offline map pins (photo + GPS + note).
  *
  * MIGRATION_5_6 adds `voice_observations` for fail-closed voice-first logging notes.
+ *
+ * MIGRATION_6_7 adds append-only `observation_events` for on-device species IDs (ADR 0002).
  */
 object Migrations {
 
@@ -65,6 +67,41 @@ object Migrations {
                     isSynced INTEGER NOT NULL
                 )
                 """.trimIndent()
+            )
+        }
+    }
+
+    val MIGRATION_6_7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS observation_events (
+                    eventId TEXT NOT NULL PRIMARY KEY,
+                    entityId TEXT NOT NULL,
+                    observedAt INTEGER NOT NULL,
+                    uploadedAt INTEGER NOT NULL,
+                    deviceId TEXT NOT NULL,
+                    operatorId TEXT NOT NULL,
+                    modelId TEXT NOT NULL,
+                    modelHash TEXT NOT NULL,
+                    backendTag TEXT NOT NULL,
+                    quantizerTag TEXT NOT NULL,
+                    frameHash TEXT NOT NULL,
+                    cropHash TEXT NOT NULL,
+                    mediaUri TEXT,
+                    labelDistributionJson TEXT NOT NULL,
+                    captureQuality REAL NOT NULL,
+                    geometryTrust REAL NOT NULL,
+                    humanVerification TEXT NOT NULL,
+                    supersedesEventId TEXT
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS index_observation_events_entityId_observedAt ON observation_events(entityId, observedAt)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS index_observation_events_humanVerification ON observation_events(humanVerification)"
             )
         }
     }

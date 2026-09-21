@@ -21,6 +21,8 @@ import kotlin.coroutines.resumeWithException
 
 data class AiAnalysisResult(
     val species: List<String> = emptyList(),
+    /** Label → on-device score for species hits only (used by ObservationEvent). */
+    val speciesScores: Map<String, Float> = emptyMap(),
     val damageTypes: List<String> = emptyList(),
     val confidence: Float = 0f,
     val suggestedServiceType: String = "",
@@ -88,6 +90,9 @@ object PhotoAIHelper {
             val evidence = WildlifeEvidenceDetector.detect(labels, objects, customHits = custom)
             val objectNames = objects.mapNotNull { it.labels.firstOrNull()?.text?.lowercase() }.distinct()
             val species = evidence.species.map { it.label }.distinct()
+            val speciesScores = evidence.species
+                .groupBy { it.label }
+                .mapValues { (_, hits) -> hits.maxOf { it.score } }
             val damage = evidence.damage.map { it.label }.distinct()
             val entries = evidence.entries.map { it.label }
             val equipment = evidence.equipment.map { it.label }.distinct()
@@ -129,6 +134,7 @@ object PhotoAIHelper {
 
             AiAnalysisResult(
                 species = species,
+                speciesScores = speciesScores,
                 damageTypes = damage,
                 confidence = confidence,
                 suggestedServiceType = service,

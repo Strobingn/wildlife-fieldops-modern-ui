@@ -216,6 +216,7 @@ class LiveCameraAnalyzer(
                         analysisDurationMs = trace.analysisDurationMs,
                         evidenceSummary = evidence.topSummary,
                         evidenceSpecies = evidence.species.map { it.label },
+                        evidenceSpeciesScores = evidence.species.map { it.score },
                         evidenceEntries = evidence.entries.map { it.label },
                         evidenceEquipment = evidence.equipment.map { it.label },
                         evidenceDamage = evidence.damage.map { it.label },

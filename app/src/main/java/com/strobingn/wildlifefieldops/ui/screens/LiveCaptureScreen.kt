@@ -621,7 +621,9 @@ fun LiveCaptureScreen(
                         onCaptureMore = {
                             viewModel.clearSmartCapture()
                             viewModel.clearArMeasurementKeepVoice()
-                        }
+                        },
+                        onSpeciesLabelChange = { viewModel.setTechnicianSpeciesLabel(it) },
+                        onConfirmSpecies = { viewModel.confirmSpeciesId() }
                     )
                 }
                 is SmartCaptureState.Error -> {
@@ -854,7 +856,9 @@ private fun SmartCaptureResultSheet(
     state: SmartCaptureState.Ready,
     checklistProgress: String?,
     onDismiss: () -> Unit,
-    onCaptureMore: () -> Unit = onDismiss
+    onCaptureMore: () -> Unit = onDismiss,
+    onSpeciesLabelChange: (String) -> Unit = {},
+    onConfirmSpecies: () -> Unit = {}
 ) {
     val a = state.analysis
     ModalBottomSheet(
@@ -896,7 +900,13 @@ private fun SmartCaptureResultSheet(
             Spacer(Modifier.height(12.dp))
             ResultRow("Service", a.suggestedServiceType.ifBlank { "—" })
             ResultRow("Priority", a.suggestedPriority)
-            ResultRow("Species", a.species.joinToString().ifBlank { "—" })
+            Spacer(Modifier.height(8.dp))
+            LiveSpeciesConfirmBlock(
+                state = state,
+                onSpeciesLabelChange = onSpeciesLabelChange,
+                onConfirmSpecies = onConfirmSpecies
+            )
+            Spacer(Modifier.height(8.dp))
             ResultRow("Damage", a.damageTypes.joinToString().ifBlank { "—" })
             ResultRow("Evidence", state.evidenceSummary.ifBlank { a.evidenceSummary }.ifBlank { "—" })
             ResultRow("Entry tags", a.entryTypes.joinToString().ifBlank { "—" })
@@ -926,7 +936,8 @@ private fun SmartCaptureResultSheet(
             )
             Spacer(Modifier.height(16.dp))
             Text(
-                "Policy owned accept/checklist advance; AI merged voice + vision + AR into notes only.",
+                "Policy owned accept/checklist advance; AI merged voice + vision + AR into notes only. " +
+                    "On-device species ID is not operational until you confirm.",
                 color = TextSecondary,
                 style = MaterialTheme.typography.bodySmall
             )
@@ -936,6 +947,64 @@ private fun SmartCaptureResultSheet(
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.Black),
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Done — next checklist item") }
+        }
+    }
+}
+
+@Composable
+private fun LiveSpeciesConfirmBlock(
+    state: SmartCaptureState.Ready,
+    onSpeciesLabelChange: (String) -> Unit,
+    onConfirmSpecies: () -> Unit
+) {
+    val suggestion = state.speciesSuggestion
+    Text("On-device species ID", color = TextSecondary, style = MaterialTheme.typography.labelLarge)
+    if (suggestion != null) {
+        Text(
+            "Suggested: ${suggestion.primaryLabel} · ${suggestion.confidencePercent}% (${suggestion.backendTag})",
+            color = TextPrimary,
+            fontWeight = FontWeight.Medium,
+            style = MaterialTheme.typography.bodyMedium
+        )
+        suggestion.safety.notes.take(3).forEach { note ->
+            Text("• $note", color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+        }
+    } else {
+        Text(
+            "No on-device species suggestion. Type a label and confirm if you identified it.",
+            color = TextSecondary,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+    Spacer(Modifier.height(6.dp))
+    OutlinedTextField(
+        value = state.technicianSpeciesLabel,
+        onValueChange = onSpeciesLabelChange,
+        modifier = Modifier.fillMaxWidth(),
+        placeholder = { Text("Species (confirm required)", color = TextSecondary) },
+        singleLine = true
+    )
+    Spacer(Modifier.height(6.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            when {
+                state.speciesConfirmed -> "Operational ID: ${state.operationalSpecies}"
+                else -> "Not operational until you confirm."
+            },
+            color = if (state.speciesConfirmed) PrimaryGreen else TextSecondary,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.weight(1f)
+        )
+        Button(
+            onClick = onConfirmSpecies,
+            enabled = state.technicianSpeciesLabel.isNotBlank() || suggestion != null,
+            colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.Black)
+        ) {
+            Text(if (state.speciesConfirmed) "Confirmed" else "Confirm ID")
         }
     }
 }
@@ -1039,6 +1108,15 @@ private fun GuidanceHud(
                     Text(
                         "evidence · ${g.evidenceSummary}",
                         color = PrimaryGreen,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+                if (g.evidenceSpecies.isNotEmpty()) {
+                    val topScore = g.evidenceSpeciesScores.firstOrNull()
+                    val scoreBit = topScore?.let { " · ${"%.0f".format(it * 100)}%" }.orEmpty()
+                    Text(
+                        "suggested ID · ${g.evidenceSpecies.first()}$scoreBit — confirm after capture",
+                        color = Color(0xFFFFCC80),
                         style = MaterialTheme.typography.labelSmall
                     )
                 }

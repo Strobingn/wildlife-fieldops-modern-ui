@@ -2,6 +2,8 @@ package com.strobingn.wildlifefieldops.ui.viewmodel
 
 import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
@@ -15,11 +17,16 @@ import com.strobingn.wildlifefieldops.ai.HybridAIService
 import com.strobingn.wildlifefieldops.ai.camera.CaptureGuidanceAction
 import com.strobingn.wildlifefieldops.ai.camera.ChecklistSession
 import com.strobingn.wildlifefieldops.ai.camera.InspectionCaptureChecklist
+import com.strobingn.wildlifefieldops.ai.species.OnDeviceSpeciesClassifier
+import com.strobingn.wildlifefieldops.ai.species.SpeciesRecognition
+import com.strobingn.wildlifefieldops.ai.species.SpeciesSuggestion
 import com.strobingn.wildlifefieldops.data.local.JobDao
 import com.strobingn.wildlifefieldops.data.local.PhotoDao
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.Photo
 import com.strobingn.wildlifefieldops.data.model.PhotoCategory
+import com.strobingn.wildlifefieldops.data.observation.ObservationEvent
+import com.strobingn.wildlifefieldops.data.observation.ObservationEventStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -62,7 +69,12 @@ sealed class SmartCaptureState {
         val arMeasurementLabel: String = "",
         val equipmentTags: List<String> = emptyList(),
         val repairScopeLabel: String = "",
-        val repairScopeNotes: String = ""
+        val repairScopeNotes: String = "",
+        val speciesSuggestion: SpeciesSuggestion? = null,
+        val speciesConfirmed: Boolean = false,
+        val operationalSpecies: String? = null,
+        val technicianSpeciesLabel: String = "",
+        val inferenceEventId: String? = null
     ) : SmartCaptureState()
     data class Error(val message: String) : SmartCaptureState()
 }
@@ -72,7 +84,8 @@ class LiveCaptureViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val hybridAI: HybridAIService,
     private val photoDao: PhotoDao,
-    private val jobDao: JobDao
+    private val jobDao: JobDao,
+    private val observationEventStore: ObservationEventStore
 ) : ViewModel() {
 
     private val _smartCapture = MutableStateFlow<SmartCaptureState>(SmartCaptureState.Idle)
@@ -119,6 +132,62 @@ class LiveCaptureViewModel @Inject constructor(
 
     fun clearSmartCapture() {
         _smartCapture.value = SmartCaptureState.Idle
+    }
+
+    fun setTechnicianSpeciesLabel(label: String) {
+        val current = _smartCapture.value as? SmartCaptureState.Ready ?: return
+        _smartCapture.value = current.copy(
+            technicianSpeciesLabel = label,
+            speciesConfirmed = false,
+            operationalSpecies = null
+        )
+    }
+
+    fun confirmSpeciesId() {
+        val current = _smartCapture.value as? SmartCaptureState.Ready ?: return
+        val label = current.technicianSpeciesLabel.ifBlank { current.speciesSuggestion?.primaryLabel }.orEmpty().trim()
+        if (label.isEmpty()) return
+        viewModelScope.launch {
+            val inference = current.inferenceEventId?.let { id ->
+                val entityId = speciesEntityId(current.photo)
+                observationEventStore.eventsFor(entityId).firstOrNull { it.eventId == id }
+            }
+            if (inference != null) {
+                val commit = SpeciesRecognition.confirm(
+                    inference = inference,
+                    technicianLabel = label,
+                    confirmedAt = System.currentTimeMillis()
+                )
+                observationEventStore.append(commit.verificationEvent)
+                _smartCapture.value = current.copy(
+                    technicianSpeciesLabel = label,
+                    speciesConfirmed = true,
+                    operationalSpecies = commit.operationalLabel
+                )
+            } else {
+                persistInferenceThenConfirm(current, label)
+            }
+        }
+    }
+
+    private suspend fun persistInferenceThenConfirm(current: SmartCaptureState.Ready, label: String) {
+        val suggestion = current.speciesSuggestion
+            ?: SpeciesRecognition.suggest(mapOf(label to 1f), backendTag = "human")
+            ?: return
+        val inference = writeInference(current.photo, suggestion)
+        val commit = SpeciesRecognition.confirm(
+            inference = inference,
+            technicianLabel = label,
+            confirmedAt = System.currentTimeMillis() + 1
+        )
+        observationEventStore.append(commit.verificationEvent)
+        _smartCapture.value = current.copy(
+            speciesSuggestion = suggestion,
+            technicianSpeciesLabel = label,
+            speciesConfirmed = true,
+            operationalSpecies = commit.operationalLabel,
+            inferenceEventId = inference.eventId
+        )
     }
 
     fun bindJob(jobId: String?, inspectionId: String? = null) {
@@ -441,6 +510,9 @@ class LiveCaptureViewModel @Inject constructor(
                     completeActiveChecklistItem(enriched.id, reasonCode, frameId)
                 }
 
+                val suggestion = OnDeviceSpeciesClassifier.suggestFromAnalysis(analysis)
+                val inference = suggestion?.let { writeInference(enriched, it) }
+
                 _smartCapture.value = SmartCaptureState.Ready(
                     photo = enriched,
                     analysis = analysis,
@@ -457,7 +529,10 @@ class LiveCaptureViewModel @Inject constructor(
                     arMeasurementLabel = arLabel,
                     equipmentTags = equipment.ifEmpty { analysis.equipmentTypes },
                     repairScopeLabel = repairLabel,
-                    repairScopeNotes = repairNotes
+                    repairScopeNotes = repairNotes,
+                    speciesSuggestion = suggestion,
+                    technicianSpeciesLabel = suggestion?.primaryLabel.orEmpty(),
+                    inferenceEventId = inference?.eventId
                 )
             } catch (t: Throwable) {
                 Log.e(TAG, "smartCapture failed", t)
@@ -515,6 +590,38 @@ class LiveCaptureViewModel @Inject constructor(
                 }
             }
         )
+    }
+
+    private suspend fun writeInference(photo: Photo, suggestion: SpeciesSuggestion): ObservationEvent {
+        val observedAt = photo.takenAt.takeIf { it > 0L } ?: System.currentTimeMillis()
+        val event = SpeciesRecognition.recordInference(
+            entityId = speciesEntityId(photo),
+            suggestion = suggestion,
+            observedAt = observedAt,
+            deviceId = localDeviceId(),
+            operatorId = "field-tech",
+            frameHash = OnDeviceSpeciesClassifier.frameHash(
+                pathOrUri = photo.localPath.ifBlank { photo.filePath },
+                observedAt = observedAt,
+                extra = photo.id
+            ),
+            modelHash = OnDeviceSpeciesClassifier.modelHash(appContext),
+            mediaUri = photo.filePath.ifBlank { photo.localPath },
+            captureQuality = suggestion.confidence.coerceIn(0.2f, 1f),
+            geometryTrust = 0f
+        )
+        observationEventStore.append(event)
+        return event
+    }
+
+    private fun speciesEntityId(photo: Photo): String =
+        photo.jobId?.takeIf { it.isNotBlank() } ?: "photo:${photo.id}"
+
+    private fun localDeviceId(): String {
+        val androidId = runCatching {
+            Settings.Secure.getString(appContext.contentResolver, Settings.Secure.ANDROID_ID)
+        }.getOrNull().orEmpty()
+        return androidId.ifBlank { Build.MODEL.ifBlank { "android-device" } }
     }
 
     companion object {
