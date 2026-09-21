@@ -10,5 +10,6 @@
         <domain includeSubdomains="true">supabase.in</domain>
         <domain includeSubdomains="true">googleapis.com</domain>
         <domain includeSubdomains="true">openweathermap.org</domain>
+        <domain includeSubdomains="true">basemaps.cartocdn.com</domain>
     </domain-config>
 </network-security-config>

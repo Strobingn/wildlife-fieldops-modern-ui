@@ -62,7 +62,7 @@ Legacy web / Capacitor folders may still exist in the repo history for reference
 ## Sync
 
 - Local data lives in Room (`wildlife_fieldops.db`).
-- **Settings → Sync Now** pushes unsynced jobs/customers/inspections and pulls cloud rows.
+- **Settings → Sync Now** pushes unsynced jobs/customers/inspections/field observations and pulls cloud rows.
 - Cloud project: `wildlife_app` (`hgdzmwfcghtilyqagjak`).
 - Schema applied: `supabase/migrations/20260710153000_native_sync_fix.sql` (customers table + RLS/grants for `anon`).
 - Verified: REST insert/select/delete for `customers` + `jobs` works with the app anon key.
@@ -102,15 +102,18 @@ The chat / estimate / summary paths never answer from hardcoded keyword tip list
 
 ## Offline maps (what works)
 
-Full Google Maps **offline tile regions** (Play Services OfflineRegion) are **not** bundled — they are heavy and need Play Console / custom tile management.
+The map screen still uses the existing Google Maps Compose stack. Full Play Services **OfflineRegion** tile packs are not bundled.
 
 What **does** work offline in this app:
 
-1. **Job markers from Room** — any job/customer with saved lat/lng still renders pins without network.
+1. **Job markers from Room** — any job/customer with saved lat/lng still renders pins without network. If Room is empty, the last marker snapshot in `map_offline_cache` is shown.
 2. **Last camera** — Map camera lat/lng/zoom is persisted to DataStore and restored on reopen.
-3. **Marker cache** — MapViewModel auto-saves recent located jobs to `map_offline_cache`; tap **Cache** on the map controls to force a snapshot.
-4. **Offline banner** — when ConnectivityManager reports no network, Map shows an “Offline map mode” banner. Map **tiles** still need network (or the device’s own Maps cached tiles); pins/routes from local data remain usable.
-5. **Online maps unchanged** — with network, GoogleMap tiles + style load normally.
+3. **Service-area tile cache** — tap **Cache** on the map to download Carto/OSM light tiles for the current viewport (bounded budget). Tiles live under `files/map_tiles` and appear as a GoogleMap `TileOverlay` when the device is offline.
+4. **Offline observation pins** — tap **Observe**, drop a pin, add a note and optional photo + GPS. Rows stay in Room (`field_observations` + `photos`) with `isSynced = 0` and push through **Settings → Sync Now** (same Supabase path as jobs).
+5. **Offline banner** — Map shows cached-tile / outside-cached-area / Room-pins-only state from ConnectivityManager.
+6. **Online maps unchanged** — with network, GoogleMap tiles + style load normally.
+
+Apply `supabase/migrations/20260921153000_field_observations.sql` on the cloud project so observation upserts succeed. Until that migration is applied, Room still keeps the records and sync reports a warning.
 
 Voice job intake and AI report paths prefer the **on-device LLM** when downloaded, so field forms can still fill without cloud.
 

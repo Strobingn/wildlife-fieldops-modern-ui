@@ -1,7 +1,12 @@
 package com.strobingn.wildlifefieldops.ui.screens
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.location.LocationManager
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -25,6 +30,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
@@ -40,6 +46,10 @@ import com.strobingn.wildlifefieldops.ui.viewmodel.MapViewModel
 import com.google.maps.android.compose.MapType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,7 +66,14 @@ fun MapScreen(
     val boundaryPoints by viewModel.boundaryPoints.collectAsState()
     val isOffline by viewModel.isOffline.collectAsState()
     val cachedCamera by viewModel.cachedCamera.collectAsState()
+    val cachedRegion by viewModel.cachedRegion.collectAsState()
+    val hasCachedTiles by viewModel.hasCachedTiles.collectAsState()
+    val isCaching by viewModel.isCaching.collectAsState()
+    val cacheProgress by viewModel.cacheProgress.collectAsState()
     val cacheMessage by viewModel.cacheMessage.collectAsState()
+    val observations by viewModel.observations.collectAsState()
+    val isObserving by viewModel.isObserving.collectAsState()
+    val pendingPin by viewModel.pendingPin.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     val mapApiKeyConfigured = BuildConfig.GOOGLE_MAPS_API_KEY.trim().let { key ->
@@ -76,6 +93,21 @@ fun MapScreen(
     var mapLoaded by remember { mutableStateOf(false) }
     var hasAutoFitted by remember { mutableStateOf(false) }
     var mapInitializationTimedOut by remember { mutableStateOf(false) }
+    var observationNotes by remember { mutableStateOf("") }
+    var observationSpecies by remember { mutableStateOf("") }
+    var pendingPhotoPath by remember { mutableStateOf<String?>(null) }
+    var pendingPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    var tempPhotoFile by remember { mutableStateOf<File?>(null) }
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            pendingPhotoPath = tempPhotoFile?.absolutePath
+            pendingPhotoUri = tempPhotoFile?.let { file ->
+                FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+            }
+        }
+    }
 
     val visibleProperties by remember(properties, selectedStatus) {
         derivedStateOf {
@@ -180,27 +212,68 @@ fun MapScreen(
         containerColor = BackgroundDark
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            if (isOffline) {
+            if (isOffline || hasCachedTiles || cacheProgress != null) {
+                val cameraInCache = cachedRegion?.contains(
+                    cameraPositionState.position.target.latitude,
+                    cameraPositionState.position.target.longitude
+                ) == true
+                val (bannerTitle, bannerBody, bannerColor) = when {
+                    cacheProgress != null -> Triple(
+                        "Caching service area",
+                        cacheProgress ?: "",
+                        AccentBlue
+                    )
+                    isOffline && hasCachedTiles && cameraInCache -> Triple(
+                        "Offline · cached tiles",
+                        "Showing cached map tiles + Room job/observation pins. © OSM © CARTO",
+                        AccentBlue
+                    )
+                    isOffline && hasCachedTiles -> Triple(
+                        "Offline · outside cached area",
+                        "Pins still work from Room. Pan back to the cached region or cache this view when online.",
+                        AccentAmber
+                    )
+                    isOffline -> Triple(
+                        "Offline map mode",
+                        "Showing Room job/observation pins + last camera. Tap Cache while online to store tiles.",
+                        AccentBlue
+                    )
+                    else -> Triple(
+                        "Map tiles cached",
+                        "${cachedRegion?.tileCount ?: 0} tiles ready for offline use. © OSM © CARTO",
+                        SurfaceVariant
+                    )
+                }
                 Card(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                         .zIndex(2f),
-                    colors = CardDefaults.cardColors(containerColor = AccentBlue.copy(alpha = 0.92f)),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isOffline) bannerColor.copy(alpha = 0.92f) else BackgroundCard.copy(alpha = 0.94f)
+                    ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.CloudOff, contentDescription = null, tint = Color.White)
+                        Icon(
+                            if (isOffline) Icons.Default.CloudOff else Icons.Default.CloudDone,
+                            contentDescription = null,
+                            tint = if (isOffline) Color.White else TextPrimary
+                        )
                         Spacer(Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Offline map mode", color = Color.White, fontWeight = FontWeight.Bold)
                             Text(
-                                "Showing Room job markers + last camera. Map tiles need network; pins still work.",
-                                color = Color.White.copy(alpha = 0.9f),
+                                bannerTitle,
+                                color = if (isOffline) Color.White else TextPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                bannerBody,
+                                color = if (isOffline) Color.White.copy(alpha = 0.9f) else TextSecondary,
                                 style = MaterialTheme.typography.labelSmall
                             )
                         }
@@ -227,11 +300,16 @@ fun MapScreen(
                     mapInitializationTimedOut = false
                 },
                 onMapClick = { latLng ->
-                    if (isDrawing) {
-                        viewModel.addBoundaryPoint(latLng)
-                    }
+                    viewModel.onMapTapped(latLng)
                 }
             ) {
+                if (isOffline && hasCachedTiles) {
+                    TileOverlay(
+                        tileProvider = viewModel.tileProvider,
+                        fadeIn = false
+                    )
+                }
+
                 // Property markers
                 visibleProperties.forEach { property ->
                     key(property.id) {
@@ -248,6 +326,32 @@ fun MapScreen(
                             }
                         )
                     }
+                }
+
+                observations.forEach { observation ->
+                    key(observation.id) {
+                        Marker(
+                            state = MarkerState(position = LatLng(observation.latitude, observation.longitude)),
+                            title = observation.notes.ifBlank { "Field observation" },
+                            snippet = buildString {
+                                append(if (observation.isSynced) "Synced" else "Queued for sync")
+                                if (observation.photoLocalPath.isNotBlank()) append(" · photo")
+                                if (observation.speciesHint.isNotBlank()) append(" · ${observation.speciesHint}")
+                            },
+                            icon = remember(observation.id, observation.isSynced) {
+                                createObservationMarkerIcon(observation.isSynced)
+                            }
+                        )
+                    }
+                }
+
+                pendingPin?.let { pin ->
+                    Marker(
+                        state = MarkerState(position = pin),
+                        title = "New observation",
+                        snippet = "Add a note and optional photo",
+                        icon = remember { createObservationMarkerIcon(false) }
+                    )
                 }
 
                 // Boundary polygon
@@ -341,7 +445,7 @@ fun MapScreen(
             }
 
             // Bottom Controls
-            if (showControls) {
+            if (showControls && pendingPin == null) {
                 Card(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -353,7 +457,7 @@ fun MapScreen(
                     Column(modifier = Modifier.padding(12.dp)) {
                         // Property count
                         Text(
-                            "${visibleProperties.size} jobs shown · ${unlocatedJobCount} without coordinates",
+                            "${visibleProperties.size} jobs · ${observations.size} observations · $unlocatedJobCount without coordinates",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextTertiary,
                             modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
@@ -414,16 +518,42 @@ fun MapScreen(
                                 modifier = Modifier.weight(1f),
                                 onClick = { fitVisibleJobs() }
                             )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            MapControlButton(
+                                label = if (isObserving) "Pinning…" else "Observe",
+                                icon = Icons.Default.AddLocationAlt,
+                                active = isObserving,
+                                modifier = Modifier.weight(1f),
+                                onClick = { viewModel.toggleObserveMode() }
+                            )
 
                             MapControlButton(
-                                label = "Cache",
+                                label = if (isCaching) "Caching" else "Cache",
                                 icon = Icons.Default.CloudDownload,
-                                active = false,
+                                active = isCaching,
                                 modifier = Modifier.weight(1f),
                                 onClick = {
+                                    if (isCaching) return@MapControlButton
                                     val p = cameraPositionState.position
                                     viewModel.persistCamera(p.target.latitude, p.target.longitude, p.zoom)
-                                    viewModel.snapshotOfflineCache()
+                                    val bounds = cameraPositionState.projection?.visibleRegion?.latLngBounds
+                                    if (bounds != null) {
+                                        viewModel.snapshotOfflineCache(
+                                            bounds.southwest.latitude,
+                                            bounds.southwest.longitude,
+                                            bounds.northeast.latitude,
+                                            bounds.northeast.longitude,
+                                            p.zoom.toInt()
+                                        )
+                                    } else {
+                                        viewModel.snapshotOfflineCache()
+                                    }
                                 }
                             )
                         }
@@ -438,7 +568,80 @@ fun MapScreen(
                             LegendDot("Active", AccentBlue)
                             LegendDot("Done", SuccessGreen)
                             LegendDot("Cancelled", ErrorRed)
+                            LegendDot("Observe", AccentAmber)
                         }
+                    }
+                }
+            }
+
+            if (pendingPin != null) {
+                ObservationComposerCard(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                        .zIndex(3f),
+                    notes = observationNotes,
+                    onNotesChange = { observationNotes = it },
+                    species = observationSpecies,
+                    onSpeciesChange = { observationSpecies = it },
+                    photoPath = pendingPhotoPath,
+                    onTakePhoto = {
+                        val file = createObservationPhotoFile(context)
+                        tempPhotoFile = file
+                        val uri = FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.provider",
+                            file
+                        )
+                        cameraLauncher.launch(uri)
+                    },
+                    onCancel = {
+                        observationNotes = ""
+                        observationSpecies = ""
+                        pendingPhotoPath = null
+                        pendingPhotoUri = null
+                        viewModel.cancelPendingObservation()
+                    },
+                    onSave = {
+                        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                        val lastKnown = locationManager?.let { viewModel.lastKnownLocation(it) }
+                        viewModel.saveObservation(
+                            notes = observationNotes,
+                            photoLocalPath = pendingPhotoPath,
+                            photoUri = pendingPhotoUri?.toString(),
+                            speciesHint = observationSpecies,
+                            lastKnown = lastKnown
+                        )
+                        observationNotes = ""
+                        observationSpecies = ""
+                        pendingPhotoPath = null
+                        pendingPhotoUri = null
+                    }
+                )
+            }
+
+            if (isObserving && pendingPin == null) {
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = if (showSearch || isOffline || hasCachedTiles) 80.dp else 16.dp)
+                        .padding(horizontal = 16.dp)
+                        .zIndex(2f),
+                    colors = CardDefaults.cardColors(containerColor = AccentAmber.copy(alpha = 0.92f)),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.TouchApp, contentDescription = null, tint = Color.White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Tap the map to drop an observation pin",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelMedium
+                        )
                     }
                 }
             }
@@ -503,4 +706,91 @@ private fun LegendDot(label: String, color: androidx.compose.ui.graphics.Color) 
         Spacer(modifier = Modifier.width(4.dp))
         Text(label, style = MaterialTheme.typography.labelSmall, color = TextTertiary)
     }
+}
+
+@Composable
+private fun ObservationComposerCard(
+    modifier: Modifier = Modifier,
+    notes: String,
+    onNotesChange: (String) -> Unit,
+    species: String,
+    onSpeciesChange: (String) -> Unit,
+    photoPath: String?,
+    onTakePhoto: () -> Unit,
+    onCancel: () -> Unit,
+    onSave: () -> Unit
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = BackgroundCard.copy(alpha = 0.97f)),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text("New field observation", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Saved to Room immediately. Syncs with Supabase when you are online.",
+                color = TextTertiary,
+                style = MaterialTheme.typography.labelSmall
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = notes,
+                onValueChange = onNotesChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("What did you see?", color = TextTertiary) },
+                singleLine = false,
+                minLines = 2,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary,
+                    focusedBorderColor = PrimaryGreen,
+                    unfocusedBorderColor = BorderDark
+                )
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = species,
+                onValueChange = onSpeciesChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Species hint (optional)", color = TextTertiary) },
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary,
+                    focusedBorderColor = PrimaryGreen,
+                    unfocusedBorderColor = BorderDark
+                )
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                if (photoPath.isNullOrBlank()) "No photo attached" else "Photo ready: ${File(photoPath).name}",
+                color = TextSecondary,
+                style = MaterialTheme.typography.labelSmall
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onTakePhoto, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.PhotoCamera, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Photo")
+                }
+                OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
+                    Text("Cancel")
+                }
+                Button(
+                    onClick = onSave,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen)
+                ) {
+                    Text("Save")
+                }
+            }
+        }
+    }
+}
+
+private fun createObservationPhotoFile(context: Context): File {
+    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    val storageDir = File(context.filesDir, "photos").apply { mkdirs() }
+    return File(storageDir, "OBS_$timeStamp.jpg")
 }

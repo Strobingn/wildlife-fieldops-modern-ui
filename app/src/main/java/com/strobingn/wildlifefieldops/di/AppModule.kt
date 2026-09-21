@@ -23,7 +23,7 @@ object AppModule {
             AppDatabase::class.java,
             "wildlife_fieldops.db"
         )
-            .addMigrations(Migrations.MIGRATION_3_4)
+            .addMigrations(Migrations.MIGRATION_3_4, Migrations.MIGRATION_4_5)
             .fallbackToDestructiveMigration()
             .build()
     }
@@ -63,4 +63,7 @@ object AppModule {
 
     @Provides
     fun provideDeletedRecordDao(database: AppDatabase) = database.deletedRecordDao()
+
+    @Provides
+    fun provideFieldObservationDao(database: AppDatabase) = database.fieldObservationDao()
 }
