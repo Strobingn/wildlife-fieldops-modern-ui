@@ -80,6 +80,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object Expense : Screen("expenses", "Expenses", Icons.Default.Receipt)
     object Inventory : Screen("inventory", "Inventory", Icons.Default.Inventory)
     object RouteOptimizer : Screen("routes", "Routes", Icons.Default.Route)
+    object CountyReports : Screen("county_reports", "County Reports", Icons.Default.Assessment)
     object Estimate : Screen("estimate/{jobId}?autoDraft={autoDraft}", "Estimate") {
         fun createRoute(jobId: String, autoDraft: Boolean = false) =
             if (autoDraft) "estimate/$jobId?autoDraft=true" else "estimate/$jobId"
@@ -90,6 +91,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
         val drawerItems = listOf(
             CustomerList,
             Map,
+            CountyReports,
             PhotoGallery,
             LiveCapture,
             VoiceLog,
