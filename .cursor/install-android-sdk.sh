@@ -130,12 +130,19 @@ install_sdk_packages() {
   local build_tools="$2"
   local sdkmanager="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
   local packages=()
+  # AGP 8.2.2 (root build.gradle.kts) still installs Build-Tools 34 even when
+  # compileSdk is 35. Pre-install it so Gradle does not download mid-compile.
+  local agp_build_tools="${ANDROID_AGP_BUILD_TOOLS_VERSION:-34.0.0}"
 
   if ! sdk_package_installed "${ANDROID_SDK_ROOT}/platforms/android-${compile_sdk}/android.jar"; then
     packages+=("platforms;android-${compile_sdk}")
   fi
   if ! sdk_package_installed "${ANDROID_SDK_ROOT}/build-tools/${build_tools}/aapt"; then
     packages+=("build-tools;${build_tools}")
+  fi
+  if [[ "$agp_build_tools" != "$build_tools" ]] && \
+     ! sdk_package_installed "${ANDROID_SDK_ROOT}/build-tools/${agp_build_tools}/aapt"; then
+    packages+=("build-tools;${agp_build_tools}")
   fi
   if ! sdk_package_installed "${ANDROID_SDK_ROOT}/platform-tools/adb"; then
     packages+=("platform-tools")
