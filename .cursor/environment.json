@@ -1,0 +1,17 @@
+{
+  "name": "Wildlife FieldOps",
+  "install": "npm ci",
+  "terminals": [
+    {
+      "name": "vite-dev",
+      "command": "npm run dev",
+      "description": "Vite dev server for the Wildlife FieldOps PWA. Serves the app at http://localhost:5173 with hot module reload. The app is offline-first and runs without API keys (Supabase/Maps/Weather features degrade gracefully)."
+    }
+  ],
+  "ports": [
+    {
+      "name": "vite-dev",
+      "port": 5173
+    }
+  ]
+}
