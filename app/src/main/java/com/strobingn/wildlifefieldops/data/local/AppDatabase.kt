@@ -20,7 +20,7 @@ import com.strobingn.wildlifefieldops.data.model.*
         Invoice::class,
         DeletedRecord::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
