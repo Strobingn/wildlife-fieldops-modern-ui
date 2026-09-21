@@ -2,11 +2,13 @@ package com.strobingn.wildlifefieldops.data.repository
 
 import com.strobingn.wildlifefieldops.data.local.CustomerDao
 import com.strobingn.wildlifefieldops.data.local.DeletedRecordDao
+import com.strobingn.wildlifefieldops.data.local.FieldObservationDao
 import com.strobingn.wildlifefieldops.data.local.InspectionDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
 import com.strobingn.wildlifefieldops.data.model.Customer
 import com.strobingn.wildlifefieldops.data.model.DeletedRecord
 import com.strobingn.wildlifefieldops.data.model.Job
+import com.strobingn.wildlifefieldops.data.observation.FieldObservationSyncQueue
 import com.strobingn.wildlifefieldops.data.remote.RemoteCustomerDto
 import com.strobingn.wildlifefieldops.data.remote.RemoteInspectionDto
 import com.strobingn.wildlifefieldops.data.remote.RemoteJobDto
@@ -27,6 +29,7 @@ data class SyncResult(
     val pushedJobs: Int = 0,
     val pushedCustomers: Int = 0,
     val pushedInspections: Int = 0,
+    val pushedObservations: Int = 0,
     val pulledJobs: Int = 0,
     val pulledCustomers: Int = 0
 )
@@ -37,6 +40,7 @@ class SyncRepository @Inject constructor(
     private val jobDao: JobDao,
     private val customerDao: CustomerDao,
     private val inspectionDao: InspectionDao,
+    private val fieldObservationDao: FieldObservationDao,
     private val deletedRecordDao: DeletedRecordDao
 ) {
     fun isCloudConfigured(): Boolean = supabaseService.isConfigured
@@ -87,6 +91,7 @@ class SyncRepository @Inject constructor(
         var pushedJobs = 0
         var pushedCustomers = 0
         var pushedInspections = 0
+        var pushedObservations = 0
         var pulledJobs = 0
         var pulledCustomers = 0
         val warnings = mutableListOf<String>()
@@ -182,8 +187,21 @@ class SyncRepository @Inject constructor(
             warnings += "job pull: ${e.message ?: e.javaClass.simpleName}"
         }
 
-        val base = "Synced. Pushed: $pushedJobs jobs, $pushedCustomers customers, $pushedInspections inspections. " +
-            "Pulled: $pulledJobs jobs, $pulledCustomers customers."
+        try {
+            val unsynced = FieldObservationSyncQueue.queuedForPush(fieldObservationDao.getUnsynced())
+            if (unsynced.isNotEmpty()) {
+                val dtos = unsynced.map { it.toRemoteDto() }
+                client.from("field_observations").upsert(dtos)
+                unsynced.forEach { fieldObservationDao.markSynced(it.id) }
+                pushedObservations = dtos.size
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("SyncRepository", "Field observation push skipped", e)
+            warnings += "observation push: ${e.message ?: e.javaClass.simpleName}"
+        }
+
+        val base = "Synced. Pushed: $pushedJobs jobs, $pushedCustomers customers, $pushedInspections inspections, " +
+            "$pushedObservations observations. Pulled: $pulledJobs jobs, $pulledCustomers customers."
         val message = if (warnings.isEmpty()) base else "$base Warnings: ${warnings.joinToString("; ")}"
         return SyncResult(
             success = true,
@@ -191,6 +209,7 @@ class SyncRepository @Inject constructor(
             pushedJobs = pushedJobs,
             pushedCustomers = pushedCustomers,
             pushedInspections = pushedInspections,
+            pushedObservations = pushedObservations,
             pulledJobs = pulledJobs,
             pulledCustomers = pulledCustomers
         )

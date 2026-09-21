@@ -2,6 +2,7 @@ package com.strobingn.wildlifefieldops.data.remote
 
 import com.strobingn.wildlifefieldops.data.model.Customer
 import com.strobingn.wildlifefieldops.data.model.CustomerType
+import com.strobingn.wildlifefieldops.data.model.FieldObservation
 import com.strobingn.wildlifefieldops.data.model.Inspection
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobPriority
@@ -70,6 +71,20 @@ data class RemoteInspectionDto(
     val species: String? = null,
     val status: String? = null,
     val priority: String? = null
+)
+
+@Serializable
+data class RemoteFieldObservationDto(
+    val id: String,
+    val notes: String = "",
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    @SerialName("photo_path") val photoPath: String? = null,
+    @SerialName("photo_id") val photoId: String? = null,
+    @SerialName("job_id") val jobId: String? = null,
+    @SerialName("species_hint") val speciesHint: String? = null,
+    @SerialName("accuracy_meters") val accuracyMeters: Double? = null,
+    @SerialName("observed_at") val observedAt: String? = null
 )
 
 @Serializable
@@ -185,6 +200,19 @@ fun RemoteJobDto.toLocal(existing: Job? = null): Job {
         isSynced = true
     )
 }
+
+fun FieldObservation.toRemoteDto(): RemoteFieldObservationDto = RemoteFieldObservationDto(
+    id = id.ifBlank { UUID.randomUUID().toString() },
+    notes = notes,
+    latitude = latitude,
+    longitude = longitude,
+    photoPath = photoLocalPath.takeIf { it.isNotBlank() },
+    photoId = photoId?.takeIf { it.isNotBlank() },
+    jobId = jobId?.takeIf { it.isNotBlank() && isUuid(it) },
+    speciesHint = speciesHint.takeIf { it.isNotBlank() },
+    accuracyMeters = accuracyMeters?.toDouble(),
+    observedAt = Instant.ofEpochMilli(observedAt).toString()
+)
 
 fun Inspection.toRemoteDtoOrNull(): RemoteInspectionDto {
     val findingsJson = buildJsonObject {
