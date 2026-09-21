@@ -1,0 +1,4 @@
+{
+  "name": "Wildlife FieldOps Android",
+  "install": "bash .cursor/install-android-sdk.sh"
+}
