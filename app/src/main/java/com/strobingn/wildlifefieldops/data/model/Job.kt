@@ -37,5 +37,9 @@ data class Job(
     val notes: String = "",
     val photos: List<String> = emptyList(),
     val isSynced: Boolean = false,
-    val syncError: String? = null
+    val syncError: String? = null,
+    /** Resolved county name (e.g. "Orange County"). Persisted so offline invoices work. */
+    val county: String? = null,
+    /** Two-letter state abbreviation resolved alongside [county] (e.g. "NY"). */
+    val state: String? = null
 )

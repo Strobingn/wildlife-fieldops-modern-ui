@@ -41,6 +41,7 @@ import com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.model.*
 import com.strobingn.wildlifefieldops.ui.theme.*
+import com.strobingn.wildlifefieldops.ui.viewmodel.CountyTaxState
 import com.strobingn.wildlifefieldops.ui.viewmodel.InvoiceViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
 import java.io.File
@@ -58,6 +59,12 @@ fun InvoiceScreen(
 ) {
     val job by jobsViewModel.getJobById(jobId).collectAsState(initial = null)
     val context = LocalContext.current
+    val countyTaxState by invoiceViewModel.countyTaxState.collectAsState()
+
+    // Trigger county lookup once the job is loaded.
+    LaunchedEffect(job) {
+        job?.let { invoiceViewModel.resolveCountyTax(it) }
+    }
 
     var lineItems by remember { mutableStateOf(listOf(
         InvoiceLineItem(description = "Wildlife Inspection", quantity = 1.0, unit = "ea", unitPrice = 150.0),
@@ -65,6 +72,15 @@ fun InvoiceScreen(
         InvoiceLineItem(description = "Entry Point Sealing", quantity = 3.0, unit = "ea", unitPrice = 85.0)
     )) }
     var taxRate by remember { mutableStateOf("8.0") }
+
+    // Auto-fill tax rate when county resolves (only overwrite if the user hasn't
+    // manually changed the field away from the default "8.0" sentinel).
+    LaunchedEffect(countyTaxState) {
+        if (countyTaxState is CountyTaxState.Resolved) {
+            val rate = (countyTaxState as CountyTaxState.Resolved).ratePercent
+            taxRate = rate.toBigDecimal().stripTrailingZeros().toPlainString()
+        }
+    }
     var discountPercent by remember { mutableStateOf("0") }
     var notes by remember { mutableStateOf("") }
     var terms by remember { mutableStateOf("Payment due within 30 days. Late payments subject to 1.5% monthly service charge.") }
@@ -177,6 +193,11 @@ fun InvoiceScreen(
                         InvoiceField("Tax %", taxRate, { taxRate = it.filter { c -> c.isDigit() || c == '.' } }, Modifier.weight(1f))
                         InvoiceField("Discount %", discountPercent, { discountPercent = it.filter { c -> c.isDigit() || c == '.' } }, Modifier.weight(1f))
                     }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    CountyTaxLabel(
+                        state = countyTaxState,
+                        onRefresh = { job?.let { invoiceViewModel.refreshCountyTax(it) } }
+                    )
                 }
             }
 
@@ -359,6 +380,89 @@ fun InvoiceScreen(
             onShare = { sharePDF(context, pdfPath) },
             onView = { viewPDF(context, pdfPath) }
         )
+    }
+}
+
+/**
+ * Small informational row shown beneath the Tax % field.
+ * Displays the resolved county name and rate, a loading indicator, or a hint to
+ * set the rate manually when county resolution failed.
+ */
+@Composable
+private fun CountyTaxLabel(
+    state: CountyTaxState,
+    onRefresh: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        when (state) {
+            is CountyTaxState.Idle -> Unit
+
+            is CountyTaxState.Loading -> {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    strokeWidth = 2.dp,
+                    color = TextSecondary
+                )
+                Text(
+                    "Resolving county…",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary
+                )
+            }
+
+            is CountyTaxState.Resolved -> {
+                Icon(
+                    Icons.Default.LocationOn,
+                    contentDescription = null,
+                    tint = PrimaryGreen,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    state.displayLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = PrimaryGreen
+                )
+                IconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier.size(20.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = "Refresh county",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+
+            is CountyTaxState.Unknown -> {
+                Icon(
+                    Icons.Default.Info,
+                    contentDescription = null,
+                    tint = TextSecondary,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    "County unknown — set tax % manually",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary
+                )
+                IconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier.size(20.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = "Retry county lookup",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+        }
     }
 }
 
