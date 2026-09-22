@@ -1,10 +1,12 @@
 package com.strobingn.wildlifefieldops.data.observation
 
 import com.strobingn.wildlifefieldops.data.model.FieldObservation
+import com.strobingn.wildlifefieldops.data.remote.toRemoteDto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Instant
 
 class FieldObservationSyncQueueTest {
 
@@ -54,5 +56,22 @@ class FieldObservationSyncQueueTest {
             )
         )
         assertTrue(FieldObservationSyncQueue.isMappable(obs("ok")))
+    }
+
+    @Test
+    fun remoteDtoWritesStorageFieldsWithoutDroppingMetadata() {
+        val row = obs("obs-1", observedAt = 1_700_000_000_000L)
+        val dto = row.toRemoteDto(
+            photoStoragePath = "field/obs-1/obs-1.jpg",
+            photoPublicUrl = "https://example.supabase.co/storage/v1/object/public/observation-photos/field/obs-1/obs-1.jpg"
+        )
+        assertEquals("obs-1", dto.id)
+        assertEquals("raccoon attic", dto.notes)
+        assertEquals(41.5, dto.latitude)
+        assertEquals(-74.0, dto.longitude)
+        assertEquals("/tmp/obs-1.jpg", dto.photoPath)
+        assertEquals("field/obs-1/obs-1.jpg", dto.photoStoragePath)
+        assertTrue(dto.photoPublicUrl!!.contains("observation-photos"))
+        assertEquals(Instant.ofEpochMilli(row.observedAt).toString(), dto.observedAt)
     }
 }

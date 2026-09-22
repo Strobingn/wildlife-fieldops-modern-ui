@@ -23,6 +23,14 @@ interface ObservationEventDao {
     @Query("SELECT * FROM observation_events ORDER BY observedAt DESC")
     fun observeAll(): Flow<List<ObservationEventRecord>>
 
+    @Query("SELECT * FROM observation_events WHERE isSynced = 0 ORDER BY observedAt ASC")
+    suspend fun getUnsynced(): List<ObservationEventRecord>
+
+    @Query(
+        "UPDATE observation_events SET isSynced = 1, syncedAt = :syncedAt WHERE eventId = :eventId"
+    )
+    suspend fun markSynced(eventId: String, syncedAt: Long)
+
     @Query("SELECT COUNT(*) FROM observation_events")
     suspend fun count(): Int
 }

@@ -14,6 +14,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * MIGRATION_5_6 adds `voice_observations` for fail-closed voice-first logging notes.
  *
  * MIGRATION_6_7 adds append-only `observation_events` for on-device species IDs (ADR 0002).
+ *
+ * MIGRATION_7_8 adds local sync flags on `observation_events` (evidence rows stay append-only).
  */
 object Migrations {
 
@@ -103,6 +105,15 @@ object Migrations {
             db.execSQL(
                 "CREATE INDEX IF NOT EXISTS index_observation_events_humanVerification ON observation_events(humanVerification)"
             )
+        }
+    }
+
+    val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE observation_events ADD COLUMN isSynced INTEGER NOT NULL DEFAULT 0"
+            )
+            db.execSQL("ALTER TABLE observation_events ADD COLUMN syncedAt INTEGER")
         }
     }
 }

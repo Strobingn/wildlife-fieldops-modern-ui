@@ -34,4 +34,7 @@ data class ObservationEventRecord(
     val geometryTrust: Float,
     val humanVerification: String,
     val supersedesEventId: String?,
+    /** Local sync bookkeeping only — not part of the immutable evidence payload. */
+    val isSynced: Boolean = false,
+    val syncedAt: Long? = null,
 )
