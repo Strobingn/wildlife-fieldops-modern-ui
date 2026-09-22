@@ -84,7 +84,32 @@ data class RemoteFieldObservationDto(
     @SerialName("job_id") val jobId: String? = null,
     @SerialName("species_hint") val speciesHint: String? = null,
     @SerialName("accuracy_meters") val accuracyMeters: Double? = null,
-    @SerialName("observed_at") val observedAt: String? = null
+    @SerialName("observed_at") val observedAt: String? = null,
+    @SerialName("photo_storage_path") val photoStoragePath: String? = null,
+    @SerialName("photo_public_url") val photoPublicUrl: String? = null
+)
+
+@Serializable
+data class RemoteObservationEventDto(
+    @SerialName("event_id") val eventId: String,
+    @SerialName("entity_id") val entityId: String,
+    @SerialName("observed_at") val observedAt: Long,
+    @SerialName("uploaded_at") val uploadedAt: Long,
+    @SerialName("device_id") val deviceId: String = "",
+    @SerialName("operator_id") val operatorId: String = "",
+    @SerialName("model_id") val modelId: String = "",
+    @SerialName("model_hash") val modelHash: String = "",
+    @SerialName("backend_tag") val backendTag: String = "",
+    @SerialName("quantizer_tag") val quantizerTag: String = "",
+    @SerialName("frame_hash") val frameHash: String = "",
+    @SerialName("crop_hash") val cropHash: String = "",
+    @SerialName("media_uri") val mediaUri: String? = null,
+    @SerialName("media_storage_path") val mediaStoragePath: String? = null,
+    @SerialName("label_distribution") val labelDistribution: JsonObject = buildJsonObject { },
+    @SerialName("capture_quality") val captureQuality: Double = 0.0,
+    @SerialName("geometry_trust") val geometryTrust: Double = 0.0,
+    @SerialName("human_verification") val humanVerification: String = "UNREVIEWED",
+    @SerialName("supersedes_event_id") val supersedesEventId: String? = null
 )
 
 @Serializable
@@ -201,7 +226,10 @@ fun RemoteJobDto.toLocal(existing: Job? = null): Job {
     )
 }
 
-fun FieldObservation.toRemoteDto(): RemoteFieldObservationDto = RemoteFieldObservationDto(
+fun FieldObservation.toRemoteDto(
+    photoStoragePath: String? = null,
+    photoPublicUrl: String? = null
+): RemoteFieldObservationDto = RemoteFieldObservationDto(
     id = id.ifBlank { UUID.randomUUID().toString() },
     notes = notes,
     latitude = latitude,
@@ -211,7 +239,9 @@ fun FieldObservation.toRemoteDto(): RemoteFieldObservationDto = RemoteFieldObser
     jobId = jobId?.takeIf { it.isNotBlank() && isUuid(it) },
     speciesHint = speciesHint.takeIf { it.isNotBlank() },
     accuracyMeters = accuracyMeters?.toDouble(),
-    observedAt = Instant.ofEpochMilli(observedAt).toString()
+    observedAt = Instant.ofEpochMilli(observedAt).toString(),
+    photoStoragePath = photoStoragePath?.takeIf { it.isNotBlank() },
+    photoPublicUrl = photoPublicUrl?.takeIf { it.isNotBlank() }
 )
 
 fun Inspection.toRemoteDtoOrNull(): RemoteInspectionDto {

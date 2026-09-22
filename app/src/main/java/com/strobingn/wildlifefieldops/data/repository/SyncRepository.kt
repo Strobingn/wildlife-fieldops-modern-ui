@@ -5,13 +5,19 @@ import com.strobingn.wildlifefieldops.data.local.DeletedRecordDao
 import com.strobingn.wildlifefieldops.data.local.FieldObservationDao
 import com.strobingn.wildlifefieldops.data.local.InspectionDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
+import com.strobingn.wildlifefieldops.data.local.ObservationEventDao
 import com.strobingn.wildlifefieldops.data.model.Customer
 import com.strobingn.wildlifefieldops.data.model.DeletedRecord
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.observation.FieldObservationSyncQueue
+import com.strobingn.wildlifefieldops.data.observation.ObservationEventMapper
+import com.strobingn.wildlifefieldops.data.observation.ObservationEventSyncQueue
+import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoPaths
+import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoUploader
 import com.strobingn.wildlifefieldops.data.remote.RemoteCustomerDto
 import com.strobingn.wildlifefieldops.data.remote.RemoteInspectionDto
 import com.strobingn.wildlifefieldops.data.remote.RemoteJobDto
+import com.strobingn.wildlifefieldops.data.remote.RemoteObservationEventDto
 import com.strobingn.wildlifefieldops.data.remote.SupabaseService
 import com.strobingn.wildlifefieldops.data.remote.toLocal
 import com.strobingn.wildlifefieldops.data.remote.toRemoteDto
@@ -30,6 +36,8 @@ data class SyncResult(
     val pushedCustomers: Int = 0,
     val pushedInspections: Int = 0,
     val pushedObservations: Int = 0,
+    val pushedEvents: Int = 0,
+    val uploadedPhotos: Int = 0,
     val pulledJobs: Int = 0,
     val pulledCustomers: Int = 0
 )
@@ -41,6 +49,8 @@ class SyncRepository @Inject constructor(
     private val customerDao: CustomerDao,
     private val inspectionDao: InspectionDao,
     private val fieldObservationDao: FieldObservationDao,
+    private val observationEventDao: ObservationEventDao,
+    private val observationPhotoUploader: ObservationPhotoUploader,
     private val deletedRecordDao: DeletedRecordDao
 ) {
     fun isCloudConfigured(): Boolean = supabaseService.isConfigured
@@ -92,6 +102,8 @@ class SyncRepository @Inject constructor(
         var pushedCustomers = 0
         var pushedInspections = 0
         var pushedObservations = 0
+        var pushedEvents = 0
+        var uploadedPhotos = 0
         var pulledJobs = 0
         var pulledCustomers = 0
         val warnings = mutableListOf<String>()
@@ -189,19 +201,102 @@ class SyncRepository @Inject constructor(
 
         try {
             val unsynced = FieldObservationSyncQueue.queuedForPush(fieldObservationDao.getUnsynced())
-            if (unsynced.isNotEmpty()) {
-                val dtos = unsynced.map { it.toRemoteDto() }
-                client.from("field_observations").upsert(dtos)
-                unsynced.forEach { fieldObservationDao.markSynced(it.id) }
-                pushedObservations = dtos.size
+            unsynced.forEach { observation ->
+                try {
+                    var storagePath: String? = null
+                    var publicUrl: String? = null
+                    val localPhoto = observation.photoLocalPath.trim()
+                    if (ObservationPhotoPaths.isLocalCandidate(localPhoto) &&
+                        observationPhotoUploader.readBytes(localPhoto) != null
+                    ) {
+                        val uploaded = observationPhotoUploader.uploadFieldPhoto(
+                            client = client,
+                            observationId = observation.id,
+                            localPath = localPhoto
+                        )
+                        storagePath = uploaded.storagePath
+                        publicUrl = uploaded.publicUrl
+                        uploadedPhotos += 1
+                    } else if (ObservationPhotoPaths.isLocalCandidate(localPhoto)) {
+                        android.util.Log.w(
+                            "SyncRepository",
+                            "Field observation ${observation.id} photo missing locally; syncing metadata only"
+                        )
+                        warnings += "observation ${observation.id} photo missing locally"
+                    }
+                    client.from("field_observations").upsert(
+                        observation.toRemoteDto(
+                            photoStoragePath = storagePath,
+                            photoPublicUrl = publicUrl
+                        )
+                    )
+                    fieldObservationDao.markSynced(observation.id)
+                    pushedObservations += 1
+                } catch (e: Exception) {
+                    android.util.Log.w(
+                        "SyncRepository",
+                        "Field observation ${observation.id} push failed; local photo kept",
+                        e
+                    )
+                    warnings += "observation ${observation.id}: ${e.message ?: e.javaClass.simpleName}"
+                    runCatching {
+                        fieldObservationDao.markSyncError(
+                            observation.id,
+                            e.message ?: e.javaClass.simpleName
+                        )
+                    }
+                }
             }
         } catch (e: Exception) {
             android.util.Log.w("SyncRepository", "Field observation push skipped", e)
             warnings += "observation push: ${e.message ?: e.javaClass.simpleName}"
         }
 
+        try {
+            val unsyncedEvents = ObservationEventSyncQueue.queuedForPush(observationEventDao.getUnsynced())
+            val now = System.currentTimeMillis()
+            unsyncedEvents.forEach { record ->
+                try {
+                    var storagePath: String? = null
+                    val mediaUri = record.mediaUri?.trim().orEmpty()
+                    if (ObservationPhotoPaths.isLocalCandidate(mediaUri) &&
+                        observationPhotoUploader.readBytes(mediaUri) != null
+                    ) {
+                        val uploaded = observationPhotoUploader.uploadEventMedia(
+                            client = client,
+                            eventId = record.eventId,
+                            mediaUri = mediaUri
+                        )
+                        storagePath = uploaded.storagePath
+                        uploadedPhotos += 1
+                    } else if (ObservationPhotoPaths.isLocalCandidate(mediaUri)) {
+                        android.util.Log.w(
+                            "SyncRepository",
+                            "ObservationEvent ${record.eventId} media missing locally; inserting row without storage path"
+                        )
+                        warnings += "event ${record.eventId} media missing locally"
+                    }
+                    val dto = ObservationEventMapper.toRemoteDto(record, mediaStoragePath = storagePath)
+                    insertObservationEventIgnoreDuplicate(client, dto)
+                    observationEventDao.markSynced(record.eventId, now)
+                    pushedEvents += 1
+                } catch (e: Exception) {
+                    android.util.Log.w(
+                        "SyncRepository",
+                        "ObservationEvent ${record.eventId} push failed; local evidence kept",
+                        e
+                    )
+                    warnings += "event ${record.eventId}: ${e.message ?: e.javaClass.simpleName}"
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("SyncRepository", "ObservationEvent push skipped", e)
+            warnings += "event push: ${e.message ?: e.javaClass.simpleName}"
+        }
+
         val base = "Synced. Pushed: $pushedJobs jobs, $pushedCustomers customers, $pushedInspections inspections, " +
-            "$pushedObservations observations. Pulled: $pulledJobs jobs, $pulledCustomers customers."
+            "$pushedObservations observations, $pushedEvents events, $uploadedPhotos photos. " +
+            "Pulled: $pulledJobs jobs, $pulledCustomers customers."
         val message = if (warnings.isEmpty()) base else "$base Warnings: ${warnings.joinToString("; ")}"
         return SyncResult(
             success = true,
@@ -210,9 +305,39 @@ class SyncRepository @Inject constructor(
             pushedCustomers = pushedCustomers,
             pushedInspections = pushedInspections,
             pushedObservations = pushedObservations,
+            pushedEvents = pushedEvents,
+            uploadedPhotos = uploadedPhotos,
             pulledJobs = pulledJobs,
             pulledCustomers = pulledCustomers
         )
+    }
+
+    private suspend fun insertObservationEventIgnoreDuplicate(
+        client: SupabaseClient,
+        dto: RemoteObservationEventDto
+    ) {
+        try {
+            client.from("observation_events").insert(dto)
+        } catch (e: Exception) {
+            if (isDuplicateEvent(e)) {
+                android.util.Log.i(
+                    "SyncRepository",
+                    "ObservationEvent ${dto.eventId} already on server; treating as synced"
+                )
+            } else {
+                throw e
+            }
+        }
+    }
+
+    private fun isDuplicateEvent(error: Throwable): Boolean {
+        val text = buildString {
+            generateSequence(error) { it.cause }.forEach { append(it.message.orEmpty()).append(' ') }
+        }.lowercase()
+        return "duplicate" in text ||
+            "already exists" in text ||
+            "23505" in text ||
+            "409" in text
     }
 
     private suspend fun pushDeletions(
