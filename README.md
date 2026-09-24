@@ -62,10 +62,30 @@ Legacy web / Capacitor folders may still exist in the repo history for reference
 ## Sync
 
 - Local data lives in Room (`wildlife_fieldops.db`).
-- **Settings → Sync Now** pushes unsynced jobs/customers/inspections/field observations and pulls cloud rows.
+- **Settings → Sync Now** pushes unsynced jobs/customers/inspections/field observations/observation events and pulls cloud rows.
 - Cloud project: `wildlife_app` (`hgdzmwfcghtilyqagjak`).
 - Schema applied: `supabase/migrations/20260710153000_native_sync_fix.sql` (customers table + RLS/grants for `anon`).
 - Verified: REST insert/select/delete for `customers` + `jobs` works with the app anon key.
+
+### WorkManager 2.12 sync canary
+
+Background upload is a **debug-only canary** (`BuildConfig.WM_SYNC_CANARY_ENABLED`).
+Release builds keep the existing foreground `SyncRepository.syncAll()` path.
+
+| Build | Flag | Sync Now |
+| --- | --- | --- |
+| `debug` | `true` | `enqueueUniqueWork("fieldops-sync", ExistingWorkPolicy.KEEP)` + network constraint |
+| `release` | `false` | today’s `syncAll()` (unchanged) |
+
+Enablement: ship a debug APK, or add a flavor that sets `WM_SYNC_CANARY_ENABLED=true`.
+Do not flip the release default without a rollback plan. Diagnostics shows **WM sync canary**.
+
+Two ledgers (see [docs/adr/0004-workmanager-sync-canary.md](docs/adr/0004-workmanager-sync-canary.md)):
+
+1. **Domain** — Room `sync_operations` + `isSynced` queues. ACK only after `syncAll()` succeeds. Worker `Result.success` is not exactly-once proof.
+2. **Scheduler** — enqueue/start/finish/retry tags (`fo-op:…`, `fo-idk:…` only; no GPS/photos/notes/tokens). WorkManager metrics retain **~7 days**; domain audit does not.
+
+When reconciling a missed upload, compare **server rows** vs **Room `isSynced` / operation state** vs **WM metrics / adapter events**. Observation events stay insert-ignore (`23505` / `409`).
 
 ## AI (real generative only)
 

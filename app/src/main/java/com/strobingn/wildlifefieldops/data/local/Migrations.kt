@@ -16,6 +16,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * MIGRATION_6_7 adds append-only `observation_events` for on-device species IDs (ADR 0002).
  *
  * MIGRATION_7_8 adds local sync flags on `observation_events` (evidence rows stay append-only).
+ *
+ * MIGRATION_8_9 adds `sync_operations` — the durable domain ledger for the
+ * WorkManager 2.12 sync canary (ADR 0004). Distinct from WM analytics (~7 days).
  */
 object Migrations {
 
@@ -114,6 +117,27 @@ object Migrations {
                 "ALTER TABLE observation_events ADD COLUMN isSynced INTEGER NOT NULL DEFAULT 0"
             )
             db.execSQL("ALTER TABLE observation_events ADD COLUMN syncedAt INTEGER")
+        }
+    }
+
+    val MIGRATION_8_9 = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS sync_operations (
+                    operationId TEXT NOT NULL PRIMARY KEY,
+                    idempotencyKey TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    workRequestId TEXT,
+                    workGeneration INTEGER,
+                    createdAt INTEGER NOT NULL,
+                    updatedAt INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS index_sync_operations_idempotencyKey ON sync_operations(idempotencyKey)"
+            )
         }
     }
 }
