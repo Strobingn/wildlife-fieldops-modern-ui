@@ -14,7 +14,10 @@ policy.
 
 WorkManager **2.12.0** (stable 2026-09-23) adds experimental `work-analytics`,
 `ScheduleEventListener`, and `ExecutionEventListener`. `minSdk = 29` is above the
-library’s API-24 floor. This ADR introduces a **guarded canary**, not a cutover.
+library’s API-24 floor. The 2.12 AARs require **AGP ≥ 8.6.0**; this repo bumps
+`com.android.application` 8.2.2 → 8.6.1 only for that metadata floor (Gradle
+wrapper is already 8.14.5). Lifecycle / Navigation / Fragment / Maps / CameraX
+pins are unchanged. This ADR introduces a **guarded canary**, not a cutover.
 
 ## Decision
 
