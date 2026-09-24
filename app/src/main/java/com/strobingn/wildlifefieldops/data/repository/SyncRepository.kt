@@ -22,6 +22,7 @@ import com.strobingn.wildlifefieldops.data.remote.SupabaseService
 import com.strobingn.wildlifefieldops.data.remote.toLocal
 import com.strobingn.wildlifefieldops.data.remote.toRemoteDto
 import com.strobingn.wildlifefieldops.data.remote.toRemoteDtoOrNull
+import com.strobingn.wildlifefieldops.sync.work.FieldOpsSyncGateway
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.Dispatchers
@@ -52,10 +53,10 @@ class SyncRepository @Inject constructor(
     private val observationEventDao: ObservationEventDao,
     private val observationPhotoUploader: ObservationPhotoUploader,
     private val deletedRecordDao: DeletedRecordDao
-) {
-    fun isCloudConfigured(): Boolean = supabaseService.isConfigured
+) : FieldOpsSyncGateway {
+    override fun isCloudConfigured(): Boolean = supabaseService.isConfigured
 
-    suspend fun syncAll(): SyncResult = withContext(Dispatchers.IO) {
+    override suspend fun syncAll(): SyncResult = withContext(Dispatchers.IO) {
         try {
             doSync()
         } catch (t: Throwable) {

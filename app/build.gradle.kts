@@ -66,6 +66,9 @@ android {
         val hfToken = envTrim("HF_TOKEN").ifBlank { envTrim("HUGGING_FACE_HUB_TOKEN") }
         buildConfigField("String", "HF_TOKEN", "\"${escapeBuildConfig(hfToken)}\"")
 
+        // WorkManager 2.12 sync canary — default OFF; debug/canary build types turn it on.
+        buildConfigField("boolean", "WM_SYNC_CANARY_ENABLED", "false")
+
         manifestPlaceholders["GOOGLE_MAPS_API"] = mapsKey
 
         ndk {
@@ -89,6 +92,7 @@ android {
         release {
             isMinifyEnabled = false
             isShrinkResources = false
+            buildConfigField("boolean", "WM_SYNC_CANARY_ENABLED", "false")
             val keystorePath = System.getenv("KEYSTORE_PATH")
             if (keystorePath != null && file(keystorePath).exists()) {
                 signingConfig = signingConfigs.getByName("release")
@@ -96,6 +100,7 @@ android {
         }
         debug {
             isDebuggable = true
+            buildConfigField("boolean", "WM_SYNC_CANARY_ENABLED", "true")
         }
     }
 
@@ -173,6 +178,12 @@ dependencies {
 
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
+    // WorkManager 2.12 canary (CoroutineWorker lives in work-runtime; ktx is empty at 2.12).
+    val workVersion = "2.12.0"
+    implementation("androidx.work:work-runtime:$workVersion")
+    implementation("androidx.work:work-runtime-ktx:$workVersion")
+    implementation("androidx.work:work-analytics:$workVersion")
+
     implementation("com.google.android.gms:play-services-maps:18.2.0")
     implementation("com.google.maps.android:maps-compose:4.3.0")
     implementation("com.google.ar:core:1.45.0")
@@ -208,6 +219,7 @@ dependencies {
     implementation("dev.ffmpegkit-maintained:llama-android:0.1.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")

@@ -76,6 +76,11 @@ fun DiagnosticsScreen(
                 DiagnosticRow("Supabase", if (supabaseReady) "Configured" else "Missing", supabaseReady)
                 DiagnosticRow("Google Maps", if (mapsReady) "Configured" else "Missing", mapsReady)
                 DiagnosticRow("AI", if (aiReady) "Configured" else "Missing", aiReady)
+                DiagnosticRow(
+                    "WM sync canary",
+                    if (BuildConfig.WM_SYNC_CANARY_ENABLED) "ON (fieldops-sync)" else "OFF",
+                    BuildConfig.WM_SYNC_CANARY_ENABLED
+                )
                 DiagnosticRow("Service status", connectionStatus, !connectionStatus.contains("missing", ignoreCase = true))
             }
 

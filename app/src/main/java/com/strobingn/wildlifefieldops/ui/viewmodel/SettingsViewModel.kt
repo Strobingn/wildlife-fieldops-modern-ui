@@ -10,6 +10,9 @@ import com.strobingn.wildlifefieldops.data.remote.AiService
 import com.strobingn.wildlifefieldops.data.remote.SupabaseService
 import com.strobingn.wildlifefieldops.data.remote.WeatherService
 import com.strobingn.wildlifefieldops.data.repository.SyncRepository
+import com.strobingn.wildlifefieldops.sync.work.FieldOpsSyncScheduler
+import com.strobingn.wildlifefieldops.sync.work.SyncEnqueueResult
+import com.strobingn.wildlifefieldops.sync.work.WorkManagerSyncCanaryFlag
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -27,7 +30,9 @@ class SettingsViewModel @Inject constructor(
     private val supabaseService: SupabaseService,
     private val weatherService: WeatherService,
     private val database: AppDatabase,
-    private val aiService: AiService
+    private val aiService: AiService,
+    private val workManagerSyncCanaryFlag: WorkManagerSyncCanaryFlag,
+    private val fieldOpsSyncScheduler: FieldOpsSyncScheduler
 ) : ViewModel() {
 
     private val dataStore = context.settingsDataStore
@@ -93,7 +98,8 @@ class SettingsViewModel @Inject constructor(
             !BuildConfig.GOOGLE_MAPS_API_KEY.contains("YOUR_")
         ) "Maps OK" else "Maps missing"
         val weather = if (weatherService.isConfigured) "Weather OK" else "Weather optional"
-        return "$cloud · $maps · $weather"
+        val wm = if (workManagerSyncCanaryFlag.isEnabled()) "WM canary" else "WM off"
+        return "$cloud · $maps · $weather · $wm"
     }
 
     fun setDarkTheme(enabled: Boolean) = viewModelScope.launch {
@@ -170,6 +176,19 @@ class SettingsViewModel @Inject constructor(
             if (!syncRepository.isCloudConfigured()) {
                 _syncMessage.value =
                     "Cloud not configured. Rebuild APK with Supabase secrets set (Settings shows connection status)."
+                return@launch
+            }
+            if (workManagerSyncCanaryFlag.isEnabled()) {
+                _syncMessage.value = withContext(Dispatchers.IO) {
+                    when (val queued = fieldOpsSyncScheduler.enqueueSync()) {
+                        SyncEnqueueResult.Disabled ->
+                            "WorkManager canary flag flipped off; use a debug rebuild."
+                        is SyncEnqueueResult.KeptExisting ->
+                            "Background sync already queued (fieldops-sync, op ${queued.operationId}). Domain pending kept."
+                        is SyncEnqueueResult.Enqueued ->
+                            "Background sync enqueued (fieldops-sync, op ${queued.operationId})."
+                    }
+                }
                 return@launch
             }
             val result = syncRepository.syncAll()
