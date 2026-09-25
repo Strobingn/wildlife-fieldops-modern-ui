@@ -401,12 +401,73 @@ function O(arr, selected = '') {
 }
 
 /**
+ * Create O(1) collection lookups for job cards to avoid O(N*M) nested array scans.
+ * @param {Record<string, any>} state
+ * @returns {{
+ *   visitJobIds: Set<string>, visitCounts: Map<string, number>,
+ *   photoJobIds: Set<string>, photoCounts: Map<string, number>,
+ *   repairJobIds: Set<string>, repairCounts: Map<string, number>,
+ *   sigJobIds: Set<string>
+ * }}
+ */
+function createJobLookups(state) {
+  const visitJobIds = new Set();
+  const visitCounts = new Map();
+  for (const v of state?.visits || []) {
+    const id = v.jobId || v.job_id;
+    if (id) {
+      visitJobIds.add(id);
+      visitCounts.set(id, (visitCounts.get(id) || 0) + 1);
+    }
+  }
+
+  const photoJobIds = new Set();
+  const photoCounts = new Map();
+  for (const p of state?.photos || []) {
+    const id = p.jobId || p.job_id;
+    if (id) {
+      photoJobIds.add(id);
+      photoCounts.set(id, (photoCounts.get(id) || 0) + 1);
+    }
+  }
+
+  const repairJobIds = new Set();
+  const repairCounts = new Map();
+  for (const r of state?.repairs || []) {
+    const id = r.jobId || r.job_id;
+    if (id) {
+      repairJobIds.add(id);
+      repairCounts.set(id, (repairCounts.get(id) || 0) + 1);
+    }
+  }
+
+  const sigJobIds = new Set();
+  for (const sig of state?.signatures || []) {
+    const id = sig.jobId || sig.job_id;
+    if (id) sigJobIds.add(id);
+  }
+
+  return { visitJobIds, visitCounts, photoJobIds, photoCounts, repairJobIds, repairCounts, sigJobIds };
+}
+
+/**
  * Calculate job completeness score (0-100).
+ * Performance optimization: Accepts optional pre-computed lookups to run in O(1) time
+ * instead of scanning sub-collection arrays in O(M) time per call.
  * @param {string} jobId
+ * @param {Record<string, any>} [state]
+ * @param {ReturnType<typeof createJobLookups>} [lookups]
  * @returns {number}
  */
-function jobScore(jobId) {
-  const s = store.getState();
+function jobScore(jobId, state = store.getState(), lookups = null) {
+  if (lookups) {
+    const hasVisits = lookups.visitJobIds.has(jobId);
+    const hasPhotos = lookups.photoJobIds.has(jobId);
+    const hasRepairs = lookups.repairJobIds.has(jobId);
+    const hasSig = lookups.sigJobIds.has(jobId);
+    return Math.min(100, (hasVisits ? 25 : 0) + (hasPhotos ? 25 : 0) + (hasRepairs ? 25 : 0) + (hasSig ? 25 : 0));
+  }
+  const s = state;
   const hasVisits = s.visits.some((v) => v.jobId === jobId || v.job_id === jobId);
   const hasPhotos = s.photos.some((p) => p.jobId === jobId || p.job_id === jobId);
   const hasRepairs = s.repairs.some((r) => r.jobId === jobId || r.job_id === jobId);
@@ -499,6 +560,9 @@ const Dashboard = {
       .sort((a, b) => b[1].length - a[1].length)
       .slice(0, 5);
 
+    // Pre-build O(1) collection lookups once for job cards
+    const lookups = createJobLookups(state);
+
     return `
       <div class="page dashboard-page">
         <!-- Metrics Cards -->
@@ -550,7 +614,7 @@ const Dashboard = {
         <!-- Recent Jobs -->
         <h2 class="section-title">${q ? 'Search Results' : 'Recent Jobs'}</h2>
         <div class="job-list">
-          ${recentJobs.length ? recentJobs.map((j) => this._jobCard(j, state)).join('')
+          ${recentJobs.length ? recentJobs.map((j) => this._jobCard(j, state, lookups)).join('')
             : '<div class="card empty">No jobs yet.</div>'}
         </div>
 
@@ -601,13 +665,13 @@ const Dashboard = {
     `;
   },
 
-  _jobCard(j, state) {
-    const s = jobScore(j.id);
+  _jobCard(j, state, lookups) {
+    const s = jobScore(j.id, state, lookups);
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
-    const vCount = (state.visits || []).filter((v) => (v.jobId || v.job_id) === j.id).length;
-    const rCount = (state.repairs || []).filter((r) => (r.jobId || r.job_id) === j.id).length;
-    const pCount = (state.photos || []).filter((p) => (p.jobId || p.job_id) === j.id).length;
+    const vCount = lookups ? (lookups.visitCounts.get(j.id) || 0) : (state.visits || []).filter((v) => (v.jobId || v.job_id) === j.id).length;
+    const rCount = lookups ? (lookups.repairCounts.get(j.id) || 0) : (state.repairs || []).filter((r) => (r.jobId || r.job_id) === j.id).length;
+    const pCount = lookups ? (lookups.photoCounts.get(j.id) || 0) : (state.photos || []).filter((p) => (p.jobId || p.job_id) === j.id).length;
     return `
       <div class="card job-card" data-job-id="${E(j.id)}">
         <div class="job-header">
@@ -704,6 +768,7 @@ const JobList = {
     let jobs = q ? searchJobs(state.jobs, q) : [...state.jobs];
     jobs = filterJobs(jobs, state.filters);
     jobs = sortBy(jobs, 'updated_at', 'desc');
+    const lookups = createJobLookups(state);
 
     return `
       <div class="page job-list-page">
@@ -721,15 +786,15 @@ const JobList = {
           <button class="btn primary" data-action="new-job">➕ New Job</button>
         </div>
         <div class="job-list">
-          ${jobs.length ? jobs.map((j) => this._jobCard(j, state)).join('')
+          ${jobs.length ? jobs.map((j) => this._jobCard(j, state, lookups)).join('')
             : `<div class="card empty">${q ? 'No matching jobs.' : 'No jobs yet.'}</div>`}
         </div>
       </div>
     `;
   },
 
-  _jobCard(j, state) {
-    const s = jobScore(j.id);
+  _jobCard(j, state, lookups) {
+    const s = jobScore(j.id, state, lookups);
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
     return `
