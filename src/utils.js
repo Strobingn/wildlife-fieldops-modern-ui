@@ -314,10 +314,29 @@ export function deepClone(obj) {
 export function mergeArrays(local, server, key) {
   if (!Array.isArray(local) || !Array.isArray(server)) return [...(local || [])];
   const merged = [...local];
+
+  // Performance optimization: Build Map of key -> index to reduce lookup time
+  // from O(N * M) using findIndex down to O(N + M) using Map hash lookup.
+  const indexMap = new Map();
+  for (let i = 0; i < merged.length; i++) {
+    const k = merged[i]?.[key];
+    if (k !== undefined && k !== null) {
+      indexMap.set(k, i);
+    }
+  }
+
   for (const sItem of server) {
-    const idx = merged.findIndex((item) => item?.[key] === sItem?.[key]);
-    if (idx >= 0) merged[idx] = deepClone(sItem);
-    else merged.push(deepClone(sItem));
+    const k = sItem?.[key];
+    const cloned = deepClone(sItem);
+    if (k !== undefined && k !== null && indexMap.has(k)) {
+      const idx = indexMap.get(k);
+      merged[idx] = cloned;
+    } else {
+      merged.push(cloned);
+      if (k !== undefined && k !== null) {
+        indexMap.set(k, merged.length - 1);
+      }
+    }
   }
   return merged;
 }
@@ -513,10 +532,24 @@ export function searchJobs(jobs, query) {
 export function filterJobs(jobs, filters) {
   if (!Array.isArray(jobs)) return [];
   if (!filters || typeof filters !== 'object') return jobs;
-  return jobs.filter((j) =>
-    Object.entries(filters).every(([key, val]) => {
-      if (!val) return true;
-      return String(j?.[key] ?? '').toLowerCase() === String(val).toLowerCase();
-    })
-  );
+
+  // Performance optimization: Extract active filters once outside the filter loop
+  // instead of recreating Object.entries(filters) on every job evaluation.
+  const activeFilters = [];
+  for (const [key, val] of Object.entries(filters)) {
+    if (val !== undefined && val !== null && val !== '') {
+      activeFilters.push([key, String(val).toLowerCase()]);
+    }
+  }
+  if (activeFilters.length === 0) return jobs;
+
+  return jobs.filter((j) => {
+    for (let i = 0; i < activeFilters.length; i++) {
+      const [key, valLower] = activeFilters[i];
+      if (String(j?.[key] ?? '').toLowerCase() !== valLower) {
+        return false;
+      }
+    }
+    return true;
+  });
 }
