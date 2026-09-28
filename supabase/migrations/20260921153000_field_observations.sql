@@ -67,4 +67,5 @@ create policy "field_observations_insert" on public.field_observations for inser
 create policy "field_observations_update" on public.field_observations for update using (true) with check (true);
 create policy "field_observations_delete" on public.field_observations for delete using (true);
 
-grant select, insert, update, delete on public.field_observations to anon, authenticated;
+-- Native FieldOps upserts this table with the anon key (no user session).
+grant select, insert, update, delete on public.field_observations to anon, authenticated, service_role;

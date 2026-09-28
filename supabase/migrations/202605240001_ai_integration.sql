@@ -23,6 +23,9 @@ for all
 using (true)
 with check (true);
 
+-- Native Android does not read/write ai_runs. No anon grant.
+grant select, insert, update, delete on public.ai_runs to authenticated, service_role;
+
 alter table public.jobs add column if not exists ai_notes text;
 alter table public.jobs add column if not exists ai_customer_message text;
 alter table public.jobs add column if not exists ai_invoice_notes text;

@@ -864,3 +864,59 @@ create policy "expenses_select" on public.expenses for select using (true);
 create policy "expenses_insert" on public.expenses for insert with check (true);
 create policy "expenses_update" on public.expenses for update using (true) with check (true);
 create policy "expenses_delete" on public.expenses for delete using (true);
+
+-- Audit log: written by trigger public.log_change() as the DML invoker.
+-- Enable RLS so the table is not Data-API readable. INSERT policy keeps
+-- job/customer/visit/repair/signature triggers working after default
+-- public-schema grants go away (2026-10-30).
+alter table public.audit_log enable row level security;
+drop policy if exists "audit_log_insert" on public.audit_log;
+create policy "audit_log_insert" on public.audit_log for insert with check (true);
+
+-- =========================
+-- Data API grants (PostgREST / supabase-kt / supabase-js)
+-- =========================
+-- Starting 2026-10-30, new public tables are not auto-granted to anon /
+-- authenticated / service_role. Explicit grants below are required for a
+-- schema rebuild (fresh project, preview branch, supabase db reset).
+-- Native Android authenticates only with the anon key (no sign-in), so
+-- customer/job/inspection tables that SyncRepository touches include anon.
+-- Other tables: authenticated + service_role only.
+
+grant usage on schema public to anon, authenticated, service_role;
+
+grant execute on function public.set_updated_at() to anon, authenticated, service_role;
+grant execute on function public.log_change() to anon, authenticated, service_role;
+
+grant usage, select on all sequences in schema public to anon, authenticated, service_role;
+
+-- Tables the native app syncs unauthenticated (anon key, no session):
+grant select, insert, update, delete on public.customers to anon, authenticated, service_role;
+grant select, insert, update, delete on public.jobs to anon, authenticated, service_role;
+grant select, insert, update, delete on public.inspections to anon, authenticated, service_role;
+
+-- Remaining tables: signed-in / service role only (no anon).
+grant select, insert, update, delete on public.techs to authenticated, service_role;
+grant select, insert, update, delete on public.visits to authenticated, service_role;
+grant select, insert, update, delete on public.repairs to authenticated, service_role;
+grant select, insert, update, delete on public.signatures to authenticated, service_role;
+grant select, insert, update, delete on public.materials to authenticated, service_role;
+grant select, insert, update, delete on public.job_materials to authenticated, service_role;
+grant select, insert, update, delete on public.services to authenticated, service_role;
+grant select, insert, update, delete on public.photos to authenticated, service_role;
+grant select, insert, update, delete on public.pdf_documents to authenticated, service_role;
+grant select, insert, update, delete on public.appointments to authenticated, service_role;
+grant select, insert, update, delete on public.sync_events to authenticated, service_role;
+grant select, insert, update, delete on public.expenses to authenticated, service_role;
+
+-- Trigger writes only for Data API roles; service_role may read for admin.
+grant insert on public.audit_log to anon, authenticated, service_role;
+grant select, update, delete on public.audit_log to service_role;
+
+grant select on public.job_stats to authenticated, service_role;
+grant select on public.tech_stats to authenticated, service_role;
+grant select on public.species_stats to authenticated, service_role;
+grant select on public.weekly_revenue to authenticated, service_role;
+grant select on public.customer_summary to authenticated, service_role;
+grant select on public.pending_repairs to authenticated, service_role;
+grant select on public.material_inventory to authenticated, service_role;
