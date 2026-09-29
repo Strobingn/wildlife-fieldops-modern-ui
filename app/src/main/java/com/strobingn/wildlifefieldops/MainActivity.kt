@@ -58,11 +58,29 @@ class MainActivity : AppCompatActivity() {
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
                     ) {
+                        val authVm: com.strobingn.wildlifefieldops.ui.viewmodel.AppAuthViewModel =
+                            hiltViewModel()
+                        val authState by authVm.uiState.collectAsState()
+                        val continueOffline by authVm.continueOffline.collectAsState()
                         LaunchedEffect(Unit) {
                             kotlinx.coroutines.delay(800)
                             requestLaunchPermissions()
                         }
-                        WildlifeFieldOpsNavHost()
+                        if (!authState.initialized || continueOffline == null) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        } else {
+                            val start = if (authState.signedIn || continueOffline == true) {
+                                Screen.Dashboard.route
+                            } else {
+                                Screen.SignIn.route
+                            }
+                            WildlifeFieldOpsNavHost(startDestination = start)
+                        }
                     }
                 }
             }
@@ -90,7 +108,7 @@ class MainActivity : AppCompatActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WildlifeFieldOpsNavHost() {
+fun WildlifeFieldOpsNavHost(startDestination: String = Screen.Dashboard.route) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -150,6 +168,7 @@ fun WildlifeFieldOpsNavHost() {
             AppNavHost(
                 navController = navController,
                 modifier = Modifier.padding(padding),
+                startDestination = startDestination,
                 onOpenDrawer = {
                     scope.launch {
                         if (drawerState.isClosed) drawerState.open() else drawerState.close()
@@ -164,9 +183,26 @@ fun WildlifeFieldOpsNavHost() {
 private fun AppNavHost(
     navController: NavHostController,
     modifier: Modifier = Modifier,
+    startDestination: String = Screen.Dashboard.route,
     onOpenDrawer: () -> Unit = {}
 ) {
-    NavHost(navController = navController, startDestination = Screen.Dashboard.route, modifier = modifier) {
+    NavHost(navController = navController, startDestination = startDestination, modifier = modifier) {
+        composable(Screen.SignIn.route) {
+            SignInScreen(
+                onSignedIn = {
+                    navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.SignIn.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
+                onContinueOffline = {
+                    navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.SignIn.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            )
+        }
         composable(Screen.Dashboard.route) {
             DashboardScreen(
                 onNavigateToJobs = { navController.navigate(Screen.JobList.route) },
@@ -180,6 +216,7 @@ private fun AppNavHost(
                 onNavigateToCountyReports = { navController.navigate(Screen.CountyReports.route) },
                 onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                 onNavigateToAI = { navController.navigate(Screen.AIAssistant.route) },
+                onNavigateToSignIn = { navController.navigate(Screen.SignIn.route) },
                 onOpenDrawer = onOpenDrawer
             )
         }
@@ -316,7 +353,10 @@ private fun AppNavHost(
             )
         }
         composable(Screen.Settings.route) {
-            SettingsScreen(onBack = { navController.popBackStack() })
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateToSignIn = { navController.navigate(Screen.SignIn.route) }
+            )
         }
         composable(Screen.AIAssistant.route) {
             AIAssistantScreen(onBack = { navController.popBackStack() })

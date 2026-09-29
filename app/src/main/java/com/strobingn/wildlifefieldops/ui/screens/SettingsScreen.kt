@@ -24,6 +24,7 @@ import com.strobingn.wildlifefieldops.ui.viewmodel.SettingsViewModel
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onNavigateToSignIn: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val darkTheme by viewModel.darkTheme.collectAsState(initial = true)
@@ -38,7 +39,9 @@ fun SettingsScreen(
     val connectionStatus by viewModel.connectionStatus.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
+    val authState by viewModel.authState.collectAsState()
     var showClearDataDialog by remember { mutableStateOf(false) }
+    var showSignOutDialog by remember { mutableStateOf(false) }
     var showAiOperations by remember { mutableStateOf(false) }
     var showDiagnostics by remember { mutableStateOf(false) }
 
@@ -73,6 +76,59 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            SettingsSectionTitle("Account")
+            SettingsCard {
+                if (authState.signedIn) {
+                    Text(
+                        authState.email?.ifBlank { null } ?: "Signed in",
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Sync runs as the authenticated Postgres role. Local Room data stays on this device if you sign out.",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = { showSignOutDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Logout, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Sign out")
+                    }
+                } else {
+                    Text(
+                        "Sign in to sync",
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Capture, jobs, and inspections still work offline. Cloud push/pull and photo uploads wait until you sign in. Accounts are created by the owner — no public signup.",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = onNavigateToSignIn,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Login, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Sign in", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
             SettingsSectionTitle("Connections")
             SettingsCard {
                 Text(connectionStatus, color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
@@ -262,6 +318,14 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(if (isSyncing) "Syncing…" else "Sync Now", fontWeight = FontWeight.Bold)
                 }
+                if (!authState.signedIn) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Sign in to sync — unsynced local items stay queued.",
+                        color = TextTertiary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -282,6 +346,29 @@ fun SettingsScreen(
             Text("Wildlife FieldOps v${BuildConfig.VERSION_NAME} (code ${BuildConfig.VERSION_CODE})", style = MaterialTheme.typography.labelSmall, color = TextTertiary, modifier = Modifier.align(Alignment.CenterHorizontally))
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+
+    if (showSignOutDialog) {
+        AlertDialog(
+            onDismissRequest = { showSignOutDialog = false },
+            title = { Text("Sign out?", color = TextPrimary) },
+            text = {
+                Text(
+                    "This does not delete local jobs, customers, inspections, photos, or unsynced queue items. You will not be able to sync until you sign in again.",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.signOut()
+                    showSignOutDialog = false
+                }) { Text("Sign out", color = ErrorRed) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSignOutDialog = false }) { Text("Cancel", color = TextSecondary) }
+            },
+            containerColor = BackgroundCard
+        )
     }
 
     if (showClearDataDialog) {

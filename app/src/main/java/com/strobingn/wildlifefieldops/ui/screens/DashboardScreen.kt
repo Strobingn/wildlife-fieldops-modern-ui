@@ -44,6 +44,7 @@ fun DashboardScreen(
     onNavigateToCountyReports: () -> Unit = {},
     onNavigateToSettings: () -> Unit,
     onNavigateToAI: () -> Unit,
+    onNavigateToSignIn: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
@@ -53,6 +54,8 @@ fun DashboardScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val weatherVm: LiveWeatherViewModel = hiltViewModel()
     val weatherState by weatherVm.state.collectAsState()
+    val authVm: com.strobingn.wildlifefieldops.ui.viewmodel.AppAuthViewModel = hiltViewModel()
+    val authState by authVm.uiState.collectAsState()
     LaunchedEffect(Unit) { weatherVm.loadShopWeather() }
 
     val greeting = remember {
@@ -104,6 +107,42 @@ fun DashboardScreen(
                     title = "Shop weather",
                     onRefresh = { weatherVm.loadShopWeather() }
                 )
+            }
+
+            if (!authState.signedIn && authState.initialized) {
+                item {
+                    Surface(
+                        onClick = onNavigateToSignIn,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = FieldShapes.card,
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.CloudOff,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Sign in to sync",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    "Local capture still works. Cloud sync and photo uploads wait until you sign in.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             // ── Hero header ───────────────────────────────────────────────

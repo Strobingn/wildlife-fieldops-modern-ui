@@ -41,6 +41,9 @@ class FieldOpsSyncWorkRunner(
             return failRetryable(boundId, workRequestId, generation, nowMs)
         }
 
+        // Missing session returns SyncResult.success = false (Sign in to sync)
+        // so this is Retry, never Success/ACK. Queue items stay unsynced.
+
         return if (result.success) {
             ledger.transition(boundId, DomainSyncState.ACKNOWLEDGED, nowMs)
             adapter.record(

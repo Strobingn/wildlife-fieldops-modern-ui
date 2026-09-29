@@ -1,21 +1,26 @@
 package com.strobingn.wildlifefieldops.data.remote
 
+import android.content.Context
+import android.util.Log
+import com.strobingn.wildlifefieldops.BuildConfig
+import com.strobingn.wildlifefieldops.data.auth.EncryptedSessionManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.gotrue.Auth
 import io.github.jan.supabase.gotrue.auth
-import io.github.jan.supabase.gotrue.providers.builtin.Email
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.postgrest
-import io.github.jan.supabase.storage.Storage
 import io.github.jan.supabase.serializer.KotlinXSerializer
+import io.github.jan.supabase.storage.Storage
 import kotlinx.serialization.json.Json
-import com.strobingn.wildlifefieldops.BuildConfig
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class SupabaseService @Inject constructor() {
+class SupabaseService @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
 
     // Keys from BuildConfig (GitHub Actions secrets / local env at build time)
     private val supabaseUrl = BuildConfig.SUPABASE_URL
@@ -30,7 +35,7 @@ class SupabaseService @Inject constructor() {
 
     val client: SupabaseClient? by lazy {
         if (!isConfigured) {
-            android.util.Log.w("SupabaseService", "Supabase not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY env vars.")
+            Log.w("SupabaseService", "Supabase not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY env vars.")
             null
         } else {
             try {
@@ -40,18 +45,19 @@ class SupabaseService @Inject constructor() {
                 ) {
                     install(Postgrest)
                     install(Auth) {
-                        // Auth configuration
+                        autoLoadFromStorage = true
+                        autoSaveToStorage = true
+                        alwaysAutoRefresh = true
+                        sessionManager = EncryptedSessionManager(context)
                     }
-                    install(Storage) {
-                        // Storage configuration
-                    }
+                    install(Storage)
                     defaultSerializer = KotlinXSerializer(Json {
                         ignoreUnknownKeys = true
                         isLenient = true
                     })
                 }
             } catch (e: Exception) {
-                android.util.Log.e("SupabaseService", "Failed to create Supabase client", e)
+                Log.e("SupabaseService", "Failed to create Supabase client", e)
                 null
             }
         }
@@ -59,56 +65,4 @@ class SupabaseService @Inject constructor() {
 
     val auth get() = client?.auth
     val postgrest get() = client?.postgrest
-
-    suspend fun signIn(email: String, password: String): Boolean {
-        return try {
-            auth?.signInWith(Email) {
-                this.email = email
-                this.password = password
-            }
-            true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
-        }
-    }
-
-    suspend fun signUp(email: String, password: String): Boolean {
-        return try {
-            auth?.signUpWith(Email) {
-                this.email = email
-                this.password = password
-            }
-            true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
-        }
-    }
-
-    suspend fun signOut() {
-        try {
-            auth?.signOut()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    fun isAuthenticated(): Boolean {
-        return auth?.currentUserOrNull() != null
-    }
-
-    suspend fun signInAnonymous(): Boolean {
-        return try {
-            val uuid = java.util.UUID.randomUUID().toString()
-            auth?.signUpWith(Email) {
-                this.email = "anon_${uuid}@wildlifefieldops.local"
-                this.password = uuid
-            }
-            true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
-        }
-    }
 }

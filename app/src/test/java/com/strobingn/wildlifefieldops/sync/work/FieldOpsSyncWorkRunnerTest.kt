@@ -1,5 +1,6 @@
 package com.strobingn.wildlifefieldops.sync.work
 
+import com.strobingn.wildlifefieldops.data.auth.SyncAuthGate
 import com.strobingn.wildlifefieldops.data.repository.SyncResult
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -8,6 +9,28 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FieldOpsSyncWorkRunnerTest {
+
+    @Test
+    fun missingSessionIsRetryNotSuccessAndDoesNotAck() = runBlocking {
+        val ledger = InMemoryDomainSyncLedger()
+        val adapter = WorkAnalyticsAdapter({ true }, RecordingWorkSchedulerTelemetry())
+        val gateway = FakeSyncGateway(
+            success = false,
+            message = SyncAuthGate.SIGN_IN_TO_SYNC,
+            sessionBlocked = true,
+            requiresSignIn = true
+        )
+        val runner = FieldOpsSyncWorkRunner(gateway, ledger, adapter)
+        val op = ledger.beginOrReuseActive(nowMs = 10L)
+
+        val outcome = runner.run(op.operationId, workRequestId = "wr-auth", generation = 0, nowMs = 20L)
+
+        assertEquals(FieldOpsSyncWorkOutcome.Retry, outcome)
+        assertEquals(DomainSyncState.RETRYABLE_FAILURE, ledger.get(op.operationId)?.state)
+        assertNotEquals(DomainSyncState.ACKNOWLEDGED, ledger.get(op.operationId)?.state)
+        assertTrue(adapter.snapshot().any { it.type == SchedulerEventType.RETRY })
+        assertTrue(adapter.snapshot().none { it.type == SchedulerEventType.FINISH })
+    }
 
     @Test
     fun doesNotAckDomainWhenRepositoryFails() = runBlocking {
@@ -89,7 +112,10 @@ private class InsertIgnoreEventSink {
 private class FakeSyncGateway(
     private val success: Boolean,
     private val throwOnCall: Boolean = false,
-    private val sink: InsertIgnoreEventSink? = null
+    private val sink: InsertIgnoreEventSink? = null,
+    private val message: String? = null,
+    private val sessionBlocked: Boolean = false,
+    private val requiresSignIn: Boolean = false
 ) : FieldOpsSyncGateway {
     var calls: Int = 0
 
@@ -101,8 +127,10 @@ private class FakeSyncGateway(
         val inserted = sink?.insertIgnore("event-a") ?: true
         return SyncResult(
             success = success,
-            message = if (success) "ok" else "push failed",
-            pushedEvents = if (inserted) 1 else 0
+            message = message ?: if (success) "ok" else "push failed",
+            pushedEvents = if (inserted) 1 else 0,
+            requiresSignIn = requiresSignIn,
+            sessionBlocked = sessionBlocked
         )
     }
 }

@@ -5,6 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.datastore.preferences.core.*
 import com.strobingn.wildlifefieldops.BuildConfig
+import com.strobingn.wildlifefieldops.data.auth.AuthActionResult
+import com.strobingn.wildlifefieldops.data.auth.AuthSessionRepository
+import com.strobingn.wildlifefieldops.data.auth.AuthUiState
+import com.strobingn.wildlifefieldops.data.auth.SyncAuthGate
 import com.strobingn.wildlifefieldops.data.local.AppDatabase
 import com.strobingn.wildlifefieldops.data.remote.AiService
 import com.strobingn.wildlifefieldops.data.remote.SupabaseService
@@ -28,6 +32,7 @@ class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val syncRepository: SyncRepository,
     private val supabaseService: SupabaseService,
+    private val authSession: AuthSessionRepository,
     private val weatherService: WeatherService,
     private val database: AppDatabase,
     private val aiService: AiService,
@@ -61,9 +66,11 @@ class SettingsViewModel @Inject constructor(
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
-    val connectionStatus: StateFlow<String> = flow {
-        emit(buildConnectionStatus())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Checking…")
+    val connectionStatus: StateFlow<String> = authSession.uiState
+        .map { buildConnectionStatus(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Checking…")
+
+    val authState: StateFlow<AuthUiState> = authSession.uiState
 
     private val settings = dataStore.data
         .catch { emit(emptyPreferences()) }
@@ -91,15 +98,20 @@ class SettingsViewModel @Inject constructor(
         return raw
     }
 
-    private fun buildConnectionStatus(): String {
+    private fun buildConnectionStatus(auth: AuthUiState = authSession.uiState.value): String {
         val cloud = if (supabaseService.isConfigured) "Supabase OK" else "Supabase missing"
+        val session = when {
+            !supabaseService.isConfigured -> "Auth n/a"
+            auth.signedIn -> "Signed in${auth.email?.let { " as $it" } ?: ""}"
+            else -> SyncAuthGate.SIGN_IN_TO_SYNC
+        }
         val maps = if (
             BuildConfig.GOOGLE_MAPS_API_KEY.isNotBlank() &&
             !BuildConfig.GOOGLE_MAPS_API_KEY.contains("YOUR_")
         ) "Maps OK" else "Maps missing"
         val weather = if (weatherService.isConfigured) "Weather OK" else "Weather optional"
         val wm = if (workManagerSyncCanaryFlag.isEnabled()) "WM canary" else "WM off"
-        return "$cloud · $maps · $weather · $wm"
+        return "$cloud · $session · $maps · $weather · $wm"
     }
 
     fun setDarkTheme(enabled: Boolean) = viewModelScope.launch {
@@ -178,6 +190,12 @@ class SettingsViewModel @Inject constructor(
                     "Cloud not configured. Rebuild APK with Supabase secrets set (Settings shows connection status)."
                 return@launch
             }
+            val session = authSession.awaitReadySession()
+            val gate = SyncAuthGate.evaluate(true, session)
+            if (gate is com.strobingn.wildlifefieldops.data.auth.SyncGateDecision.Blocked) {
+                _syncMessage.value = gate.message
+                return@launch
+            }
             if (workManagerSyncCanaryFlag.isEnabled()) {
                 _syncMessage.value = withContext(Dispatchers.IO) {
                     when (val queued = fieldOpsSyncScheduler.enqueueSync()) {
@@ -203,6 +221,18 @@ class SettingsViewModel @Inject constructor(
 
     fun clearSyncMessage() {
         _syncMessage.value = null
+    }
+
+    fun signOut() = viewModelScope.launch {
+        when (val result = authSession.signOut()) {
+            AuthActionResult.Success -> {
+                _syncMessage.value =
+                    "Signed out. Local jobs, customers, and unsynced queue are still on this device. Sign in to sync."
+            }
+            is AuthActionResult.Failure -> {
+                _syncMessage.value = "Sign out failed: ${result.message}"
+            }
+        }
     }
 
     fun exportData() = viewModelScope.launch {

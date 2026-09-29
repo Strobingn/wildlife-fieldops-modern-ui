@@ -15,8 +15,8 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 47
-        versionName = "2.3.6-capture-clock-soak"
+        versionCode = 48
+        versionName = "2.3.7-supabase-auth"
 
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
         val supabaseKey = System.getenv("SUPABASE_ANON_KEY") ?: "your-anon-key"
@@ -209,6 +209,8 @@ dependencies {
     implementation("io.github.jan-tennert.supabase:gotrue-kt:$supabaseVersion")
     implementation("io.github.jan-tennert.supabase:storage-kt:$supabaseVersion")
     implementation("io.ktor:ktor-client-android:2.3.12")
+
+    implementation("androidx.security:security-crypto:1.0.0")
 
     implementation("com.google.code.gson:gson:2.10.1")
 

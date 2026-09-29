@@ -61,13 +61,16 @@ Legacy web / Capacitor folders may still exist in the repo history for reference
 
 ## Sync
 
-- Local data lives in Room (`wildlife_fieldops.db`).
-- **Settings → Sync Now** pushes unsynced jobs/customers/inspections/field observations/observation events and pulls cloud rows.
+- Local data lives in Room (`wildlife_fieldops.db`). Sign-out does **not** wipe it.
+- **Settings → Account → Sign in** (email + password via Supabase Auth). Owner-created
+  accounts only — there is no public self-signup screen. Disable “Allow new users to
+  sign up” in the Supabase dashboard (see `supabase/migrations/README.md`).
+- Session is stored in EncryptedSharedPreferences and auto-refreshed by supabase-kt.
+- **Settings → Sync Now** pushes unsynced jobs/customers/inspections/field observations/observation events and pulls cloud rows **only when a valid session exists**. Otherwise the UI shows **Sign in to sync** and the queue stays local.
+- Capture / local edits work offline with or without a session. Cloud PostgREST and `observation-photos` uploads pause until sign-in.
 - Cloud project: `wildlife_app` (`hgdzmwfcghtilyqagjak`).
-- Schema applied: `supabase/migrations/20260710153000_native_sync_fix.sql` (customers table + RLS/grants for `anon`).
-- Verified: REST insert/select/delete for `customers` + `jobs` works with the app anon key.
-- **Auth tradeoff:** the native client sends `SUPABASE_ANON_KEY` and never calls `signIn` from the UI (`SupabaseService.signIn` is unused). Sync therefore runs as the Postgres `anon` role. Tables `customers`, `jobs`, `inspections`, `field_observations`, and `observation_events` are explicitly granted to `anon` so rebuilds after 2026-10-30 still work. Other public tables are granted only to `authenticated` + `service_role`. Adding real sign-in and revoking anon table grants is the follow-up; do not silently expand anon to invoices, techs, etc.
-- **Live follow-up:** run `supabase/migrations/20260928120000_explicit_data_api_grants.sql` in the SQL Editor if the migration runner has not applied it. Future `create table` migrations must include grants — see `supabase/migrations/README.md`.
+- **Rollout:** (1) ship `2.3.7-supabase-auth`, (2) create Auth users, (3) disable public signup, (4) apply `20260929220000_authenticated_rls_for_signed_in_sync.sql` now, (5) apply `20260929221000_REVOKE_ANON_AFTER_SIGNED_IN_ROLLOUT.sql` **only after every device is signed in**. Details: `supabase/migrations/README.md`.
+- **Live follow-up (grants):** run `supabase/migrations/20260928120000_explicit_data_api_grants.sql` in the SQL Editor if it has not been applied. Future `create table` migrations must include grants — no new `anon` grants on sensitive tables.
 
 ### WorkManager 2.12 sync canary
 
