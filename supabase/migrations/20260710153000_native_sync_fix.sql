@@ -93,9 +93,11 @@ create policy "anon_delete_customers" on public.customers for delete to anon usi
 create policy "authenticated customers (consolidated)" on public.customers
   for all to authenticated using (true) with check (true);
 
--- Table privileges (required for Data API beyond RLS)
-grant select, insert, update, delete on public.customers to anon, authenticated;
-grant usage, select on all sequences in schema public to anon, authenticated;
+-- Table privileges (required for Data API beyond RLS).
+-- Native FieldOps uses the anon key with no sign-in, so anon is required
+-- to keep current sync working. service_role is for Edge Functions / SQL.
+grant select, insert, update, delete on public.customers to anon, authenticated, service_role;
+grant usage, select on all sequences in schema public to anon, authenticated, service_role;
 
 -- Realtime (optional)
 do $$

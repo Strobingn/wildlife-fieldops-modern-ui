@@ -30,6 +30,10 @@ create policy "Allow authenticated access to photos"
     using (true)
     with check (true);
 
+-- Data API (PostgREST) table privileges. Native Android sync does not use
+-- public.photos; leftover web/Capacitor code did. No anon grant.
+grant select, insert, update, delete on public.photos to authenticated, service_role;
+
 -- Index for fast job-based lookups
 create index if not exists idx_photos_job_id on photos(job_id);
 
@@ -56,12 +60,22 @@ alter table if exists inspections enable row level security;
 
 -- Inspections policies (drop first to avoid conflicts)
 drop policy if exists "Allow authenticated access to inspections" on inspections;
+drop policy if exists "Allow anon access to inspections" on inspections;
 
 create policy "Allow authenticated access to inspections"
     on inspections for all
     to authenticated
     using (true)
     with check (true);
+
+-- Native FieldOps syncs inspections with the anon key (no user session).
+create policy "Allow anon access to inspections"
+    on inspections for all
+    to anon
+    using (true)
+    with check (true);
+
+grant select, insert, update, delete on public.inspections to anon, authenticated, service_role;
 
 -- Indexes for common queries
 create index if not exists idx_inspections_status on inspections(status);

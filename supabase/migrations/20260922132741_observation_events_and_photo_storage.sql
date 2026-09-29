@@ -49,7 +49,9 @@ create policy "observation_events_insert"
   for insert
   with check (true);
 
-grant select, insert on public.observation_events to anon, authenticated;
+-- Append-only: no update/delete for Data API roles (ADR 0002).
+-- Native FieldOps inserts with the anon key (no user session).
+grant select, insert on public.observation_events to anon, authenticated, service_role;
 
 alter table public.field_observations
   add column if not exists photo_storage_path text;

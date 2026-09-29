@@ -66,6 +66,8 @@ Legacy web / Capacitor folders may still exist in the repo history for reference
 - Cloud project: `wildlife_app` (`hgdzmwfcghtilyqagjak`).
 - Schema applied: `supabase/migrations/20260710153000_native_sync_fix.sql` (customers table + RLS/grants for `anon`).
 - Verified: REST insert/select/delete for `customers` + `jobs` works with the app anon key.
+- **Auth tradeoff:** the native client sends `SUPABASE_ANON_KEY` and never calls `signIn` from the UI (`SupabaseService.signIn` is unused). Sync therefore runs as the Postgres `anon` role. Tables `customers`, `jobs`, `inspections`, `field_observations`, and `observation_events` are explicitly granted to `anon` so rebuilds after 2026-10-30 still work. Other public tables are granted only to `authenticated` + `service_role`. Adding real sign-in and revoking anon table grants is the follow-up; do not silently expand anon to invoices, techs, etc.
+- **Live follow-up:** run `supabase/migrations/20260928120000_explicit_data_api_grants.sql` in the SQL Editor if the migration runner has not applied it. Future `create table` migrations must include grants — see `supabase/migrations/README.md`.
 
 ### WorkManager 2.12 sync canary
 
