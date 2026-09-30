@@ -25,6 +25,7 @@ jobs:
       LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
       LLM_BASE_URL: https://api.x.ai/v1
       LLM_MODEL: grok-4.5
+      DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -41,6 +42,28 @@ jobs:
 
       - name: Grant execute permission for Gradle wrapper
         run: chmod +x ./gradlew
+
+      - name: Decode CI debug keystore
+        env:
+          DEBUG_KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE_B64 }}
+          DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DEBUG_KEYSTORE_B64:-}" ] || [ -z "${DEBUG_KEYSTORE_PASSWORD:-}" ]; then
+            echo "No DEBUG_KEYSTORE_B64 / DEBUG_KEYSTORE_PASSWORD secrets (fork PR or local). Using the default Android debug key."
+            echo "HAS_CI_DEBUG_KEYSTORE=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          umask 077
+          KEYSTORE_PATH="${RUNNER_TEMP}/fieldops-debug.p12"
+          printf '%s' "$DEBUG_KEYSTORE_B64" | tr -d ' \t\r\n' | base64 -d > "$KEYSTORE_PATH"
+          if [ ! -s "$KEYSTORE_PATH" ]; then
+            echo "::error::Decoded CI debug keystore is empty"
+            exit 1
+          fi
+          echo "DEBUG_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+          echo "HAS_CI_DEBUG_KEYSTORE=true" >> "$GITHUB_ENV"
+          echo "CI debug keystore written (${#DEBUG_KEYSTORE_B64} b64 chars, $(wc -c < "$KEYSTORE_PATH") bytes). Password not printed."
 
       - name: Verify Maps secret (no value printed)
         run: |
@@ -95,6 +118,34 @@ jobs:
           test -n "$(ls -A app/build/outputs/apk/debug/*.apk 2>/dev/null)"
           echo "=== End check ==="
 
+      - name: Verify CI debug APK signer
+        if: success() && env.HAS_CI_DEBUG_KEYSTORE == 'true'
+        run: |
+          set -euo pipefail
+          EXPECTED="EC:75:D0:BC:BC:62:30:6B:0C:38:91:76:9E:05:4C:EB:C7:7C:6A:84:4D:11:9B:40:18:B9:0C:7E:F7:57:0C:A6"
+          APK="$(ls app/build/outputs/apk/debug/*.apk | head -n 1)"
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -x "${SDK}/build-tools/35.0.0/apksigner" ]; then
+            APKSIGNER="${SDK}/build-tools/35.0.0/apksigner"
+          else
+            APKSIGNER="$(find "$SDK/build-tools" -name apksigner | sort | tail -n 1)"
+          fi
+          if [ -z "$APKSIGNER" ] || [ ! -x "$APKSIGNER" ]; then
+            echo "::error::apksigner not found under $SDK/build-tools"
+            exit 1
+          fi
+          echo "Using apksigner: $APKSIGNER"
+          echo "APK: $APK"
+          CERTS="$("$APKSIGNER" verify --print-certs "$APK")"
+          echo "$CERTS"
+          GOT="$(printf '%s\n' "$CERTS" | grep -i 'SHA-256 digest' | head -n 1 | awk '{print $NF}')"
+          normalize() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]' | tr -d ' :'; }
+          if [ "$(normalize "$GOT")" != "$(normalize "$EXPECTED")" ]; then
+            echo "::error::APK signer SHA-256 mismatch. expected=$EXPECTED got=$GOT"
+            exit 1
+          fi
+          echo "Signer SHA-256 matches $EXPECTED"
+
       - name: Upload Debug APK
         if: success()
         uses: actions/upload-artifact@v4
@@ -114,7 +165,7 @@ jobs:
           retention-days: 14
 
       - name: Set release tag from branch
-        if: success() && github.event_name == 'push'
+        if: success() && github.event_name == 'push' && env.HAS_CI_DEBUG_KEYSTORE == 'true'
         id: apk_tag
         run: |
           RAW="${GITHUB_REF_NAME}"
@@ -131,7 +182,7 @@ jobs:
           echo "Publishing release tag: $TAG"
 
       - name: Publish APK on Releases (easy download)
-        if: success() && github.event_name == 'push'
+        if: success() && github.event_name == 'push' && env.HAS_CI_DEBUG_KEYSTORE == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.apk_tag.outputs.tag }}
@@ -148,10 +199,13 @@ jobs:
         if: success()
         run: |
           echo "Wildlife Field Ops Debug APK built successfully."
-          if [ "${{ github.event_name }}" = "push" ]; then
+          echo "versionCode uses 1000000 + GITHUB_RUN_NUMBER=${{ github.run_number }} in CI."
+          if [ "${{ github.event_name }}" = "push" ] && [ "${HAS_CI_DEBUG_KEYSTORE:-false}" = "true" ]; then
             TAG="${{ steps.apk_tag.outputs.tag }}"
             echo "Public download: https://github.com/${{ github.repository }}/releases/download/${TAG}/app-debug.apk"
-          else
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "PR builds upload Artifacts only (no Releases publish)."
+          else
+            echo "Release tag not published (push-only, and only when the CI debug keystore secret is present)."
           fi
 
