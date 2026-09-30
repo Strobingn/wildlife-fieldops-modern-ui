@@ -1,10 +1,12 @@
 package com.strobingn.wildlifefieldops.ui.viewmodel
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.datastore.preferences.core.*
 import com.strobingn.wildlifefieldops.BuildConfig
+import com.strobingn.wildlifefieldops.data.backup.FieldOpsBackupManager
 import com.strobingn.wildlifefieldops.data.local.AppDatabase
 import com.strobingn.wildlifefieldops.data.remote.AiService
 import com.strobingn.wildlifefieldops.data.remote.SupabaseService
@@ -65,6 +67,9 @@ class SettingsViewModel @Inject constructor(
 
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+
+    private val _isBackingUp = MutableStateFlow(false)
+    val isBackingUp: StateFlow<Boolean> = _isBackingUp.asStateFlow()
 
     private val _backlog = MutableStateFlow<SyncBacklogSnapshot?>(null)
     val backlog: StateFlow<SyncBacklogSnapshot?> = _backlog.asStateFlow()
@@ -229,11 +234,43 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun exportData() = viewModelScope.launch {
-        _syncMessage.value = "Export: use Share from job/invoice PDFs for now. Full dump coming in a later update."
+        if (_isBackingUp.value) return@launch
+        _isBackingUp.value = true
+        _syncMessage.value = "Creating Wildlife Whisperer backup…"
+        try {
+            val message = withContext(Dispatchers.IO) {
+                FieldOpsBackupManager.exportToDownloads(context, database)
+            }
+            _syncMessage.value = message
+        } catch (t: Throwable) {
+            android.util.Log.e("SettingsViewModel", "Backup failed", t)
+            _syncMessage.value = "Backup failed: ${t.message ?: t.javaClass.simpleName}"
+        } finally {
+            _isBackingUp.value = false
+        }
+    }
+
+    fun restoreFromBackup(hostContext: Context, uri: Uri) = viewModelScope.launch {
+        if (_isBackingUp.value) return@launch
+        _isBackingUp.value = true
+        _syncMessage.value = "Validating Wildlife Whisperer backup…"
+        try {
+            withContext(Dispatchers.IO) {
+                FieldOpsBackupManager.stageRestore(hostContext, uri)
+            }
+            _syncMessage.value = "Backup OK. Restarting to restore…"
+            delay(400)
+            FieldOpsBackupManager.restartApp(hostContext)
+        } catch (t: Throwable) {
+            android.util.Log.e("SettingsViewModel", "Restore failed", t)
+            _syncMessage.value = "Restore failed: ${t.message ?: t.javaClass.simpleName}"
+        } finally {
+            _isBackingUp.value = false
+        }
     }
 
     fun importData() = viewModelScope.launch {
-        _syncMessage.value = "Import: use Sync Now to pull jobs and customers from Supabase."
+        _syncMessage.value = "Use Restore from backup to pick a Wildlife Whisperer zip from Downloads."
     }
 
     fun clearAllData() = viewModelScope.launch {

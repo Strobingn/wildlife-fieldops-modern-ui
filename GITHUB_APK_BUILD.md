@@ -28,3 +28,5 @@ This is a native Android map. The Google Cloud key must have **Maps SDK for Andr
 ## Install on phone
 
 Allow install from unknown sources if asked. Open the APK after unzipping the artifact.
+
+**Updates:** the first APK signed with the shared CI debug key requires one uninstall of any older random-signed build (export a backup in Settings first). Later GitHub debug APKs install as updates.

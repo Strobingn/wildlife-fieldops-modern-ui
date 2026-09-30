@@ -26,11 +26,20 @@ Field operations app for wildlife removal:
 | `GOOGLE_MAPS_API` | Maps + GPS screens |
 | `VITE_OPENWEATHER_API_KEY` | Weather on inspections / field |
 | `VITE_GOOGLE_CALENDAR_CLIENT_ID` | Optional calendar (future) |
+| `DEBUG_KEYSTORE_B64` / `DEBUG_KEYSTORE_PASSWORD` | Stable debug APK signing so updates install over previous GitHub builds |
 
 > `GOOGLE_MAPS_API` is the native secret/build variable. The workflow also accepts older `GOOGLE_MAPS_API_KEY`, `VITE_GOOGLE_MAPS_API_KEY`, and `VITE_GOOGLE_MAPS_API` secret names.
 
 2. Push to `main` or run **Build Native Android APK (Debug)** in Actions.
 3. Download artifact **wildlife-field-ops-debug-apk**.
+
+## Installing updates
+
+GitHub Actions debug APKs now share one CI debug key and a monotonically increasing `versionCode` (`1000000 + run number`), so each new build installs **over** the last one.
+
+1. **First APK signed with the new key:** uninstall the old random-signed build once (it cannot update in place). **Settings → Export data** first if you have unsynced jobs or photos.
+2. **After that:** download the new APK and install it as an update. Unsynced Room data stays on the phone.
+3. Pull-request builds from forks have no signing secrets, so they are not published to release tags.
 
 ## Local build
 

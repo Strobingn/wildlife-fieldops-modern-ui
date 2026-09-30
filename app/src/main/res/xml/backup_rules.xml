@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <include domain="database" path="wildlife_fieldops.db" />
+    <include domain="database" path="wildlife_fieldops.db-wal" />
+    <include domain="database" path="wildlife_fieldops.db-shm" />
+    <include domain="file" path="photos/" />
+    <include domain="file" path="datastore/" />
+    <exclude domain="file" path="local_llm/" />
+    <exclude domain="file" path="wildlife_evidence.tflite" />
+    <exclude domain="file" path="map_tiles/" />
+</full-backup-content>
