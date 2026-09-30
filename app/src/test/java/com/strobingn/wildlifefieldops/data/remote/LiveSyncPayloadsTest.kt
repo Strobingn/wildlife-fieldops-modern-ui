@@ -88,20 +88,30 @@ class LiveSyncPayloadsTest {
             category = PhotoCategory.EVIDENCE,
             localPath = "/data/user/0/app/files/live.jpg"
         )
-        val dto = LiveSyncPayloads.photo(photo, "11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222.jpg", "https://example.supabase.co/storage/v1/object/public/job-photos/a.jpg")
+        val dto = LiveSyncPayloads.photo(photo, "public/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222.jpg", "https://example.supabase.co/storage/v1/object/public/job-photos/a.jpg")
         assertEquals(middletown.id, dto.jobId)
         assertEquals("evidence", dto.tag)
-        assertTrue(dto.notes!!.contains("AI:"))
         assertTrue(dto.imageUrl!!.contains("job-photos"))
         val encoded = LiveSyncPayloads.json.encodeToJsonElement(LivePhotoUpsert.serializer(), dto).jsonObject
         assertFalse("public_url" in encoded.keys)
+        assertFalse("notes" in encoded.keys)
         assertTrue("image_url" in encoded.keys)
         assertTrue("storage_path" in encoded.keys)
         assertFalse("photo_path" in encoded.keys)
+        val link = LiveSyncPayloads.jobPhotoLink(
+            photo,
+            "public/${middletown.id}/22222222-2222-2222-2222-222222222222.jpg",
+            dto.imageUrl!!
+        )
+        val linkEncoded = LiveSyncPayloads.json.encodeToJsonElement(LiveJobPhotoUpsert.serializer(), link).jsonObject
+        assertFalse("storage_path" in linkEncoded.keys)
+        assertTrue("path" in linkEncoded.keys)
+        assertTrue("notes" in linkEncoded.keys)
+        assertTrue("public_url" in linkEncoded.keys)
     }
 
     @Test
-    fun fieldObservationOmitsColumnsMissingFromSep21LiveTable() {
+    fun fieldObservationUsesLiveColumnsIncludingPhotoUrls() {
         val observation = com.strobingn.wildlifefieldops.data.model.FieldObservation(
             id = "33333333-3333-3333-3333-333333333333",
             notes = "Raccoon at soffit",
@@ -123,7 +133,19 @@ class LiveSyncPayloadsTest {
             "https://example.supabase.co/storage/v1/object/public/observation-photos/field/obs/a.jpg",
             encoded.getValue("photo_path").jsonPrimitive.content
         )
-        assertFalse("photo_storage_path" in encoded.keys)
-        assertFalse("photo_public_url" in encoded.keys)
+        assertEquals("field/obs/a.jpg", encoded.getValue("photo_storage_path").jsonPrimitive.content)
+        assertTrue("photo_public_url" in encoded.keys)
+    }
+
+    @Test
+    fun liveDumpColumnAllowlists() {
+        assertTrue(
+            LiveSyncPayloads.JOB_WRITE_COLUMNS.containsAll(
+                setOf("id", "customer_name", "customer", "title", "species", "status", "address", "town", "latitude", "longitude", "ai_notes")
+            )
+        )
+        assertFalse("organization_id" in LiveSyncPayloads.JOB_WRITE_COLUMNS)
+        assertFalse("property_id" in LiveSyncPayloads.JOB_WRITE_COLUMNS)
+        assertFalse("assigned_to" in LiveSyncPayloads.JOB_WRITE_COLUMNS)
     }
 }

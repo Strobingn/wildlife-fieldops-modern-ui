@@ -9,11 +9,14 @@ import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoPaths
 object JobPhotoPaths {
     const val BUCKET = "job-photos"
     const val MAX_BYTES = 50L * 1024 * 1024
+    /** Live anon INSERT on job-photos requires first folder `public` and `.jpg`. */
+    const val ANON_FOLDER = "public"
 
     fun objectPath(jobId: String?, photoId: String, localPath: String): String {
         val folder = jobId?.takeIf { it.isNotBlank() }?.let { ObservationPhotoPaths.sanitizeSegment(it) }
             ?: "unassigned"
         val name = ObservationPhotoPaths.sanitizeSegment(photoId.ifBlank { "photo" })
-        return "$folder/$name.${ObservationPhotoPaths.extension(localPath)}"
+        // Extension is always jpg: live policy is `storage.extension(name) = 'jpg'`.
+        return "$ANON_FOLDER/$folder/$name.jpg"
     }
 }

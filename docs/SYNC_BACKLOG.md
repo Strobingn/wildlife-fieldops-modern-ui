@@ -37,9 +37,10 @@ photos it has. After the update those numbers must still match.
 
 - Upserts each local job/customer/inspection/observation **by UUID** (retry-safe,
   no duplicates).
-- Uploads Live Capture / job gallery files to the `job-photos` bucket and inserts
-  `photos` rows (`job_id` + public URL). ML `ObservationEvent` stills go to
-  `observation-photos`.
+- Uploads Live Capture / job gallery files to the `job-photos` bucket at
+  `public/{jobId}/{photoId}.jpg` (live anon policy requires that folder and
+  extension) and inserts `photos` rows (`job_id` + `image_url` + `storage_path`).
+  ML `ObservationEvent` stills go to `observation-photos`.
 - Sets `isSynced` / `isUploaded` only after the server returns success.
 
 Owner SQL (if the dashboard still rejects writes): paste

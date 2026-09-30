@@ -12,15 +12,15 @@ class JobPhotoPathsTest {
         val second = JobPhotoPaths.objectPath("job-1", "photo-9", "content://media/still.JPEG")
         assertEquals(first, second)
         assertEquals("job-photos", JobPhotoPaths.BUCKET)
-        assertTrue(first.startsWith("job-1/"))
+        assertTrue(first.startsWith("public/"))
         assertTrue(first.endsWith(".jpg"))
+        assertEquals("public/job-1/photo-9.jpg", first)
     }
 
     @Test
     fun unassignedFolderWhenJobIdMissing() {
         val path = JobPhotoPaths.objectPath(null, "p1", "a.png")
-        assertTrue(path.startsWith("unassigned/"))
-        assertTrue(path.endsWith(".png"))
+        assertEquals("public/unassigned/p1.jpg", path)
     }
 
     @Test

@@ -18,7 +18,7 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * Push payloads that match **live** `wildlife_app` columns (owner-verified 2026-09-30).
+ * Push payloads that match **live** `wildlife_app` columns (dump 2026-09-30).
  *
  * Do not add keys that are missing live — PostgREST returns 400 `PGRST204` and the
  * whole batch used to fail silently. Latitude/longitude are JSON numbers so they
@@ -134,9 +134,8 @@ object LiveSyncPayloads {
         notes = observation.notes,
         latitude = observation.latitude,
         longitude = observation.longitude,
-        // Live field_observations (Sep 21 SQL editor) has photo_path, not the
-        // later photo_storage_path / photo_public_url add-ons. Sending those
-        // extra keys 400s the whole observation when they are missing.
+        // Live field_observations (dump 2026-09-30) includes photo_path plus
+        // photo_storage_path / photo_public_url.
         photoPath = photoPublicUrl?.takeIf { it.isNotBlank() }
             ?: photoStoragePath?.takeIf { it.isNotBlank() }
             ?: observation.photoLocalPath.takeIf { ObservationPhotoPaths.isRemoteUrl(it) },
@@ -144,7 +143,9 @@ object LiveSyncPayloads {
         jobId = observation.jobId?.takeIf { it.isNotBlank() && SyncIds.isUuid(it) },
         speciesHint = observation.speciesHint.takeIf { it.isNotBlank() },
         accuracyMeters = observation.accuracyMeters?.toDouble(),
-        observedAt = Instant.ofEpochMilli(observation.observedAt).toString()
+        observedAt = Instant.ofEpochMilli(observation.observedAt).toString(),
+        photoStoragePath = photoStoragePath?.takeIf { it.isNotBlank() },
+        photoPublicUrl = photoPublicUrl?.takeIf { it.isNotBlank() }
     )
 
     fun photo(
@@ -156,8 +157,7 @@ object LiveSyncPayloads {
         jobId = photo.jobId?.takeIf { it.isNotBlank() && SyncIds.isUuid(it) },
         imageUrl = publicUrl,
         storagePath = storagePath,
-        tag = photo.category.name.lowercase(),
-        notes = photo.description.takeIf { it.isNotBlank() }
+        tag = photo.category.name.lowercase()
     )
 
     fun jobPhotoLink(
@@ -168,7 +168,6 @@ object LiveSyncPayloads {
         id = photo.id.ifBlank { UUID.randomUUID().toString() },
         jobId = photo.jobId?.takeIf { it.isNotBlank() && SyncIds.isUuid(it) },
         path = storagePath,
-        storagePath = storagePath,
         publicUrl = publicUrl,
         tag = photo.category.name.lowercase(),
         notes = photo.description.takeIf { it.isNotBlank() }
@@ -259,7 +258,9 @@ data class LiveFieldObservationUpsert(
     @SerialName("job_id") val jobId: String? = null,
     @SerialName("species_hint") val speciesHint: String? = null,
     @SerialName("accuracy_meters") val accuracyMeters: Double? = null,
-    @SerialName("observed_at") val observedAt: String? = null
+    @SerialName("observed_at") val observedAt: String? = null,
+    @SerialName("photo_storage_path") val photoStoragePath: String? = null,
+    @SerialName("photo_public_url") val photoPublicUrl: String? = null
 )
 
 @Serializable
@@ -268,8 +269,7 @@ data class LivePhotoUpsert(
     @SerialName("job_id") val jobId: String? = null,
     @SerialName("image_url") val imageUrl: String? = null,
     @SerialName("storage_path") val storagePath: String? = null,
-    val tag: String? = null,
-    val notes: String? = null
+    val tag: String? = null
 )
 
 @Serializable
@@ -277,7 +277,6 @@ data class LiveJobPhotoUpsert(
     val id: String,
     @SerialName("job_id") val jobId: String? = null,
     val path: String? = null,
-    @SerialName("storage_path") val storagePath: String? = null,
     @SerialName("public_url") val publicUrl: String? = null,
     val tag: String? = null,
     val notes: String? = null

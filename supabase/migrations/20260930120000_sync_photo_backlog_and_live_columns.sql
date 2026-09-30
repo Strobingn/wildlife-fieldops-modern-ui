@@ -6,8 +6,8 @@
 
 create extension if not exists pgcrypto;
 
--- App omits organization_id (no tenant UI). If the column is NOT NULL
--- without a default, job upserts fail with 23502.
+-- Live dump 2026-09-30: jobs.organization_id is already nullable.
+-- Keep the guarded ALTER for older copies of the DB.
 do $$
 begin
   if exists (
