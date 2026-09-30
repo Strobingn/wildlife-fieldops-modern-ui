@@ -32,7 +32,8 @@ data class Customer(
     val isActive: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
-    val isSynced: Boolean = false
+    val isSynced: Boolean = false,
+    val syncError: String? = null
 ) {
     val fullName: String
         get() = if (companyName.isNotBlank()) {

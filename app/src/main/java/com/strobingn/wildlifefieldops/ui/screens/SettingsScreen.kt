@@ -38,6 +38,9 @@ fun SettingsScreen(
     val connectionStatus by viewModel.connectionStatus.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
+    val backlog by viewModel.backlog.collectAsState()
+    val lastSyncMessage by viewModel.lastSyncMessage.collectAsState()
+    val lastSyncOk by viewModel.lastSyncOk.collectAsState()
     var showClearDataDialog by remember { mutableStateOf(false) }
     var showAiOperations by remember { mutableStateOf(false) }
     var showDiagnostics by remember { mutableStateOf(false) }
@@ -84,9 +87,17 @@ fun SettingsScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 SettingsAiDiagnosticsBlock()
-                if (!syncMessage.isNullOrBlank()) {
+                val liveMessage = syncMessage ?: lastSyncMessage
+                if (!liveMessage.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(syncMessage!!, color = PrimaryGreen, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        liveMessage,
+                        color = if (lastSyncOk == false && syncMessage == null) ErrorRed else
+                            if (syncMessage?.contains("Failed", ignoreCase = true) == true ||
+                                syncMessage?.contains("not configured", ignoreCase = true) == true
+                            ) ErrorRed else PrimaryGreen,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
 
@@ -246,6 +257,24 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
             SettingsSectionTitle("Sync & Data")
             SettingsCard {
+                val pending = backlog
+                Text(
+                    pending?.summaryLine() ?: "Counting unsynced jobs and photos on this phone…",
+                    color = if (pending?.hasFailures == true) ErrorRed else TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                if (pending != null && pending.recentFailures.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    pending.recentFailures.take(5).forEach { line ->
+                        Text(line, color = ErrorRed, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Before installing an update: confirm the counts above match the jobs and photos you see in the app. An update must not clear this backlog. Then tap Sync Now.",
+                    color = TextTertiary,
+                    style = MaterialTheme.typography.bodySmall
+                )
                 SettingsSwitchItem("Auto Sync", "Automatically sync with cloud", Icons.Default.Sync, autoSync, viewModel::setAutoSync)
                 SettingsSwitchItem("Offline Mode", "Work without internet connection", Icons.Default.CloudOff, offlineMode, viewModel::setOfflineMode)
                 SettingsSwitchItem("High Accuracy GPS", "Use GPS for precise location", Icons.Default.GpsFixed, highAccuracyGps, viewModel::setHighAccuracyGps)

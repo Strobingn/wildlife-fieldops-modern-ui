@@ -6,6 +6,7 @@ import com.strobingn.wildlifefieldops.data.local.FieldObservationDao
 import com.strobingn.wildlifefieldops.data.local.InspectionDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
 import com.strobingn.wildlifefieldops.data.local.ObservationEventDao
+import com.strobingn.wildlifefieldops.data.local.PhotoDao
 import com.strobingn.wildlifefieldops.data.model.Customer
 import com.strobingn.wildlifefieldops.data.model.DeletedRecord
 import com.strobingn.wildlifefieldops.data.model.Job
@@ -14,14 +15,17 @@ import com.strobingn.wildlifefieldops.data.observation.ObservationEventMapper
 import com.strobingn.wildlifefieldops.data.observation.ObservationEventSyncQueue
 import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoPaths
 import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoUploader
+import com.strobingn.wildlifefieldops.data.remote.JobPhotoUploader
+import com.strobingn.wildlifefieldops.data.remote.LiveSyncPayloads
 import com.strobingn.wildlifefieldops.data.remote.RemoteCustomerDto
-import com.strobingn.wildlifefieldops.data.remote.RemoteInspectionDto
 import com.strobingn.wildlifefieldops.data.remote.RemoteJobDto
 import com.strobingn.wildlifefieldops.data.remote.RemoteObservationEventDto
 import com.strobingn.wildlifefieldops.data.remote.SupabaseService
+import com.strobingn.wildlifefieldops.data.remote.SyncErrorFormatter
+import com.strobingn.wildlifefieldops.data.remote.SyncItemFailure
+import com.strobingn.wildlifefieldops.data.remote.SyncItemOutcome
+import com.strobingn.wildlifefieldops.data.remote.SyncItemRunner
 import com.strobingn.wildlifefieldops.data.remote.toLocal
-import com.strobingn.wildlifefieldops.data.remote.toRemoteDto
-import com.strobingn.wildlifefieldops.data.remote.toRemoteDtoOrNull
 import com.strobingn.wildlifefieldops.sync.work.FieldOpsSyncGateway
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
@@ -40,7 +44,9 @@ data class SyncResult(
     val pushedEvents: Int = 0,
     val uploadedPhotos: Int = 0,
     val pulledJobs: Int = 0,
-    val pulledCustomers: Int = 0
+    val pulledCustomers: Int = 0,
+    val failedItems: List<SyncItemFailure> = emptyList(),
+    val pendingRemaining: Int = 0
 )
 
 @Singleton
@@ -51,8 +57,11 @@ class SyncRepository @Inject constructor(
     private val inspectionDao: InspectionDao,
     private val fieldObservationDao: FieldObservationDao,
     private val observationEventDao: ObservationEventDao,
+    private val photoDao: PhotoDao,
     private val observationPhotoUploader: ObservationPhotoUploader,
-    private val deletedRecordDao: DeletedRecordDao
+    private val jobPhotoUploader: JobPhotoUploader,
+    private val deletedRecordDao: DeletedRecordDao,
+    private val itemRunner: SyncItemRunner
 ) : FieldOpsSyncGateway {
     override fun isCloudConfigured(): Boolean = supabaseService.isConfigured
 
@@ -63,7 +72,7 @@ class SyncRepository @Inject constructor(
             android.util.Log.e("SyncRepository", "Sync crashed", t)
             SyncResult(
                 success = false,
-                message = "Sync failed: ${t.message ?: t.javaClass.simpleName}. Check connection and Supabase config."
+                message = "Sync failed: ${SyncErrorFormatter.reason(t)}. Local data was not deleted."
             )
         }
     }
@@ -107,81 +116,68 @@ class SyncRepository @Inject constructor(
         var uploadedPhotos = 0
         var pulledJobs = 0
         var pulledCustomers = 0
-        val warnings = mutableListOf<String>()
+        val failures = mutableListOf<SyncItemFailure>()
 
-        // Push remote DELETEs for local tombstones before pull, so resurrected rows
-        // are removed server-side first when possible.
-        pushDeletions(client, DeletedRecord.TYPE_JOB, "jobs", warnings)
-        pushDeletions(client, DeletedRecord.TYPE_CUSTOMER, "customers", warnings)
-        pushDeletions(client, DeletedRecord.TYPE_INSPECTION, "inspections", warnings)
+        pushDeletions(client, DeletedRecord.TYPE_JOB, "jobs", failures)
+        pushDeletions(client, DeletedRecord.TYPE_CUSTOMER, "customers", failures)
+        pushDeletions(client, DeletedRecord.TYPE_INSPECTION, "inspections", failures)
 
-        try {
-            val unsyncedCustomers = customerDao.getUnsynced()
-            if (unsyncedCustomers.isNotEmpty()) {
-                val deletedCustomerIds = deletedRecordDao.getIdsByType(DeletedRecord.TYPE_CUSTOMER).toSet()
-                val dtos = unsyncedCustomers.mapNotNull { c ->
-                    if (c.id in deletedCustomerIds) return@mapNotNull null
-                    runCatching { c.toRemoteDto() }
-                        .onFailure { android.util.Log.w("SyncRepository", "Skip customer ${c.id}: ${it.message}") }
-                        .getOrNull()
-                }
-                if (dtos.isNotEmpty()) {
-                    client.from("customers").upsert(dtos)
-                    unsyncedCustomers.filter { it.id !in deletedCustomerIds }.forEach { customerDao.markSynced(it.id) }
-                    pushedCustomers = dtos.size
-                }
+        val deletedCustomerIds = deletedRecordDao.getIdsByType(DeletedRecord.TYPE_CUSTOMER).toSet()
+        customerDao.getUnsynced().forEach { customer ->
+            if (customer.id in deletedCustomerIds) return@forEach
+            val outcome = itemRunner.run(
+                markSynced = { customerDao.markSynced(customer.id) },
+                markError = { customerDao.markSyncError(customer.id, it) }
+            ) {
+                client.from("customers").upsert(LiveSyncPayloads.customer(customer))
             }
-        } catch (e: Exception) {
-            android.util.Log.e("SyncRepository", "Customer push failed", e)
-            warnings += "customer push: ${e.message ?: e.javaClass.simpleName}"
+            when (outcome) {
+                is SyncItemOutcome.Ok -> pushedCustomers += 1
+                is SyncItemOutcome.Failed -> failures += SyncItemFailure(
+                    "customer", customer.id, customer.fullName, outcome.reason
+                )
+            }
         }
 
-        try {
-            val unsyncedJobs = jobDao.getUnsynced()
-            if (unsyncedJobs.isNotEmpty()) {
-                val deletedJobIds = deletedRecordDao.getIdsByType(DeletedRecord.TYPE_JOB).toSet()
-                val dtos = unsyncedJobs.mapNotNull { j ->
-                    if (j.id in deletedJobIds) return@mapNotNull null
-                    runCatching { j.toRemoteDto() }
-                        .onFailure { android.util.Log.w("SyncRepository", "Skip job ${j.id}: ${it.message}") }
-                        .getOrNull()
-                }
-                if (dtos.isNotEmpty()) {
-                    client.from("jobs").upsert(dtos)
-                    val okIds = dtos.map { it.id }.toSet()
-                    unsyncedJobs.filter { it.id in okIds }.forEach { jobDao.markSynced(it.id) }
-                    pushedJobs = dtos.size
+        val deletedJobIds = deletedRecordDao.getIdsByType(DeletedRecord.TYPE_JOB).toSet()
+        jobDao.getUnsynced().forEach { job ->
+            if (job.id in deletedJobIds) return@forEach
+            val outcome = itemRunner.run(
+                markSynced = { jobDao.markSynced(job.id) },
+                markError = { jobDao.markSyncError(job.id, it) }
+            ) {
+                client.from("jobs").upsert(LiveSyncPayloads.job(job))
+            }
+            when (outcome) {
+                is SyncItemOutcome.Ok -> pushedJobs += 1
+                is SyncItemOutcome.Failed -> {
+                    android.util.Log.e("SyncRepository", "Job push failed ${job.id}: ${outcome.reason}")
+                    failures += SyncItemFailure("job", job.id, job.title.ifBlank { job.customerName }, outcome.reason)
                 }
             }
-        } catch (e: Exception) {
-            android.util.Log.e("SyncRepository", "Job push failed", e)
-            warnings += "job push: ${e.message ?: e.javaClass.simpleName}"
         }
 
-        try {
-            val unsyncedInspections = inspectionDao.getUnsynced()
-            if (unsyncedInspections.isNotEmpty()) {
-                val deletedInspectionIds = deletedRecordDao.getIdsByType(DeletedRecord.TYPE_INSPECTION).toSet()
-                val dtos = mutableListOf<RemoteInspectionDto>()
-                val okIds = mutableListOf<String>()
-                unsyncedInspections.forEach { insp ->
-                    if (insp.id in deletedInspectionIds) return@forEach
-                    runCatching {
-                        dtos += insp.toRemoteDtoOrNull()
-                        okIds += insp.id
-                    }.onFailure {
-                        android.util.Log.w("SyncRepository", "Skip inspection ${insp.id}: ${it.message}")
-                    }
-                }
-                if (dtos.isNotEmpty()) {
-                    client.from("inspections").upsert(dtos)
-                    okIds.forEach { inspectionDao.markSynced(it) }
-                    pushedInspections = dtos.size
-                }
+        val deletedInspectionIds = deletedRecordDao.getIdsByType(DeletedRecord.TYPE_INSPECTION).toSet()
+        inspectionDao.getUnsynced().forEach { insp ->
+            if (insp.id in deletedInspectionIds) return@forEach
+            if (insp.jobId.isNotBlank() && !com.strobingn.wildlifefieldops.data.remote.SyncIds.isUuid(insp.jobId)) {
+                val reason = "Inspection job_id is not a UUID; cloud inspections.job_id is uuid"
+                inspectionDao.markSyncError(insp.id, reason)
+                failures += SyncItemFailure("inspection", insp.id, insp.customerName, reason)
+                return@forEach
             }
-        } catch (e: Exception) {
-            android.util.Log.w("SyncRepository", "Inspection push skipped", e)
-            warnings += "inspection push: ${e.message ?: e.javaClass.simpleName}"
+            val outcome = itemRunner.run(
+                markSynced = { inspectionDao.markSynced(insp.id) },
+                markError = { inspectionDao.markSyncError(insp.id, it) }
+            ) {
+                client.from("inspections").upsert(LiveSyncPayloads.inspection(insp))
+            }
+            when (outcome) {
+                is SyncItemOutcome.Ok -> pushedInspections += 1
+                is SyncItemOutcome.Failed -> failures += SyncItemFailure(
+                    "inspection", insp.id, insp.customerName.ifBlank { insp.id }, outcome.reason
+                )
+            }
         }
 
         try {
@@ -189,7 +185,7 @@ class SyncRepository @Inject constructor(
             pulledCustomers = mergeCustomers(remoteCustomers)
         } catch (e: Exception) {
             android.util.Log.w("SyncRepository", "Customer pull failed", e)
-            warnings += "customer pull: ${e.message ?: e.javaClass.simpleName}"
+            failures += SyncItemFailure("customer", "*", "pull", SyncErrorFormatter.reason(e))
         }
 
         try {
@@ -197,111 +193,160 @@ class SyncRepository @Inject constructor(
             pulledJobs = mergeJobs(remoteJobs)
         } catch (e: Exception) {
             android.util.Log.w("SyncRepository", "Job pull failed", e)
-            warnings += "job pull: ${e.message ?: e.javaClass.simpleName}"
+            failures += SyncItemFailure("job", "*", "pull", SyncErrorFormatter.reason(e))
         }
 
-        try {
-            val unsynced = FieldObservationSyncQueue.queuedForPush(fieldObservationDao.getUnsynced())
-            unsynced.forEach { observation ->
+        photoDao.getUnuploaded().forEach { photo ->
+            val outcome = itemRunner.run(
+                markSynced = { /* ACK inside the block after a description-stable write */ },
+                markError = { photoDao.markUploadError(photo.id, it) }
+            ) {
+                val uploaded = jobPhotoUploader.upload(client, photo)
+                val latest = photoDao.getById(photo.id) ?: photo
                 try {
-                    var storagePath: String? = null
-                    var publicUrl: String? = null
-                    val localPhoto = observation.photoLocalPath.trim()
-                    if (ObservationPhotoPaths.isLocalCandidate(localPhoto) &&
-                        observationPhotoUploader.readBytes(localPhoto) != null
-                    ) {
-                        val uploaded = observationPhotoUploader.uploadFieldPhoto(
-                            client = client,
-                            observationId = observation.id,
-                            localPath = localPhoto
-                        )
-                        storagePath = uploaded.storagePath
-                        publicUrl = uploaded.publicUrl
-                        uploadedPhotos += 1
-                    } else if (ObservationPhotoPaths.isLocalCandidate(localPhoto)) {
-                        android.util.Log.w(
-                            "SyncRepository",
-                            "Field observation ${observation.id} photo missing locally; syncing metadata only"
-                        )
-                        warnings += "observation ${observation.id} photo missing locally"
-                    }
-                    client.from("field_observations").upsert(
-                        observation.toRemoteDto(
-                            photoStoragePath = storagePath,
-                            photoPublicUrl = publicUrl
-                        )
+                    client.from("photos").upsert(
+                        LiveSyncPayloads.photo(latest, uploaded.storagePath, uploaded.publicUrl)
                     )
-                    fieldObservationDao.markSynced(observation.id)
-                    pushedObservations += 1
                 } catch (e: Exception) {
-                    android.util.Log.w(
-                        "SyncRepository",
-                        "Field observation ${observation.id} push failed; local photo kept",
-                        e
+                    android.util.Log.w("SyncRepository", "photos row failed for ${photo.id}", e)
+                    throw e
+                }
+                runCatching {
+                    client.from("job_photos").upsert(
+                        LiveSyncPayloads.jobPhotoLink(latest, uploaded.storagePath, uploaded.publicUrl)
                     )
-                    warnings += "observation ${observation.id}: ${e.message ?: e.javaClass.simpleName}"
-                    runCatching {
-                        fieldObservationDao.markSyncError(
-                            observation.id,
-                            e.message ?: e.javaClass.simpleName
-                        )
-                    }
+                }.onFailure {
+                    android.util.Log.w("SyncRepository", "job_photos link skipped for ${photo.id}", it)
+                }
+                val acked = photoDao.markUploadedIfDescription(
+                    latest.id,
+                    uploaded.publicUrl,
+                    latest.description
+                )
+                if (acked == 0) {
+                    android.util.Log.i(
+                        "SyncRepository",
+                        "Photo ${photo.id} notes changed during upload; leaving unsynced for AI retry"
+                    )
+                }
+                acked
+            }
+            when (outcome) {
+                is SyncItemOutcome.Ok -> {
+                    if (outcome.value > 0) uploadedPhotos += 1
+                }
+                is SyncItemOutcome.Failed -> {
+                    android.util.Log.e("SyncRepository", "Photo upload failed ${photo.id}: ${outcome.reason}")
+                    failures += SyncItemFailure(
+                        "photo",
+                        photo.id,
+                        photo.description.take(40).ifBlank { photo.id },
+                        outcome.reason
+                    )
                 }
             }
-        } catch (e: Exception) {
-            android.util.Log.w("SyncRepository", "Field observation push skipped", e)
-            warnings += "observation push: ${e.message ?: e.javaClass.simpleName}"
         }
 
-        try {
-            val unsyncedEvents = ObservationEventSyncQueue.queuedForPush(observationEventDao.getUnsynced())
-            val now = System.currentTimeMillis()
-            unsyncedEvents.forEach { record ->
-                try {
-                    var storagePath: String? = null
-                    val mediaUri = record.mediaUri?.trim().orEmpty()
-                    if (ObservationPhotoPaths.isLocalCandidate(mediaUri) &&
-                        observationPhotoUploader.readBytes(mediaUri) != null
-                    ) {
-                        val uploaded = observationPhotoUploader.uploadEventMedia(
-                            client = client,
-                            eventId = record.eventId,
-                            mediaUri = mediaUri
-                        )
-                        storagePath = uploaded.storagePath
-                        uploadedPhotos += 1
-                    } else if (ObservationPhotoPaths.isLocalCandidate(mediaUri)) {
-                        android.util.Log.w(
-                            "SyncRepository",
-                            "ObservationEvent ${record.eventId} media missing locally; inserting row without storage path"
-                        )
-                        warnings += "event ${record.eventId} media missing locally"
-                    }
-                    val dto = ObservationEventMapper.toRemoteDto(record, mediaStoragePath = storagePath)
-                    insertObservationEventIgnoreDuplicate(client, dto)
-                    observationEventDao.markSynced(record.eventId, now)
-                    pushedEvents += 1
-                } catch (e: Exception) {
+        FieldObservationSyncQueue.queuedForPush(fieldObservationDao.getUnsynced()).forEach { observation ->
+            val outcome = itemRunner.run(
+                markSynced = { fieldObservationDao.markSynced(observation.id) },
+                markError = { fieldObservationDao.markSyncError(observation.id, it) }
+            ) {
+                var storagePath: String? = null
+                var publicUrl: String? = null
+                val localPhoto = observation.photoLocalPath.trim()
+                if (ObservationPhotoPaths.isLocalCandidate(localPhoto) &&
+                    observationPhotoUploader.readBytes(localPhoto) != null
+                ) {
+                    val uploaded = observationPhotoUploader.uploadFieldPhoto(
+                        client = client,
+                        observationId = observation.id,
+                        localPath = localPhoto
+                    )
+                    storagePath = uploaded.storagePath
+                    publicUrl = uploaded.publicUrl
+                    uploadedPhotos += 1
+                } else if (ObservationPhotoPaths.isLocalCandidate(localPhoto)) {
                     android.util.Log.w(
                         "SyncRepository",
-                        "ObservationEvent ${record.eventId} push failed; local evidence kept",
-                        e
+                        "Field observation ${observation.id} photo missing locally; syncing metadata only"
                     )
-                    warnings += "event ${record.eventId}: ${e.message ?: e.javaClass.simpleName}"
                 }
+                client.from("field_observations").upsert(
+                    LiveSyncPayloads.fieldObservation(
+                        observation,
+                        photoStoragePath = storagePath,
+                        photoPublicUrl = publicUrl
+                    )
+                )
             }
-        } catch (e: Exception) {
-            android.util.Log.w("SyncRepository", "ObservationEvent push skipped", e)
-            warnings += "event push: ${e.message ?: e.javaClass.simpleName}"
+            when (outcome) {
+                is SyncItemOutcome.Ok -> pushedObservations += 1
+                is SyncItemOutcome.Failed -> failures += SyncItemFailure(
+                    "observation", observation.id, observation.notes.take(40), outcome.reason
+                )
+            }
         }
+
+        val now = System.currentTimeMillis()
+        ObservationEventSyncQueue.queuedForPush(observationEventDao.getUnsynced()).forEach { record ->
+            val outcome = itemRunner.run(
+                markSynced = { observationEventDao.markSynced(record.eventId, now) },
+                markError = { observationEventDao.markSyncError(record.eventId, it) }
+            ) {
+                var storagePath: String? = null
+                val mediaUri = record.mediaUri?.trim().orEmpty()
+                if (ObservationPhotoPaths.isLocalCandidate(mediaUri) &&
+                    observationPhotoUploader.readBytes(mediaUri) != null
+                ) {
+                    val uploaded = observationPhotoUploader.uploadEventMedia(
+                        client = client,
+                        eventId = record.eventId,
+                        mediaUri = mediaUri
+                    )
+                    storagePath = uploaded.storagePath
+                    uploadedPhotos += 1
+                } else if (ObservationPhotoPaths.isLocalCandidate(mediaUri)) {
+                    android.util.Log.w(
+                        "SyncRepository",
+                        "ObservationEvent ${record.eventId} media missing locally; inserting row without storage path"
+                    )
+                }
+                val dto = ObservationEventMapper.toRemoteDto(record, mediaStoragePath = storagePath)
+                insertObservationEventIgnoreDuplicate(client, dto)
+            }
+            when (outcome) {
+                is SyncItemOutcome.Ok -> pushedEvents += 1
+                is SyncItemOutcome.Failed -> failures += SyncItemFailure(
+                    "event", record.eventId, record.entityId, outcome.reason
+                )
+            }
+        }
+
+        val pendingRemaining = jobDao.countUnsynced() +
+            customerDao.countUnsynced() +
+            inspectionDao.countUnsynced() +
+            fieldObservationDao.countUnsynced() +
+            observationEventDao.countUnsynced() +
+            photoDao.countUnuploaded()
 
         val base = "Synced. Pushed: $pushedJobs jobs, $pushedCustomers customers, $pushedInspections inspections, " +
             "$pushedObservations observations, $pushedEvents events, $uploadedPhotos photos. " +
-            "Pulled: $pulledJobs jobs, $pulledCustomers customers."
-        val message = if (warnings.isEmpty()) base else "$base Warnings: ${warnings.joinToString("; ")}"
+            "Pulled: $pulledJobs jobs, $pulledCustomers customers. Still pending locally: $pendingRemaining."
+        val failureText = if (failures.isEmpty()) {
+            ""
+        } else {
+            " Failed (${failures.size}): " + failures.take(8).joinToString("; ") {
+                "${it.entityType} ${it.label.ifBlank { it.id }} — ${it.reason}"
+            }
+        }
+        val ok = failures.isEmpty()
+        if (!ok) {
+            android.util.Log.e("SyncRepository", "Sync finished with failures:$failureText")
+        }
         return SyncResult(
-            success = true,
-            message = message,
+            success = ok,
+            message = if (ok) base else "$base$failureText",
             pushedJobs = pushedJobs,
             pushedCustomers = pushedCustomers,
             pushedInspections = pushedInspections,
@@ -309,7 +354,9 @@ class SyncRepository @Inject constructor(
             pushedEvents = pushedEvents,
             uploadedPhotos = uploadedPhotos,
             pulledJobs = pulledJobs,
-            pulledCustomers = pulledCustomers
+            pulledCustomers = pulledCustomers,
+            failedItems = failures,
+            pendingRemaining = pendingRemaining
         )
     }
 
@@ -320,7 +367,7 @@ class SyncRepository @Inject constructor(
         try {
             client.from("observation_events").insert(dto)
         } catch (e: Exception) {
-            if (isDuplicateEvent(e)) {
+            if (SyncErrorFormatter.isDuplicate(e)) {
                 android.util.Log.i(
                     "SyncRepository",
                     "ObservationEvent ${dto.eventId} already on server; treating as synced"
@@ -331,21 +378,11 @@ class SyncRepository @Inject constructor(
         }
     }
 
-    private fun isDuplicateEvent(error: Throwable): Boolean {
-        val text = buildString {
-            generateSequence(error) { it.cause }.forEach { append(it.message.orEmpty()).append(' ') }
-        }.lowercase()
-        return "duplicate" in text ||
-            "already exists" in text ||
-            "23505" in text ||
-            "409" in text
-    }
-
     private suspend fun pushDeletions(
         client: SupabaseClient,
         entityType: String,
         table: String,
-        warnings: MutableList<String>
+        failures: MutableList<SyncItemFailure>
     ) {
         try {
             val unsynced = deletedRecordDao.getUnsyncedByType(entityType)
@@ -358,17 +395,18 @@ class SyncRepository @Inject constructor(
                     }
                     deletedRecordDao.markSynced(tombstone.id, entityType)
                 } catch (e: Exception) {
+                    val reason = SyncErrorFormatter.reason(e)
                     android.util.Log.w(
                         "SyncRepository",
                         "Remote delete failed for $entityType/${tombstone.id}",
                         e
                     )
-                    warnings += "$entityType delete ${tombstone.id}: ${e.message ?: e.javaClass.simpleName}"
+                    failures += SyncItemFailure(entityType, tombstone.id, "delete", reason)
                 }
             }
         } catch (e: Exception) {
             android.util.Log.e("SyncRepository", "Deletion push failed for $entityType", e)
-            warnings += "$entityType deletions: ${e.message ?: e.javaClass.simpleName}"
+            failures += SyncItemFailure(entityType, "*", "deletions", SyncErrorFormatter.reason(e))
         }
     }
 

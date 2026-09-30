@@ -69,7 +69,10 @@ class FieldObservationSyncQueueTest {
         assertEquals("raccoon attic", dto.notes)
         assertEquals(41.5, dto.latitude)
         assertEquals(-74.0, dto.longitude)
-        assertEquals("/tmp/obs-1.jpg", dto.photoPath)
+        assertEquals(
+            "https://example.supabase.co/storage/v1/object/public/observation-photos/field/obs-1/obs-1.jpg",
+            dto.photoPath
+        )
         assertEquals("field/obs-1/obs-1.jpg", dto.photoStoragePath)
         assertTrue(dto.photoPublicUrl!!.contains("observation-photos"))
         assertEquals(Instant.ofEpochMilli(row.observedAt).toString(), dto.observedAt)

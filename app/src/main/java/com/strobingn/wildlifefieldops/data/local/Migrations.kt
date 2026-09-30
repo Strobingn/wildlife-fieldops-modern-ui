@@ -19,6 +19,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *
  * MIGRATION_8_9 adds `sync_operations` — the durable domain ledger for the
  * WorkManager 2.12 sync canary (ADR 0004). Distinct from WM analytics (~7 days).
+ *
+ * MIGRATION_9_10 adds nullable `syncError` on customers, inspections, and
+ * observation_events so failed cloud writes stay on-device with a reason.
+ * Existing rows and photo files are preserved (ALTER TABLE ADD COLUMN only).
  */
 object Migrations {
 
@@ -138,6 +142,14 @@ object Migrations {
             db.execSQL(
                 "CREATE INDEX IF NOT EXISTS index_sync_operations_idempotencyKey ON sync_operations(idempotencyKey)"
             )
+        }
+    }
+
+    val MIGRATION_9_10 = object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE customers ADD COLUMN syncError TEXT")
+            db.execSQL("ALTER TABLE inspections ADD COLUMN syncError TEXT")
+            db.execSQL("ALTER TABLE observation_events ADD COLUMN syncError TEXT")
         }
     }
 }

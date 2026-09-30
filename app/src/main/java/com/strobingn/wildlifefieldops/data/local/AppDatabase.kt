@@ -24,7 +24,7 @@ import com.strobingn.wildlifefieldops.data.model.*
         ObservationEventRecord::class,
         SyncOperationRecord::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

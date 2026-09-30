@@ -58,13 +58,16 @@ interface DomainSyncLedger {
 object FieldOpsSyncWorkNames {
     /** Unique work name passed to [androidx.work.WorkManager.enqueueUniqueWork]. */
     const val UNIQUE_WORK_NAME = "fieldops-sync"
+    const val PERIODIC_WORK_NAME = "fieldops-sync-periodic"
+    const val PERIODIC_TAG = "fo-sync-periodic"
 
     /**
-     * [androidx.work.ExistingWorkPolicy.KEEP]: if unique work is still unfinished,
-     * ignore the new request. Domain pending lives in Room regardless.
-     * REPLACE would cancel an in-flight upload without clearing `isSynced=0`.
+     * [androidx.work.ExistingWorkPolicy.APPEND_OR_REPLACE]: chain behind an
+     * in-flight upload so a write during sync is not dropped; replace a failed
+     * chain. Domain pending lives in Room regardless. REPLACE-only would cancel
+     * an in-flight upload without clearing `isSynced=0`.
      */
-    const val EXISTING_WORK_POLICY = "KEEP"
+    const val EXISTING_WORK_POLICY = "APPEND_OR_REPLACE"
 
     const val ACTIVE_IDEMPOTENCY_KEY = "fieldops-sync"
 

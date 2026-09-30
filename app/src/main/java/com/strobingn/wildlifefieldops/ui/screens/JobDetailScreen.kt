@@ -110,6 +110,21 @@ fun JobDetailScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             TypeBadge(type = currentJob.type)
                         }
+                        if (!currentJob.syncError.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Sync failed: ${currentJob.syncError}",
+                                color = ErrorRed,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        } else if (!currentJob.isSynced) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Pending cloud sync — still on this phone. Settings → Sync Now.",
+                                color = TextTertiary,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
                 }
 

@@ -130,19 +130,22 @@ fun WildlifeFieldOpsNavHost() {
             topBar = {},
             bottomBar = {
                 if (showBottomNav) {
-                    ModernBottomBar(
-                        currentRoute = currentRoute ?: Screen.Dashboard.route,
-                        onNavigate = { route ->
-                            scope.launch {
-                                if (drawerState.isOpen) drawerState.close()
-                                navController.navigate(route) {
-                                    popUpTo(Screen.Dashboard.route) { inclusive = false }
-                                    launchSingleTop = true
-                                    restoreState = true
+                    Column {
+                        AutoSyncStatusBar()
+                        ModernBottomBar(
+                            currentRoute = currentRoute ?: Screen.Dashboard.route,
+                            onNavigate = { route ->
+                                scope.launch {
+                                    if (drawerState.isOpen) drawerState.close()
+                                    navController.navigate(route) {
+                                        popUpTo(Screen.Dashboard.route) { inclusive = false }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
                                 }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             },
             containerColor = MaterialTheme.colorScheme.background
@@ -347,6 +350,38 @@ private fun AppNavHost(
             )
         }
     }
+}
+
+@Composable
+private fun AutoSyncStatusBar(viewModel: SettingsViewModel = hiltViewModel()) {
+    val backlog by viewModel.backlog.collectAsState()
+    val lastOk by viewModel.lastSyncOk.collectAsState()
+    val isSyncing by viewModel.isSyncing.collectAsState()
+    LaunchedEffect(Unit) { viewModel.refreshBacklog() }
+    val pending = backlog?.pendingTotal ?: 0
+    val failed = backlog?.hasFailures == true || lastOk == false
+    val text = when {
+        isSyncing -> "Syncing…"
+        failed -> "Sync failed" + (backlog?.recentFailures?.firstOrNull()?.let { " — $it" } ?: "")
+        pending > 0 -> "Pending sync · $pending"
+        else -> "Synced"
+    }
+    val color = when {
+        isSyncing -> TextSecondary
+        failed -> ErrorRed
+        pending > 0 -> TextTertiary
+        else -> TextSecondary
+    }
+    Text(
+        text = text,
+        color = color,
+        style = MaterialTheme.typography.labelSmall,
+        maxLines = 1,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    )
 }
 
 @Composable

@@ -7,6 +7,7 @@ import com.strobingn.wildlifefieldops.data.model.Inspection
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobPriority
 import com.strobingn.wildlifefieldops.data.model.JobStatus
+import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoPaths
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -47,10 +48,10 @@ data class RemoteJobDto(
     @SerialName("assigned_tech") val assignedTech: String? = null,
     val notes: String? = null,
     val scope: String? = null,
-    @Serializable(with = FlexibleStringSerializer::class)
-    val latitude: String? = null,
-    @Serializable(with = FlexibleStringSerializer::class)
-    val longitude: String? = null,
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val latitude: Double? = null,
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val longitude: Double? = null,
     @Serializable(with = FlexibleDoubleSerializer::class)
     val estimate: Double? = 0.0,
     @SerialName("grand_total")
@@ -174,15 +175,15 @@ fun Job.toRemoteDto(): RemoteJobDto {
         customer = name,
         title = jobTitle,
         species = speciesGuess,
-        customerId = customerId.takeIf { it.isNotBlank() && isUuid(it) },
+        customerId = customerId.takeIf { it.isNotBlank() && SyncIds.isUuid(it) },
         address = address.ifBlank { null },
         status = status.toRemoteStatus(),
         priority = priority.toRemotePriority(),
         assignedTech = assignedTo.ifBlank { null },
         notes = notes.ifBlank { null },
         scope = description.ifBlank { null },
-        latitude = latitude?.toString(),
-        longitude = longitude?.toString(),
+        latitude = latitude,
+        longitude = longitude,
         estimate = estimatedValue,
         grandTotal = actualCost,
         scheduledStart = scheduledDate?.let { Instant.ofEpochMilli(it).toString() },
@@ -208,8 +209,8 @@ fun RemoteJobDto.toLocal(existing: Job? = null): Job {
         customerId = customerId.orEmpty().ifBlank { existing?.customerId.orEmpty() },
         customerName = displayCustomer,
         address = address.orEmpty().ifBlank { existing?.address.orEmpty() },
-        latitude = latitude?.toDoubleOrNull() ?: existing?.latitude,
-        longitude = longitude?.toDoubleOrNull() ?: existing?.longitude,
+        latitude = latitude ?: existing?.latitude,
+        longitude = longitude ?: existing?.longitude,
         status = status,
         priority = existing?.priority ?: priority.fromRemotePriority(),
         type = if (existing != null && existing.type.isNotBlank()) existing.type else mappedType,
@@ -234,9 +235,10 @@ fun FieldObservation.toRemoteDto(
     notes = notes,
     latitude = latitude,
     longitude = longitude,
-    photoPath = photoLocalPath.takeIf { it.isNotBlank() },
+    photoPath = photoPublicUrl?.takeIf { it.isNotBlank() }
+        ?: photoLocalPath.takeIf { ObservationPhotoPaths.isRemoteUrl(it) },
     photoId = photoId?.takeIf { it.isNotBlank() },
-    jobId = jobId?.takeIf { it.isNotBlank() && isUuid(it) },
+    jobId = jobId?.takeIf { it.isNotBlank() && SyncIds.isUuid(it) },
     speciesHint = speciesHint.takeIf { it.isNotBlank() },
     accuracyMeters = accuracyMeters?.toDouble(),
     observedAt = Instant.ofEpochMilli(observedAt).toString(),
@@ -258,7 +260,7 @@ fun Inspection.toRemoteDtoOrNull(): RemoteInspectionDto {
     }
     return RemoteInspectionDto(
         id = id.ifBlank { UUID.randomUUID().toString() },
-        jobId = jobId.takeIf { it.isNotBlank() && isUuid(it) },
+        jobId = jobId.takeIf { it.isNotBlank() && SyncIds.isUuid(it) },
         inspectionType = inspectionType.name,
         notes = notes.ifBlank { null },
         findings = findingsJson,
@@ -269,10 +271,7 @@ fun Inspection.toRemoteDtoOrNull(): RemoteInspectionDto {
     )
 }
 
-private fun isUuid(value: String): Boolean =
-    runCatching { UUID.fromString(value); true }.getOrDefault(false)
-
-private fun JobStatus.toRemoteStatus(): String = when (this) {
+internal fun JobStatus.toRemoteStatus(): String = when (this) {
     JobStatus.PENDING -> "Active"
     JobStatus.IN_PROGRESS -> "In Progress"
     JobStatus.COMPLETED -> "Closed"
@@ -289,7 +288,7 @@ private fun String?.fromRemoteStatus(): JobStatus = when (this?.lowercase()) {
     else -> JobStatus.PENDING
 }
 
-private fun JobPriority.toRemotePriority(): String = when (this) {
+internal fun JobPriority.toRemotePriority(): String = when (this) {
     JobPriority.LOW -> "Low"
     JobPriority.MEDIUM -> "Normal"
     JobPriority.HIGH -> "High"

@@ -93,7 +93,7 @@ object ObservationEventMapper {
             quantizerTag = record.quantizerTag,
             frameHash = record.frameHash,
             cropHash = record.cropHash,
-            mediaUri = record.mediaUri,
+            mediaUri = record.mediaUri?.takeIf { ObservationPhotoPaths.isRemoteUrl(it) },
             mediaStoragePath = mediaStoragePath?.takeIf { it.isNotBlank() },
             labelDistribution = toLabelJson(distribution),
             captureQuality = record.captureQuality.toDouble(),

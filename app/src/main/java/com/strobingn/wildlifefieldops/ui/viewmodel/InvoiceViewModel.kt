@@ -162,7 +162,13 @@ class InvoiceViewModel @Inject constructor(
                 terms = terms
             )
             invoiceDao.insert(invoice)
-            jobDao.update(job.copy(status = JobStatus.INVOICED))
+            jobDao.update(
+                job.copy(
+                    status = JobStatus.INVOICED,
+                    updatedAt = System.currentTimeMillis(),
+                    isSynced = false
+                )
+            )
         }
     }
 
@@ -177,7 +183,13 @@ class InvoiceViewModel @Inject constructor(
             ))
             val job = jobDao.getById(it.jobId)
             job?.let { j ->
-                jobDao.update(j.copy(status = JobStatus.PAID))
+                jobDao.update(
+                    j.copy(
+                        status = JobStatus.PAID,
+                        updatedAt = System.currentTimeMillis(),
+                        isSynced = false
+                    )
+                )
             }
         }
     }

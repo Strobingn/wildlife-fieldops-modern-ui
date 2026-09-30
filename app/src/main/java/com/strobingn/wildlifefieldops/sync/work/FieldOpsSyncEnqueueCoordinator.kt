@@ -5,7 +5,7 @@ package com.strobingn.wildlifefieldops.sync.work
  * idempotency can be unit-tested without WorkManager.
  */
 class FieldOpsSyncEnqueueCoordinator(
-    private val flag: WorkManagerSyncCanaryFlag,
+    private val autoSync: AutoSyncGate,
     private val ledger: DomainSyncLedger,
     private val adapter: WorkAnalyticsAdapter
 ) {
@@ -13,19 +13,15 @@ class FieldOpsSyncEnqueueCoordinator(
         existingUnfinished: Boolean,
         nowMs: Long = System.currentTimeMillis()
     ): SyncEnqueueDecision {
-        if (!flag.isEnabled()) return SyncEnqueueDecision.Disabled
+        if (!autoSync.isEnabled()) return SyncEnqueueDecision.Disabled
+        // existingUnfinished is unused: APPEND_OR_REPLACE chains behind in-flight
+        // work instead of KEEP-skipping, so a write during upload still syncs.
+        @Suppress("UNUSED_PARAMETER")
+        val ignored = existingUnfinished
 
         val operation = ledger.beginOrReuseActive(nowMs = nowMs)
         val tags = SyncWorkCorrelation.tagsFor(operation)
         val input = SyncWorkCorrelation.inputFor(operation)
-
-        if (FieldOpsSyncWorkNames.shouldSkipBecauseKeep(existingUnfinished)) {
-            return SyncEnqueueDecision.KeptExisting(
-                operation = operation,
-                tags = tags,
-                input = input
-            )
-        }
 
         adapter.record(
             SchedulerEvent(

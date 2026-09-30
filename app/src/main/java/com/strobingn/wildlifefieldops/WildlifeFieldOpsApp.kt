@@ -1,8 +1,11 @@
 package com.strobingn.wildlifefieldops
 
+import android.app.Activity
 import android.app.Application
+import android.os.Bundle
 import android.util.Log
 import androidx.work.Configuration
+import com.strobingn.wildlifefieldops.sync.work.AutoSync
 import com.strobingn.wildlifefieldops.sync.work.WorkManagerConfigurationFactory
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -10,6 +13,7 @@ import javax.inject.Inject
 @HiltAndroidApp
 class WildlifeFieldOpsApp : Application(), Configuration.Provider {
     @Inject lateinit var workManagerConfigurationFactory: WorkManagerConfigurationFactory
+    @Inject lateinit var autoSync: AutoSync
 
     override fun onCreate() {
         super.onCreate()
@@ -21,8 +25,11 @@ class WildlifeFieldOpsApp : Application(), Configuration.Provider {
         }
         Log.i("WildlifeFieldOps", "App starting v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
         if (BuildConfig.WM_SYNC_CANARY_ENABLED) {
-            Log.i("WildlifeFieldOps", "WorkManager sync canary is ON (unique work fieldops-sync)")
+            Log.i("WildlifeFieldOps", "WorkManager sync canary listeners are ON")
         }
+        runCatching { autoSync.start() }
+            .onFailure { Log.e("WildlifeFieldOps", "Auto-sync failed to start", it) }
+        registerActivityLifecycleCallbacks(ForegroundAutoSyncCallbacks { autoSync.onForeground() })
     }
 
     /**
@@ -35,4 +42,22 @@ class WildlifeFieldOpsApp : Application(), Configuration.Provider {
         } else {
             Configuration.Builder().build()
         }
+}
+
+private class ForegroundAutoSyncCallbacks(
+    private val onForeground: () -> Unit
+) : Application.ActivityLifecycleCallbacks {
+    private var started = 0
+    override fun onActivityStarted(activity: Activity) {
+        if (started == 0) onForeground()
+        started++
+    }
+    override fun onActivityStopped(activity: Activity) {
+        started = (started - 1).coerceAtLeast(0)
+    }
+    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+    override fun onActivityResumed(activity: Activity) = Unit
+    override fun onActivityPaused(activity: Activity) = Unit
+    override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+    override fun onActivityDestroyed(activity: Activity) = Unit
 }

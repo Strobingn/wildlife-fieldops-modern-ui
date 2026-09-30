@@ -18,6 +18,9 @@ interface CustomerDao {
     @Query("SELECT * FROM customers WHERE isSynced = 0")
     suspend fun getUnsynced(): List<Customer>
 
+    @Query("SELECT COUNT(*) FROM customers WHERE isSynced = 0")
+    suspend fun countUnsynced(): Int
+
     @Query("SELECT * FROM customers WHERE firstName LIKE '%' || :query || '%' OR lastName LIKE '%' || :query || '%' OR companyName LIKE '%' || :query || '%' OR phone LIKE '%' || :query || '%' OR email LIKE '%' || :query || '%'")
     fun search(query: String): Flow<List<Customer>>
 
@@ -36,8 +39,11 @@ interface CustomerDao {
     @Query("SELECT COUNT(*) FROM customers WHERE isActive = 1")
     suspend fun count(): Int
 
-    @Query("UPDATE customers SET isSynced = 1 WHERE id = :id")
+    @Query("UPDATE customers SET isSynced = 1, syncError = NULL WHERE id = :id")
     suspend fun markSynced(id: String)
+
+    @Query("UPDATE customers SET syncError = :error WHERE id = :id")
+    suspend fun markSyncError(id: String, error: String?)
 
     @Query("DELETE FROM customers")
     suspend fun deleteAll()

@@ -62,12 +62,14 @@ Legacy web / Capacitor folders may still exist in the repo history for reference
 ## Sync
 
 - Local data lives in Room (`wildlife_fieldops.db`).
-- **Settings → Sync Now** pushes unsynced jobs/customers/inspections/field observations/observation events and pulls cloud rows.
+- **Settings → Sync Now** pushes unsynced jobs/customers/inspections/field observations/observation events **and job/Live Capture photos**, then pulls cloud rows. Failures stay unsynced with a readable reason (job list shows **Sync failed** / **Pending sync**).
+- Confirm the on-device backlog before/after installing a fix APK: [docs/SYNC_BACKLOG.md](docs/SYNC_BACKLOG.md).
 - Cloud project: `wildlife_app` (`hgdzmwfcghtilyqagjak`).
 - Schema applied: `supabase/migrations/20260710153000_native_sync_fix.sql` (customers table + RLS/grants for `anon`).
+- Photo/link follow-up: `supabase/migrations/20260930120000_sync_photo_backlog_and_live_columns.sql` (photos grants, `job-photos` storage policies for anon, nullable `jobs.organization_id`).
 - Verified: REST insert/select/delete for `customers` + `jobs` works with the app anon key.
-- **Auth tradeoff:** the native client sends `SUPABASE_ANON_KEY` and never calls `signIn` from the UI (`SupabaseService.signIn` is unused). Sync therefore runs as the Postgres `anon` role. Tables `customers`, `jobs`, `inspections`, `field_observations`, and `observation_events` are explicitly granted to `anon` so rebuilds after 2026-10-30 still work. Other public tables are granted only to `authenticated` + `service_role`. Adding real sign-in and revoking anon table grants is the follow-up; do not silently expand anon to invoices, techs, etc.
-- **Live follow-up:** run `supabase/migrations/20260928120000_explicit_data_api_grants.sql` in the SQL Editor if the migration runner has not applied it. Future `create table` migrations must include grants — see `supabase/migrations/README.md`.
+- **Auth tradeoff:** the native client sends `SUPABASE_ANON_KEY` and never calls `signIn` from the UI (`SupabaseService.signIn` is unused). Sync therefore runs as the Postgres `anon` role. Tables `customers`, `jobs`, `inspections`, `field_observations`, `observation_events`, and `photos` are granted to `anon` so rebuilds after 2026-10-30 still work. Other public tables are granted only to `authenticated` + `service_role`. Adding real sign-in and revoking anon table grants is PR #59; do not silently expand anon to invoices, techs, etc.
+- **Live follow-up:** run `supabase/migrations/20260928120000_explicit_data_api_grants.sql` and `20260930120000_sync_photo_backlog_and_live_columns.sql` in the SQL Editor if the migration runner has not applied them. Future `create table` migrations must include grants — see `supabase/migrations/README.md`.
 
 ### WorkManager 2.12 sync canary
 
@@ -76,8 +78,10 @@ Release builds keep the existing foreground `SyncRepository.syncAll()` path.
 
 | Build | Flag | Sync Now |
 | --- | --- | --- |
-| `debug` | `true` | `enqueueUniqueWork("fieldops-sync", ExistingWorkPolicy.KEEP)` + network constraint |
-| `release` | `false` | today’s `syncAll()` (unchanged) |
+| `debug` | `true` | Foreground `syncAll()` plus auto-enqueue. Experimental WM analytics listeners on. |
+| `release` | `false` | Same auto-sync + Sync Now `syncAll()`. Experimental WM analytics off. |
+
+**Auto-sync (release and debug):** every Room write to jobs/customers/inspections/photos/observations, app foreground, connectivity restore, and a 15-minute safety-net enqueue unique work `fieldops-sync` (`APPEND_OR_REPLACE`, network-connected, exponential backoff). Sync Now is optional. A later sign-in gate (PR #59) should retry, not drop the queue.
 
 Enablement: ship a debug APK, or add a flavor that sets `WM_SYNC_CANARY_ENABLED=true`.
 Do not flip the release default without a rollback plan. Diagnostics shows **WM sync canary**.

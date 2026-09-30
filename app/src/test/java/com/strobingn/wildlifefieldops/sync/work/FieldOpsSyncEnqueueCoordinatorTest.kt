@@ -7,7 +7,7 @@ import org.junit.Test
 class FieldOpsSyncEnqueueCoordinatorTest {
 
     @Test
-    fun flagOffDoesNotCreateDomainOperationOrTelemetry() {
+    fun gateOffDoesNotCreateDomainOperationOrTelemetry() {
         val ledger = InMemoryDomainSyncLedger()
         val telemetry = RecordingWorkSchedulerTelemetry()
         val adapter = WorkAnalyticsAdapter({ false }, telemetry)
@@ -21,7 +21,7 @@ class FieldOpsSyncEnqueueCoordinatorTest {
     }
 
     @Test
-    fun keepPolicySkipsSecondEnqueueWithoutSecondOperation() {
+    fun autoSyncEnqueuesEvenWhenWorkAlreadyUnfinished() {
         val ledger = InMemoryDomainSyncLedger()
         val adapter = WorkAnalyticsAdapter({ true }, RecordingWorkSchedulerTelemetry())
         val coordinator = FieldOpsSyncEnqueueCoordinator({ true }, ledger, adapter)
@@ -29,13 +29,14 @@ class FieldOpsSyncEnqueueCoordinatorTest {
         val first = coordinator.prepare(existingUnfinished = false, nowMs = 1L)
         val second = coordinator.prepare(existingUnfinished = true, nowMs = 2L)
 
-        val firstReady = first as SyncEnqueueDecision.ReadyToEnqueue
-        val secondKept = second as SyncEnqueueDecision.KeptExisting
-        assertEquals(firstReady.operation.operationId, secondKept.operation.operationId)
-        assertEquals(1, ledger.snapshot().size)
-        assertEquals("KEEP", FieldOpsSyncWorkNames.EXISTING_WORK_POLICY)
-        assertTrue(FieldOpsSyncWorkNames.shouldSkipBecauseKeep(true))
-        assertTrue(secondKept.tags.all(SyncWorkCorrelation::isSafeTag))
+        assertTrue(first is SyncEnqueueDecision.ReadyToEnqueue)
+        assertTrue(second is SyncEnqueueDecision.ReadyToEnqueue)
+        assertEquals("APPEND_OR_REPLACE", FieldOpsSyncWorkNames.EXISTING_WORK_POLICY)
+        assertEquals(
+            (first as SyncEnqueueDecision.ReadyToEnqueue).operation.operationId,
+            (second as SyncEnqueueDecision.ReadyToEnqueue).operation.operationId
+        )
+        assertTrue(second.tags.all(SyncWorkCorrelation::isSafeTag))
     }
 
     @Test

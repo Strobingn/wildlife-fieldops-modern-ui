@@ -106,11 +106,15 @@ class InspectionsViewModel @Inject constructor(
     }
 
     fun saveInspection(inspection: Inspection) = viewModelScope.launch {
-        inspectionDao.insert(inspection)
+        inspectionDao.insert(
+            inspection.copy(isSynced = false, updatedAt = System.currentTimeMillis(), syncError = null)
+        )
     }
 
     fun updateInspection(inspection: Inspection) = viewModelScope.launch {
-        inspectionDao.update(inspection.copy(updatedAt = System.currentTimeMillis()))
+        inspectionDao.update(
+            inspection.copy(updatedAt = System.currentTimeMillis(), isSynced = false)
+        )
     }
 
     fun deleteInspection(inspection: Inspection) = viewModelScope.launch {
