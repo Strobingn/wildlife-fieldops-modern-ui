@@ -879,9 +879,10 @@ create policy "audit_log_insert" on public.audit_log for insert with check (true
 -- Starting 2026-10-30, new public tables are not auto-granted to anon /
 -- authenticated / service_role. Explicit grants below are required for a
 -- schema rebuild (fresh project, preview branch, supabase db reset).
--- Native Android authenticates only with the anon key (no sign-in), so
--- customer/job/inspection tables that SyncRepository touches include anon.
--- Other tables: authenticated + service_role only.
+-- Native Android now signs in (GoTrue). Anon grants on customers/jobs/
+-- inspections below exist only so currently installed APKs keep syncing
+-- until 20260929221000_REVOKE_ANON_AFTER_SIGNED_IN_ROLLOUT.sql. See
+-- supabase/migrations/README.md. Other tables: authenticated + service_role.
 
 grant usage on schema public to anon, authenticated, service_role;
 

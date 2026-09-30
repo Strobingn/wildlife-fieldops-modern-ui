@@ -24,10 +24,27 @@ create extension if not exists pgcrypto;
 
 do $$ begin create role anon nologin; exception when duplicate_object then null; end $$;
 do $$ begin create role authenticated nologin; exception when duplicate_object then null; end $$;
-do $$ begin create role service_role nologin; exception when duplicate_object then null; end $$;
+do $$ begin create role service_role nologin bypassrls; exception when duplicate_object then null; end $$;
 
 revoke all on schema public from public;
 grant usage on schema public to anon, authenticated, service_role, postgres;
+
+create schema if not exists auth;
+create table if not exists auth.users (
+  id uuid primary key default gen_random_uuid(),
+  email text
+);
+create or replace function auth.jwt() returns jsonb language sql stable as $$
+  select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb
+$$;
+create or replace function auth.uid() returns uuid language sql stable as $$
+  select nullif(auth.jwt()->>'sub', '')::uuid
+$$;
+create or replace function auth.role() returns text language sql stable as $$
+  select coalesce(auth.jwt()->>'role', current_user::text)
+$$;
+grant usage on schema auth to anon, authenticated, service_role;
+grant execute on all functions in schema auth to anon, authenticated, service_role;
 
 create table if not exists public.customers (
   id uuid primary key default gen_random_uuid(),
@@ -67,21 +84,99 @@ create table if not exists public.audit_log (
   changed_by text
 );
 
+-- Live extras used to prove step 1 closes non-sync tables immediately.
+create table if not exists public.invoices (
+  id text primary key,
+  customer_name text not null default ''
+);
+create table if not exists public.payment_records (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null default gen_random_uuid(),
+  amount numeric(12,2) not null default 0
+);
+create table if not exists public.organizations (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  slug text not null unique
+);
+create table if not exists public.organization_members (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id),
+  user_id uuid,
+  email text,
+  role text not null default 'technician',
+  active boolean not null default true
+);
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text,
+  name text,
+  role text not null default 'technician'
+);
+
+create or replace function public.is_org_member(org uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path to public
+as $$
+  select exists (
+    select 1 from public.organization_members m
+    where m.organization_id = org and m.user_id = auth.uid() and m.active
+  )
+$$;
+
+create or replace function public.has_org_role(org uuid, roles text[])
+returns boolean
+language sql
+stable
+security definer
+set search_path to public
+as $$
+  select exists (
+    select 1 from public.organization_members m
+    where m.organization_id = org and m.user_id = auth.uid()
+      and m.active and m.role = any (roles)
+  )
+$$;
+
+create or replace function public.queue_campaign(p_campaign_id uuid)
+returns integer language sql as $$ select 0 $$;
+
+create or replace function public.set_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+create or replace function public.touch_integration_connection()
+returns trigger language plpgsql as $$
+begin
+  return new;
+end;
+$$;
+
 alter table public.customers enable row level security;
 alter table public.jobs enable row level security;
 alter table public.inspections enable row level security;
 alter table public.field_observations enable row level security;
 alter table public.observation_events enable row level security;
 alter table public.audit_log enable row level security;
+alter table public.invoices enable row level security;
+alter table public.payment_records enable row level security;
+alter table public.organizations enable row level security;
+alter table public.organization_members enable row level security;
+alter table public.profiles enable row level security;
 
--- Simulate PR #58 grants (anon still present until the HOLD revoke file).
-grant select, insert, update, delete on public.customers to anon, authenticated, service_role;
-grant select, insert, update, delete on public.jobs to anon, authenticated, service_role;
-grant select, insert, update, delete on public.inspections to anon, authenticated, service_role;
-grant select, insert, update, delete on public.field_observations to anon, authenticated, service_role;
-grant select, insert on public.observation_events to anon, authenticated, service_role;
-grant insert on public.audit_log to anon, authenticated, service_role;
-grant select, update, delete on public.audit_log to service_role;
+-- Simulate live: ALL grants + testing_full_access, helpers not executable.
+grant all on all tables in schema public to anon, authenticated, service_role;
+grant usage, select on all sequences in schema public to anon, authenticated, service_role;
+grant execute on function public.queue_campaign(uuid) to public, anon, authenticated;
+revoke execute on function public.is_org_member(uuid) from public, anon, authenticated;
+revoke execute on function public.has_org_role(uuid, text[]) from public, anon, authenticated;
 
 create policy "open_customers" on public.customers for all using (true) with check (true);
 create policy "open_jobs" on public.jobs for all using (true) with check (true);
@@ -90,13 +185,36 @@ create policy "open_field_observations" on public.field_observations for all usi
 create policy "open_observation_events_select" on public.observation_events for select using (true);
 create policy "open_observation_events_insert" on public.observation_events for insert with check (true);
 create policy "audit_log_insert" on public.audit_log for insert with check (true);
+create policy "testing_full_access" on public.invoices for all to anon, authenticated using (true) with check (true);
+create policy "testing_full_access" on public.payment_records for all to anon, authenticated using (true) with check (true);
+create policy "testing_full_access" on public.organizations for all to anon, authenticated using (true) with check (true);
+create policy "testing_full_access" on public.organization_members for all to anon, authenticated using (true) with check (true);
+create policy "authenticated profiles access" on public.profiles for all to public
+  using ((select auth.role()) = 'authenticated')
+  with check ((select auth.role()) = 'authenticated');
+create policy "members_manage" on public.organization_members for all to public
+  using (has_org_role(organization_id, array['owner','admin']))
+  with check (has_org_role(organization_id, array['owner','admin']));
+create policy "members_select" on public.organization_members for select to public
+  using (is_org_member(organization_id));
 
 create schema if not exists storage;
+create table if not exists storage.buckets (
+  id text primary key,
+  name text,
+  public boolean default false
+);
 create table if not exists storage.objects (
   id uuid primary key default gen_random_uuid(),
   bucket_id text,
   name text
 );
+insert into storage.buckets(id, name, public) values
+  ('observation-photos', 'observation-photos', true),
+  ('job-photos', 'job-photos', true),
+  ('job-pdfs', 'job-pdfs', true),
+  ('fieldops-photos', 'fieldops-photos', false)
+on conflict (id) do nothing;
 alter table storage.objects enable row level security;
 grant usage on schema storage to anon, authenticated, service_role;
 grant select, insert, update, delete on storage.objects to anon, authenticated, service_role;
@@ -104,12 +222,15 @@ create policy "observation_photos_select" on storage.objects for select using (b
 create policy "observation_photos_insert" on storage.objects for insert with check (bucket_id = 'observation-photos');
 create policy "observation_photos_update" on storage.objects for update using (bucket_id = 'observation-photos') with check (bucket_id = 'observation-photos');
 create policy "observation_photos_delete" on storage.objects for delete using (bucket_id = 'observation-photos');
+create policy "fieldops_photos_access" on storage.objects for all to anon, authenticated
+  using (bucket_id = any (array['fieldops-photos'::text, 'fieldops-documents'::text, 'fieldops-signatures'::text]))
+  with check (bucket_id = any (array['fieldops-photos'::text, 'fieldops-documents'::text, 'fieldops-signatures'::text]));
 SQL
 
-  echo "== apply authenticated RLS migration (anon grants kept)"
+  echo "== apply authenticated RLS migration (anon grants kept on hold tables)"
   run_psql "$url" -f "$MIG/20260929220000_authenticated_rls_for_signed_in_sync.sql"
 
-  echo "== stage 1: anon and authenticated can insert"
+  echo "== stage 1: anon and authenticated can insert hold tables"
   run_psql "$url" <<'SQL'
 set role authenticated;
 insert into public.customers (name) values ('auth-tech');
@@ -122,6 +243,91 @@ set role anon;
 insert into public.customers (name) values ('anon-old-apk');
 insert into storage.objects (bucket_id, name) values ('observation-photos', 'anon.jpg');
 reset role;
+SQL
+
+  echo "== stage 1b: anon denied on non-hold tables; no self-promotion"
+  run_psql "$url" <<'SQL'
+do $$
+declare
+  denied int := 0;
+  rec record;
+  uid uuid := gen_random_uuid();
+  org uuid;
+begin
+  insert into auth.users (id, email) values (uid, 'tech@example.com');
+  insert into public.organizations (name, slug) values ('Wildlife Whisperer', 'ww-llc') returning id into org;
+
+  for rec in
+    select * from (values
+      ('invoices', 'insert into public.invoices (id) values (''inv-anon'')'),
+      ('payment_records', 'insert into public.payment_records default values'),
+      ('organizations', format('insert into public.organizations (name, slug) values (''x'', ''x-%s'')', uid)),
+      ('organization_members', format(
+        'insert into public.organization_members (organization_id, user_id, role) values (%L::uuid, %L::uuid, ''owner'')',
+        org, uid
+      )),
+      ('fieldops storage', 'insert into storage.objects (bucket_id, name) values (''fieldops-photos'', ''secret.pdf'')'),
+      ('queue_campaign', 'select public.queue_campaign(gen_random_uuid())')
+    ) as t(rel, stmt)
+  loop
+    set role anon;
+    begin
+      execute rec.stmt;
+      raise exception 'anon DML on % succeeded after step 1', rec.rel;
+    exception
+      when insufficient_privilege or invalid_grant_operation then
+        denied := denied + 1;
+        raise notice 'anon denied on % (privilege)', rec.rel;
+      when others then
+        if sqlerrm like '%succeeded after%' then
+          raise;
+        end if;
+        denied := denied + 1;
+        raise notice 'anon denied on % (%)', rec.rel, sqlerrm;
+    end;
+    reset role;
+  end loop;
+
+  perform set_config('request.jwt.claims', json_build_object('sub', uid, 'role', 'authenticated')::text, false);
+  set role authenticated;
+  begin
+    insert into public.organization_members (organization_id, user_id, role)
+    values (org, uid, 'owner');
+    raise exception 'authenticated self-insert as owner succeeded';
+  exception
+    when insufficient_privilege then
+      raise notice 'authenticated cannot insert organization_members (privilege)';
+    when others then
+      if sqlerrm like '%self-insert%' then
+        raise;
+      end if;
+      raise notice 'authenticated cannot insert organization_members (%)', sqlerrm;
+  end;
+  begin
+    insert into public.profiles (id, email, role) values (uid, 'tech@example.com', 'owner');
+    raise exception 'authenticated self-insert profile owner succeeded';
+  exception
+    when insufficient_privilege then
+      raise notice 'authenticated cannot insert owner profile (privilege)';
+    when others then
+      if sqlerrm like '%self-insert%' then
+        raise;
+      end if;
+      raise notice 'authenticated cannot insert owner profile (%)', sqlerrm;
+  end;
+  reset role;
+  perform set_config('request.jwt.claims', '{}', false);
+
+  if denied < 5 then
+    raise exception 'expected anon denies on non-hold relations, got %', denied;
+  end if;
+
+  -- Helpers must be executable so org policies filter instead of erroring.
+  set role authenticated;
+  perform public.is_org_member(org);
+  perform public.has_org_role(org, array['owner']);
+  reset role;
+end $$;
 SQL
 
   echo "== apply HOLD revoke migration"
@@ -166,6 +372,9 @@ begin
         denied := denied + 1;
         raise notice 'anon denied on % (privilege)', rec.rel;
       when others then
+        if sqlerrm like '%succeeded after%' then
+          raise;
+        end if;
         denied := denied + 1;
         raise notice 'anon denied on % (%)', rec.rel, sqlerrm;
     end;
@@ -177,7 +386,19 @@ begin
 end $$;
 SQL
 
-  echo "OK: authenticated allowed after revoke; anon blocked on tables + observation-photos."
+  echo "OK: step 1 keeps hold-table anon, closes the rest; step 2 blocks remaining anon."
+}
+
+start_local_postgres() {
+  if sudo -u postgres pg_isready -q 2>/dev/null; then
+    return 0
+  fi
+  if need_cmd pg_ctlcluster; then
+    sudo pg_ctlcluster 16 main start || sudo pg_ctlcluster 16 main restart || true
+  elif need_cmd pg_ctl; then
+    sudo -u postgres pg_ctl -D /var/lib/postgresql/16/main -l /tmp/pg.log start || true
+  fi
+  sudo -u postgres pg_isready -q
 }
 
 if need_cmd docker; then
@@ -193,8 +414,20 @@ if need_cmd docker; then
   export PGPASSWORD=postgres
   verify "postgres://postgres:postgres@127.0.0.1:55432/postgres"
 elif need_cmd psql; then
-  url="${DATABASE_URL:-postgres://postgres:postgres@127.0.0.1:5432/postgres}"
-  verify "$url"
+  start_local_postgres
+  if [ -n "${DATABASE_URL:-}" ]; then
+    verify "$DATABASE_URL"
+  else
+    DB="fieldops_auth_rls_$$"
+    sudo -u postgres createdb "$DB"
+    cleanup_db() { sudo -u postgres dropdb --if-exists "$DB" >/dev/null 2>&1 || true; }
+    trap cleanup_db EXIT
+    run_psql() {
+      shift
+      sudo -u postgres psql -d "$DB" -v ON_ERROR_STOP=1 "$@"
+    }
+    verify "peer:$DB"
+  fi
 else
   echo "SKIP: neither docker nor psql is available"
   exit 0
