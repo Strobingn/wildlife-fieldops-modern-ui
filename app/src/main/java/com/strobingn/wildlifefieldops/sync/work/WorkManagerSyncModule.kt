@@ -43,10 +43,14 @@ object WorkManagerSyncProvideModule {
     @Provides
     @Singleton
     fun provideEnqueueCoordinator(
-        flag: WorkManagerSyncCanaryFlag,
+        gate: AutoSyncGate,
         ledger: DomainSyncLedger,
         adapter: WorkAnalyticsAdapter
-    ): FieldOpsSyncEnqueueCoordinator = FieldOpsSyncEnqueueCoordinator(flag, ledger, adapter)
+    ): FieldOpsSyncEnqueueCoordinator = FieldOpsSyncEnqueueCoordinator(gate, ledger, adapter)
+
+    @Provides
+    @Singleton
+    fun provideAutoSyncGate(): AutoSyncGate = AutoSyncGate { true }
 
     @Provides
     @Singleton

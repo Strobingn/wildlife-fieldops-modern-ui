@@ -78,8 +78,10 @@ Release builds keep the existing foreground `SyncRepository.syncAll()` path.
 
 | Build | Flag | Sync Now |
 | --- | --- | --- |
-| `debug` | `true` | Foreground `syncAll()` (so Sync Now actually pushes). Also enqueues unique work `fieldops-sync` for the canary worker. |
-| `release` | `false` | today’s `syncAll()` (unchanged) |
+| `debug` | `true` | Foreground `syncAll()` plus auto-enqueue. Experimental WM analytics listeners on. |
+| `release` | `false` | Same auto-sync + Sync Now `syncAll()`. Experimental WM analytics off. |
+
+**Auto-sync (release and debug):** every Room write to jobs/customers/inspections/photos/observations, app foreground, connectivity restore, and a 15-minute safety-net enqueue unique work `fieldops-sync` (`APPEND_OR_REPLACE`, network-connected, exponential backoff). Sync Now is optional. A later sign-in gate (PR #59) should retry, not drop the queue.
 
 Enablement: ship a debug APK, or add a flavor that sets `WM_SYNC_CANARY_ENABLED=true`.
 Do not flip the release default without a rollback plan. Diagnostics shows **WM sync canary**.
