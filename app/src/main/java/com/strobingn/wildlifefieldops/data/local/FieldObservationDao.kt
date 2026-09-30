@@ -36,4 +36,7 @@ interface FieldObservationDao {
 
     @Query("SELECT COUNT(*) FROM field_observations")
     suspend fun count(): Int
+
+    @Query("SELECT COUNT(*) FROM field_observations WHERE isSynced = 0")
+    suspend fun countUnsynced(): Int
 }

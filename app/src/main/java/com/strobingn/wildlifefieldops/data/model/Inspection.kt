@@ -40,5 +40,6 @@ data class Inspection(
     val longitude: Double? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
-    val isSynced: Boolean = false
+    val isSynced: Boolean = false,
+    val syncError: String? = null
 )

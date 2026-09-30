@@ -68,7 +68,7 @@ class ObservationEventMapperTest {
         assertEquals(inference.quantizerTag, dto.quantizerTag)
         assertEquals(inference.frameHash, dto.frameHash)
         assertEquals(inference.cropHash, dto.cropHash)
-        assertEquals(inference.mediaUri, dto.mediaUri)
+        assertNull(dto.mediaUri)
         assertEquals("events/abc/abc.jpg", dto.mediaStoragePath)
         assertEquals(0.7, dto.captureQuality, 1e-6)
         assertEquals(0.4, dto.geometryTrust, 1e-6)

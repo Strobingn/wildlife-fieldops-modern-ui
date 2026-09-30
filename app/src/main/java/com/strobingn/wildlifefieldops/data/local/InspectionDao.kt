@@ -21,6 +21,9 @@ interface InspectionDao {
     @Query("SELECT * FROM inspections WHERE isSynced = 0")
     suspend fun getUnsynced(): List<Inspection>
 
+    @Query("SELECT COUNT(*) FROM inspections WHERE isSynced = 0")
+    suspend fun countUnsynced(): Int
+
     @Query("SELECT * FROM inspections WHERE followUpRequired = 1 AND followUpDate <= :currentTime")
     suspend fun getPendingFollowUps(currentTime: Long): List<Inspection>
 
@@ -39,8 +42,11 @@ interface InspectionDao {
     @Query("SELECT COUNT(*) FROM inspections")
     suspend fun count(): Int
 
-    @Query("UPDATE inspections SET isSynced = 1 WHERE id = :id")
+    @Query("UPDATE inspections SET isSynced = 1, syncError = NULL WHERE id = :id")
     suspend fun markSynced(id: String)
+
+    @Query("UPDATE inspections SET syncError = :error WHERE id = :id")
+    suspend fun markSyncError(id: String, error: String?)
 
     @Query("DELETE FROM inspections")
     suspend fun deleteAll()

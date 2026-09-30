@@ -37,4 +37,5 @@ data class ObservationEventRecord(
     /** Local sync bookkeeping only — not part of the immutable evidence payload. */
     val isSynced: Boolean = false,
     val syncedAt: Long? = null,
+    val syncError: String? = null,
 )

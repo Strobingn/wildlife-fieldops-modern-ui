@@ -41,3 +41,8 @@ Catch-up for tables that already exist: `20260928120000_explicit_data_api_grants
 Run that file in the SQL Editor on live `wildlife_app` if it has not been applied
 via the migration runner. Do not re-run older migrations just to pick up grant
 edits; the catch-up file is idempotent.
+
+Photo / Live Capture backlog (native sync): `20260930120000_sync_photo_backlog_and_live_columns.sql`.
+Grants `anon` on `photos` / `job_photos`, adds storage policies for `job-photos`,
+and drops `NOT NULL` on `jobs.organization_id` if that column exists. Safe to re-run.
+The shipping client still has no sign-in (PR #59 is separate).

@@ -35,6 +35,8 @@ fun DiagnosticsScreen(
     val connectionStatus by viewModel.connectionStatus.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
+    val backlog by viewModel.backlog.collectAsState()
+    val lastSyncOk by viewModel.lastSyncOk.collectAsState()
     val autoSync by viewModel.autoSync.collectAsState(initial = true)
     val offlineMode by viewModel.offlineMode.collectAsState(initial = false)
     val highAccuracyGps by viewModel.highAccuracyGps.collectAsState(initial = true)
@@ -89,6 +91,28 @@ fun DiagnosticsScreen(
                 DiagnosticRow("Auto sync", if (autoSync) "Enabled" else "Disabled", autoSync)
                 DiagnosticRow("Offline mode", if (offlineMode) "Enabled" else "Disabled", !offlineMode)
                 DiagnosticRow("High accuracy GPS", if (highAccuracyGps) "Enabled" else "Disabled", highAccuracyGps)
+            }
+
+            val pending = backlog
+            DiagnosticSection("On-device sync backlog") {
+                DiagnosticRow("Pending jobs", (pending?.pendingJobs ?: 0).toString(), pending?.pendingJobs == 0)
+                DiagnosticRow("Pending photos", (pending?.pendingPhotos ?: 0).toString(), pending?.pendingPhotos == 0)
+                DiagnosticRow("Pending customers", (pending?.pendingCustomers ?: 0).toString(), pending?.pendingCustomers == 0)
+                DiagnosticRow("Pending inspections", (pending?.pendingInspections ?: 0).toString(), pending?.pendingInspections == 0)
+                DiagnosticRow("Pending map pins", (pending?.pendingObservations ?: 0).toString(), pending?.pendingObservations == 0)
+                DiagnosticRow("Pending ML events", (pending?.pendingEvents ?: 0).toString(), pending?.pendingEvents == 0)
+                DiagnosticRow(
+                    "Last sync",
+                    when (lastSyncOk) {
+                        true -> "OK"
+                        false -> "Failed — see message below"
+                        null -> "Not run this session"
+                    },
+                    lastSyncOk != false
+                )
+                pending?.recentFailures?.forEach { line ->
+                    DiagnosticRow("Failure", line, false)
+                }
             }
 
             Button(

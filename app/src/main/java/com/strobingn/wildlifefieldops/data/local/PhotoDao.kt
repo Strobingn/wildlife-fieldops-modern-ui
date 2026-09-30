@@ -21,6 +21,15 @@ interface PhotoDao {
     @Query("SELECT * FROM photos WHERE isUploaded = 0")
     suspend fun getUnuploaded(): List<Photo>
 
+    @Query("SELECT COUNT(*) FROM photos WHERE isUploaded = 0")
+    suspend fun countUnuploaded(): Int
+
+    @Query("UPDATE photos SET isUploaded = 1, uploadError = NULL, remoteUrl = :remoteUrl WHERE id = :id")
+    suspend fun markUploaded(id: String, remoteUrl: String)
+
+    @Query("UPDATE photos SET uploadError = :error WHERE id = :id")
+    suspend fun markUploadError(id: String, error: String?)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(photo: Photo)
 

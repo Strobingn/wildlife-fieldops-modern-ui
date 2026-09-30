@@ -192,10 +192,27 @@ private fun JobListItem(job: Job, onClick: () -> Unit) {
                     )
                 }
             }
-            StatusChip(
-                text = job.status.name.replace("_", " "),
-                color = statusColor
-            )
+            Column(horizontalAlignment = Alignment.End) {
+                StatusChip(
+                    text = job.status.name.replace("_", " "),
+                    color = statusColor
+                )
+                if (!job.syncError.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Sync failed",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ErrorRed
+                    )
+                } else if (!job.isSynced) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Pending sync",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(10.dp))

@@ -9,9 +9,10 @@ import com.strobingn.wildlifefieldops.data.local.AppDatabase
 import com.strobingn.wildlifefieldops.data.remote.AiService
 import com.strobingn.wildlifefieldops.data.remote.SupabaseService
 import com.strobingn.wildlifefieldops.data.remote.WeatherService
+import com.strobingn.wildlifefieldops.data.repository.SyncBacklogRepository
+import com.strobingn.wildlifefieldops.data.repository.SyncBacklogSnapshot
 import com.strobingn.wildlifefieldops.data.repository.SyncRepository
 import com.strobingn.wildlifefieldops.sync.work.FieldOpsSyncScheduler
-import com.strobingn.wildlifefieldops.sync.work.SyncEnqueueResult
 import com.strobingn.wildlifefieldops.sync.work.WorkManagerSyncCanaryFlag
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -27,6 +28,7 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val syncRepository: SyncRepository,
+    private val syncBacklogRepository: SyncBacklogRepository,
     private val supabaseService: SupabaseService,
     private val weatherService: WeatherService,
     private val database: AppDatabase,
@@ -53,6 +55,9 @@ class SettingsViewModel @Inject constructor(
         val DEFAULT_TAX_RATE = floatPreferencesKey("default_tax_rate")
         val OFFLINE_MODE = booleanPreferencesKey("offline_mode")
         val HIGH_ACCURACY_GPS = booleanPreferencesKey("high_accuracy_gps")
+        val LAST_SYNC_MESSAGE = stringPreferencesKey("last_sync_message")
+        val LAST_SYNC_OK = booleanPreferencesKey("last_sync_ok")
+        val LAST_SYNC_AT = longPreferencesKey("last_sync_at")
     }
 
     private val _syncMessage = MutableStateFlow<String?>(null)
@@ -61,6 +66,9 @@ class SettingsViewModel @Inject constructor(
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
+    private val _backlog = MutableStateFlow<SyncBacklogSnapshot?>(null)
+    val backlog: StateFlow<SyncBacklogSnapshot?> = _backlog.asStateFlow()
+
     val connectionStatus: StateFlow<String> = flow {
         emit(buildConnectionStatus())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Checking…")
@@ -68,6 +76,11 @@ class SettingsViewModel @Inject constructor(
     private val settings = dataStore.data
         .catch { emit(emptyPreferences()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyPreferences())
+
+    val lastSyncMessage: StateFlow<String?> = settings.map { it[LAST_SYNC_MESSAGE] }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val lastSyncOk: StateFlow<Boolean?> = settings.map { it[LAST_SYNC_OK] }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val darkTheme = settings.map { it[DARK_THEME] ?: true }
     val notificationsEnabled = settings.map { it[NOTIFICATIONS_ENABLED] ?: true }
@@ -79,6 +92,18 @@ class SettingsViewModel @Inject constructor(
     val defaultTaxRate = settings.map { storedTax(it[DEFAULT_TAX_RATE]) }
     val offlineMode = settings.map { it[OFFLINE_MODE] ?: false }
     val highAccuracyGps = settings.map { it[HIGH_ACCURACY_GPS] ?: true }
+
+    init {
+        refreshBacklog()
+    }
+
+    fun refreshBacklog() {
+        viewModelScope.launch {
+            _backlog.value = withContext(Dispatchers.IO) {
+                runCatching { syncBacklogRepository.snapshot() }.getOrNull()
+            }
+        }
+    }
 
     fun aiDiagnostics(): String = try {
         aiService.configDiagnostics()
@@ -179,20 +204,18 @@ class SettingsViewModel @Inject constructor(
                 return@launch
             }
             if (workManagerSyncCanaryFlag.isEnabled()) {
-                _syncMessage.value = withContext(Dispatchers.IO) {
-                    when (val queued = fieldOpsSyncScheduler.enqueueSync()) {
-                        SyncEnqueueResult.Disabled ->
-                            "WorkManager canary flag flipped off; use a debug rebuild."
-                        is SyncEnqueueResult.KeptExisting ->
-                            "Background sync already queued (fieldops-sync, op ${queued.operationId}). Domain pending kept."
-                        is SyncEnqueueResult.Enqueued ->
-                            "Background sync enqueued (fieldops-sync, op ${queued.operationId})."
-                    }
+                withContext(Dispatchers.IO) {
+                    runCatching { fieldOpsSyncScheduler.enqueueSync() }
                 }
-                return@launch
             }
             val result = syncRepository.syncAll()
+            dataStore.edit {
+                it[LAST_SYNC_MESSAGE] = result.message
+                it[LAST_SYNC_OK] = result.success
+                it[LAST_SYNC_AT] = System.currentTimeMillis()
+            }
             _syncMessage.value = result.message
+            refreshBacklog()
         } catch (t: Throwable) {
             android.util.Log.e("SettingsViewModel", "Sync UI crash prevented", t)
             _syncMessage.value = "Sync error: ${t.message ?: t.javaClass.simpleName}"

@@ -34,6 +34,9 @@ interface JobDao {
     @Query("SELECT * FROM jobs WHERE isSynced = 0")
     suspend fun getUnsynced(): List<Job>
 
+    @Query("SELECT COUNT(*) FROM jobs WHERE isSynced = 0")
+    suspend fun countUnsynced(): Int
+
     @Query("SELECT * FROM jobs WHERE title LIKE '%' || :query || '%' OR description LIKE '%' || :query || '%' OR customerName LIKE '%' || :query || '%' OR address LIKE '%' || :query || '%'")
     fun search(query: String): Flow<List<Job>>
 
@@ -58,8 +61,11 @@ interface JobDao {
     @Query("SELECT COUNT(*) FROM jobs WHERE status = :status")
     suspend fun countByStatus(status: JobStatus): Int
 
-    @Query("UPDATE jobs SET isSynced = 1 WHERE id = :id")
+    @Query("UPDATE jobs SET isSynced = 1, syncError = NULL WHERE id = :id")
     suspend fun markSynced(id: String)
+
+    @Query("UPDATE jobs SET syncError = :error WHERE id = :id")
+    suspend fun markSyncError(id: String, error: String?)
 
     @Query("DELETE FROM jobs")
     suspend fun deleteAll()

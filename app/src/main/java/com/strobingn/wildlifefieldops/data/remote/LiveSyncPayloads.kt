@@ -1,0 +1,270 @@
+package com.strobingn.wildlifefieldops.data.remote
+
+import com.strobingn.wildlifefieldops.data.model.Customer
+import com.strobingn.wildlifefieldops.data.model.FieldObservation
+import com.strobingn.wildlifefieldops.data.model.Inspection
+import com.strobingn.wildlifefieldops.data.model.Job
+import com.strobingn.wildlifefieldops.data.model.Photo
+import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoPaths
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.put
+import java.time.Instant
+import java.util.UUID
+
+/**
+ * Push payloads that match **live** `wildlife_app` columns (owner-verified 2026-09-30).
+ *
+ * Do not add keys that are missing live — PostgREST returns 400 `PGRST204` and the
+ * whole batch used to fail silently. Latitude/longitude are JSON numbers so they
+ * bind to both `double precision` and `text` columns.
+ */
+object LiveSyncPayloads {
+
+    @OptIn(ExperimentalSerializationApi::class)
+    val json: Json = Json {
+        encodeDefaults = false
+        explicitNulls = false
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
+    /** Columns the native client is allowed to write on `public.jobs`. */
+    val JOB_WRITE_COLUMNS: Set<String> = setOf(
+        "id",
+        "customer_name",
+        "customer",
+        "title",
+        "scope",
+        "species",
+        "status",
+        "priority",
+        "address",
+        "town",
+        "state",
+        "zip",
+        "estimate",
+        "grand_total",
+        "notes",
+        "ai_notes",
+        "latitude",
+        "longitude",
+        "scheduled_start",
+        "completed_at",
+        "customer_id"
+    )
+
+    fun job(job: Job): LiveJobUpsert {
+        val name = job.customerName.ifBlank { job.title.ifBlank { "Customer" } }
+        val jobTitle = job.title.ifBlank { name }
+        val speciesGuess = when {
+            job.type.isNotBlank() && job.type.length <= 40 -> job.type
+            job.description.isNotBlank() && job.description.length <= 60 -> job.description
+            else -> "Wildlife"
+        }
+        return LiveJobUpsert(
+            id = job.id.ifBlank { UUID.randomUUID().toString() },
+            customerName = name,
+            customer = name,
+            title = jobTitle,
+            species = speciesGuess,
+            customerId = job.customerId.takeIf { it.isNotBlank() && SyncIds.isUuid(it) },
+            address = job.address, // empty string satisfies NOT NULL without omitting the column
+            town = null,
+            state = job.state?.takeIf { it.isNotBlank() },
+            zip = null,
+            status = job.status.toRemoteStatus(),
+            priority = job.priority.toRemotePriority(),
+            notes = job.notes.takeIf { it.isNotBlank() },
+            aiNotes = job.notes.takeIf { it.contains("AI:", ignoreCase = true) || it.contains("Live Capture") },
+            scope = job.description.takeIf { it.isNotBlank() },
+            latitude = job.latitude,
+            longitude = job.longitude,
+            estimate = job.estimatedValue.takeIf { it > 0.0 },
+            grandTotal = job.actualCost.takeIf { it > 0.0 },
+            scheduledStart = job.scheduledDate?.let { Instant.ofEpochMilli(it).toString() },
+            completedAt = job.completedDate?.let { Instant.ofEpochMilli(it).toString() }
+        )
+    }
+
+    fun customer(customer: Customer): LiveCustomerUpsert = LiveCustomerUpsert(
+        id = customer.id.ifBlank { UUID.randomUUID().toString() },
+        name = customer.fullName.trim().ifBlank { "Customer" },
+        phone = customer.phone.takeIf { it.isNotBlank() },
+        email = customer.email.takeIf { it.isNotBlank() },
+        address = customer.address.takeIf { it.isNotBlank() },
+        town = customer.city.takeIf { it.isNotBlank() },
+        state = customer.state.takeIf { it.isNotBlank() },
+        zip = customer.zipCode.takeIf { it.isNotBlank() },
+        notes = customer.notes.takeIf { it.isNotBlank() }
+    )
+
+    fun inspection(inspection: Inspection): LiveInspectionUpsert {
+        val findingsJson = buildJsonObject {
+            put("text", inspection.findings)
+            put("recommendations", inspection.recommendations)
+            put("species", inspection.speciesIdentified)
+            put("entry_points", inspection.entryPoints)
+            put("severity", inspection.severity.name)
+            put("customer", inspection.customerName)
+            put("inspector", inspection.inspectorName)
+            put("weather", inspection.weatherConditions)
+            put("damage", inspection.damageAssessment)
+        }
+        return LiveInspectionUpsert(
+            id = inspection.id.ifBlank { UUID.randomUUID().toString() },
+            jobId = inspection.jobId.takeIf { it.isNotBlank() && SyncIds.isUuid(it) },
+            inspectionType = inspection.inspectionType.name,
+            notes = inspection.notes.takeIf { it.isNotBlank() },
+            findings = findingsJson
+        )
+    }
+
+    fun fieldObservation(
+        observation: FieldObservation,
+        photoStoragePath: String? = null,
+        photoPublicUrl: String? = null
+    ): LiveFieldObservationUpsert = LiveFieldObservationUpsert(
+        id = observation.id.ifBlank { UUID.randomUUID().toString() },
+        notes = observation.notes,
+        latitude = observation.latitude,
+        longitude = observation.longitude,
+        photoPath = photoPublicUrl?.takeIf { it.isNotBlank() }
+            ?: observation.photoLocalPath.takeIf { ObservationPhotoPaths.isRemoteUrl(it) },
+        photoId = observation.photoId?.takeIf { it.isNotBlank() },
+        jobId = observation.jobId?.takeIf { it.isNotBlank() && SyncIds.isUuid(it) },
+        speciesHint = observation.speciesHint.takeIf { it.isNotBlank() },
+        accuracyMeters = observation.accuracyMeters?.toDouble(),
+        observedAt = Instant.ofEpochMilli(observation.observedAt).toString(),
+        photoStoragePath = photoStoragePath?.takeIf { it.isNotBlank() },
+        photoPublicUrl = photoPublicUrl?.takeIf { it.isNotBlank() }
+    )
+
+    fun photo(
+        photo: Photo,
+        storagePath: String,
+        publicUrl: String
+    ): LivePhotoUpsert = LivePhotoUpsert(
+        id = photo.id.ifBlank { UUID.randomUUID().toString() },
+        jobId = photo.jobId?.takeIf { it.isNotBlank() && SyncIds.isUuid(it) },
+        imageUrl = publicUrl,
+        publicUrl = publicUrl,
+        storagePath = storagePath,
+        tag = photo.category.name.lowercase(),
+        notes = photo.description.takeIf { it.isNotBlank() }
+    )
+
+    fun jobPhotoLink(
+        photo: Photo,
+        storagePath: String,
+        publicUrl: String
+    ): LiveJobPhotoUpsert = LiveJobPhotoUpsert(
+        id = photo.id.ifBlank { UUID.randomUUID().toString() },
+        jobId = photo.jobId?.takeIf { it.isNotBlank() && SyncIds.isUuid(it) },
+        path = storagePath,
+        storagePath = storagePath,
+        publicUrl = publicUrl,
+        tag = photo.category.name.lowercase(),
+        notes = photo.description.takeIf { it.isNotBlank() }
+    )
+
+    fun encodedKeys(value: LiveJobUpsert): Set<String> {
+        val element = json.encodeToJsonElement(LiveJobUpsert.serializer(), value)
+        return (element as JsonObject).keys
+    }
+}
+
+@Serializable
+data class LiveJobUpsert(
+    val id: String,
+    @SerialName("customer_name") val customerName: String,
+    val customer: String,
+    val title: String,
+    val species: String,
+    val status: String,
+    val priority: String,
+    val address: String,
+    val town: String? = null,
+    val state: String? = null,
+    val zip: String? = null,
+    val scope: String? = null,
+    val notes: String? = null,
+    @SerialName("ai_notes") val aiNotes: String? = null,
+    @SerialName("customer_id") val customerId: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val estimate: Double? = null,
+    @SerialName("grand_total") val grandTotal: Double? = null,
+    @SerialName("scheduled_start") val scheduledStart: String? = null,
+    @SerialName("completed_at") val completedAt: String? = null
+)
+
+@Serializable
+data class LiveCustomerUpsert(
+    val id: String,
+    val name: String,
+    val phone: String? = null,
+    val email: String? = null,
+    val address: String? = null,
+    val town: String? = null,
+    val state: String? = null,
+    val zip: String? = null,
+    val notes: String? = null
+)
+
+@Serializable
+data class LiveInspectionUpsert(
+    val id: String,
+    @SerialName("job_id") val jobId: String? = null,
+    @SerialName("inspection_type") val inspectionType: String,
+    val notes: String? = null,
+    val findings: JsonObject = buildJsonObject { }
+)
+
+@Serializable
+data class LiveFieldObservationUpsert(
+    val id: String,
+    val notes: String = "",
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    @SerialName("photo_path") val photoPath: String? = null,
+    @SerialName("photo_id") val photoId: String? = null,
+    @SerialName("job_id") val jobId: String? = null,
+    @SerialName("species_hint") val speciesHint: String? = null,
+    @SerialName("accuracy_meters") val accuracyMeters: Double? = null,
+    @SerialName("observed_at") val observedAt: String? = null,
+    @SerialName("photo_storage_path") val photoStoragePath: String? = null,
+    @SerialName("photo_public_url") val photoPublicUrl: String? = null
+)
+
+@Serializable
+data class LivePhotoUpsert(
+    val id: String,
+    @SerialName("job_id") val jobId: String? = null,
+    @SerialName("image_url") val imageUrl: String? = null,
+    @SerialName("public_url") val publicUrl: String? = null,
+    @SerialName("storage_path") val storagePath: String? = null,
+    val tag: String? = null,
+    val notes: String? = null
+)
+
+@Serializable
+data class LiveJobPhotoUpsert(
+    val id: String,
+    @SerialName("job_id") val jobId: String? = null,
+    val path: String? = null,
+    @SerialName("storage_path") val storagePath: String? = null,
+    @SerialName("public_url") val publicUrl: String? = null,
+    val tag: String? = null,
+    val notes: String? = null
+)
+
+object SyncIds {
+    fun isUuid(value: String): Boolean =
+        runCatching { UUID.fromString(value); true }.getOrDefault(false)
+}
