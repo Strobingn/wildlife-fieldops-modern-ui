@@ -70,7 +70,7 @@ interface JobDao {
     @Query("DELETE FROM jobs")
     suspend fun deleteAll()
 
-    @Query("UPDATE jobs SET county = :county, state = :state, updatedAt = :updatedAt WHERE id = :id")
+    @Query("UPDATE jobs SET county = :county, state = :state, updatedAt = :updatedAt, isSynced = 0 WHERE id = :id")
     suspend fun updateCounty(
         id: String,
         county: String?,

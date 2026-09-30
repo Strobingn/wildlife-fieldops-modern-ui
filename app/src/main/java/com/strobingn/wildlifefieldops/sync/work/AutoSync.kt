@@ -83,6 +83,11 @@ class AutoSync @Inject constructor(
         trigger.onAppForeground()
     }
 
+    /** PR #59: call when a user session is obtained. Does not clear Room. */
+    fun onAuthSessionReady() {
+        trigger.onAuthSessionReady()
+    }
+
     fun notifyLocalChange() {
         trigger.notifyLocalChange()
     }

@@ -43,11 +43,15 @@ class CustomersViewModel @Inject constructor(
     }
 
     fun saveCustomer(customer: Customer) = viewModelScope.launch {
-        customerDao.insert(customer)
+        customerDao.insert(
+            customer.copy(isSynced = false, updatedAt = System.currentTimeMillis(), syncError = null)
+        )
     }
 
     fun updateCustomer(customer: Customer) = viewModelScope.launch {
-        customerDao.update(customer.copy(updatedAt = System.currentTimeMillis()))
+        customerDao.update(
+            customer.copy(updatedAt = System.currentTimeMillis(), isSynced = false)
+        )
     }
 
     fun deleteCustomer(customer: Customer) = viewModelScope.launch {

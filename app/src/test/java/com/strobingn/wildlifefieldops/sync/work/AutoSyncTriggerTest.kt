@@ -37,6 +37,19 @@ class AutoSyncTriggerTest {
     }
 
     @Test
+    fun authSessionReadyEnqueuesWithoutClearing() = runBlocking {
+        var enqueues = 0
+        val trigger = AutoSyncTrigger(
+            scope = this,
+            enqueue = { enqueues += 1 },
+            debounceMs = 5_000L
+        )
+        trigger.onAuthSessionReady()
+        delay(20L)
+        assertEquals(1, enqueues)
+    }
+
+    @Test
     fun reconnectEnqueuesImmediately() = runBlocking {
         var enqueues = 0
         val trigger = AutoSyncTrigger(

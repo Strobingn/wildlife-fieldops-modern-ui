@@ -41,6 +41,14 @@ class AutoSyncTrigger(
         notifyLocalChange()
     }
 
+    /**
+     * PR #59 will call this when a session appears. Pause is [isEnabled] == false
+     * (items stay in Room). Ready session must enqueue, never drop the queue.
+     */
+    fun onAuthSessionReady() {
+        onConnectivityRestored()
+    }
+
     fun cancel() {
         debounceJob?.cancel()
         debounceJob = null
