@@ -14,43 +14,40 @@ grants include TRUNCATE, TRIGGER, or REFERENCES.
 
 ## Native Android usage (this branch)
 
-Proven from Kotlin on `cursor/supabase-auth-signin-2b39`. There is **no**
-`client.rpc()` / PostgREST function call. GoTrue is email+password only
-(`AuthSessionRepository`).
+Proven from Kotlin on PR #60 (`cursor/supabase-sync-backlog-5562`, the build
+that will be on phones) plus this branch's signed-in path. There is **no**
+`client.rpc()`. GoTrue is email+password only (`AuthSessionRepository`).
+PR #60 syncs **as `anon`** (no sign-in gate).
 
 | Surface | Live object | Operations in code |
 | --- | --- | --- |
-| PostgREST | `customers` | `select()`, `upsert` (INSERT+UPDATE), `delete` (tombstones + tryRemoteDelete) |
-| PostgREST | `jobs` | `select()`, `upsert`, `delete` |
+| PostgREST | `customers` | `select()`, `upsert` (INSERT+UPDATE), `delete` |
+| PostgREST | `jobs` | `select()`, `upsert` (incl. `ai_notes`; PR #61 also `pricing` jsonb, `subtotal`, `tax_rate`, `tax_amount`) |
 | PostgREST | `inspections` | `upsert`, `delete` — **no SELECT pull** today |
 | PostgREST | `field_observations` | `upsert` of queued rows (no pull) |
 | PostgREST | `observation_events` | `insert` only; HTTP 409 / PG 23505 treated as already synced |
-| Storage | bucket `observation-photos` | `upload(..., upsert = true)` → INSERT+UPDATE+SELECT on `storage.objects`; `publicUrl` (bucket is public) |
+| PostgREST | `photos` | PR #60 `upsert` by `id` (`image_url`, `storage_path`, `tag`) |
+| PostgREST | `job_photos` | PR #60 `upsert` by `id` (`path`, `public_url`, `notes`) |
+| Storage | bucket `observation-photos` | `upload(..., upsert = true)` any path; `publicUrl` |
+| Storage | bucket `job-photos` | PR #60 `public/{jobId}/{photoId}.jpg` upsert + `publicUrl` (live anon policy: `.jpg` + first folder `public`) |
 | Auth | GoTrue `/token` | sign-in, refresh, sign-out. Not a table grant. |
 | Views | — | none |
-| RPCs | — | none (`generate_due_recurring_jobs`, `queue_campaign`, `refresh_technician_metrics` are unused by the app) |
+| RPCs | — | none |
 
-Room-only (never sent to PostgREST on this branch): `invoices`, `photos`,
-`expenses`, `estimates`, `inventory`, `signatures`, `visits`, `repairs`.
+Room-only (never sent to PostgREST): `invoices`, `expenses`, `estimates`,
+`inventory`, `signatures`, `visits`, `repairs`.
 
 ### Assumptions (concurrent agents)
 
-A separate agent is fixing sync + auto-sync and photo upload on `main`. Nothing
-has reached live since ~12 Sep; buckets currently hold 0 objects.
-
-- Photo upload that **already exists** on this branch uses **only**
-  `observation-photos`. Job-site stills in Room `photos` are **not** uploaded.
-- A working job-photo cloud path will almost certainly use live tables
-  `photos` and/or `job_photos` plus bucket `job-photos`, **as `authenticated`**
-  (PR #59 gates every PostgREST/Storage call on a session). Phase 1 therefore
-  keeps **authenticated SIUD** on `photos` / `job_photos` and authenticated
-  storage policies on `job-photos`, and **does not** keep anon on them.
-- `fieldops-photos` / `fieldops-documents` / `fieldops-signatures` are unused
-  by the native app; anon is revoked in phase 1; authenticated keeps access
-  for a leftover web client.
+- **PR #60 is the phone build** (`2.3.7-sync-backlog`, versionCode 48). Phase 1
+  keeps anon SIUD on `photos` / `job_photos` and live job-photos JPG `public/`
+  storage policies. This auth PR is **2.3.9-supabase-auth** (versionCode 50).
+- **PR #61** (`2.3.8-editable-pricing`, versionCode 49) upserts `jobs.pricing`.
+  Phase 1 adds that column if missing. Do **not** re-run #61's `GRANT … TO anon`
+  after phase 2.
+- `fieldops-*` buckets stay unused by the native app; anon is revoked in phase 1.
 - Native DTOs do **not** send `organization_id`. Sync tables stay
-  `TO authenticated using (true)`. Org-helper policies remain for other
-  tables once EXECUTE is restored. `organization_members` INSERT/DELETE is
+  `TO authenticated using (true)`. `organization_members` INSERT/DELETE is
   revoked from `authenticated`; add owner/tech rows in the SQL Editor.
 
 ## What is on live that is not in `schema.sql`
@@ -88,9 +85,10 @@ SECURITY DEFINER with a fixed `search_path`. Live revokes EXECUTE from anon
 and authenticated, so those policies error. Phase 1 grants EXECUTE to both
 client roles (anon still has no table GRANT on those relations).
 
-**Storage buckets (0 objects):** `observation-photos` (public), `job-photos`
-(public → private in phase 1), `job-pdfs` (public → private in phase 1),
-`fieldops-photos`, `fieldops-documents`, `fieldops-signatures` (already private).
+**Storage buckets (0 objects):** `observation-photos` (public, stays public),
+`job-photos` (public, **stays public** — JobPhotoUploader stores `publicUrl`),
+`job-pdfs` (public → private in phase 1), `fieldops-photos`,
+`fieldops-documents`, `fieldops-signatures` (already private).
 
 **Functions:** PUBLIC EXECUTE on `generate_due_recurring_jobs`,
 `queue_campaign`, `refresh_technician_metrics`. Mutable search_path on
@@ -99,8 +97,9 @@ leaked-password protection is a dashboard toggle, not SQL.
 
 ## Privilege matrix (live → phase 1 → phase 2)
 
-Phase 1 is safe for currently installed APKs: they only talk as `anon` to the
-five hold tables + `observation-photos`. Phase 2 removes that remainder.
+Phase 1 is safe for currently installed APKs **and for PR #60**: they talk as
+`anon` to the hold tables + `observation-photos` + `job-photos` (`public/*.jpg`).
+Phase 2 removes that remainder after every device is on 2.3.9-supabase-auth.
 
 | Relation | Kind | Live anon | Live authenticated | Live service_role | Phase 1 anon | Phase 1 authenticated | Phase 1 service_role | Phase 2 anon |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -126,7 +125,7 @@ five hold tables + `observation-photos`. Phase 2 removes that remainder.
 | `inventory_items` | table | ALL | ALL | ALL | — | SIUD | ALL | — |
 | `inventory_transactions` | table | ALL | ALL | ALL | — | SIUD | ALL | — |
 | `invoices` | table | ALL | ALL | ALL | — | SIUD | ALL | — |
-| `job_photos` | table | ALL | ALL | ALL | — | SIUD | ALL | — |
+| `job_photos` | table | ALL | ALL | ALL | SIUD | SIUD | ALL | — |
 | `jobs` | table | ALL | ALL | ALL | SIUD | SIUD | ALL | — |
 | `marketing_campaigns` | table | ALL | ALL | ALL | — | SIUD | ALL | — |
 | `measurements` | table | ALL | ALL | ALL | — | SIUD | ALL | — |
@@ -138,7 +137,7 @@ five hold tables + `observation-photos`. Phase 2 removes that remainder.
 | `payments` | table | ALL | ALL | ALL | — | SIUD | ALL | — |
 | `pdf_documents` | table | ALL | ALL | ALL | — | SIUD | ALL | — |
 | `photo_annotations` | table | ALL | ALL | ALL | — | SIUD | ALL | — |
-| `photos` | table | ALL | ALL | ALL | — | SIUD | ALL | — |
+| `photos` | table | ALL | ALL | ALL | SIUD | SIUD | ALL | — |
 | `profiles` | table | ALL | ALL | ALL | — | SELECT,INSERT,UPDATE | ALL | — |
 | `properties` | table | ALL | ALL | ALL | — | SIUD | ALL | — |
 | `recurring_service_plans` | table | ALL | ALL | ALL | — | SIUD | ALL | — |
@@ -162,6 +161,7 @@ five hold tables + `observation-photos`. Phase 2 removes that remainder.
 | `species_stats` | view | ALL | ALL | ALL | — | SELECT | ALL | — |
 | `tech_stats` | view | ALL | ALL | ALL | — | SELECT | ALL | — |
 | `warranty_alerts` | view | ALL | ALL | ALL | — | SELECT | ALL | — |
+| `storage.objects` | storage | ALL | ALL | ALL | SIUD (RLS: `observation-photos` any path; `job-photos` `.jpg` under `public/`) | SIUD | ALL | — |
 
 `TRUNCATE` / `TRIGGER` / `REFERENCES` are revoked from `anon` and
 `authenticated` on every public table in phase 1. `service_role` keeps ALL.
@@ -178,6 +178,11 @@ are not auto-granted to `anon`. Authenticated default becomes SIUD, not ALL.
 4. **After every device is signed in:** `20260929221000_REVOKE_ANON_AFTER_SIGNED_IN_ROLLOUT.sql`
 
 Do not re-run `20260928120000` after phase 2.
+
+PR #61 (`20260930120000_job_pricing_overrides.sql`) is optional if phase 1
+already ran: phase 1 adds `jobs.pricing jsonb`. If you apply #61 first, its
+column add is idempotent and its `GRANT anon` on `jobs` is redundant with
+phase 1's hold. **Do not re-run #61's GRANT after phase 2.**
 
 ## Local restore (not live)
 

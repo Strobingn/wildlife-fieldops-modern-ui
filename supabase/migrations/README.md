@@ -23,10 +23,10 @@ files below close that, in two steps so currently installed APKs keep syncing.
 
 | Step | When | File / dashboard action |
 | --- | --- | --- |
-| 1 | With this app release (`2.3.7-supabase-auth`) | `20260929220000_authenticated_rls_for_signed_in_sync.sql` — authenticated RLS for native sync **and** immediate lock-down of everything old APKs do not hit (invoices, payments, orgs, profiles, storage fieldops/job-photos, dangerous RPCs, default privileges). **Keeps anon SIUD on the six hold tables** so currently installed APKs keep syncing. |
+| 1 | With this app release (`2.3.9-supabase-auth`, versionCode 50) | `20260929220000_authenticated_rls_for_signed_in_sync.sql` — authenticated RLS for native sync **and** immediate lock-down of everything PR #60 does not hit (invoices, payments, orgs, profiles, fieldops storage, dangerous RPCs, default privileges). **Keeps anon SIUD on customers/jobs/inspections/field_observations/observation_events/photos/job_photos** plus `observation-photos` and live `job-photos` JPG `public/` policies so the #60 phone build keeps syncing. Adds `jobs.pricing` if missing (PR #61). |
 | 2 | Ship the signed-in APK to every phone | Settings → Account → Sign in. Capture still works offline without a session; sync shows **Sign in to sync**. |
 | 3 | Owner | Create users (no public signup). Insert the owner row in `organization_members` via the SQL Editor if that table is empty (see below). |
-| 4 | After **all** devices are signed in and Sync Now works | `20260929221000_REVOKE_ANON_AFTER_SIGNED_IN_ROLLOUT.sql` — `REVOKE` anon on customers, jobs, inspections, field_observations, observation_events, audit_log and `storage.objects`; drop leftover PUBLIC `using(true)` policies; tighten `observation-photos` to `authenticated`. |
+| 4 | After **all** devices are signed in and Sync Now works | `20260929221000_REVOKE_ANON_AFTER_SIGNED_IN_ROLLOUT.sql` — `REVOKE` anon on customers, jobs, inspections, field_observations, observation_events, photos, job_photos, audit_log and `storage.objects`; drop leftover PUBLIC `using(true)` policies; tighten `observation-photos` and `job-photos` JPG `public/` writes to `authenticated`. |
 
 Greenfield `supabase db reset` applies both files in timestamp order, which is
 correct for a new project that will only run the signed-in app. **Live
@@ -45,10 +45,11 @@ longer call `queue_campaign` / `generate_due_recurring_jobs` /
 so the existing org policies filter instead of raising "permission denied for
 function".
 
-`observation-photos` stays a **public** bucket because the Android uploader
-stores `publicUrl`. Writes are JWT-gated after step 4; object URLs remain
-readable by anyone who has the path. Follow-up: switch the app to signed URLs
-and set `public = false`.
+`observation-photos` and `job-photos` stay **public** buckets because the
+Android uploaders store `publicUrl`. Anon writes to `job-photos` stay limited
+to `.jpg` under `public/` (live policy). Writes are JWT-gated after step 4;
+object URLs remain readable by anyone who has the path. Follow-up: signed URLs
+and `public = false`.
 
 ### Owner: create accounts and disable public signup
 
@@ -98,7 +99,9 @@ supabase/migrations/20260929220000_authenticated_rls_for_signed_in_sync.sql
 
 `20260928120000_explicit_data_api_grants.sql` does **not** grant `anon` (it is
 stale vs live). Prefer phase 1 as the live source of truth. Re-running it after
-the HOLD file will not restore anon privileges.
+the HOLD file will not restore anon privileges. Phase 1 already adds
+`jobs.pricing` (PR #61). Do **not** re-run #61's `GRANT … TO anon` on `jobs`
+after phase 2 — that would reopen anon DML.
 
 **Hold until every device is upgraded:**
 

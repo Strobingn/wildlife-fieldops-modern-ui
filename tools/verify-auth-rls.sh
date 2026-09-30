@@ -56,6 +56,7 @@ create table if not exists public.jobs (
   customer text not null default 'Customer',
   address text not null default '',
   status text not null default 'Active',
+  ai_notes text,
   created_at timestamptz not null default now()
 );
 create table if not exists public.inspections (
@@ -117,13 +118,17 @@ create table if not exists public.profiles (
 create table if not exists public.photos (
   id uuid primary key default gen_random_uuid(),
   job_id uuid,
+  image_url text,
   storage_path text,
+  tag text,
   created_at timestamptz not null default now()
 );
 create table if not exists public.job_photos (
   id uuid primary key default gen_random_uuid(),
   job_id uuid,
   path text not null default '',
+  public_url text,
+  notes text,
   created_at timestamptz not null default now()
 );
 
@@ -244,6 +249,14 @@ on conflict (id) do nothing;
 alter table storage.objects enable row level security;
 grant usage on schema storage to anon, authenticated, service_role;
 grant select, insert, update, delete on storage.objects to anon, authenticated, service_role;
+create or replace function storage.foldername(name text) returns text[] language sql immutable as $$
+  select (string_to_array(name, '/'))[1:greatest(array_length(string_to_array(name, '/'), 1) - 1, 0)]
+$$;
+create or replace function storage.extension(name text) returns text language sql immutable as $$
+  select lower(reverse(split_part(reverse(name), '.', 1)))
+$$;
+grant execute on function storage.foldername(text) to anon, authenticated, service_role;
+grant execute on function storage.extension(text) to anon, authenticated, service_role;
 create policy "observation_photos_select" on storage.objects for select using (bucket_id = 'observation-photos');
 create policy "observation_photos_insert" on storage.objects for insert with check (bucket_id = 'observation-photos');
 create policy "observation_photos_update" on storage.objects for update using (bucket_id = 'observation-photos') with check (bucket_id = 'observation-photos');
@@ -284,15 +297,54 @@ insert into public.job_photos (path) values ('jobs/1.jpg');
 insert into storage.objects (bucket_id, name) values ('job-photos', 'jobs/1.jpg');
 reset role;
 
+-- PostgREST anon JWT. Do not leave the authenticated claims in this session:
+-- auth.role() is coalesce(jwt->>'role', current_user), and live job-photos
+-- JPG policies require auth.role() = 'anon'.
+select set_config('request.jwt.claims', json_build_object('role', 'anon')::text, false);
 set role anon;
 insert into public.customers (name) values ('anon-old-apk');
 update public.customers set name = 'anon-old-apk-upsert' where name = 'anon-old-apk';
-insert into public.jobs (customer) values ('anon-job');
+insert into public.jobs (customer, ai_notes)
+  values ('anon-job', 'AI: raccoon');
+update public.jobs
+   set status = 'Closed',
+       ai_notes = 'AI: attic',
+       pricing = '{"totalOverride": 200}'::jsonb
+ where customer = 'anon-job';
 insert into public.inspections default values;
 insert into public.field_observations (notes) values ('anon-obs');
 insert into public.observation_events (event_id, entity_id) values ('evt-anon', 'ent-anon');
 insert into storage.objects (bucket_id, name) values ('observation-photos', 'anon.jpg');
+insert into public.photos (id, image_url, storage_path, tag)
+  values (
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1',
+    'https://example.test/p.jpg',
+    'public/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa0/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1.jpg',
+    'live_capture'
+  )
+  on conflict (id) do update set storage_path = excluded.storage_path, tag = excluded.tag;
+insert into public.job_photos (id, path, public_url, notes)
+  values (
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1',
+    'public/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa0/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1.jpg',
+    'https://example.test/p.jpg',
+    'Live Capture'
+  )
+  on conflict (id) do update set path = excluded.path, notes = excluded.notes;
+insert into storage.objects (bucket_id, name)
+  values (
+    'job-photos',
+    'public/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa0/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1.jpg'
+  );
+update storage.objects
+   set name = name
+ where bucket_id = 'job-photos'
+   and name = 'public/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa0/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1.jpg';
+select 1 from storage.objects
+ where bucket_id = 'job-photos'
+   and name = 'public/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa0/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1.jpg';
 reset role;
+select set_config('request.jwt.claims', '{}', false);
 SQL
 
   echo "== stage 1b: anon denied on non-hold tables; no self-promotion"
@@ -317,12 +369,12 @@ begin
         org, uid
       )),
       ('fieldops storage', 'insert into storage.objects (bucket_id, name) values (''fieldops-photos'', ''secret.pdf'')'),
-      ('job-photos storage', 'insert into storage.objects (bucket_id, name) values (''job-photos'', ''public/x.jpg'')'),
-      ('photos', 'insert into public.photos (storage_path) values (''anon.jpg'')'),
+      ('job-photos outside public/', 'insert into storage.objects (bucket_id, name) values (''job-photos'', ''not-public/x.jpg'')'),
       ('queue_campaign', 'select public.queue_campaign(gen_random_uuid())'),
       ('generate_due_recurring_jobs', 'select public.generate_due_recurring_jobs(current_date)')
     ) as t(rel, stmt)
   loop
+    perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, false);
     set role anon;
     begin
       execute rec.stmt;
@@ -391,15 +443,26 @@ SQL
 
   echo "== stage 2: authenticated allowed; anon denied"
   run_psql "$url" <<'SQL'
+select set_config(
+  'request.jwt.claims',
+  json_build_object('role', 'authenticated')::text,
+  false
+);
 set role authenticated;
 insert into public.customers (name) values ('auth-after-revoke');
-insert into public.jobs (customer, address) values ('Auth Job', '210 Willow Avenue');
+insert into public.jobs (customer, address, pricing)
+  values ('Auth Job', '210 Willow Avenue', '{"totalOverride": 850}'::jsonb);
 insert into public.inspections default values;
 insert into public.field_observations (notes) values ('after-revoke');
 insert into public.observation_events (event_id, entity_id) values ('evt-auth-2', 'ent-2');
 insert into public.audit_log (table_name, action) values ('customers', 'INSERT');
 insert into storage.objects (bucket_id, name) values ('observation-photos', 'auth-2.jpg');
+insert into public.photos (storage_path) values ('public/after-revoke.jpg');
+insert into public.job_photos (path) values ('public/after-revoke.jpg');
+insert into storage.objects (bucket_id, name)
+  values ('job-photos', 'public/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb0/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1.jpg');
 reset role;
+select set_config('request.jwt.claims', '{}', false);
 SQL
 
   run_psql "$url" <<'SQL'
@@ -416,9 +479,13 @@ begin
       ('field_observations', 'insert into public.field_observations (notes) values (''x'')'),
       ('observation_events', 'insert into public.observation_events (event_id, entity_id) values (''x'', ''y'')'),
       ('audit_log', 'insert into public.audit_log (table_name, action) values (''x'', ''INSERT'')'),
-      ('storage.objects', 'insert into storage.objects (bucket_id, name) values (''observation-photos'', ''x.jpg'')')
+      ('photos', 'insert into public.photos (storage_path) values (''x.jpg'')'),
+      ('job_photos', 'insert into public.job_photos (path) values (''x.jpg'')'),
+      ('storage.objects', 'insert into storage.objects (bucket_id, name) values (''observation-photos'', ''x.jpg'')'),
+      ('job-photos', 'insert into storage.objects (bucket_id, name) values (''job-photos'', ''public/x.jpg'')')
     ) as t(rel, stmt)
   loop
+    perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, false);
     set role anon;
     begin
       execute rec.stmt;
@@ -436,7 +503,7 @@ begin
     end;
     reset role;
   end loop;
-  if denied < 6 then
+  if denied < 10 then
     raise exception 'expected anon denies on all sync relations, got %', denied;
   end if;
 end $$;

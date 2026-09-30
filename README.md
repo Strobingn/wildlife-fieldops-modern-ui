@@ -69,7 +69,7 @@ Legacy web / Capacitor folders may still exist in the repo history for reference
 - **Settings → Sync Now** pushes unsynced jobs/customers/inspections/field observations/observation events and pulls cloud rows **only when a valid session exists**. Otherwise the UI shows **Sign in to sync** and the queue stays local.
 - Capture / local edits work offline with or without a session. Cloud PostgREST and `observation-photos` uploads pause until sign-in.
 - Cloud project: `wildlife_app` (`hgdzmwfcghtilyqagjak`). Live catalog does **not** match `supabase/schema.sql` — see `supabase/migrations/LIVE_BASELINE.md`.
-- **Rollout:** (1) ship `2.3.7-supabase-auth`, (2) create Auth users, (3) disable public signup, (4) apply `20260929220000_authenticated_rls_for_signed_in_sync.sql` **now** (keeps anon only on the five native-sync tables + `observation-photos`; closes invoices/orgs/storage/RPCs), (5) apply `20260929221000_REVOKE_ANON_AFTER_SIGNED_IN_ROLLOUT.sql` **only after every device is signed in**. Details: `supabase/migrations/README.md`.
+- **Rollout:** (1) ship `2.3.9-supabase-auth` (versionCode 50; #60 is 48, #61 is 49), (2) create Auth users, (3) disable public signup, (4) apply `20260929220000_authenticated_rls_for_signed_in_sync.sql` **now** (keeps anon on PR #60 sync tables including `photos` / `job_photos` / `job-photos` public/*.jpg; closes invoices/orgs/fieldops/RPCs), (5) apply `20260929221000_REVOKE_ANON_AFTER_SIGNED_IN_ROLLOUT.sql` **only after every device is signed in**. Details: `supabase/migrations/README.md`.
 - Future `create table` migrations must include grants — no new `anon` grants on sensitive tables. Phase 1 stops default-privilege auto-grants to `anon`.
 
 ### WorkManager 2.12 sync canary

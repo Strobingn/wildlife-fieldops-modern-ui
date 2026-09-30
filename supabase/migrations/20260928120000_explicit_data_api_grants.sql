@@ -42,7 +42,8 @@ begin
       ('inspections',          'select, insert, update, delete'),
       ('field_observations',   'select, insert, update, delete'),
       ('observation_events',   'select, insert'),
-      -- Present on live; unused by native sync (leftover web / future photo sync)
+      -- Present on live; PR #60 native photo sync (authenticated after sign-in;
+      -- phase 1 separately holds anon SIUD until the HOLD file)
       ('photos',               'select, insert, update, delete'),
       ('job_photos',           'select, insert, update, delete'),
       ('techs',                'select, insert, update, delete'),

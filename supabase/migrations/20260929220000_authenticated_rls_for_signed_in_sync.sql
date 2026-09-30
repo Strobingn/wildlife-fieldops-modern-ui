@@ -2,10 +2,11 @@
 -- Authenticated RLS + live permission lock-down (apply with the signed-in APK).
 --
 -- Safe to run on live wildlife_app NOW. Does NOT revoke anon on the
--- relations old APKs still hit (customers, jobs, inspections,
--- field_observations, observation_events) or on storage.objects for
--- observation-photos. Live audit_log is written by SECURITY DEFINER
--- trigger audit_row_change(); clients do not need INSERT.
+-- relations PR #60 (2.3.7-sync-backlog) still hits as anon: customers,
+-- jobs, inspections, field_observations, observation_events, photos,
+-- job_photos; storage.objects for observation-photos (any path) and
+-- job-photos at public/{jobId}/{photoId}.jpg. Live audit_log is written
+-- by SECURITY DEFINER trigger audit_row_change(); clients do not need INSERT.
 --
 -- Grounded in the 2026-09-30 live catalog dump of project wildlife_app
 -- (hgdzmwfcghtilyqagjak): 52 tables, 6 views, testing_full_access / anon_*
@@ -18,7 +19,7 @@
 --   * Matching `TO authenticated` policies on storage.objects for bucket
 --     `observation-photos` (alongside the existing open policies).
 --   * Immediately closes the live holes that old APKs do not need:
---       - REVOKE anon on every public table/view except the six hold relations
+--       - REVOKE anon on every public table/view except the hold relations
 --       - drop testing_full_access and anon_* policies on non-hold tables
 --       - stop default-privilege auto-grants of ALL to anon
 --       - GRANT EXECUTE on is_org_member / has_org_role so org policies filter
@@ -26,13 +27,15 @@
 --       - block self-promotion on profiles / organization_members
 --       - revoke anon EXECUTE on generate_due_recurring_jobs, queue_campaign,
 --         refresh_technician_metrics
---       - close fieldops-* and job-photos anon storage policies
+--       - close fieldops-* anon storage; KEEP live job-photos anon JPG
+--         public/ policies (PR #60 JobPhotoUploader)
+--       - add jobs.pricing jsonb (PR #61) if missing
 --   * Fixes mutable search_path on set_updated_at and
 --     touch_integration_connection.
 --
 -- Apply the SEPARATE file
 --   20260929221000_REVOKE_ANON_AFTER_SIGNED_IN_ROLLOUT.sql
--- only after every field device is on 2.3.7-supabase-auth (or later) and
+-- only after every field device is on 2.3.9-supabase-auth (or later) and
 -- owner-created Auth users exist. See supabase/migrations/README.md.
 -- =============================================================================
 
@@ -104,6 +107,61 @@ end $$;
 
 do $$
 begin
+  if to_regclass('public.photos') is null then
+    raise notice 'authenticated_rls: skip missing public.photos';
+  else
+    execute 'drop policy if exists "authenticated_photos_all" on public.photos';
+    execute 'drop policy if exists "anon_photos_all" on public.photos';
+    execute $p$
+      create policy "authenticated_photos_all" on public.photos
+        for all to authenticated using (true) with check (true)
+    $p$;
+    -- Fixture / leftover DBs may lack live anon_* policies after dropping
+    -- testing_full_access. PR #60 upserts photos by id as anon.
+    execute $p$
+      create policy "anon_photos_all" on public.photos
+        for all to anon using (true) with check (true)
+    $p$;
+  end if;
+  if to_regclass('public.job_photos') is null then
+    raise notice 'authenticated_rls: skip missing public.job_photos';
+  else
+    execute 'drop policy if exists "authenticated_job_photos_all" on public.job_photos';
+    execute 'drop policy if exists "anon_job_photos_all" on public.job_photos';
+    execute $p$
+      create policy "authenticated_job_photos_all" on public.job_photos
+        for all to authenticated using (true) with check (true)
+    $p$;
+    -- Live has no named anon_* on job_photos — only testing_full_access.
+    -- PR #60 upserts by id; keep an explicit anon SIUD policy after that drop.
+    execute $p$
+      create policy "anon_job_photos_all" on public.job_photos
+        for all to anon using (true) with check (true)
+    $p$;
+  end if;
+end $$;
+
+-- PR #61: jobs.pricing jsonb. Idempotent; live dump (2026-09-30) lacks it.
+-- Column add only — do not copy #61's GRANT anon (phase 1 already holds SIUD
+-- on jobs; re-running #61's grant file after phase 2 would restore anon).
+do $$
+begin
+  if to_regclass('public.jobs') is null then
+    raise notice 'authenticated_rls: skip jobs.pricing (no public.jobs)';
+    return;
+  end if;
+  execute $c$
+    alter table public.jobs
+      add column if not exists pricing jsonb not null default '{}'::jsonb
+  $c$;
+  execute $c$
+    comment on column public.jobs.pricing is
+      'Estimate worksheet and computed-field overrides (PR #61). Empty {} means use calculated values.'
+  $c$;
+end $$;
+
+do $$
+begin
   if to_regclass('public.audit_log') is null then
     raise notice 'authenticated_rls: skip missing public.audit_log';
   else
@@ -168,7 +226,9 @@ declare
     'jobs',
     'inspections',
     'field_observations',
-    'observation_events'
+    'observation_events',
+    'photos',
+    'job_photos'
   ];
   privileged constant text[] := array[
     'organization_members',
@@ -580,8 +640,9 @@ begin
   end if;
 end $$;
 
--- Storage: close anon write on fieldops-* and job-photos now. Keep
--- observation-photos PUBLIC policies until HOLD so old APKs can upload.
+-- Storage: close anon write on fieldops-* now. Keep observation-photos PUBLIC
+-- policies and live job-photos anon JPG public/ semantics until HOLD.
+-- PR #60 JobPhotoUploader: upsert at public/{jobId}/{photoId}.jpg + publicUrl.
 do $$
 declare
   pol record;
@@ -594,7 +655,7 @@ begin
   execute 'revoke all on table storage.objects from anon';
   execute 'grant all on table storage.objects to service_role';
   execute 'grant select, insert, update, delete on table storage.objects to authenticated';
-  -- anon keeps SIUD until HOLD (observation-photos upserts from old APKs).
+  -- anon keeps SIUD until HOLD (observation-photos any path + job-photos jpg).
   execute 'grant select, insert, update, delete on table storage.objects to anon';
   begin
     execute 'revoke truncate, trigger, references on table storage.objects from anon, authenticated';
@@ -602,19 +663,14 @@ begin
     raise notice 'authenticated_rls: skip storage truncate/trigger/references revoke (%)', sqlerrm;
   end;
 
-  for pol in
-    select policyname
-    from pg_policies
-    where schemaname = 'storage'
-      and tablename = 'objects'
-      and (
-        policyname = 'fieldops_photos_access'
-        or policyname like 'Give anon users access to JPG images in folder%'
-      )
-  loop
-    execute format('drop policy if exists %I on storage.objects', pol.policyname);
-  end loop;
+  if to_regprocedure('storage.foldername(text)') is not null then
+    execute 'grant execute on function storage.foldername(text) to anon, authenticated, service_role';
+  end if;
+  if to_regprocedure('storage.extension(text)') is not null then
+    execute 'grant execute on function storage.extension(text) to anon, authenticated, service_role';
+  end if;
 
+  -- Close fieldops-* for anon. Do NOT drop live job-photos JPG policies.
   execute 'drop policy if exists "fieldops_photos_access" on storage.objects';
   execute $p$
     create policy "fieldops_photos_access" on storage.objects
@@ -623,8 +679,6 @@ begin
       with check (bucket_id = any (array['fieldops-photos'::text, 'fieldops-documents'::text, 'fieldops-signatures'::text]))
   $p$;
 
-  -- Working job-photo upload (assumed authenticated). Keep live names + add
-  -- an explicit UPDATE policy matching supabase-kt upsert.
   execute 'drop policy if exists "Allow authenticated reads" on storage.objects';
   execute 'drop policy if exists "Allow authenticated uploads" on storage.objects';
   execute 'drop policy if exists "Allow authenticated deletes" on storage.objects';
@@ -648,17 +702,75 @@ begin
       for delete to authenticated using (bucket_id = 'job-photos')
   $p$;
 
+  -- Recreate live anon JPG public/ semantics (PR #60). Idempotent.
+  for pol in
+    select policyname
+    from pg_policies
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and policyname like 'Give anon users access to JPG images in folder%'
+  loop
+    execute format('drop policy if exists %I on storage.objects', pol.policyname);
+  end loop;
+
+  execute $p$
+    create policy "Give anon users access to JPG images in folder jd82oh_1"
+      on storage.objects for select to public
+      using (
+        bucket_id = 'job-photos'
+        and storage.extension(name) = 'jpg'
+        and lower((storage.foldername(name))[1]) = 'public'
+        and auth.role() = 'anon'
+      )
+  $p$;
+  execute $p$
+    create policy "Give anon users access to JPG images in folder jd82oh_2"
+      on storage.objects for insert to public
+      with check (
+        bucket_id = 'job-photos'
+        and storage.extension(name) = 'jpg'
+        and lower((storage.foldername(name))[1]) = 'public'
+        and auth.role() = 'anon'
+      )
+  $p$;
+  execute $p$
+    create policy "Give anon users access to JPG images in folder jd82oh_0"
+      on storage.objects for update to public
+      using (
+        bucket_id = 'job-photos'
+        and storage.extension(name) = 'jpg'
+        and lower((storage.foldername(name))[1]) = 'public'
+        and auth.role() = 'anon'
+      )
+      with check (
+        bucket_id = 'job-photos'
+        and storage.extension(name) = 'jpg'
+        and lower((storage.foldername(name))[1]) = 'public'
+        and auth.role() = 'anon'
+      )
+  $p$;
+  execute $p$
+    create policy "Give anon users access to JPG images in folder jd82oh_3"
+      on storage.objects for delete to public
+      using (
+        bucket_id = 'job-photos'
+        and storage.extension(name) = 'jpg'
+        and lower((storage.foldername(name))[1]) = 'public'
+        and auth.role() = 'anon'
+      )
+  $p$;
+
   if to_regclass('storage.buckets') is not null then
-    execute $u$
-      update storage.buckets
-         set public = false
-       where id in ('job-photos', 'job-pdfs')
-    $u$;
-    -- observation-photos stays public: Android ObservationPhotoUploader stores publicUrl.
+    -- job-photos stays public: JobPhotoUploader stores publicUrl (same as observation-photos).
     execute $u$
       update storage.buckets
          set public = true
-       where id = 'observation-photos'
+       where id in ('observation-photos', 'job-photos')
+    $u$;
+    execute $u$
+      update storage.buckets
+         set public = false
+       where id = 'job-pdfs'
     $u$;
   end if;
 end $$;

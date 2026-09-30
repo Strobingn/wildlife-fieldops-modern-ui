@@ -132,10 +132,13 @@ begin
      or has_table_privilege('anon', 'public.payment_records', 'SELECT')
      or has_table_privilege('anon', 'public.organizations', 'SELECT')
      or has_table_privilege('anon', 'public.organization_members', 'SELECT')
-     or has_table_privilege('anon', 'public.audit_log', 'INSERT')
-     or has_table_privilege('anon', 'public.photos', 'INSERT')
-     or has_table_privilege('anon', 'public.job_photos', 'INSERT') then
+     or has_table_privilege('anon', 'public.audit_log', 'INSERT') then
     raise exception 'phase 1 left anon DML on a non-hold table';
+  end if;
+
+  if not has_table_privilege('anon', 'public.photos', 'INSERT')
+     or not has_table_privilege('anon', 'public.job_photos', 'INSERT') then
+    raise exception 'phase 1 revoked anon INSERT on photos/job_photos (PR #60 needs it)';
   end if;
 
   if has_table_privilege('authenticated', 'public.organization_members', 'INSERT') then
@@ -180,14 +183,29 @@ begin
   end if;
 
   if not exists (
-    select 1 from storage.buckets where id = 'observation-photos' and public
+    select 1 from storage.buckets where id in ('observation-photos', 'job-photos') and public
   ) then
-    raise exception 'observation-photos must stay public (Android publicUrl)';
+    raise exception 'observation-photos / job-photos must stay public (Android publicUrl)';
   end if;
   if exists (
-    select 1 from storage.buckets where id in ('job-photos', 'job-pdfs') and public
+    select 1 from storage.buckets where id = 'job-pdfs' and public
   ) then
-    raise exception 'job-photos / job-pdfs still public';
+    raise exception 'job-pdfs still public';
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'storage' and tablename = 'objects'
+      and policyname like 'Give anon users access to JPG images in folder%'
+  ) then
+    raise exception 'phase 1 dropped live anon job-photos JPG policies';
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'jobs' and column_name = 'pricing'
+  ) then
+    raise exception 'phase 1 did not add jobs.pricing';
   end if;
 end $$;
 SQL
@@ -218,8 +236,15 @@ begin
   update public.customers set notes = 'upsert-merge' where id = cust;
   perform * from public.customers;
 
-  insert into public.jobs (customer, title, status, address)
-    values ('Auth Customer', 'Squirrel job', 'Active', '210 Willow Avenue')
+  insert into public.jobs (customer, title, status, address, ai_notes, pricing)
+    values (
+      'Auth Customer',
+      'Squirrel job',
+      'Active',
+      '210 Willow Avenue',
+      'AI: attic',
+      '{"totalOverride": 850}'::jsonb
+    )
     returning id into job;
   update public.jobs set notes = 'follow-up' where id = job;
   perform * from public.jobs;
@@ -265,9 +290,8 @@ begin
   delete from public.customers where id = cust;
 
   insert into public.jobs (customer, title) values ('Anon Job', 'Anon Job') returning id into job;
-  update public.jobs set status = 'Closed' where id = job;
+  update public.jobs set status = 'Closed', ai_notes = 'AI: raccoon', pricing = '{"totalOverride": 200}'::jsonb where id = job;
   perform * from public.jobs;
-  delete from public.jobs where id = job;
 
   insert into public.inspections (notes) values ('anon-insp') returning id into insp;
   update public.inspections set notes = 'anon-insp-2' where id = insp;
@@ -278,6 +302,48 @@ begin
 
   insert into public.observation_events (event_id, entity_id, observed_at)
     values ('evt-anon-1', 'ent-anon', 1);
+
+  -- PR #60: PostgREST-style upsert by id on photos / job_photos + job-photos
+  -- object at public/{jobId}/{photoId}.jpg
+  insert into public.photos (id, job_id, image_url, storage_path, tag)
+    values (
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1'::uuid,
+      job,
+      'https://example.test/public/job/photo.jpg',
+      'public/' || job::text || '/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1.jpg',
+      'live_capture'
+    )
+    on conflict (id) do update
+      set image_url = excluded.image_url,
+          storage_path = excluded.storage_path,
+          tag = excluded.tag;
+  update public.photos
+     set tag = 'entry'
+   where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1'::uuid;
+
+  insert into public.job_photos (id, job_id, path, public_url, notes)
+    values (
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1'::uuid,
+      job,
+      'public/' || job::text || '/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1.jpg',
+      'https://example.test/public/job/photo.jpg',
+      'Live Capture raccoon'
+    )
+    on conflict (id) do update
+      set path = excluded.path,
+          public_url = excluded.public_url,
+          notes = excluded.notes;
+
+  insert into storage.objects (bucket_id, name)
+    values (
+      'job-photos',
+      'public/' || job::text || '/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1.jpg'
+    );
+  update storage.objects
+     set name = name
+   where bucket_id = 'job-photos'
+     and name = 'public/' || job::text || '/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1.jpg';
+  perform 1 from storage.objects where bucket_id = 'job-photos' limit 1;
 
   insert into storage.objects (bucket_id, name)
     values ('observation-photos', 'field/anon/anon.jpg');
@@ -311,11 +377,9 @@ begin
       ('payment_records', format($s$insert into public.payment_records (organization_id, amount) values (%L::uuid, 1)$s$, org)),
       ('organizations', format($s$insert into public.organizations (name, slug) values ('x', 'x-%s')$s$, uid)),
       ('organization_members', format($s$insert into public.organization_members (organization_id, user_id, role) values (%L::uuid, %L::uuid, 'owner')$s$, org, uid)),
-      ('photos', $s$insert into public.photos (storage_path) values ('anon.jpg')$s$),
-      ('job_photos', $s$insert into public.job_photos (path) values ('anon.jpg')$s$),
       ('audit_log', $s$insert into public.audit_log (entity_type, action) values ('customers', 'INSERT')$s$),
       ('fieldops storage', $s$insert into storage.objects (bucket_id, name) values ('fieldops-photos', 'secret.pdf')$s$),
-      ('job-photos storage', $s$insert into storage.objects (bucket_id, name) values ('job-photos', 'public/x.jpg')$s$),
+      ('job-photos outside public/', $s$insert into storage.objects (bucket_id, name) values ('job-photos', 'not-public/x.jpg')$s$),
       ('queue_campaign', $s$select public.queue_campaign(gen_random_uuid())$s$),
       ('generate_due_recurring_jobs', $s$select public.generate_due_recurring_jobs(current_date)$s$)
     ) as t(rel, stmt)
@@ -374,7 +438,7 @@ begin
   reset role;
   perform set_config('request.jwt.claims', '{}', false);
 
-  if denied < 10 then
+  if denied < 9 then
     raise exception 'expected anon denies on non-hold relations, got %', denied;
   end if;
 end $$;
@@ -406,7 +470,7 @@ begin
   if exists (
     select 1 from information_schema.role_table_grants
     where table_schema = 'public'
-      and table_name in ('customers','jobs','inspections','field_observations','observation_events','audit_log')
+      and table_name in ('customers','jobs','inspections','field_observations','observation_events','photos','job_photos','audit_log')
       and grantee = 'anon'
   ) then
     raise exception 'phase 2 left anon table grants on a sync relation';
@@ -455,18 +519,26 @@ begin
   );
   set role authenticated;
   insert into public.customers (name) values ('auth-after-hold');
-  insert into public.jobs (customer, title) values ('Hold Job', 'Hold Job');
+  insert into public.jobs (customer, title, pricing)
+    values ('Hold Job', 'Hold Job', '{"totalOverride": 850}'::jsonb);
   insert into public.inspections (notes) values ('after-hold');
   insert into public.field_observations (notes) values ('after-hold');
   insert into public.observation_events (event_id, entity_id, observed_at)
     values ('evt-auth-hold', 'ent-hold', 2);
+  insert into public.photos (storage_path) values ('public/hold.jpg');
+  insert into public.job_photos (path) values ('public/hold.jpg');
   insert into storage.objects (bucket_id, name)
     values ('observation-photos', 'field/hold/hold.jpg');
+  insert into storage.objects (bucket_id, name)
+    values ('job-photos', 'public/cccccccc-cccc-cccc-cccc-ccccccccccc0/cccccccc-cccc-cccc-cccc-ccccccccccc1.jpg');
   reset role;
 
   for rec in
     select * from (values
       ('customers', $s$insert into public.customers (name) values ('anon-after-hold')$s$),
+      ('photos', $s$insert into public.photos (storage_path) values ('anon.jpg')$s$),
+      ('job_photos', $s$insert into public.job_photos (path) values ('anon.jpg')$s$),
+      ('job-photos storage', $s$insert into storage.objects (bucket_id, name) values ('job-photos', 'public/x.jpg')$s$),
       ('jobs', $s$insert into public.jobs (customer, title) values ('x', 'x')$s$),
       ('inspections', $s$insert into public.inspections (notes) values ('x')$s$),
       ('field_observations', $s$insert into public.field_observations (notes) values ('x')$s$),
@@ -493,7 +565,7 @@ begin
     reset role;
   end loop;
 
-  if denied < 6 then
+  if denied < 8 then
     raise exception 'expected anon denies on remaining sync relations, got %', denied;
   end if;
 end $$;
