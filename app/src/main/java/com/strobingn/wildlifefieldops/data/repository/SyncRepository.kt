@@ -18,6 +18,8 @@ import com.strobingn.wildlifefieldops.data.remote.RemoteCustomerDto
 import com.strobingn.wildlifefieldops.data.remote.RemoteInspectionDto
 import com.strobingn.wildlifefieldops.data.remote.RemoteJobDto
 import com.strobingn.wildlifefieldops.data.remote.RemoteObservationEventDto
+import com.strobingn.wildlifefieldops.data.auth.AuthSessionPort
+import com.strobingn.wildlifefieldops.data.auth.GatedCloudSync
 import com.strobingn.wildlifefieldops.data.remote.SupabaseService
 import com.strobingn.wildlifefieldops.data.remote.toLocal
 import com.strobingn.wildlifefieldops.data.remote.toRemoteDto
@@ -40,12 +42,15 @@ data class SyncResult(
     val pushedEvents: Int = 0,
     val uploadedPhotos: Int = 0,
     val pulledJobs: Int = 0,
-    val pulledCustomers: Int = 0
+    val pulledCustomers: Int = 0,
+    val requiresSignIn: Boolean = false,
+    val sessionBlocked: Boolean = false
 )
 
 @Singleton
 class SyncRepository @Inject constructor(
     private val supabaseService: SupabaseService,
+    private val authSession: AuthSessionPort,
     private val jobDao: JobDao,
     private val customerDao: CustomerDao,
     private val inspectionDao: InspectionDao,
@@ -54,11 +59,18 @@ class SyncRepository @Inject constructor(
     private val observationPhotoUploader: ObservationPhotoUploader,
     private val deletedRecordDao: DeletedRecordDao
 ) : FieldOpsSyncGateway {
+
+    private val gated = GatedCloudSync(
+        auth = authSession,
+        isConfigured = { supabaseService.isConfigured },
+        perform = { doSync() }
+    )
+
     override fun isCloudConfigured(): Boolean = supabaseService.isConfigured
 
     override suspend fun syncAll(): SyncResult = withContext(Dispatchers.IO) {
         try {
-            doSync()
+            gated.syncAll()
         } catch (t: Throwable) {
             android.util.Log.e("SyncRepository", "Sync crashed", t)
             SyncResult(
@@ -70,9 +82,11 @@ class SyncRepository @Inject constructor(
 
     /**
      * Best-effort immediate remote delete. Offline / failure is OK — tombstone stays
-     * unsynced and [doSync] will retry.
+     * unsynced and [doSync] will retry. Skipped when there is no valid session so
+     * the queue item is not dropped.
      */
     suspend fun tryRemoteDelete(entityType: String, id: String) = withContext(Dispatchers.IO) {
+        if (!gated.mayTouchRemote()) return@withContext
         val client = supabaseService.client ?: return@withContext
         val table = when (entityType) {
             DeletedRecord.TYPE_JOB -> "jobs"
@@ -96,7 +110,8 @@ class SyncRepository @Inject constructor(
         val client = supabaseService.client
             ?: return SyncResult(
                 success = false,
-                message = "Cloud not configured. Rebuild the APK with Supabase secrets (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)."
+                message = "Cloud not configured. Rebuild the APK with Supabase secrets (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY).",
+                sessionBlocked = true
             )
 
         var pushedJobs = 0

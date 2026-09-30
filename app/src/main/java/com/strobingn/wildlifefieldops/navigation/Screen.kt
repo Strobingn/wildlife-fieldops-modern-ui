@@ -74,6 +74,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
             return "live_capture?jobId=$j&inspectionId=$i"
         }
     }
+    object SignIn : Screen("sign_in", "Sign in")
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
     object AIAssistant : Screen("ai_assistant", "AI Assistant", Icons.Default.Psychology)
     object AIOperations : Screen("ai_operations", "AI Operations", Icons.Default.AutoAwesome)
