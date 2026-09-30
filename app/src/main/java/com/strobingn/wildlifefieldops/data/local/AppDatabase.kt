@@ -24,8 +24,8 @@ import com.strobingn.wildlifefieldops.data.model.*
         ObservationEventRecord::class,
         SyncOperationRecord::class
     ],
-    version = 10,
-    exportSchema = false
+    version = 11,
+    exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {

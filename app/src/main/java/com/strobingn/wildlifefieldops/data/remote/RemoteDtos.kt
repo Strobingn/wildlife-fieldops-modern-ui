@@ -8,6 +8,8 @@ import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobPriority
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoPaths
+import com.strobingn.wildlifefieldops.pricing.JobPricing
+import com.strobingn.wildlifefieldops.pricing.PricingCalculator
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -54,9 +56,19 @@ data class RemoteJobDto(
     val longitude: Double? = null,
     @Serializable(with = FlexibleDoubleSerializer::class)
     val estimate: Double? = 0.0,
+    @SerialName("subtotal")
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val subtotal: Double? = 0.0,
+    @SerialName("tax_rate")
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val taxRate: Double? = 0.0,
+    @SerialName("tax_amount")
+    @Serializable(with = FlexibleDoubleSerializer::class)
+    val taxAmount: Double? = 0.0,
     @SerialName("grand_total")
     @Serializable(with = FlexibleDoubleSerializer::class)
     val grandTotal: Double? = 0.0,
+    val pricing: JobPricing = JobPricing(),
     @SerialName("scheduled_start") val scheduledStart: String? = null,
     @SerialName("completed_at") val completedAt: String? = null
 )
@@ -169,6 +181,8 @@ fun Job.toRemoteDto(): RemoteJobDto {
         description.isNotBlank() && description.length <= 60 -> description
         else -> "Wildlife"
     }
+    val quote = PricingCalculator.compute(pricing)
+    val empty = pricing.isEmptyWorksheet()
     return RemoteJobDto(
         id = id.ifBlank { UUID.randomUUID().toString() },
         customerName = name,
@@ -185,7 +199,11 @@ fun Job.toRemoteDto(): RemoteJobDto {
         latitude = latitude,
         longitude = longitude,
         estimate = estimatedValue,
+        subtotal = if (empty) 0.0 else quote.subtotal.effective,
+        taxRate = if (empty) 0.0 else pricing.taxRatePercent,
+        taxAmount = if (empty) 0.0 else quote.taxAmount.effective,
         grandTotal = actualCost,
+        pricing = pricing,
         scheduledStart = scheduledDate?.let { Instant.ofEpochMilli(it).toString() },
         completedAt = completedDate?.let { Instant.ofEpochMilli(it).toString() }
     )
@@ -202,6 +220,15 @@ fun RemoteJobDto.toLocal(existing: Job? = null): Job {
     val mappedType = species.takeIf { it.isNotBlank() && !it.equals("Wildlife", ignoreCase = true) }
         ?: existing?.type
         ?: "Inspection"
+    val pulledPricing = pricing.takeUnless { it.isEmptyWorksheet() } ?: existing?.pricing ?: JobPricing()
+    val pulledEstimate = (estimate ?: 0.0).takeIf { it > 0 } ?: (existing?.estimatedValue ?: 0.0)
+    val resolvedPricing = when {
+        !pulledPricing.isEmptyWorksheet() -> pulledPricing
+        pulledEstimate > 0.0 -> pulledPricing.copy(totalOverride = pulledEstimate)
+        else -> pulledPricing
+    }
+    val resolvedEstimate = PricingCalculator.compute(resolvedPricing).total.effective
+        .takeIf { it > 0.0 } ?: pulledEstimate
     return Job(
         id = id,
         title = title.ifBlank { displayCustomer }.ifBlank { existing?.title.orEmpty() },
@@ -214,7 +241,7 @@ fun RemoteJobDto.toLocal(existing: Job? = null): Job {
         status = status,
         priority = existing?.priority ?: priority.fromRemotePriority(),
         type = if (existing != null && existing.type.isNotBlank()) existing.type else mappedType,
-        estimatedValue = (estimate ?: 0.0).takeIf { it > 0 } ?: (existing?.estimatedValue ?: 0.0),
+        estimatedValue = resolvedEstimate,
         actualCost = (grandTotal ?: 0.0).takeIf { it > 0 } ?: (existing?.actualCost ?: 0.0),
         assignedTo = assignedTech.orEmpty().ifBlank { existing?.assignedTo.orEmpty() },
         notes = notes.orEmpty().ifBlank { existing?.notes.orEmpty() },
@@ -223,7 +250,10 @@ fun RemoteJobDto.toLocal(existing: Job? = null): Job {
         completedDate = completedAt?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() } ?: existing?.completedDate,
         createdAt = existing?.createdAt ?: System.currentTimeMillis(),
         updatedAt = existing?.updatedAt ?: System.currentTimeMillis(),
-        isSynced = true
+        isSynced = true,
+        county = existing?.county,
+        state = existing?.state ?: this.state,
+        pricing = resolvedPricing
     )
 }
 

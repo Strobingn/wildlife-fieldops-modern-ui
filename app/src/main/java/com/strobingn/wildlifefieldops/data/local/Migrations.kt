@@ -23,6 +23,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * MIGRATION_9_10 adds nullable `syncError` on customers, inspections, and
  * observation_events so failed cloud writes stay on-device with a reason.
  * Existing rows and photo files are preserved (ALTER TABLE ADD COLUMN only).
+ *
+ * MIGRATION_10_11 persists the estimate worksheet and computed-field overrides
+ * on jobs (`pricing` JSON) and invoices (nullable override columns). Existing
+ * rows stay valid: empty pricing JSON and NULL overrides mean "use calculated".
  */
 object Migrations {
 
@@ -150,6 +154,18 @@ object Migrations {
             db.execSQL("ALTER TABLE customers ADD COLUMN syncError TEXT")
             db.execSQL("ALTER TABLE inspections ADD COLUMN syncError TEXT")
             db.execSQL("ALTER TABLE observation_events ADD COLUMN syncError TEXT")
+        }
+    }
+
+    val MIGRATION_10_11 = object : Migration(10, 11) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE jobs ADD COLUMN pricing TEXT NOT NULL DEFAULT '{}'")
+            db.execSQL("ALTER TABLE invoices ADD COLUMN discountPercent REAL NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE invoices ADD COLUMN subtotalOverride REAL")
+            db.execSQL("ALTER TABLE invoices ADD COLUMN taxAmountOverride REAL")
+            db.execSQL("ALTER TABLE invoices ADD COLUMN discountAmountOverride REAL")
+            db.execSQL("ALTER TABLE invoices ADD COLUMN totalOverride REAL")
+            db.execSQL("ALTER TABLE invoices ADD COLUMN taxRateManual INTEGER NOT NULL DEFAULT 0")
         }
     }
 }

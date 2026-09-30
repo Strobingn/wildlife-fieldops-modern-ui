@@ -149,7 +149,13 @@ fun JobDetailScreen(
                     }
                     InfoRow(Icons.Default.PersonOutline, currentJob.assignedTo.ifBlank { "Unassigned" })
                     if (currentJob.estimatedValue > 0) {
-                        InfoRow(Icons.Default.AttachMoney, "Estimated: $${String.format("%.2f", currentJob.estimatedValue)}")
+                        val quote = com.strobingn.wildlifefieldops.pricing.PricingCalculator.compute(currentJob.pricing)
+                        val label = if (quote.total.isOverridden) {
+                            "Estimated: $" + String.format("%.2f", currentJob.estimatedValue) + " (manual)"
+                        } else {
+                            "Estimated: $" + String.format("%.2f", currentJob.estimatedValue)
+                        }
+                        InfoRow(Icons.Default.AttachMoney, label)
                     }
                     if (currentJob.actualCost > 0) {
                         InfoRow(Icons.Default.Money, "Actual: $${String.format("%.2f", currentJob.actualCost)}")

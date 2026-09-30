@@ -58,6 +58,33 @@ class LiveSyncPayloadsTest {
     }
 
     @Test
+    fun jobPayloadAlwaysSendsPricingObjectNeverNull() {
+        val empty = LiveSyncPayloads.job(middletown)
+        val encodedEmpty = LiveSyncPayloads.json.encodeToJsonElement(LiveJobUpsert.serializer(), empty).jsonObject
+        assertTrue("pricing" in encodedEmpty.keys)
+        assertTrue(encodedEmpty.getValue("pricing").jsonObject.isEmpty())
+        assertFalse("subtotal" in encodedEmpty.keys)
+
+        val priced = LiveSyncPayloads.job(
+            middletown.copy(
+                pricing = com.strobingn.wildlifefieldops.pricing.JobPricing(
+                    laborHours = 4.0,
+                    laborRate = 85.0,
+                    totalOverride = 850.0
+                ),
+                estimatedValue = 850.0
+            )
+        )
+        val encoded = LiveSyncPayloads.json.encodeToJsonElement(LiveJobUpsert.serializer(), priced).jsonObject
+        assertTrue("pricing" in encoded.keys)
+        assertEquals(850.0, encoded.getValue("pricing").jsonObject.getValue("totalOverride").jsonPrimitive.content.toDouble(), 0.0)
+        assertTrue("subtotal" in encoded.keys)
+        encoded.keys.forEach { key ->
+            assertTrue("unexpected column $key", key in LiveSyncPayloads.JOB_WRITE_COLUMNS)
+        }
+    }
+
+    @Test
     fun inferTownFromUsStyleAddress() {
         assertEquals("Middletown", LiveSyncPayloads.inferTown("12 Oak St, Middletown, NY", "NY"))
         assertEquals("Middletown", LiveSyncPayloads.inferTown("Middletown, NY", "NY"))

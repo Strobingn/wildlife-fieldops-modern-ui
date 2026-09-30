@@ -6,6 +6,9 @@ import com.strobingn.wildlifefieldops.data.local.InvoiceDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
 import com.strobingn.wildlifefieldops.data.model.*
 import com.strobingn.wildlifefieldops.data.repository.JobRepository
+import com.strobingn.wildlifefieldops.pricing.InvoicePricingInputs
+import com.strobingn.wildlifefieldops.pricing.PricingCalculator
+import com.strobingn.wildlifefieldops.pricing.effectiveTotal
 import com.strobingn.wildlifefieldops.tax.CountyLookupService
 import com.strobingn.wildlifefieldops.tax.NyCountyTaxRates
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -136,40 +139,60 @@ class InvoiceViewModel @Inject constructor(
         jobId: String,
         lineItems: List<InvoiceLineItem>,
         taxRate: Double,
-        discountAmount: Double,
+        discountPercent: Double,
         notes: String,
-        terms: String
+        terms: String,
+        subtotalOverride: Double? = null,
+        taxAmountOverride: Double? = null,
+        discountAmountOverride: Double? = null,
+        totalOverride: Double? = null,
+        taxRateManual: Boolean = false
     ) = viewModelScope.launch {
-        val job = jobDao.getById(jobId)
-        job?.let {
-            val subtotal = lineItems.sumOf { it.calculateTotal() }
-            val taxAmount = subtotal * (taxRate / 100.0)
-            val total = subtotal + taxAmount - discountAmount
-
-            val invoice = Invoice(
-                invoiceNumber = generateInvoiceNumber(),
-                jobId = jobId,
-                customerId = job.customerId,
-                customerName = job.customerName,
-                subtotal = subtotal,
-                taxRate = taxRate,
-                taxAmount = taxAmount,
-                discountAmount = discountAmount,
-                totalAmount = total,
-                balanceDue = total,
+        val job = jobDao.getById(jobId) ?: return@launch
+        val priced = PricingCalculator.computeInvoice(
+            InvoicePricingInputs(
                 lineItems = lineItems,
-                notes = notes,
-                terms = terms
+                taxRatePercent = taxRate,
+                discountPercent = discountPercent,
+                subtotalOverride = subtotalOverride,
+                discountAmountOverride = discountAmountOverride,
+                taxAmountOverride = taxAmountOverride,
+                totalOverride = totalOverride
             )
-            invoiceDao.insert(invoice)
-            jobDao.update(
-                job.copy(
-                    status = JobStatus.INVOICED,
-                    updatedAt = System.currentTimeMillis(),
-                    isSynced = false
-                )
-            )
+        )
+        val persistedLines = lineItems.map { item ->
+            item.copy(total = item.effectiveTotal())
         }
+        val invoice = Invoice(
+            invoiceNumber = generateInvoiceNumber(),
+            jobId = jobId,
+            customerId = job.customerId,
+            customerName = job.customerName,
+            subtotal = priced.subtotal.effective,
+            taxRate = taxRate,
+            taxAmount = priced.taxAmount.effective,
+            discountPercent = discountPercent,
+            discountAmount = priced.discountAmount.effective,
+            totalAmount = priced.total.effective,
+            subtotalOverride = subtotalOverride,
+            taxAmountOverride = taxAmountOverride,
+            discountAmountOverride = discountAmountOverride,
+            totalOverride = totalOverride,
+            taxRateManual = taxRateManual,
+            balanceDue = priced.total.effective,
+            lineItems = persistedLines,
+            notes = notes,
+            terms = terms
+        )
+        invoiceDao.insert(invoice)
+        jobDao.update(
+            job.copy(
+                status = JobStatus.INVOICED,
+                actualCost = priced.total.effective,
+                updatedAt = System.currentTimeMillis(),
+                isSynced = false
+            )
+        )
     }
 
     fun markAsPaid(invoiceId: String) = viewModelScope.launch {

@@ -42,6 +42,7 @@ fun JobFormScreen(
     var selectedType by remember { mutableStateOf(DefaultServiceTypes.all.first()) }
     var selectedPriority by remember { mutableStateOf(JobPriority.MEDIUM) }
     var estimatedValue by remember { mutableStateOf("") }
+    var actualCost by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
     var showTypeDropdown by remember { mutableStateOf(false) }
     var showPriorityDropdown by remember { mutableStateOf(false) }
@@ -72,6 +73,7 @@ fun JobFormScreen(
             selectedType = DefaultServiceTypes.display(job.type)
             selectedPriority = job.priority
             estimatedValue = if (job.estimatedValue > 0) job.estimatedValue.toString() else ""
+            actualCost = if (job.actualCost > 0) job.actualCost.toString() else ""
             notes = job.notes
             val visits = viewModel.loadScheduledVisits(job.id)
             appointmentTimes.clear()
@@ -275,8 +277,35 @@ fun JobFormScreen(
             OutlinedTextField(
                 value = estimatedValue,
                 onValueChange = { estimatedValue = it.filter { c -> c.isDigit() || c == '.' } },
-                label = { Text("Estimated Value") },
+                label = { Text("Job total / estimate") },
                 leadingIcon = { Icon(Icons.Default.AttachMoney, contentDescription = null, tint = TextSecondary) },
+                supportingText = {
+                    val quote = existingJob?.let {
+                        com.strobingn.wildlifefieldops.pricing.PricingCalculator.compute(it.pricing)
+                    }
+                    if (quote?.total?.isOverridden == true) {
+                        Text(
+                            "manual · calc " + com.strobingn.wildlifefieldops.pricing.Money.formatUsd(quote.total.calculated) +
+                                " — open Estimate to reset or edit line items",
+                            color = AccentAmber
+                        )
+                    } else {
+                        Text("Editable anytime. Open Estimate to auto-sum labor, materials, and miles.", color = TextTertiary)
+                    }
+                },
+                colors = fieldColors(),
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
+            )
+
+            OutlinedTextField(
+                value = actualCost,
+                onValueChange = { actualCost = it.filter { c -> c.isDigit() || c == '.' } },
+                label = { Text("Actual cost") },
+                leadingIcon = { Icon(Icons.Default.Money, contentDescription = null, tint = TextSecondary) },
+                supportingText = { Text("Invoice total when billed, or type it here.", color = TextTertiary) },
                 colors = fieldColors(),
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -366,7 +395,8 @@ fun JobFormScreen(
                         priority = selectedPriority,
                         estimatedValue = estVal,
                         notes = notes.trim(),
-                        appointmentTimes = appointmentTimes.toList()
+                        appointmentTimes = appointmentTimes.toList(),
+                        actualCost = actualCost.toDoubleOrNull()
                     ) {
                         isSaving = false
                         onBack()

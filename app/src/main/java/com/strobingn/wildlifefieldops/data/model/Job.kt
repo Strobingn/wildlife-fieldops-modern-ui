@@ -2,6 +2,7 @@ package com.strobingn.wildlifefieldops.data.model
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.strobingn.wildlifefieldops.pricing.JobPricing
 import java.util.UUID
 
 enum class JobStatus {
@@ -41,5 +42,10 @@ data class Job(
     /** Resolved county name (e.g. "Orange County"). Persisted so offline invoices work. */
     val county: String? = null,
     /** Two-letter state abbreviation resolved alongside [county] (e.g. "NY"). */
-    val state: String? = null
+    val state: String? = null,
+    /**
+     * Estimate worksheet + computed-field overrides. Empty default preserves
+     * existing jobs; [estimatedValue] stays the effective quote total.
+     */
+    val pricing: JobPricing = JobPricing()
 )

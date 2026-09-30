@@ -107,6 +107,7 @@ create table if not exists public.jobs (
   tax_rate numeric(6,3) not null default 0,
   tax_amount numeric(12,2) not null default 0,
   grand_total numeric(12,2) not null default 0,
+  pricing jsonb not null default '{}'::jsonb,
   deposit_paid numeric(12,2) not null default 0,
   balance_due numeric(12,2) not null default 0,
 
@@ -340,6 +341,7 @@ alter table public.jobs add column if not exists subtotal numeric(12,2) not null
 alter table public.jobs add column if not exists tax_rate numeric(6,3) not null default 0;
 alter table public.jobs add column if not exists tax_amount numeric(12,2) not null default 0;
 alter table public.jobs add column if not exists grand_total numeric(12,2) not null default 0;
+alter table public.jobs add column if not exists pricing jsonb not null default '{}'::jsonb;
 alter table public.jobs add column if not exists ai_notes text;
 alter table public.jobs add column if not exists scheduled_start timestamptz;
 alter table public.jobs add column if not exists scheduled_end timestamptz;

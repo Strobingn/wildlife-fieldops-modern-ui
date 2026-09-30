@@ -7,6 +7,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 android {
     namespace = "com.strobingn.wildlifefieldops"
     compileSdk = 35
@@ -15,8 +19,8 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 48
-        versionName = "2.3.7-sync-backlog"
+        versionCode = 49
+        versionName = "2.3.8-editable-pricing"
 
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
         val supabaseKey = System.getenv("SUPABASE_ANON_KEY") ?: "your-anon-key"
@@ -217,6 +221,7 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    testImplementation("org.xerial:sqlite-jdbc:3.45.3.0")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
