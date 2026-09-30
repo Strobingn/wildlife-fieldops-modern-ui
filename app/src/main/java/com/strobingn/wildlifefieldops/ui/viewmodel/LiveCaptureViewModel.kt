@@ -477,7 +477,7 @@ class LiveCaptureViewModel @Inject constructor(
                         append(narration.customerSummary)
                     }
                 )
-                photoDao.update(enriched)
+                photoDao.insert(enriched.copy(isUploaded = false, uploadError = null))
 
                 // B) Repair-scope autofill onto linked job notes (Whisperer branding).
                 val jid = _jobId.value

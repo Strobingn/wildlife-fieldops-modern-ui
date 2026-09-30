@@ -2,7 +2,8 @@
 
 Jobs, Live Capture stills, and ML notes live in Room (`wildlife_fieldops.db`) and
 app files. **An app update does not upload them by itself**, and this release
-does not delete them. Confirm they are still on the phone, then tap **Sync Now**.
+does not delete them. Confirm they are still on the phone. After install, auto-sync
+pushes the backlog when the phone is online; **Sync Now** is optional.
 
 ## Before installing 2.3.7-sync-backlog (current APK)
 
@@ -28,9 +29,9 @@ photos it has. After the update those numbers must still match.
    stills. If the counts are zero and the job is gone, stop and do not sync
    (data did not survive — that would be unexpected; this migration only adds
    nullable `syncError` columns).
-3. Tap **Sync Now**. Watch the message. Green/OK means the cloud accepted the
-   backlog. Red lists the failed item and a readable reason; the row stays
-   unsynced for retry. Nothing is deleted on failure.
+3. Leave **Offline mode** off. Auto-sync starts on launch and after local
+   writes. The status bar should move from Pending N → Synced (or Sync failed
+   + reason). **Sync Now** is optional if you want to force a pass immediately.
 
 ## What the first successful sync does
 

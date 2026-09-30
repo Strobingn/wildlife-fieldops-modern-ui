@@ -27,6 +27,18 @@ interface PhotoDao {
     @Query("UPDATE photos SET isUploaded = 1, uploadError = NULL, remoteUrl = :remoteUrl WHERE id = :id")
     suspend fun markUploaded(id: String, remoteUrl: String)
 
+    /**
+     * ACK only if AI notes did not land during the upload. Returns rows updated
+     * (0 = description changed; leave unsynced for the next pass).
+     */
+    @Query(
+        """
+        UPDATE photos SET isUploaded = 1, uploadError = NULL, remoteUrl = :remoteUrl
+        WHERE id = :id AND description = :expectedDescription
+        """
+    )
+    suspend fun markUploadedIfDescription(id: String, remoteUrl: String, expectedDescription: String): Int
+
     @Query("UPDATE photos SET uploadError = :error WHERE id = :id")
     suspend fun markUploadError(id: String, error: String?)
 

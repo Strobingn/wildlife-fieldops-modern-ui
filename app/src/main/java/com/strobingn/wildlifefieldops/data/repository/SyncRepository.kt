@@ -198,13 +198,14 @@ class SyncRepository @Inject constructor(
 
         photoDao.getUnuploaded().forEach { photo ->
             val outcome = itemRunner.run(
-                markSynced = { /* set after we have the public URL */ },
+                markSynced = { /* ACK inside the block after a description-stable write */ },
                 markError = { photoDao.markUploadError(photo.id, it) }
             ) {
                 val uploaded = jobPhotoUploader.upload(client, photo)
+                val latest = photoDao.getById(photo.id) ?: photo
                 try {
                     client.from("photos").upsert(
-                        LiveSyncPayloads.photo(photo, uploaded.storagePath, uploaded.publicUrl)
+                        LiveSyncPayloads.photo(latest, uploaded.storagePath, uploaded.publicUrl)
                     )
                 } catch (e: Exception) {
                     android.util.Log.w("SyncRepository", "photos row failed for ${photo.id}", e)
@@ -212,16 +213,28 @@ class SyncRepository @Inject constructor(
                 }
                 runCatching {
                     client.from("job_photos").upsert(
-                        LiveSyncPayloads.jobPhotoLink(photo, uploaded.storagePath, uploaded.publicUrl)
+                        LiveSyncPayloads.jobPhotoLink(latest, uploaded.storagePath, uploaded.publicUrl)
                     )
                 }.onFailure {
                     android.util.Log.w("SyncRepository", "job_photos link skipped for ${photo.id}", it)
                 }
-                photoDao.markUploaded(photo.id, uploaded.publicUrl)
-                uploaded
+                val acked = photoDao.markUploadedIfDescription(
+                    latest.id,
+                    uploaded.publicUrl,
+                    latest.description
+                )
+                if (acked == 0) {
+                    android.util.Log.i(
+                        "SyncRepository",
+                        "Photo ${photo.id} notes changed during upload; leaving unsynced for AI retry"
+                    )
+                }
+                acked
             }
             when (outcome) {
-                is SyncItemOutcome.Ok -> uploadedPhotos += 1
+                is SyncItemOutcome.Ok -> {
+                    if (outcome.value > 0) uploadedPhotos += 1
+                }
                 is SyncItemOutcome.Failed -> {
                     android.util.Log.e("SyncRepository", "Photo upload failed ${photo.id}: ${outcome.reason}")
                     failures += SyncItemFailure(

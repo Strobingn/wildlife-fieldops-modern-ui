@@ -6,6 +6,7 @@ import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.data.model.Photo
 import com.strobingn.wildlifefieldops.data.model.PhotoCategory
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
@@ -52,7 +53,15 @@ class LiveSyncPayloadsTest {
         assertEquals(-74.4207, encoded.getValue("longitude").jsonPrimitive.content.toDouble(), 1e-6)
         assertEquals("12 Oak St, Middletown, NY", encoded.getValue("address").jsonPrimitive.content)
         assertEquals("NY", encoded.getValue("state").jsonPrimitive.content)
+        assertEquals("Middletown", encoded.getValue("town").jsonPrimitive.content)
         assertTrue(encoded.getValue("ai_notes").jsonPrimitive.content.contains("Live Capture"))
+    }
+
+    @Test
+    fun inferTownFromUsStyleAddress() {
+        assertEquals("Middletown", LiveSyncPayloads.inferTown("12 Oak St, Middletown, NY", "NY"))
+        assertEquals("Middletown", LiveSyncPayloads.inferTown("Middletown, NY", "NY"))
+        assertEquals(null, LiveSyncPayloads.inferTown("12 Oak St", "NY"))
     }
 
     @Test
@@ -83,6 +92,38 @@ class LiveSyncPayloadsTest {
         assertEquals(middletown.id, dto.jobId)
         assertEquals("evidence", dto.tag)
         assertTrue(dto.notes!!.contains("AI:"))
-        assertTrue(dto.publicUrl!!.contains("job-photos"))
+        assertTrue(dto.imageUrl!!.contains("job-photos"))
+        val encoded = LiveSyncPayloads.json.encodeToJsonElement(LivePhotoUpsert.serializer(), dto).jsonObject
+        assertFalse("public_url" in encoded.keys)
+        assertTrue("image_url" in encoded.keys)
+        assertTrue("storage_path" in encoded.keys)
+        assertFalse("photo_path" in encoded.keys)
+    }
+
+    @Test
+    fun fieldObservationOmitsColumnsMissingFromSep21LiveTable() {
+        val observation = com.strobingn.wildlifefieldops.data.model.FieldObservation(
+            id = "33333333-3333-3333-3333-333333333333",
+            notes = "Raccoon at soffit",
+            latitude = 41.4459,
+            longitude = -74.4207,
+            jobId = middletown.id,
+            speciesHint = "raccoon"
+        )
+        val dto = LiveSyncPayloads.fieldObservation(
+            observation,
+            photoStoragePath = "field/obs/a.jpg",
+            photoPublicUrl = "https://example.supabase.co/storage/v1/object/public/observation-photos/field/obs/a.jpg"
+        )
+        val encoded = LiveSyncPayloads.json.encodeToJsonElement(
+            LiveFieldObservationUpsert.serializer(),
+            dto
+        ).jsonObject
+        assertEquals(
+            "https://example.supabase.co/storage/v1/object/public/observation-photos/field/obs/a.jpg",
+            encoded.getValue("photo_path").jsonPrimitive.content
+        )
+        assertFalse("photo_storage_path" in encoded.keys)
+        assertFalse("photo_public_url" in encoded.keys)
     }
 }

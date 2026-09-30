@@ -75,7 +75,7 @@ object LiveSyncPayloads {
             species = speciesGuess,
             customerId = job.customerId.takeIf { it.isNotBlank() && SyncIds.isUuid(it) },
             address = job.address, // empty string satisfies NOT NULL without omitting the column
-            town = null,
+            town = inferTown(job.address, job.state),
             state = job.state?.takeIf { it.isNotBlank() },
             zip = null,
             status = job.status.toRemoteStatus(),
@@ -134,15 +134,17 @@ object LiveSyncPayloads {
         notes = observation.notes,
         latitude = observation.latitude,
         longitude = observation.longitude,
+        // Live field_observations (Sep 21 SQL editor) has photo_path, not the
+        // later photo_storage_path / photo_public_url add-ons. Sending those
+        // extra keys 400s the whole observation when they are missing.
         photoPath = photoPublicUrl?.takeIf { it.isNotBlank() }
+            ?: photoStoragePath?.takeIf { it.isNotBlank() }
             ?: observation.photoLocalPath.takeIf { ObservationPhotoPaths.isRemoteUrl(it) },
         photoId = observation.photoId?.takeIf { it.isNotBlank() },
         jobId = observation.jobId?.takeIf { it.isNotBlank() && SyncIds.isUuid(it) },
         speciesHint = observation.speciesHint.takeIf { it.isNotBlank() },
         accuracyMeters = observation.accuracyMeters?.toDouble(),
-        observedAt = Instant.ofEpochMilli(observation.observedAt).toString(),
-        photoStoragePath = photoStoragePath?.takeIf { it.isNotBlank() },
-        photoPublicUrl = photoPublicUrl?.takeIf { it.isNotBlank() }
+        observedAt = Instant.ofEpochMilli(observation.observedAt).toString()
     )
 
     fun photo(
@@ -153,7 +155,6 @@ object LiveSyncPayloads {
         id = photo.id.ifBlank { UUID.randomUUID().toString() },
         jobId = photo.jobId?.takeIf { it.isNotBlank() && SyncIds.isUuid(it) },
         imageUrl = publicUrl,
-        publicUrl = publicUrl,
         storagePath = storagePath,
         tag = photo.category.name.lowercase(),
         notes = photo.description.takeIf { it.isNotBlank() }
@@ -176,6 +177,27 @@ object LiveSyncPayloads {
     fun encodedKeys(value: LiveJobUpsert): Set<String> {
         val element = json.encodeToJsonElement(LiveJobUpsert.serializer(), value)
         return (element as JsonObject).keys
+    }
+
+    /**
+     * "12 Oak St, Middletown, NY" → Middletown. Used when Room has no town column.
+     */
+    fun inferTown(address: String, state: String?): String? {
+        val parts = address.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        if (parts.isEmpty()) return null
+        val withoutStateZip = parts.filter { part ->
+            val head = part.substringBefore(' ')
+            val looksLikeStateZip = head.length == 2 &&
+                head.all { it.isLetter() } &&
+                part.matches(Regex("[A-Za-z]{2}(\\s+\\d{5}(-\\d{4})?)?"))
+            val matchesKnownState = state != null && head.equals(state, ignoreCase = true)
+            !looksLikeStateZip && !matchesKnownState
+        }
+        return when {
+            withoutStateZip.size >= 2 -> withoutStateZip.last()
+            withoutStateZip.size == 1 && parts.size >= 2 -> withoutStateZip.first()
+            else -> null
+        }?.takeIf { it.length in 2..48 }
     }
 }
 
@@ -237,9 +259,7 @@ data class LiveFieldObservationUpsert(
     @SerialName("job_id") val jobId: String? = null,
     @SerialName("species_hint") val speciesHint: String? = null,
     @SerialName("accuracy_meters") val accuracyMeters: Double? = null,
-    @SerialName("observed_at") val observedAt: String? = null,
-    @SerialName("photo_storage_path") val photoStoragePath: String? = null,
-    @SerialName("photo_public_url") val photoPublicUrl: String? = null
+    @SerialName("observed_at") val observedAt: String? = null
 )
 
 @Serializable
@@ -247,7 +267,6 @@ data class LivePhotoUpsert(
     val id: String,
     @SerialName("job_id") val jobId: String? = null,
     @SerialName("image_url") val imageUrl: String? = null,
-    @SerialName("public_url") val publicUrl: String? = null,
     @SerialName("storage_path") val storagePath: String? = null,
     val tag: String? = null,
     val notes: String? = null
