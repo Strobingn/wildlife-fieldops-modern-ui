@@ -114,6 +114,19 @@ create table if not exists public.profiles (
   role text not null default 'technician'
 );
 
+create table if not exists public.photos (
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid,
+  storage_path text,
+  created_at timestamptz not null default now()
+);
+create table if not exists public.job_photos (
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid,
+  path text not null default '',
+  created_at timestamptz not null default now()
+);
+
 create or replace function public.is_org_member(org uuid)
 returns boolean
 language sql
@@ -144,6 +157,12 @@ $$;
 create or replace function public.queue_campaign(p_campaign_id uuid)
 returns integer language sql as $$ select 0 $$;
 
+create or replace function public.generate_due_recurring_jobs(p_through date default current_date)
+returns integer language sql as $$ select 0 $$;
+
+create or replace function public.refresh_technician_metrics(p_from date, p_to date)
+returns integer language sql as $$ select 0 $$;
+
 create or replace function public.set_updated_at()
 returns trigger language plpgsql as $$
 begin
@@ -171,10 +190,15 @@ alter table public.organizations enable row level security;
 alter table public.organization_members enable row level security;
 alter table public.profiles enable row level security;
 
+alter table public.photos enable row level security;
+alter table public.job_photos enable row level security;
+
 -- Simulate live: ALL grants + testing_full_access, helpers not executable.
 grant all on all tables in schema public to anon, authenticated, service_role;
 grant usage, select on all sequences in schema public to anon, authenticated, service_role;
 grant execute on function public.queue_campaign(uuid) to public, anon, authenticated;
+grant execute on function public.generate_due_recurring_jobs(date) to public, anon, authenticated;
+grant execute on function public.refresh_technician_metrics(date, date) to public, anon, authenticated;
 revoke execute on function public.is_org_member(uuid) from public, anon, authenticated;
 revoke execute on function public.has_org_role(uuid, text[]) from public, anon, authenticated;
 
@@ -189,6 +213,8 @@ create policy "testing_full_access" on public.invoices for all to anon, authenti
 create policy "testing_full_access" on public.payment_records for all to anon, authenticated using (true) with check (true);
 create policy "testing_full_access" on public.organizations for all to anon, authenticated using (true) with check (true);
 create policy "testing_full_access" on public.organization_members for all to anon, authenticated using (true) with check (true);
+create policy "testing_full_access" on public.photos for all to anon, authenticated using (true) with check (true);
+create policy "testing_full_access" on public.job_photos for all to anon, authenticated using (true) with check (true);
 create policy "authenticated profiles access" on public.profiles for all to public
   using ((select auth.role()) = 'authenticated')
   with check ((select auth.role()) = 'authenticated');
@@ -230,17 +256,41 @@ SQL
   echo "== apply authenticated RLS migration (anon grants kept on hold tables)"
   run_psql "$url" -f "$MIG/20260929220000_authenticated_rls_for_signed_in_sync.sql"
 
+  echo "== re-apply phase 1 (idempotence)"
+  run_psql "$url" -f "$MIG/20260929220000_authenticated_rls_for_signed_in_sync.sql"
+
   echo "== stage 1: anon and authenticated can insert hold tables"
   run_psql "$url" <<'SQL'
+do $$
+declare
+  uid uuid := gen_random_uuid();
+begin
+  insert into auth.users (id, email) values (uid, 'auth-tech@example.com');
+  perform set_config(
+    'request.jwt.claims',
+    json_build_object('sub', uid::text, 'role', 'authenticated')::text,
+    false
+  );
+end $$;
 set role authenticated;
 insert into public.customers (name) values ('auth-tech');
+insert into public.jobs (customer, address) values ('Auth Job', '210 Willow Avenue');
+insert into public.inspections default values;
 insert into public.field_observations (notes) values ('raccoon');
 insert into public.observation_events (event_id, entity_id) values ('evt-auth', 'ent-1');
 insert into storage.objects (bucket_id, name) values ('observation-photos', 'auth.jpg');
+insert into public.photos (storage_path) values ('jobs/1.jpg');
+insert into public.job_photos (path) values ('jobs/1.jpg');
+insert into storage.objects (bucket_id, name) values ('job-photos', 'jobs/1.jpg');
 reset role;
 
 set role anon;
 insert into public.customers (name) values ('anon-old-apk');
+update public.customers set name = 'anon-old-apk-upsert' where name = 'anon-old-apk';
+insert into public.jobs (customer) values ('anon-job');
+insert into public.inspections default values;
+insert into public.field_observations (notes) values ('anon-obs');
+insert into public.observation_events (event_id, entity_id) values ('evt-anon', 'ent-anon');
 insert into storage.objects (bucket_id, name) values ('observation-photos', 'anon.jpg');
 reset role;
 SQL
@@ -267,7 +317,10 @@ begin
         org, uid
       )),
       ('fieldops storage', 'insert into storage.objects (bucket_id, name) values (''fieldops-photos'', ''secret.pdf'')'),
-      ('queue_campaign', 'select public.queue_campaign(gen_random_uuid())')
+      ('job-photos storage', 'insert into storage.objects (bucket_id, name) values (''job-photos'', ''public/x.jpg'')'),
+      ('photos', 'insert into public.photos (storage_path) values (''anon.jpg'')'),
+      ('queue_campaign', 'select public.queue_campaign(gen_random_uuid())'),
+      ('generate_due_recurring_jobs', 'select public.generate_due_recurring_jobs(current_date)')
     ) as t(rel, stmt)
   loop
     set role anon;
@@ -298,7 +351,7 @@ begin
     when insufficient_privilege then
       raise notice 'authenticated cannot insert organization_members (privilege)';
     when others then
-      if sqlerrm like '%self-insert%' then
+      if sqlerrm like '%succeeded%' then
         raise;
       end if;
       raise notice 'authenticated cannot insert organization_members (%)', sqlerrm;
@@ -310,7 +363,7 @@ begin
     when insufficient_privilege then
       raise notice 'authenticated cannot insert owner profile (privilege)';
     when others then
-      if sqlerrm like '%self-insert%' then
+      if sqlerrm like '%succeeded%' then
         raise;
       end if;
       raise notice 'authenticated cannot insert owner profile (%)', sqlerrm;
@@ -318,7 +371,7 @@ begin
   reset role;
   perform set_config('request.jwt.claims', '{}', false);
 
-  if denied < 5 then
+  if denied < 8 then
     raise exception 'expected anon denies on non-hold relations, got %', denied;
   end if;
 
@@ -332,6 +385,9 @@ SQL
 
   echo "== apply HOLD revoke migration"
   run_psql "$url" -f "$MIG/20260929221000_REVOKE_ANON_AFTER_SIGNED_IN_ROLLOUT.sql"
+
+  echo "== re-run 28120000 (must not restore anon)"
+  run_psql "$url" -f "$MIG/20260928120000_explicit_data_api_grants.sql"
 
   echo "== stage 2: authenticated allowed; anon denied"
   run_psql "$url" <<'SQL'

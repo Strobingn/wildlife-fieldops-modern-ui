@@ -1,6 +1,10 @@
 -- Wildlife Whisperer FieldOps - Supabase Schema v3.0.0
 -- Drop this file in: supabase/schema.sql
 -- Safe to re-run. Designed for the current repo's src/main.js data calls.
+--
+-- STALE vs live wildlife_app (dumped 2026-09-30). Live catalog, Kotlin usage,
+-- and the two-step permission rollout live in supabase/migrations/LIVE_BASELINE.md.
+-- Do not apply this file on production; it does not match the live schema.
 
 create extension if not exists pgcrypto;
 

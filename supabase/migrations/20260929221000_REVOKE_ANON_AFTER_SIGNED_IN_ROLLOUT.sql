@@ -61,79 +61,103 @@ begin
 end $$;
 
 -- Drop leftover open policies on the hold tables (live names + fixture names).
-drop policy if exists "anon_select_customers" on public.customers;
-drop policy if exists "anon_insert_customers" on public.customers;
-drop policy if exists "anon_update_customers" on public.customers;
-drop policy if exists "anon_delete_customers" on public.customers;
-drop policy if exists "testing_full_access" on public.customers;
-drop policy if exists "open_customers" on public.customers;
-
-drop policy if exists "allow anon all jobs" on public.jobs;
-drop policy if exists "anon_delete_jobs" on public.jobs;
-drop policy if exists "anon_insert_jobs" on public.jobs;
-drop policy if exists "anon_select_jobs" on public.jobs;
-drop policy if exists "anon_update_jobs" on public.jobs;
-drop policy if exists "testing_full_access" on public.jobs;
-drop policy if exists "open_jobs" on public.jobs;
-
-drop policy if exists "Allow anon access to inspections" on public.inspections;
-drop policy if exists "anon_delete_inspections" on public.inspections;
-drop policy if exists "anon_insert_inspections" on public.inspections;
-drop policy if exists "anon_select_inspections" on public.inspections;
-drop policy if exists "anon_update_inspections" on public.inspections;
-drop policy if exists "testing_full_access" on public.inspections;
-drop policy if exists "open_inspections" on public.inspections;
-
 do $$
+declare
+  rec record;
 begin
-  if to_regclass('public.field_observations') is null then
-    return;
-  end if;
-  execute 'drop policy if exists "field_observations_delete" on public.field_observations';
-  execute 'drop policy if exists "field_observations_insert" on public.field_observations';
-  execute 'drop policy if exists "field_observations_select" on public.field_observations';
-  execute 'drop policy if exists "field_observations_update" on public.field_observations';
-  execute 'drop policy if exists "open_field_observations" on public.field_observations';
-  execute 'drop policy if exists "testing_full_access" on public.field_observations';
+  for rec in
+    select schemaname, tablename, policyname, roles
+    from pg_policies
+    where schemaname = 'public'
+      and (
+        policyname = 'testing_full_access'
+        or policyname like 'anon_%'
+        or policyname ilike '%anon%'
+        or policyname like 'open_%'
+        or policyname like 'Allow anon%'
+        or 'anon' = any (roles::text[])
+      )
+  loop
+    execute format(
+      'drop policy if exists %I on %I.%I',
+      rec.policyname, rec.schemaname, rec.tablename
+    );
+  end loop;
 end $$;
 
 do $$
+declare
+  rec record;
 begin
-  if to_regclass('public.observation_events') is null then
-    return;
-  end if;
-  execute 'drop policy if exists "observation_events_select" on public.observation_events';
-  execute 'drop policy if exists "observation_events_insert" on public.observation_events';
-  execute 'drop policy if exists "open_observation_events_select" on public.observation_events';
-  execute 'drop policy if exists "open_observation_events_insert" on public.observation_events';
-  execute 'drop policy if exists "testing_full_access" on public.observation_events';
-end $$;
-
-do $$
-begin
-  if to_regclass('public.audit_log') is null then
-    return;
-  end if;
-  execute 'drop policy if exists "audit_log_insert_anon" on public.audit_log';
-  execute 'drop policy if exists "audit_log_insert" on public.audit_log';
-  execute 'drop policy if exists "testing_full_access" on public.audit_log';
+  for rec in
+    select * from (values
+      ('customers', 'anon_select_customers'),
+      ('customers', 'anon_insert_customers'),
+      ('customers', 'anon_update_customers'),
+      ('customers', 'anon_delete_customers'),
+      ('customers', 'testing_full_access'),
+      ('customers', 'open_customers'),
+      ('jobs', 'allow anon all jobs'),
+      ('jobs', 'anon_delete_jobs'),
+      ('jobs', 'anon_insert_jobs'),
+      ('jobs', 'anon_select_jobs'),
+      ('jobs', 'anon_update_jobs'),
+      ('jobs', 'testing_full_access'),
+      ('jobs', 'open_jobs'),
+      ('inspections', 'Allow anon access to inspections'),
+      ('inspections', 'anon_delete_inspections'),
+      ('inspections', 'anon_insert_inspections'),
+      ('inspections', 'anon_select_inspections'),
+      ('inspections', 'anon_update_inspections'),
+      ('inspections', 'testing_full_access'),
+      ('inspections', 'open_inspections'),
+      ('field_observations', 'field_observations_delete'),
+      ('field_observations', 'field_observations_insert'),
+      ('field_observations', 'field_observations_select'),
+      ('field_observations', 'field_observations_update'),
+      ('field_observations', 'open_field_observations'),
+      ('field_observations', 'testing_full_access'),
+      ('observation_events', 'observation_events_select'),
+      ('observation_events', 'observation_events_insert'),
+      ('observation_events', 'open_observation_events_select'),
+      ('observation_events', 'open_observation_events_insert'),
+      ('observation_events', 'testing_full_access'),
+      ('audit_log', 'audit_log_insert_anon'),
+      ('audit_log', 'audit_log_insert'),
+      ('audit_log', 'testing_full_access')
+    ) as t(rel, pol)
+  loop
+    if to_regclass('public.' || rec.rel) is null then
+      continue;
+    end if;
+    execute format('drop policy if exists %I on public.%I', rec.pol, rec.rel);
+  end loop;
 end $$;
 
 -- Recreate authenticated policies in case the previous migration was skipped.
-drop policy if exists "authenticated_customers_all" on public.customers;
-create policy "authenticated_customers_all" on public.customers
-  for all to authenticated using (true) with check (true);
-
-drop policy if exists "authenticated_jobs_all" on public.jobs;
-create policy "authenticated_jobs_all" on public.jobs
-  for all to authenticated using (true) with check (true);
-
-drop policy if exists "authenticated_inspections_all" on public.inspections;
-create policy "authenticated_inspections_all" on public.inspections
-  for all to authenticated using (true) with check (true);
-
 do $$
 begin
+  if to_regclass('public.customers') is not null then
+    execute 'drop policy if exists "authenticated_customers_all" on public.customers';
+    execute $p$
+      create policy "authenticated_customers_all" on public.customers
+        for all to authenticated using (true) with check (true)
+    $p$;
+  end if;
+  if to_regclass('public.jobs') is not null then
+    execute 'drop policy if exists "authenticated_jobs_all" on public.jobs';
+    execute $p$
+      create policy "authenticated_jobs_all" on public.jobs
+        for all to authenticated using (true) with check (true)
+    $p$;
+  end if;
+  if to_regclass('public.inspections') is not null then
+    execute 'drop policy if exists "authenticated_inspections_all" on public.inspections';
+    execute $p$
+      create policy "authenticated_inspections_all" on public.inspections
+        for all to authenticated using (true) with check (true)
+    $p$;
+  end if;
   if to_regclass('public.field_observations') is not null then
     execute 'drop policy if exists "authenticated_field_observations_all" on public.field_observations';
     execute $p$

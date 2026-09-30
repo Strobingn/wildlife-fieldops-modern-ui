@@ -5,8 +5,8 @@
 # Usage:
 #   DUMP_DIR=/path/to/uploads ./tools/verify-live-permissions.sh
 #
-# Looks for 00_restore_live_schema.sql (hashed suffix ok) plus the numbered
-# include files that restore script \i s.
+# From DUMP_DIR (after staging hashed names):
+#   psql -v ON_ERROR_STOP=1 -f 00_restore_live_schema.sql
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -86,16 +86,20 @@ chmod -R a+rX "$STAGE"
 sudo -u postgres createdb "$DB"
 
 echo "== restore live catalog into $DB"
+echo "    (cd \$STAGE && psql -v ON_ERROR_STOP=1 -f 00_restore_live_schema.sql)"
 sudo -u postgres bash -c "cd '$STAGE' && psql -d '$DB' -v ON_ERROR_STOP=1 -f 00_restore_live_schema.sql"
 
 psql_db() {
   sudo -u postgres psql -d "$DB" -v ON_ERROR_STOP=1 "$@"
 }
 
-echo "== apply step 1 (authenticated RLS + immediate lock-down)"
+echo "== apply phase 1 (authenticated RLS + immediate lock-down)"
 psql_db -f "$MIG/20260929220000_authenticated_rls_for_signed_in_sync.sql"
 
-echo "== assert step 1"
+echo "== re-apply phase 1 (idempotence)"
+psql_db -f "$MIG/20260929220000_authenticated_rls_for_signed_in_sync.sql"
+
+echo "== assert phase 1 grants / policies"
 psql_db <<'SQL'
 do $$
 declare
@@ -108,7 +112,12 @@ begin
   where table_schema = 'public' and table_name = 'customers'
     and grantee = 'anon' and privilege_type = 'INSERT';
   if anon_hold < 1 then
-    raise exception 'step 1 revoked anon INSERT on customers (old APKs need it)';
+    raise exception 'phase 1 revoked anon INSERT on customers (old APKs need it)';
+  end if;
+
+  if has_table_privilege('anon', 'public.customers', 'TRUNCATE')
+     or has_table_privilege('authenticated', 'public.customers', 'TRUNCATE') then
+    raise exception 'TRUNCATE still granted on customers to a client role';
   end if;
 
   select count(*) into anon_invoices
@@ -116,7 +125,21 @@ begin
   where table_schema = 'public' and table_name = 'invoices'
     and grantee = 'anon';
   if anon_invoices > 0 then
-    raise exception 'step 1 left anon grants on invoices';
+    raise exception 'phase 1 left anon grants on invoices';
+  end if;
+
+  if has_table_privilege('anon', 'public.payments', 'SELECT')
+     or has_table_privilege('anon', 'public.payment_records', 'SELECT')
+     or has_table_privilege('anon', 'public.organizations', 'SELECT')
+     or has_table_privilege('anon', 'public.organization_members', 'SELECT')
+     or has_table_privilege('anon', 'public.audit_log', 'INSERT')
+     or has_table_privilege('anon', 'public.photos', 'INSERT')
+     or has_table_privilege('anon', 'public.job_photos', 'INSERT') then
+    raise exception 'phase 1 left anon DML on a non-hold table';
+  end if;
+
+  if has_table_privilege('authenticated', 'public.organization_members', 'INSERT') then
+    raise exception 'authenticated still has INSERT on organization_members';
   end if;
 
   select has_function_privilege('authenticated', 'public.is_org_member(uuid)', 'EXECUTE')
@@ -125,8 +148,10 @@ begin
     raise exception 'authenticated lacks EXECUTE on is_org_member';
   end if;
 
-  if has_function_privilege('anon', 'public.queue_campaign(uuid)', 'EXECUTE') then
-    raise exception 'anon can still EXECUTE queue_campaign';
+  if has_function_privilege('anon', 'public.queue_campaign(uuid)', 'EXECUTE')
+     or has_function_privilege('anon', 'public.generate_due_recurring_jobs(date)', 'EXECUTE')
+     or has_function_privilege('anon', 'public.refresh_technician_metrics(date, date)', 'EXECUTE') then
+    raise exception 'anon can still EXECUTE a dangerous RPC';
   end if;
 
   if exists (
@@ -146,74 +171,235 @@ begin
     raise exception 'fieldops_photos_access still includes anon';
   end if;
 
-  -- Hold tables still have open policies / grants so old APKs work.
   if not exists (
     select 1 from pg_policies
     where schemaname = 'public' and tablename = 'jobs'
       and policyname in ('allow anon all jobs', 'anon_select_jobs', 'open_jobs')
   ) then
-    raise exception 'step 1 dropped hold-table anon policies on jobs';
+    raise exception 'phase 1 dropped hold-table anon policies on jobs';
+  end if;
+
+  if not exists (
+    select 1 from storage.buckets where id = 'observation-photos' and public
+  ) then
+    raise exception 'observation-photos must stay public (Android publicUrl)';
+  end if;
+  if exists (
+    select 1 from storage.buckets where id in ('job-photos', 'job-pdfs') and public
+  ) then
+    raise exception 'job-photos / job-pdfs still public';
   end if;
 end $$;
 SQL
 
-echo "== DML smoke (step 1 hold tables vs locked tables)"
+echo "== Kotlin-shaped queries (phase 1: anon current APK + authenticated signed-in)"
 psql_db <<'SQL'
-set role authenticated;
-insert into public.customers (name) values ('auth-live-1');
-reset role;
-
-set role anon;
-insert into public.customers (name) values ('anon-live-hold');
-reset role;
-
 do $$
+declare
+  uid uuid := gen_random_uuid();
+  org uuid;
+  cust uuid;
+  job uuid;
+  insp uuid;
+  obs uuid;
 begin
-  set role anon;
-  begin
-    insert into public.invoices (id) values ('should-fail');
-    raise exception 'anon insert invoices succeeded after step 1';
-  exception
-    when insufficient_privilege then
-      raise notice 'anon invoices blocked';
-    when others then
-      if sqlerrm like '%succeeded%' then raise; end if;
-      raise notice 'anon invoices blocked (%)', sqlerrm;
-  end;
-  reset role;
-
+  -- ---- authenticated signed-in path (PR #59) ----
+  insert into auth.users (id, email) values (uid, 'tech@example.com');
+  perform set_config(
+    'request.jwt.claims',
+    json_build_object('sub', uid::text, 'role', 'authenticated')::text,
+    false
+  );
   set role authenticated;
+
+  insert into public.customers (name, phone, town)
+    values ('Auth Customer', '555-0100', 'Walden')
+    returning id into cust;
+  update public.customers set notes = 'upsert-merge' where id = cust;
+  perform * from public.customers;
+
+  insert into public.jobs (customer, title, status, address)
+    values ('Auth Customer', 'Squirrel job', 'Active', '210 Willow Avenue')
+    returning id into job;
+  update public.jobs set notes = 'follow-up' where id = job;
+  perform * from public.jobs;
+
+  insert into public.inspections (job_id, notes, status)
+    values (job, 'attic', 'completed')
+    returning id into insp;
+  update public.inspections set notes = 'updated' where id = insp;
+
+  insert into public.field_observations (notes, species_hint, photo_storage_path)
+    values ('raccoon', 'raccoon', 'field/obs/obs.jpg')
+    returning id into obs;
+  update public.field_observations set photo_public_url = 'https://example.test/obs.jpg' where id = obs;
+
+  insert into public.observation_events (event_id, entity_id, observed_at, uploaded_at)
+    values ('evt-auth-1', obs::text, 0, 0);
+
+  insert into storage.objects (bucket_id, name)
+    values ('observation-photos', 'field/obs/obs.jpg')
+    on conflict do nothing;
+  update storage.objects
+     set name = name
+   where bucket_id = 'observation-photos' and name = 'field/obs/obs.jpg';
+  perform * from storage.objects where bucket_id = 'observation-photos';
+
+  insert into public.photos (job_id, storage_path) values (job, 'jobs/' || job::text || '/1.jpg');
+  insert into public.job_photos (job_id, path) values (job, 'jobs/' || job::text || '/1.jpg');
+  insert into storage.objects (bucket_id, name)
+    values ('job-photos', 'jobs/' || job::text || '/1.jpg');
+
   perform public.is_org_member('00000000-0000-0000-0000-000000000001'::uuid);
   perform public.has_org_role('00000000-0000-0000-0000-000000000001'::uuid, array['owner']);
-  begin
-    perform public.queue_campaign('00000000-0000-0000-0000-000000000001'::uuid);
-  exception when others then
-    -- campaign not found is fine; permission denied is not
-    if sqlerrm ilike '%permission denied%' then
-      raise;
-    end if;
-  end;
+
   reset role;
 
+  -- ---- anon current APK (hold tables + observation-photos only) ----
+  perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, false);
   set role anon;
-  begin
-    perform public.queue_campaign('00000000-0000-0000-0000-000000000001'::uuid);
-    raise exception 'anon queue_campaign succeeded';
-  exception
-    when insufficient_privilege then
-      raise notice 'anon queue_campaign blocked';
-    when others then
-      if sqlerrm like '%succeeded%' then raise; end if;
-      raise notice 'anon queue_campaign blocked (%)', sqlerrm;
-  end;
+
+  insert into public.customers (name) values ('Anon Old APK') returning id into cust;
+  update public.customers set notes = 'anon-upsert' where id = cust;
+  perform * from public.customers;
+  delete from public.customers where id = cust;
+
+  insert into public.jobs (customer, title) values ('Anon Job', 'Anon Job') returning id into job;
+  update public.jobs set status = 'Closed' where id = job;
+  perform * from public.jobs;
+  delete from public.jobs where id = job;
+
+  insert into public.inspections (notes) values ('anon-insp') returning id into insp;
+  update public.inspections set notes = 'anon-insp-2' where id = insp;
+  delete from public.inspections where id = insp;
+
+  insert into public.field_observations (notes) values ('anon-obs') returning id into obs;
+  update public.field_observations set notes = 'anon-obs-2' where id = obs;
+
+  insert into public.observation_events (event_id, entity_id, observed_at)
+    values ('evt-anon-1', 'ent-anon', 1);
+
+  insert into storage.objects (bucket_id, name)
+    values ('observation-photos', 'field/anon/anon.jpg');
+  update storage.objects
+     set name = name
+   where bucket_id = 'observation-photos' and name = 'field/anon/anon.jpg';
+  perform 1 from storage.objects where bucket_id = 'observation-photos' limit 1;
+
   reset role;
 end $$;
 SQL
 
-echo "== apply HOLD revoke"
+echo "== phase 1: anon denied on unused tables / RPCs / buckets; no self-promotion"
+psql_db <<'SQL'
+do $$
+declare
+  denied int := 0;
+  rec record;
+  uid uuid := gen_random_uuid();
+  org uuid;
+  stmt_err text;
+begin
+  insert into public.organizations (name, slug) values ('Wildlife Whisperer', 'ww-llc')
+    returning id into org;
+  insert into auth.users (id, email) values (uid, 'tech2@example.com');
+
+  for rec in
+    select * from (values
+      ('invoices', $s$insert into public.invoices (id, issue_date, due_date, created_at, updated_at) values ('inv-anon', 1, 1, 1, 1)$s$),
+      ('payments', format($s$insert into public.payments (organization_id, provider, amount, status) values (%L::uuid, 'cash', 1, 'paid')$s$, org)),
+      ('payment_records', format($s$insert into public.payment_records (organization_id, amount) values (%L::uuid, 1)$s$, org)),
+      ('organizations', format($s$insert into public.organizations (name, slug) values ('x', 'x-%s')$s$, uid)),
+      ('organization_members', format($s$insert into public.organization_members (organization_id, user_id, role) values (%L::uuid, %L::uuid, 'owner')$s$, org, uid)),
+      ('photos', $s$insert into public.photos (storage_path) values ('anon.jpg')$s$),
+      ('job_photos', $s$insert into public.job_photos (path) values ('anon.jpg')$s$),
+      ('audit_log', $s$insert into public.audit_log (entity_type, action) values ('customers', 'INSERT')$s$),
+      ('fieldops storage', $s$insert into storage.objects (bucket_id, name) values ('fieldops-photos', 'secret.pdf')$s$),
+      ('job-photos storage', $s$insert into storage.objects (bucket_id, name) values ('job-photos', 'public/x.jpg')$s$),
+      ('queue_campaign', $s$select public.queue_campaign(gen_random_uuid())$s$),
+      ('generate_due_recurring_jobs', $s$select public.generate_due_recurring_jobs(current_date)$s$)
+    ) as t(rel, stmt)
+  loop
+    perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, false);
+    set role anon;
+    begin
+      execute rec.stmt;
+      raise exception 'anon DML on % succeeded after phase 1', rec.rel;
+    exception
+      when insufficient_privilege or invalid_grant_operation then
+        denied := denied + 1;
+        raise notice 'anon denied on % (privilege)', rec.rel;
+      when others then
+        if sqlerrm like '%succeeded after%' then
+          raise;
+        end if;
+        denied := denied + 1;
+        stmt_err := sqlerrm;
+        raise notice 'anon denied on % (%)', rec.rel, stmt_err;
+    end;
+    reset role;
+  end loop;
+
+  perform set_config(
+    'request.jwt.claims',
+    json_build_object('sub', uid::text, 'role', 'authenticated')::text,
+    false
+  );
+  set role authenticated;
+  begin
+    insert into public.organization_members (organization_id, user_id, role)
+    values (org, uid, 'owner');
+    raise exception 'authenticated self-insert as owner succeeded';
+  exception
+    when insufficient_privilege then
+      raise notice 'authenticated cannot insert organization_members (privilege)';
+    when others then
+      if sqlerrm like '%succeeded%' then
+        raise;
+      end if;
+      raise notice 'authenticated cannot insert organization_members (%)', sqlerrm;
+  end;
+  begin
+    insert into public.profiles (id, email, role) values (uid, 'tech2@example.com', 'owner');
+    raise exception 'authenticated self-insert profile owner succeeded';
+  exception
+    when insufficient_privilege then
+      raise notice 'authenticated cannot insert owner profile (privilege)';
+    when others then
+      if sqlerrm like '%succeeded%' then
+        raise;
+      end if;
+      raise notice 'authenticated cannot insert owner profile (%)', sqlerrm;
+  end;
+  reset role;
+  perform set_config('request.jwt.claims', '{}', false);
+
+  if denied < 10 then
+    raise exception 'expected anon denies on non-hold relations, got %', denied;
+  end if;
+end $$;
+SQL
+
+echo "== default privileges: new public table is not auto-granted to anon"
+psql_db <<'SQL'
+create table public._perm_probe (id int primary key);
+do $$
+begin
+  if has_table_privilege('anon', 'public._perm_probe', 'SELECT')
+     or has_table_privilege('anon', 'public._perm_probe', 'INSERT') then
+    raise exception 'new table still auto-granted to anon';
+  end if;
+end $$;
+drop table public._perm_probe;
+SQL
+
+echo "== apply HOLD / phase 2"
 psql_db -f "$MIG/20260929221000_REVOKE_ANON_AFTER_SIGNED_IN_ROLLOUT.sql"
 
-echo "== assert HOLD"
+echo "== re-run 28120000 (must not restore anon)"
+psql_db -f "$MIG/20260928120000_explicit_data_api_grants.sql"
+
+echo "== assert phase 2"
 psql_db <<'SQL'
 do $$
 begin
@@ -223,7 +409,12 @@ begin
       and table_name in ('customers','jobs','inspections','field_observations','observation_events','audit_log')
       and grantee = 'anon'
   ) then
-    raise exception 'HOLD left anon table grants on a sync relation';
+    raise exception 'phase 2 left anon table grants on a sync relation';
+  end if;
+
+  if has_table_privilege('anon', 'storage.objects', 'INSERT')
+     or has_table_privilege('anon', 'storage.objects', 'SELECT') then
+    raise exception 'phase 2 left anon grants on storage.objects';
   end if;
 
   if exists (
@@ -231,7 +422,7 @@ begin
     where schemaname = 'public' and tablename = 'jobs'
       and policyname in ('allow anon all jobs', 'anon_select_jobs', 'testing_full_access')
   ) then
-    raise exception 'HOLD left anon policies on jobs';
+    raise exception 'phase 2 left anon policies on jobs';
   end if;
 
   if exists (
@@ -239,7 +430,7 @@ begin
     where schemaname = 'storage' and tablename = 'objects'
       and policyname in ('observation_photos_select', 'observation_photos_insert')
   ) then
-    raise exception 'HOLD left PUBLIC observation-photos policies';
+    raise exception 'phase 2 left PUBLIC observation-photos policies';
   end if;
 
   if not has_table_privilege('authenticated', 'public.customers', 'INSERT') then
@@ -248,29 +439,64 @@ begin
 end $$;
 SQL
 
-echo "== DML smoke after HOLD"
+echo "== Kotlin-shaped queries after phase 2 (authenticated ok, anon blocked)"
 psql_db <<'SQL'
-set role authenticated;
-insert into public.customers (name) values ('auth-live-after-hold');
-insert into public.jobs (customer, title) values ('Hold Job', 'Hold Job');
-reset role;
-
 do $$
+declare
+  uid uuid := gen_random_uuid();
+  denied int := 0;
+  rec record;
 begin
-  set role anon;
-  begin
-    insert into public.customers (name) values ('anon-after-hold');
-    raise exception 'anon insert customers succeeded after HOLD';
-  exception
-    when insufficient_privilege then
-      raise notice 'anon customers blocked after HOLD';
-    when others then
-      if sqlerrm like '%succeeded%' then raise; end if;
-      raise notice 'anon customers blocked after HOLD (%)', sqlerrm;
-  end;
+  insert into auth.users (id, email) values (uid, 'tech3@example.com');
+  perform set_config(
+    'request.jwt.claims',
+    json_build_object('sub', uid::text, 'role', 'authenticated')::text,
+    false
+  );
+  set role authenticated;
+  insert into public.customers (name) values ('auth-after-hold');
+  insert into public.jobs (customer, title) values ('Hold Job', 'Hold Job');
+  insert into public.inspections (notes) values ('after-hold');
+  insert into public.field_observations (notes) values ('after-hold');
+  insert into public.observation_events (event_id, entity_id, observed_at)
+    values ('evt-auth-hold', 'ent-hold', 2);
+  insert into storage.objects (bucket_id, name)
+    values ('observation-photos', 'field/hold/hold.jpg');
   reset role;
+
+  for rec in
+    select * from (values
+      ('customers', $s$insert into public.customers (name) values ('anon-after-hold')$s$),
+      ('jobs', $s$insert into public.jobs (customer, title) values ('x', 'x')$s$),
+      ('inspections', $s$insert into public.inspections (notes) values ('x')$s$),
+      ('field_observations', $s$insert into public.field_observations (notes) values ('x')$s$),
+      ('observation_events', $s$insert into public.observation_events (event_id, entity_id, observed_at) values ('x', 'y', 3)$s$),
+      ('storage.objects', $s$insert into storage.objects (bucket_id, name) values ('observation-photos', 'x.jpg')$s$)
+    ) as t(rel, stmt)
+  loop
+    perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, false);
+    set role anon;
+    begin
+      execute rec.stmt;
+      raise exception 'anon DML on % succeeded after phase 2', rec.rel;
+    exception
+      when insufficient_privilege then
+        denied := denied + 1;
+        raise notice 'anon denied on % after phase 2 (privilege)', rec.rel;
+      when others then
+        if sqlerrm like '%succeeded after%' then
+          raise;
+        end if;
+        denied := denied + 1;
+        raise notice 'anon denied on % after phase 2 (%)', rec.rel, sqlerrm;
+    end;
+    reset role;
+  end loop;
+
+  if denied < 6 then
+    raise exception 'expected anon denies on remaining sync relations, got %', denied;
+  end if;
 end $$;
 SQL
 
-echo "OK: live-restore permissions match the two-step rollout."
-
+echo "OK: live-restore permissions match the two-step rollout (phase 1 idempotent)."

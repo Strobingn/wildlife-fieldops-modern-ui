@@ -10,6 +10,13 @@ permissions:
   actions: read
 
 jobs:
+  permissions-sql:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify authenticated RLS SQL
+        run: bash tools/verify-auth-rls.sh
+
   build:
     runs-on: ubuntu-latest
     env:

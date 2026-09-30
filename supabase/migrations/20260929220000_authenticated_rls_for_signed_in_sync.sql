@@ -1,10 +1,11 @@
 -- =============================================================================
 -- Authenticated RLS + live permission lock-down (apply with the signed-in APK).
 --
--- Safe to run on live wildlife_app NOW. Does NOT revoke anon on the six
+-- Safe to run on live wildlife_app NOW. Does NOT revoke anon on the
 -- relations old APKs still hit (customers, jobs, inspections,
--- field_observations, observation_events, audit_log INSERT) or on
--- storage.objects for observation-photos.
+-- field_observations, observation_events) or on storage.objects for
+-- observation-photos. Live audit_log is written by SECURITY DEFINER
+-- trigger audit_row_change(); clients do not need INSERT.
 --
 -- Grounded in the 2026-09-30 live catalog dump of project wildlife_app
 -- (hgdzmwfcghtilyqagjak): 52 tables, 6 views, testing_full_access / anon_*
@@ -36,20 +37,39 @@
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
--- Native sync tables: authenticated policies (idempotent).
+-- Native sync tables: authenticated policies (idempotent, skip missing).
 -- customers already has "authenticated customers (consolidated)" on live.
 -- ---------------------------------------------------------------------------
-drop policy if exists "authenticated_customers_all" on public.customers;
-create policy "authenticated_customers_all" on public.customers
-  for all to authenticated using (true) with check (true);
-
-drop policy if exists "authenticated_jobs_all" on public.jobs;
-create policy "authenticated_jobs_all" on public.jobs
-  for all to authenticated using (true) with check (true);
-
-drop policy if exists "authenticated_inspections_all" on public.inspections;
-create policy "authenticated_inspections_all" on public.inspections
-  for all to authenticated using (true) with check (true);
+do $$
+begin
+  if to_regclass('public.customers') is null then
+    raise notice 'authenticated_rls: skip missing public.customers';
+  else
+    execute 'drop policy if exists "authenticated_customers_all" on public.customers';
+    execute $p$
+      create policy "authenticated_customers_all" on public.customers
+        for all to authenticated using (true) with check (true)
+    $p$;
+  end if;
+  if to_regclass('public.jobs') is null then
+    raise notice 'authenticated_rls: skip missing public.jobs';
+  else
+    execute 'drop policy if exists "authenticated_jobs_all" on public.jobs';
+    execute $p$
+      create policy "authenticated_jobs_all" on public.jobs
+        for all to authenticated using (true) with check (true)
+    $p$;
+  end if;
+  if to_regclass('public.inspections') is null then
+    raise notice 'authenticated_rls: skip missing public.inspections';
+  else
+    execute 'drop policy if exists "authenticated_inspections_all" on public.inspections';
+    execute $p$
+      create policy "authenticated_inspections_all" on public.inspections
+        for all to authenticated using (true) with check (true)
+    $p$;
+  end if;
+end $$;
 
 do $$
 begin
@@ -93,12 +113,10 @@ begin
       create policy "audit_log_insert_authenticated" on public.audit_log
         for insert to authenticated with check (true)
     $p$;
-    -- Old APKs fire invoker triggers that INSERT audit rows. Keep until HOLD.
+    -- Live audit_row_change() is SECURITY DEFINER (owner writes the row).
+    -- Do not grant anon INSERT. Drop leftover open insert policies.
     execute 'drop policy if exists "audit_log_insert_anon" on public.audit_log';
-    execute $p$
-      create policy "audit_log_insert_anon" on public.audit_log
-        for insert to anon with check (true)
-    $p$;
+    execute 'drop policy if exists "audit_log_insert" on public.audit_log';
   end if;
 end $$;
 
@@ -150,8 +168,7 @@ declare
     'jobs',
     'inspections',
     'field_observations',
-    'observation_events',
-    'audit_log'
+    'observation_events'
   ];
   privileged constant text[] := array[
     'organization_members',
@@ -182,7 +199,9 @@ begin
     end if;
 
     if rec.relname = 'audit_log' then
-      execute 'grant insert on table public.audit_log to anon, authenticated';
+      -- Trigger-written on live (SECURITY DEFINER). Authenticated INSERT
+      -- covers invoker-style log_change() if that function exists.
+      execute 'grant insert on table public.audit_log to authenticated';
       execute 'grant select on table public.audit_log to authenticated';
       continue;
     end if;
@@ -205,12 +224,22 @@ begin
     end if;
 
     -- Privilege-escalation tables: keep DML grants narrow; RLS does the rest.
+    -- Membership rows are created in the SQL Editor as postgres/service_role.
     if rec.relname = 'organizations' then
       execute 'revoke insert, delete on table public.organizations from authenticated';
+    elsif rec.relname = 'organization_members' then
+      execute 'revoke insert, delete on table public.organization_members from authenticated';
     elsif rec.relname = 'profiles' then
       execute 'revoke delete on table public.profiles from authenticated';
     end if;
   end loop;
+
+  -- Never leave TRUNCATE / TRIGGER / REFERENCES on Data API client roles.
+  begin
+    execute 'revoke truncate, trigger, references on all tables in schema public from anon, authenticated';
+  exception when undefined_object or invalid_grant_operation then
+    raise notice 'authenticated_rls: skip truncate/trigger/references revoke (%)', sqlerrm;
+  end;
 
   -- 2. Sequences: anon does not need setval. Identity inserts run as owner.
   begin
@@ -268,10 +297,10 @@ begin
     end if;
   end loop;
 
-  -- 4. Drop testing_full_access everywhere. Drop anon_* / PUBLIC-true policies
-  --    on non-hold tables. Hold-table anon policies stay until the HOLD file.
+  -- 4. Drop testing_full_access everywhere. Drop anon_* / PUBLIC `true`
+  --    policies on non-hold tables. Hold-table anon policies stay until HOLD.
   for rec in
-    select schemaname, tablename, policyname, roles
+    select schemaname, tablename, policyname, roles, qual, with_check
     from pg_policies
     where schemaname = 'public'
   loop
@@ -291,6 +320,14 @@ begin
        or rec.policyname ilike '%anon%'
        or rec.policyname = 'Allow all ops on ai_runs'
        or rec.policyname = 'authenticated profiles access'
+       or rec.policyname = 'profiles own access'
+       or (
+         ('public' = any (rec.roles::text[]) or 'anon' = any (rec.roles::text[]))
+         and (
+           coalesce(rec.qual, '') in ('true', '(true)')
+           or coalesce(rec.with_check, '') in ('true', '(true)')
+         )
+       )
     then
       execute format(
         'drop policy if exists %I on %I.%I',
@@ -359,17 +396,57 @@ end $$;
 
 -- Restrictive policies for the tables a signed-in user currently uses to
 -- self-promote to owner (FINDINGS #3). Requires the helpers above.
+-- Recreate TO authenticated (live copies were TO public).
 do $$
 begin
   if to_regclass('public.organization_members') is null then
     return;
   end if;
 
+  execute 'drop policy if exists "testing_full_access" on public.organization_members';
   execute 'drop policy if exists "members_self_select" on public.organization_members';
+  execute 'drop policy if exists "members_select" on public.organization_members';
+  execute 'drop policy if exists "members_manage" on public.organization_members';
+
   execute $p$
     create policy "members_self_select" on public.organization_members
       for select to authenticated
       using (user_id = auth.uid())
+  $p$;
+  execute $p$
+    create policy "members_select" on public.organization_members
+      for select to authenticated
+      using (is_org_member(organization_id))
+  $p$;
+  execute $p$
+    create policy "members_manage" on public.organization_members
+      for update to authenticated
+      using (has_org_role(organization_id, array['owner'::text, 'admin'::text]))
+      with check (has_org_role(organization_id, array['owner'::text, 'admin'::text]))
+  $p$;
+end $$;
+
+do $$
+begin
+  if to_regclass('public.organizations') is null then
+    return;
+  end if;
+
+  execute 'drop policy if exists "testing_full_access" on public.organizations';
+  execute 'drop policy if exists "organizations_select" on public.organizations';
+  execute 'drop policy if exists "organizations_update" on public.organizations';
+  execute 'drop policy if exists "authenticated_staff_all" on public.organizations';
+
+  execute $p$
+    create policy "organizations_select" on public.organizations
+      for select to authenticated
+      using (is_org_member(id))
+  $p$;
+  execute $p$
+    create policy "organizations_update" on public.organizations
+      for update to authenticated
+      using (has_org_role(id, array['owner'::text, 'admin'::text]))
+      with check (has_org_role(id, array['owner'::text, 'admin'::text]))
   $p$;
 end $$;
 
@@ -394,12 +471,7 @@ begin
     create policy "profiles_update_own_no_escalation" on public.profiles
       for update to authenticated
       using (id = auth.uid())
-      with check (
-        id = auth.uid()
-        and role is not distinct from (
-          select p.role from public.profiles p where p.id = auth.uid()
-        )
-      )
+      with check (id = auth.uid())
   $p$;
   execute $p$
     create policy "profiles_insert_own_staff" on public.profiles
@@ -519,9 +591,16 @@ begin
   end if;
 
   execute 'revoke all on table storage.objects from authenticated';
-  execute 'grant select, insert, update, delete on table storage.objects to authenticated, service_role';
+  execute 'revoke all on table storage.objects from anon';
+  execute 'grant all on table storage.objects to service_role';
+  execute 'grant select, insert, update, delete on table storage.objects to authenticated';
   -- anon keeps SIUD until HOLD (observation-photos upserts from old APKs).
   execute 'grant select, insert, update, delete on table storage.objects to anon';
+  begin
+    execute 'revoke truncate, trigger, references on table storage.objects from anon, authenticated';
+  exception when undefined_object or invalid_grant_operation then
+    raise notice 'authenticated_rls: skip storage truncate/trigger/references revoke (%)', sqlerrm;
+  end;
 
   for pol in
     select policyname
@@ -544,11 +623,42 @@ begin
       with check (bucket_id = any (array['fieldops-photos'::text, 'fieldops-documents'::text, 'fieldops-signatures'::text]))
   $p$;
 
+  -- Working job-photo upload (assumed authenticated). Keep live names + add
+  -- an explicit UPDATE policy matching supabase-kt upsert.
+  execute 'drop policy if exists "Allow authenticated reads" on storage.objects';
+  execute 'drop policy if exists "Allow authenticated uploads" on storage.objects';
+  execute 'drop policy if exists "Allow authenticated deletes" on storage.objects';
+  execute 'drop policy if exists "Allow authenticated updates" on storage.objects';
+  execute $p$
+    create policy "Allow authenticated reads" on storage.objects
+      for select to authenticated using (bucket_id = 'job-photos')
+  $p$;
+  execute $p$
+    create policy "Allow authenticated uploads" on storage.objects
+      for insert to authenticated with check (bucket_id = 'job-photos')
+  $p$;
+  execute $p$
+    create policy "Allow authenticated updates" on storage.objects
+      for update to authenticated
+      using (bucket_id = 'job-photos')
+      with check (bucket_id = 'job-photos')
+  $p$;
+  execute $p$
+    create policy "Allow authenticated deletes" on storage.objects
+      for delete to authenticated using (bucket_id = 'job-photos')
+  $p$;
+
   if to_regclass('storage.buckets') is not null then
     execute $u$
       update storage.buckets
          set public = false
        where id in ('job-photos', 'job-pdfs')
+    $u$;
+    -- observation-photos stays public: Android ObservationPhotoUploader stores publicUrl.
+    execute $u$
+      update storage.buckets
+         set public = true
+       where id = 'observation-photos'
     $u$;
   end if;
 end $$;

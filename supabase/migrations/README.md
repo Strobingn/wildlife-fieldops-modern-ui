@@ -3,6 +3,10 @@
 Apply these in timestamp order (or paste `schema.sql` first for a full bootstrap,
 then any later migrations).
 
+**Live `wildlife_app` does not match this folder.** Catalog dump 2026-09-30:
+52 tables + 6 views, 142 policies. Drift, per-table privilege matrix, and
+Kotlin usage: [`LIVE_BASELINE.md`](LIVE_BASELINE.md).
+
 ## Two-step auth rollout (read this before applying new SQL on live)
 
 The native app now signs in with email + password (GoTrue). PostgREST and Storage
@@ -92,8 +96,9 @@ supabase/migrations/20260928120000_explicit_data_api_grants.sql
 supabase/migrations/20260929220000_authenticated_rls_for_signed_in_sync.sql
 ```
 
-Do **not** re-run `20260928120000_explicit_data_api_grants.sql` after the HOLD
-file; it would re-grant `anon` on the six native-sync tables.
+`20260928120000_explicit_data_api_grants.sql` does **not** grant `anon` (it is
+stale vs live). Prefer phase 1 as the live source of truth. Re-running it after
+the HOLD file will not restore anon privileges.
 
 **Hold until every device is upgraded:**
 
@@ -130,7 +135,7 @@ grant select, insert, update, delete on public.your_table
 -- grant usage, select on sequence public.your_table_id_seq to authenticated, service_role;
 ```
 
-Catch-up for tables that already exist: `20260928120000_explicit_data_api_grants.sql`.
-Run that file in the SQL Editor on live `wildlife_app` if it has not been applied
-via the migration runner. Do not re-run older migrations just to pick up grant
-edits; the catch-up file is idempotent.
+Catch-up for tables that already exist: `20260928120000_explicit_data_api_grants.sql`
+is **stale vs live** (it used to mention `materials` / `job_materials`, which
+are not on live). Prefer phase 1. Re-running `20260928120000` after phase 2 does
+not restore `anon` (it only top-ups authenticated / service_role).
