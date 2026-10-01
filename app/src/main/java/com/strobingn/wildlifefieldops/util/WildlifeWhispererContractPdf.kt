@@ -12,6 +12,7 @@ import android.os.Environment
 import androidx.core.content.FileProvider
 import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
 import com.strobingn.wildlifefieldops.data.model.Job
+import com.strobingn.wildlifefieldops.pricing.effectiveTotal
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -450,7 +451,7 @@ object WildlifeWhispererContractPdf {
                 keys.any { k -> d.contains(k) }
             } ?: return null
             used.add(match.id)
-            return match.calculateTotal()
+            return match.effectiveTotal()
         }
 
         val trap = take("trap service", "trap fee", "trap setup", "trap set")
@@ -462,7 +463,7 @@ object WildlifeWhispererContractPdf {
         )
 
         val leftover = lineItems.filter { it.id !in used }
-        val otherTotal = (otherMatched ?: 0.0) + leftover.sumOf { it.calculateTotal() }
+        val otherTotal = (otherMatched ?: 0.0) + leftover.sumOf { it.effectiveTotal() }
         val otherLabel = if (leftover.isNotEmpty() && leftover.size <= 2 && leftover.all {
                 it.description.isNotBlank() && !it.description.lowercase(Locale.US).let { d ->
                     d.contains("exclusion") || d.contains("repair") || d.contains("other")

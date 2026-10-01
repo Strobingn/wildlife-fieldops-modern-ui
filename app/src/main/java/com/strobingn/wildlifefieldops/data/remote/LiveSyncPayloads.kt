@@ -6,6 +6,8 @@ import com.strobingn.wildlifefieldops.data.model.Inspection
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.Photo
 import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoPaths
+import com.strobingn.wildlifefieldops.pricing.JobPricing
+import com.strobingn.wildlifefieldops.pricing.PricingCalculator
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -49,7 +51,11 @@ object LiveSyncPayloads {
         "state",
         "zip",
         "estimate",
+        "subtotal",
+        "tax_rate",
+        "tax_amount",
         "grand_total",
+        "pricing",
         "notes",
         "ai_notes",
         "latitude",
@@ -67,6 +73,8 @@ object LiveSyncPayloads {
             job.description.isNotBlank() && job.description.length <= 60 -> job.description
             else -> "Wildlife"
         }
+        val quote = PricingCalculator.compute(job.pricing)
+        val empty = job.pricing.isEmptyWorksheet()
         return LiveJobUpsert(
             id = job.id.ifBlank { UUID.randomUUID().toString() },
             customerName = name,
@@ -86,7 +94,11 @@ object LiveSyncPayloads {
             latitude = job.latitude,
             longitude = job.longitude,
             estimate = job.estimatedValue.takeIf { it > 0.0 },
+            subtotal = if (empty) null else quote.subtotal.effective,
+            taxRate = if (empty) null else job.pricing.taxRatePercent,
+            taxAmount = if (empty) null else quote.taxAmount.effective,
             grandTotal = job.actualCost.takeIf { it > 0.0 },
+            pricing = job.pricing,
             scheduledStart = job.scheduledDate?.let { Instant.ofEpochMilli(it).toString() },
             completedAt = job.completedDate?.let { Instant.ofEpochMilli(it).toString() }
         )
@@ -220,7 +232,11 @@ data class LiveJobUpsert(
     val latitude: Double? = null,
     val longitude: Double? = null,
     val estimate: Double? = null,
+    @SerialName("subtotal") val subtotal: Double? = null,
+    @SerialName("tax_rate") val taxRate: Double? = null,
+    @SerialName("tax_amount") val taxAmount: Double? = null,
     @SerialName("grand_total") val grandTotal: Double? = null,
+    val pricing: JobPricing,
     @SerialName("scheduled_start") val scheduledStart: String? = null,
     @SerialName("completed_at") val completedAt: String? = null
 )

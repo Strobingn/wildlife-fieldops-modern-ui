@@ -4,6 +4,8 @@ import androidx.room.TypeConverter
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.strobingn.wildlifefieldops.data.model.*
+import com.strobingn.wildlifefieldops.pricing.JobPricing
+import com.strobingn.wildlifefieldops.pricing.PricingJson
 
 class Converters {
     private val gson = Gson()
@@ -128,4 +130,10 @@ class Converters {
         val listType = object : TypeToken<List<InvoiceLineItem>>() {}.type
         return gson.fromJson(value, listType) ?: emptyList()
     }
+
+    @TypeConverter
+    fun fromJobPricing(value: JobPricing): String = PricingJson.encode(value)
+
+    @TypeConverter
+    fun toJobPricing(value: String?): JobPricing = PricingJson.decode(value)
 }

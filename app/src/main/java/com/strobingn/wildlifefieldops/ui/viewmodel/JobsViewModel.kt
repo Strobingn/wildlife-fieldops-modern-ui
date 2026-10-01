@@ -13,6 +13,8 @@ import com.strobingn.wildlifefieldops.data.remote.AiService
 import com.strobingn.wildlifefieldops.data.remote.GeocodingService
 import com.strobingn.wildlifefieldops.data.remote.JobIntakeDraft
 import com.strobingn.wildlifefieldops.data.repository.SyncRepository
+import com.strobingn.wildlifefieldops.pricing.JobPricing
+import com.strobingn.wildlifefieldops.pricing.PricingCalculator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -137,6 +139,11 @@ class JobsViewModel @Inject constructor(
         scheduledDate: Long? = null
     ) = viewModelScope.launch {
         val existing = jobDao.getById(jobId) ?: return@launch
+        val nextPricing = PricingCalculator.withTypedJobTotal(
+            existing.pricing,
+            estimatedValue.takeIf { it > 0.0 }
+        )
+        val quote = PricingCalculator.compute(nextPricing)
         jobDao.insert(
             withCoordinates(
                 existing.copy(
@@ -147,11 +154,12 @@ class JobsViewModel @Inject constructor(
                     address = address,
                     type = com.strobingn.wildlifefieldops.data.model.DefaultServiceTypes.display(type),
                     priority = priority,
-                    estimatedValue = estimatedValue,
+                    estimatedValue = quote.total.effective,
                     notes = notes,
                     scheduledDate = scheduledDate ?: existing.scheduledDate,
                     updatedAt = System.currentTimeMillis(),
-                    isSynced = false
+                    isSynced = false,
+                    pricing = nextPricing
                 )
             )
         )
@@ -224,7 +232,8 @@ class JobsViewModel @Inject constructor(
             priority = priority,
             estimatedValue = estimatedValue,
             scheduledDate = scheduledDate,
-            notes = notes
+            notes = notes,
+            pricing = PricingCalculator.withTypedJobTotal(JobPricing(), estimatedValue.takeIf { it > 0.0 })
         )
         jobDao.insert(withCoordinates(job))
     }
@@ -241,9 +250,13 @@ class JobsViewModel @Inject constructor(
         estimatedValue: Double,
         notes: String,
         appointmentTimes: List<Long>,
+        actualCost: Double? = null,
         onSaved: () -> Unit
     ) = viewModelScope.launch {
-        val job = (existingJob ?: Job()).copy(
+        val base = existingJob ?: Job()
+        val nextPricing = PricingCalculator.withTypedJobTotal(base.pricing, estimatedValue.takeIf { it > 0.0 })
+        val quote = PricingCalculator.compute(nextPricing)
+        val job = base.copy(
             title = title,
             description = description,
             customerId = customerId,
@@ -251,11 +264,13 @@ class JobsViewModel @Inject constructor(
             address = address,
             type = com.strobingn.wildlifefieldops.data.model.DefaultServiceTypes.display(type),
             priority = priority,
-            estimatedValue = estimatedValue,
+            estimatedValue = quote.total.effective,
+            actualCost = actualCost ?: base.actualCost,
             notes = notes,
             scheduledDate = appointmentTimes.minOrNull(),
             updatedAt = System.currentTimeMillis(),
-            isSynced = false
+            isSynced = false,
+            pricing = nextPricing
         )
         val saved = withCoordinates(job)
         jobDao.insert(saved)
@@ -273,6 +288,19 @@ class JobsViewModel @Inject constructor(
             )
         }
         onSaved()
+    }
+
+    fun saveJobPricing(jobId: String, pricing: JobPricing) = viewModelScope.launch {
+        val existing = jobDao.getById(jobId) ?: return@launch
+        val quote = PricingCalculator.compute(pricing)
+        jobDao.insert(
+            existing.copy(
+                pricing = pricing,
+                estimatedValue = quote.total.effective,
+                updatedAt = System.currentTimeMillis(),
+                isSynced = false
+            )
+        )
     }
 
     private val _aiFillLoading = MutableStateFlow(false)

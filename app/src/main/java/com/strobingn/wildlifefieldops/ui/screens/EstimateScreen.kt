@@ -1,30 +1,76 @@
 package com.strobingn.wildlifefieldops.ui.screens
 
-import android.content.Context
-import androidx.compose.ui.platform.LocalContext
-import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
-import com.strobingn.wildlifefieldops.util.ContractDocumentType
-import com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf
-
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.strobingn.wildlifefieldops.ui.theme.*
+import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
+import com.strobingn.wildlifefieldops.pricing.JobPricing
+import com.strobingn.wildlifefieldops.pricing.Money
+import com.strobingn.wildlifefieldops.pricing.PricingCalculator
+import com.strobingn.wildlifefieldops.ui.components.DecimalField
+import com.strobingn.wildlifefieldops.ui.components.OverridableAmountField
+import com.strobingn.wildlifefieldops.ui.theme.AccentBlue
+import com.strobingn.wildlifefieldops.ui.theme.AccentPurple
+import com.strobingn.wildlifefieldops.ui.theme.BackgroundCard
+import com.strobingn.wildlifefieldops.ui.theme.BackgroundDark
+import com.strobingn.wildlifefieldops.ui.theme.BorderDark
+import com.strobingn.wildlifefieldops.ui.theme.PrimaryGreen
+import com.strobingn.wildlifefieldops.ui.theme.TextPrimary
+import com.strobingn.wildlifefieldops.ui.theme.TextSecondary
+import com.strobingn.wildlifefieldops.ui.theme.TextTertiary
+import com.strobingn.wildlifefieldops.ui.viewmodel.CountyTaxState
+import com.strobingn.wildlifefieldops.ui.viewmodel.InvoiceViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobAiViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
+import com.strobingn.wildlifefieldops.util.ContractDocumentType
+import com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,13 +79,49 @@ fun EstimateScreen(
     autoDraft: Boolean = false,
     onBack: () -> Unit,
     jobsViewModel: JobsViewModel = hiltViewModel(),
-    jobAiViewModel: JobAiViewModel = hiltViewModel()
+    jobAiViewModel: JobAiViewModel = hiltViewModel(),
+    invoiceViewModel: InvoiceViewModel = hiltViewModel()
 ) {
     val job by jobsViewModel.getJobById(jobId).collectAsState(initial = null)
     val draft by jobAiViewModel.estimateDraft.collectAsState()
     val estimateLoading by jobAiViewModel.estimateLoading.collectAsState()
     val aiMessage by jobAiViewModel.message.collectAsState()
+    val countyTaxState by invoiceViewModel.countyTaxState.collectAsState()
     var autoDraftFired by remember { mutableStateOf(false) }
+
+    var pricing by remember { mutableStateOf(PricingCalculator.starterWorksheet()) }
+    var hydrated by remember { mutableStateOf(false) }
+    var dirty by remember { mutableStateOf(false) }
+    var laborHoursText by remember { mutableStateOf("2.0") }
+    var laborRateText by remember { mutableStateOf("85.00") }
+    var materialsQtyText by remember { mutableStateOf("1") }
+    var materialsPriceText by remember { mutableStateOf("0.00") }
+    var equipmentText by remember { mutableStateOf("0.00") }
+    var permitText by remember { mutableStateOf("0.00") }
+    var disposalText by remember { mutableStateOf("0.00") }
+    var mileageText by remember { mutableStateOf("0") }
+    var mileageRateText by remember { mutableStateOf("0.65") }
+    var taxRateText by remember { mutableStateOf("8.125") }
+    var discountPercentText by remember { mutableStateOf("0") }
+
+    fun applyPricing(next: JobPricing, markDirty: Boolean = true) {
+        pricing = next
+        if (markDirty) dirty = true
+    }
+
+    fun syncInputTexts(p: JobPricing) {
+        laborHoursText = formatNum(p.laborHours)
+        laborRateText = formatNum(p.laborRate)
+        materialsQtyText = formatNum(p.materialsQty)
+        materialsPriceText = formatNum(p.materialsPrice)
+        equipmentText = formatNum(p.equipmentCost)
+        permitText = formatNum(p.permitCost)
+        disposalText = formatNum(p.disposalCost)
+        mileageText = formatNum(p.mileage)
+        mileageRateText = formatNum(p.mileageRate)
+        taxRateText = formatNum(p.taxRatePercent)
+        discountPercentText = formatNum(p.discountPercent)
+    }
 
     LaunchedEffect(job, autoDraft) {
         val current = job
@@ -49,46 +131,60 @@ fun EstimateScreen(
         }
     }
 
-    var laborHours by remember { mutableStateOf("2.0") }
-    var laborRate by remember { mutableStateOf("85.00") }
-    var materialsCost by remember { mutableStateOf("0.00") }
-    var equipmentCost by remember { mutableStateOf("0.00") }
-    var permitCost by remember { mutableStateOf("0.00") }
-    var disposalCost by remember { mutableStateOf("0.00") }
-    var mileage by remember { mutableStateOf("0") }
-    var mileageRate by remember { mutableStateOf("0.65") }
-    var taxRate by remember { mutableStateOf("8.125") }
-    var discountPercent by remember { mutableStateOf("0") }
-    var draftRationale by remember { mutableStateOf("") }
-    var lineItemNotes by remember { mutableStateOf("") }
-
-    LaunchedEffect(draft) {
-        val d = draft ?: return@LaunchedEffect
-        laborHours = formatNum(d.laborHours)
-        laborRate = formatNum(d.laborRate)
-        materialsCost = formatNum(d.materialsCost)
-        equipmentCost = formatNum(d.equipmentCost)
-        permitCost = formatNum(d.permitCost)
-        disposalCost = formatNum(d.disposalCost)
-        mileage = formatNum(d.mileage)
-        mileageRate = formatNum(d.mileageRate)
-        taxRate = formatNum(d.taxRate)
-        discountPercent = formatNum(d.discountPercent)
-        draftRationale = d.rationale
-        lineItemNotes = d.lineItemNotes
+    LaunchedEffect(job?.id) {
+        hydrated = false
+        dirty = false
     }
 
-    val laborTotal = laborHours.toDoubleOrNull()?.times(laborRate.toDoubleOrNull() ?: 0.0) ?: 0.0
-    val materialsTotal = materialsCost.toDoubleOrNull() ?: 0.0
-    val equipmentTotal = equipmentCost.toDoubleOrNull() ?: 0.0
-    val permitTotal = permitCost.toDoubleOrNull() ?: 0.0
-    val disposalTotal = disposalCost.toDoubleOrNull() ?: 0.0
-    val mileageTotal = mileage.toDoubleOrNull()?.times(mileageRate.toDoubleOrNull() ?: 0.0) ?: 0.0
-    val subtotal = laborTotal + materialsTotal + equipmentTotal + permitTotal + disposalTotal + mileageTotal
-    val discountAmount = subtotal * (discountPercent.toDoubleOrNull() ?: 0.0) / 100.0
-    val taxableAmount = subtotal - discountAmount
-    val taxAmount = taxableAmount * (taxRate.toDoubleOrNull() ?: 0.0) / 100.0
-    val total = taxableAmount + taxAmount
+    LaunchedEffect(job, hydrated) {
+        val current = job ?: return@LaunchedEffect
+        if (hydrated) return@LaunchedEffect
+        val loaded = PricingCalculator.pricingForEditor(current.pricing, current.estimatedValue)
+        pricing = loaded
+        syncInputTexts(loaded)
+        hydrated = true
+        invoiceViewModel.resolveCountyTax(current)
+    }
+
+    LaunchedEffect(draft, hydrated) {
+        val d = draft ?: return@LaunchedEffect
+        if (!hydrated) return@LaunchedEffect
+        val filled = PricingCalculator.applyAiInputs(
+            current = pricing,
+            laborHours = d.laborHours,
+            laborRate = d.laborRate,
+            materialsCost = d.materialsCost,
+            equipmentCost = d.equipmentCost,
+            permitCost = d.permitCost,
+            disposalCost = d.disposalCost,
+            mileage = d.mileage,
+            mileageRate = d.mileageRate,
+            taxRatePercent = d.taxRate,
+            discountPercent = d.discountPercent,
+            rationale = d.rationale,
+            notes = d.lineItemNotes
+        )
+        applyPricing(filled)
+        syncInputTexts(filled)
+    }
+
+    LaunchedEffect(countyTaxState, hydrated) {
+        if (!hydrated) return@LaunchedEffect
+        val resolved = countyTaxState as? CountyTaxState.Resolved ?: return@LaunchedEffect
+        val next = PricingCalculator.applyCountyTaxRate(pricing, resolved.ratePercent)
+        if (next.taxRatePercent != pricing.taxRatePercent) {
+            applyPricing(next)
+            taxRateText = formatNum(next.taxRatePercent)
+        }
+    }
+
+    LaunchedEffect(pricing, dirty, hydrated) {
+        if (!hydrated || !dirty) return@LaunchedEffect
+        delay(500)
+        jobsViewModel.saveJobPricing(jobId, pricing)
+    }
+
+    val result = PricingCalculator.compute(pricing)
     val context = LocalContext.current
     var pdfPath by remember { mutableStateOf("") }
     var showPdfShare by remember { mutableStateOf(false) }
@@ -117,7 +213,11 @@ fun EstimateScreen(
         containerColor = BackgroundDark
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             job?.let {
@@ -126,6 +226,12 @@ fun EstimateScreen(
                         Text(it.title, style = MaterialTheme.typography.titleMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
                         Text(it.customerName, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                         if (it.address.isNotBlank()) Text(it.address, style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                        Text(
+                            "Every amount is editable. Auto-sum keeps running; a manual lock stays until you reset it.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextTertiary,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
                     }
                 }
             }
@@ -147,98 +253,177 @@ fun EstimateScreen(
                 }
             }
             if (!aiMessage.isNullOrBlank()) Text(aiMessage!!, style = MaterialTheme.typography.labelMedium, color = PrimaryGreen)
-            if (draftRationale.isNotBlank()) {
+            if (pricing.rationale.isNotBlank()) {
                 Card(colors = CardDefaults.cardColors(containerColor = BackgroundCard), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text("Draft rationale", style = MaterialTheme.typography.labelMedium, color = TextPrimary)
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text(draftRationale, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                        Text(pricing.rationale, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     }
                 }
             }
             EstimateSection("Labor") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    EstimateField("Hours", laborHours, { laborHours = it }, Modifier.weight(1f))
-                    EstimateField("Rate/hr", laborRate, { laborRate = it }, Modifier.weight(1f))
+                    DecimalField("Hours", laborHoursText, {
+                        laborHoursText = it
+                        applyPricing(pricing.copy(laborHours = it.toDoubleOrNull() ?: 0.0))
+                    }, Modifier.weight(1f))
+                    DecimalField("Rate/hr", laborRateText, {
+                        laborRateText = it
+                        applyPricing(pricing.copy(laborRate = it.toDoubleOrNull() ?: 0.0))
+                    }, Modifier.weight(1f))
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                OverridableAmountField(
+                    label = "Labor total",
+                    field = result.laborTotal,
+                    onOverride = { applyPricing(pricing.copy(laborTotalOverride = Money.round(it))) },
+                    onReset = { applyPricing(PricingCalculator.resetLaborTotal(pricing)) }
+                )
             }
-            EstimateSection("Materials & Equipment") {
+            EstimateSection("Materials") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    EstimateField("Materials", materialsCost, { materialsCost = it }, Modifier.weight(1f))
-                    EstimateField("Equipment", equipmentCost, { equipmentCost = it }, Modifier.weight(1f))
+                    DecimalField("Qty", materialsQtyText, {
+                        materialsQtyText = it
+                        applyPricing(pricing.copy(materialsQty = it.toDoubleOrNull() ?: 0.0))
+                    }, Modifier.weight(1f))
+                    DecimalField("Unit price", materialsPriceText, {
+                        materialsPriceText = it
+                        applyPricing(pricing.copy(materialsPrice = it.toDoubleOrNull() ?: 0.0))
+                    }, Modifier.weight(1f))
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                OverridableAmountField(
+                    label = "Materials total",
+                    field = result.materialsTotal,
+                    onOverride = { applyPricing(pricing.copy(materialsTotalOverride = Money.round(it))) },
+                    onReset = { applyPricing(PricingCalculator.resetMaterialsTotal(pricing)) }
+                )
             }
             EstimateSection("Other Costs") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    EstimateField("Permits", permitCost, { permitCost = it }, Modifier.weight(1f))
-                    EstimateField("Disposal", disposalCost, { disposalCost = it }, Modifier.weight(1f))
+                    DecimalField("Equipment", equipmentText, {
+                        equipmentText = it
+                        applyPricing(pricing.copy(equipmentCost = it.toDoubleOrNull() ?: 0.0))
+                    }, Modifier.weight(1f))
+                    DecimalField("Permits", permitText, {
+                        permitText = it
+                        applyPricing(pricing.copy(permitCost = it.toDoubleOrNull() ?: 0.0))
+                    }, Modifier.weight(1f))
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                DecimalField("Disposal", disposalText, {
+                    disposalText = it
+                    applyPricing(pricing.copy(disposalCost = it.toDoubleOrNull() ?: 0.0))
+                }, Modifier.fillMaxWidth())
             }
             EstimateSection("Mileage") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    EstimateField("Miles", mileage, { mileage = it }, Modifier.weight(1f))
-                    EstimateField("Rate/mi", mileageRate, { mileageRate = it }, Modifier.weight(1f))
+                    DecimalField("Miles", mileageText, {
+                        mileageText = it
+                        applyPricing(pricing.copy(mileage = it.toDoubleOrNull() ?: 0.0))
+                    }, Modifier.weight(1f))
+                    DecimalField("Rate/mi", mileageRateText, {
+                        mileageRateText = it
+                        applyPricing(pricing.copy(mileageRate = it.toDoubleOrNull() ?: 0.0))
+                    }, Modifier.weight(1f))
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                OverridableAmountField(
+                    label = "Mileage total",
+                    field = result.mileageTotal,
+                    onOverride = { applyPricing(pricing.copy(mileageTotalOverride = Money.round(it))) },
+                    onReset = { applyPricing(PricingCalculator.resetMileageTotal(pricing)) }
+                )
             }
             EstimateSection("Adjustments") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    EstimateField("Tax %", taxRate, { taxRate = it }, Modifier.weight(1f))
-                    EstimateField("Discount %", discountPercent, { discountPercent = it }, Modifier.weight(1f))
+                    DecimalField("Tax %", taxRateText, {
+                        taxRateText = it
+                        applyPricing(
+                            pricing.copy(
+                                taxRatePercent = it.toDoubleOrNull() ?: 0.0,
+                                taxRateManual = true
+                            )
+                        )
+                    }, Modifier.weight(1f))
+                    DecimalField("Discount %", discountPercentText, {
+                        discountPercentText = it
+                        applyPricing(pricing.copy(discountPercent = it.toDoubleOrNull() ?: 0.0))
+                    }, Modifier.weight(1f))
+                }
+                val county = countyTaxState
+                if (county is CountyTaxState.Resolved) {
+                    Text(
+                        county.displayLabel + if (pricing.taxRateManual) " · tax % locked" else "",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (pricing.taxRateManual) TextTertiary else PrimaryGreen,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
                 }
             }
-            Card(colors = CardDefaults.cardColors(containerColor = PrimaryGreen.copy(alpha = 0.1f)), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    SummaryRow("Subtotal", subtotal)
-                    if (discountAmount > 0) SummaryRow("Discount", -discountAmount, color = SuccessGreen)
-                    SummaryRow("Tax (${taxRate}%)", taxAmount)
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = BorderDark)
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("TOTAL", style = MaterialTheme.typography.titleLarge, color = TextPrimary, fontWeight = FontWeight.Bold)
-                        Text("$${String.format("%.2f", total)}", style = MaterialTheme.typography.headlineSmall, color = PrimaryGreen, fontWeight = FontWeight.Bold)
-                    }
+            Card(
+                colors = CardDefaults.cardColors(containerColor = PrimaryGreen.copy(alpha = 0.1f)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OverridableAmountField(
+                        label = "Subtotal",
+                        field = result.subtotal,
+                        onOverride = { applyPricing(pricing.copy(subtotalOverride = Money.round(it))) },
+                        onReset = { applyPricing(PricingCalculator.resetSubtotal(pricing)) }
+                    )
+                    OverridableAmountField(
+                        label = "Discount $",
+                        field = result.discountAmount,
+                        onOverride = { applyPricing(pricing.copy(discountAmountOverride = Money.round(it))) },
+                        onReset = { applyPricing(PricingCalculator.resetDiscountAmount(pricing)) }
+                    )
+                    OverridableAmountField(
+                        label = "Tax $",
+                        field = result.taxAmount,
+                        onOverride = { applyPricing(pricing.copy(taxAmountOverride = Money.round(it))) },
+                        onReset = { applyPricing(PricingCalculator.resetTaxAmount(pricing)) }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = BorderDark)
+                    OverridableAmountField(
+                        label = "TOTAL",
+                        field = result.total,
+                        onOverride = { applyPricing(pricing.copy(totalOverride = Money.round(it))) },
+                        onReset = { applyPricing(PricingCalculator.resetTotal(pricing)) },
+                        emphasized = true
+                    )
                 }
             }
             job?.let { j ->
                 OutlinedButton(
                     onClick = {
-                        jobsViewModel.updateJobDetails(
-                            jobId = j.id, title = j.title, description = j.description,
-                            customerId = j.customerId, customerName = j.customerName, address = j.address,
-                            type = j.type, priority = j.priority, estimatedValue = total, notes = j.notes
-                        )
+                        dirty = true
+                        jobsViewModel.saveJobPricing(j.id, pricing)
                     },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGreen)
                 ) {
                     Icon(Icons.Default.Save, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Save total as job estimated value")
+                    Text("Save job pricing")
                 }
                 Button(
                     onClick = {
-                        val items = buildEstimateLineItems(
-                            laborHours = laborHours.toDoubleOrNull() ?: 0.0,
-                            laborRate = laborRate.toDoubleOrNull() ?: 0.0,
-                            materialsCost = materialsCost.toDoubleOrNull() ?: 0.0,
-                            equipmentCost = equipmentCost.toDoubleOrNull() ?: 0.0,
-                            permitCost = permitCost.toDoubleOrNull() ?: 0.0,
-                            disposalCost = disposalCost.toDoubleOrNull() ?: 0.0,
-                            mileage = mileage.toDoubleOrNull() ?: 0.0,
-                            mileageRate = mileageRate.toDoubleOrNull() ?: 0.0,
-                            lineItemNotes = lineItemNotes,
-                            draftRationale = draftRationale
-                        )
+                        jobsViewModel.saveJobPricing(j.id, pricing)
+                        val items = buildEstimateLineItems(pricing, result)
                         pdfPath = WildlifeWhispererContractPdf.generate(
                             context = context,
                             documentType = ContractDocumentType.ESTIMATE,
-                            job = j,
+                            job = j.copy(estimatedValue = result.total.effective, pricing = pricing),
                             lineItems = items,
-                            subtotal = subtotal,
-                            taxRate = taxRate.toDoubleOrNull() ?: 0.0,
-                            taxAmount = taxAmount,
-                            discountAmount = discountAmount,
-                            total = total,
-                            notes = listOf(lineItemNotes, draftRationale).filter { it.isNotBlank() }.joinToString("\n")
+                            subtotal = result.subtotal.effective,
+                            taxRate = pricing.taxRatePercent,
+                            taxAmount = result.taxAmount.effective,
+                            discountAmount = result.discountAmount.effective,
+                            total = result.total.effective,
+                            notes = listOf(pricing.notes, pricing.rationale).filter { it.isNotBlank() }.joinToString("\n")
                         )
                         showPdfShare = true
                     },
@@ -277,42 +462,58 @@ fun EstimateScreen(
     }
 }
 
-private fun buildEstimateLineItems(
-    laborHours: Double,
-    laborRate: Double,
-    materialsCost: Double,
-    equipmentCost: Double,
-    permitCost: Double,
-    disposalCost: Double,
-    mileage: Double,
-    mileageRate: Double,
-    lineItemNotes: String,
-    draftRationale: String
+internal fun buildEstimateLineItems(
+    pricing: JobPricing,
+    result: com.strobingn.wildlifefieldops.pricing.JobPricingResult
 ): List<InvoiceLineItem> {
     val items = mutableListOf<InvoiceLineItem>()
-    if (laborHours > 0 && laborRate > 0) {
-        items += InvoiceLineItem(description = "Labor / Trap Service", quantity = laborHours, unit = "hr", unitPrice = laborRate)
+    if (pricing.laborHours > 0 || result.laborTotal.effective > 0) {
+        items += InvoiceLineItem(
+            description = "Labor / Trap Service",
+            quantity = pricing.laborHours,
+            unit = "hr",
+            unitPrice = pricing.laborRate,
+            total = result.laborTotal.effective,
+            totalOverride = pricing.laborTotalOverride
+        )
     }
-    if (materialsCost > 0) {
-        items += InvoiceLineItem(description = "Materials / Exclusion & Repairs", quantity = 1.0, unit = "ea", unitPrice = materialsCost)
+    if (pricing.materialsQty > 0 || pricing.materialsPrice > 0 || result.materialsTotal.effective > 0) {
+        items += InvoiceLineItem(
+            description = "Materials / Exclusion & Repairs",
+            quantity = pricing.materialsQty,
+            unit = "ea",
+            unitPrice = pricing.materialsPrice,
+            total = result.materialsTotal.effective,
+            totalOverride = pricing.materialsTotalOverride
+        )
     }
-    if (equipmentCost > 0) {
-        items += InvoiceLineItem(description = "Equipment", quantity = 1.0, unit = "ea", unitPrice = equipmentCost)
+    if (pricing.equipmentCost > 0) {
+        items += InvoiceLineItem(description = "Equipment", quantity = 1.0, unit = "ea", unitPrice = pricing.equipmentCost, total = result.equipmentTotal.effective)
     }
-    if (permitCost > 0) {
-        items += InvoiceLineItem(description = "Permits", quantity = 1.0, unit = "ea", unitPrice = permitCost)
+    if (pricing.permitCost > 0) {
+        items += InvoiceLineItem(description = "Permits", quantity = 1.0, unit = "ea", unitPrice = pricing.permitCost, total = result.permitTotal.effective)
     }
-    if (disposalCost > 0) {
-        items += InvoiceLineItem(description = "Disposal", quantity = 1.0, unit = "ea", unitPrice = disposalCost)
+    if (pricing.disposalCost > 0) {
+        items += InvoiceLineItem(description = "Disposal", quantity = 1.0, unit = "ea", unitPrice = pricing.disposalCost, total = result.disposalTotal.effective)
     }
-    if (mileage > 0 && mileageRate > 0) {
-        items += InvoiceLineItem(description = "Mileage", quantity = mileage, unit = "mi", unitPrice = mileageRate)
+    if (pricing.mileage > 0 || result.mileageTotal.effective > 0) {
+        items += InvoiceLineItem(
+            description = "Mileage",
+            quantity = pricing.mileage,
+            unit = "mi",
+            unitPrice = pricing.mileageRate,
+            total = result.mileageTotal.effective,
+            totalOverride = pricing.mileageTotalOverride
+        )
     }
-    if (items.isEmpty() && lineItemNotes.isNotBlank()) {
-        items += InvoiceLineItem(description = lineItemNotes.take(80), quantity = 1.0, unit = "ea", unitPrice = 0.0)
+    if (items.isEmpty() && pricing.notes.isNotBlank()) {
+        items += InvoiceLineItem(description = pricing.notes.take(80), quantity = 1.0, unit = "ea", unitPrice = result.total.effective, total = result.total.effective, totalOverride = pricing.totalOverride)
     }
-    if (items.isEmpty() && draftRationale.isNotBlank()) {
-        items += InvoiceLineItem(description = "Inspection / estimate", quantity = 1.0, unit = "ea", unitPrice = 0.0)
+    if (items.isEmpty() && pricing.rationale.isNotBlank()) {
+        items += InvoiceLineItem(description = "Inspection / estimate", quantity = 1.0, unit = "ea", unitPrice = result.total.effective, total = result.total.effective, totalOverride = pricing.totalOverride)
+    }
+    if (items.isEmpty() && result.total.effective > 0) {
+        items += InvoiceLineItem(description = "Job total", quantity = 1.0, unit = "ea", unitPrice = result.total.effective, total = result.total.effective, totalOverride = pricing.totalOverride)
     }
     return items
 }
@@ -330,31 +531,5 @@ private fun EstimateSection(title: String, content: @Composable ColumnScope.() -
             Spacer(modifier = Modifier.height(8.dp))
             content()
         }
-    }
-}
-
-@Composable
-private fun EstimateField(label: String, value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = { onChange(it.filter { c -> c.isDigit() || c == '.' }) },
-        label = { Text(label) },
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = PrimaryGreen, unfocusedBorderColor = BorderDark,
-            focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary,
-            focusedContainerColor = BackgroundDark, unfocusedContainerColor = BackgroundDark
-        ),
-        modifier = modifier,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        shape = RoundedCornerShape(10.dp),
-        singleLine = true
-    )
-}
-
-@Composable
-private fun SummaryRow(label: String, amount: Double, color: Color = TextSecondary) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = color)
-        Text("$${String.format("%.2f", amount)}", style = MaterialTheme.typography.bodySmall, color = if (amount < 0) SuccessGreen else TextPrimary)
     }
 }

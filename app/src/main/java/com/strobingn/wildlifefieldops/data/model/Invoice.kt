@@ -24,8 +24,14 @@ data class Invoice(
     val subtotal: Double = 0.0,
     val taxRate: Double = 0.0,
     val taxAmount: Double = 0.0,
+    val discountPercent: Double = 0.0,
     val discountAmount: Double = 0.0,
     val totalAmount: Double = 0.0,
+    val subtotalOverride: Double? = null,
+    val taxAmountOverride: Double? = null,
+    val discountAmountOverride: Double? = null,
+    val totalOverride: Double? = null,
+    val taxRateManual: Boolean = false,
     val amountPaid: Double = 0.0,
     val balanceDue: Double = 0.0,
     val lineItems: List<InvoiceLineItem> = emptyList(),
@@ -45,7 +51,9 @@ data class InvoiceLineItem(
     val quantity: Double = 1.0,
     val unit: String = "ea",
     val unitPrice: Double = 0.0,
-    val total: Double = 0.0
+    val total: Double = 0.0,
+    /** When set, this line's amount is locked; qty/price still edit for reference. */
+    val totalOverride: Double? = null
 ) {
     fun calculateTotal(): Double = quantity * unitPrice
 }
