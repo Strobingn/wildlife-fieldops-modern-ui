@@ -41,5 +41,8 @@ data class Inspection(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val isSynced: Boolean = false,
-    val syncError: String? = null
+    val syncError: String? = null,
+    /** Last AI narrative draft (also copied into findings JSON for sync). */
+    val aiNarrativeDraft: String = "",
+    val aiDraftSource: String = ""
 )

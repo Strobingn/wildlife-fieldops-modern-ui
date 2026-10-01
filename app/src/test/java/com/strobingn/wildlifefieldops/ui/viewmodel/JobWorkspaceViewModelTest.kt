@@ -23,6 +23,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Test
 
 /**
@@ -207,6 +210,27 @@ class JobWorkspaceViewModelTest {
         assertEquals("new@x.com", row.email)
         assertEquals("9", row.phone)
         assertEquals("New Name", overwritten.job.customerName)
+    }
+
+    @Test
+    fun savePersistsSpeciesAndNextStepIntoPricingForSync() = runBlocking {
+        val result = workspace.save(
+            newJobRequest(JobCustomerDraft(name = "Pat Rivera")).copy(
+                confirmedSpecies = "raccoon",
+                legalNotes = "Rabies PPE",
+                nextStep = "Check the deck trap"
+            )
+        )
+        assertEquals("raccoon", result.job.confirmedSpecies)
+        assertEquals("Check the deck trap", result.job.nextStep)
+        assertEquals("raccoon", result.job.pricing.confirmedSpecies)
+        assertFalse(result.job.isSynced)
+        val encoded = LiveSyncPayloads.json.encodeToJsonElement(
+            com.strobingn.wildlifefieldops.data.remote.LiveJobUpsert.serializer(),
+            LiveSyncPayloads.job(result.job)
+        )
+        val pricing = encoded.jsonObject.getValue("pricing").jsonObject
+        assertEquals("raccoon", pricing.getValue("confirmedSpecies").jsonPrimitive.content)
     }
 
     @Test

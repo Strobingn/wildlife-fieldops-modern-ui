@@ -31,8 +31,20 @@ data class JobPricing(
     val taxAmountOverride: Double? = null,
     val totalOverride: Double? = null,
     val notes: String = "",
-    val rationale: String = ""
+    val rationale: String = "",
+    /** Photo / AI suggested lines. Empty default keeps old worksheets valid. */
+    val photoLineItems: List<InvoiceLineItem> = emptyList(),
+    val confirmedSpecies: String = "",
+    val legalNotes: String = "",
+    val nextStep: String = "",
+    val nextStepDueAt: Long? = null,
+    val nextStepSource: String = "",
+    val aiRuntime: String = ""
 ) {
+    /**
+     * Money worksheet only. Field-ops extras (species, next step) must not
+     * force subtotal/tax onto the live upsert.
+     */
     fun isEmptyWorksheet(): Boolean =
         laborHours == 0.0 &&
             materialsQty == 0.0 &&
@@ -51,6 +63,7 @@ data class JobPricing(
             totalOverride == null &&
             notes.isBlank() &&
             rationale.isBlank() &&
+            photoLineItems.isEmpty() &&
             !taxRateManual
 }
 
@@ -126,15 +139,31 @@ object PricingCalculator {
      */
     fun pricingForEditor(saved: JobPricing, estimatedValue: Double): JobPricing {
         if (!saved.isEmptyWorksheet()) return saved
+        val extras = saved
         if (estimatedValue > 0.0) {
             return JobPricing(
                 laborRate = 85.0,
                 mileageRate = 0.65,
                 taxRatePercent = 8.125,
-                totalOverride = Money.round(estimatedValue)
+                totalOverride = Money.round(estimatedValue),
+                confirmedSpecies = extras.confirmedSpecies,
+                legalNotes = extras.legalNotes,
+                nextStep = extras.nextStep,
+                nextStepDueAt = extras.nextStepDueAt,
+                nextStepSource = extras.nextStepSource,
+                aiRuntime = extras.aiRuntime,
+                photoLineItems = extras.photoLineItems
             )
         }
-        return starterWorksheet()
+        return starterWorksheet().copy(
+            confirmedSpecies = extras.confirmedSpecies,
+            legalNotes = extras.legalNotes,
+            nextStep = extras.nextStep,
+            nextStepDueAt = extras.nextStepDueAt,
+            nextStepSource = extras.nextStepSource,
+            aiRuntime = extras.aiRuntime,
+            photoLineItems = extras.photoLineItems
+        )
     }
 
     fun compute(pricing: JobPricing): JobPricingResult {
@@ -151,13 +180,18 @@ object PricingCalculator {
         val mileageCalc = Money.times(pricing.mileage, pricing.mileageRate)
         val mileage = MoneyField(mileageCalc, pricing.mileageTotalOverride?.let { Money.round(it) })
 
+        val photoLines = pricing.photoLineItems.fold(0.0) { acc, item ->
+            Money.plus(acc, item.effectiveTotal())
+        }
+
         val subtotalCalc = Money.plus(
             labor.effective,
             materials.effective,
             equipment.effective,
             permit.effective,
             disposal.effective,
-            mileage.effective
+            mileage.effective,
+            photoLines
         )
         val subtotal = MoneyField(subtotalCalc, pricing.subtotalOverride?.let { Money.round(it) })
 

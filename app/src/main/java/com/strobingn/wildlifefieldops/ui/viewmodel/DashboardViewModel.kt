@@ -76,4 +76,17 @@ class DashboardViewModel @Inject constructor(
     val pendingReminders = reminderDao.getPending()
         .map { it.take(5) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val dueNextSteps = jobDao.getAll()
+        .map { jobs ->
+            val now = System.currentTimeMillis()
+            jobs.filter { it.nextStep.isNotBlank() }
+                .sortedBy { it.nextStepDueAt ?: Long.MAX_VALUE }
+                .filter { step ->
+                    val due = step.nextStepDueAt
+                    due == null || due <= now + 2 * 86_400_000L
+                }
+                .take(5)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 }

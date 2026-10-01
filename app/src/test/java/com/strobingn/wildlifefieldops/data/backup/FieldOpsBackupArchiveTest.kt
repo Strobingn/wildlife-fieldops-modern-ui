@@ -183,13 +183,13 @@ class FieldOpsBackupArchiveTest {
     }
 
     @Test
-    fun currentRoomVersionMatchesAppDatabaseV11() {
-        assertEquals(11, FieldOpsBackupFormat.CURRENT_ROOM_VERSION)
+    fun currentRoomVersionMatchesAppDatabaseV12() {
+        assertEquals(12, FieldOpsBackupFormat.CURRENT_ROOM_VERSION)
         assertEquals(FieldOpsBackupFormat.CURRENT_ROOM_VERSION, com.strobingn.wildlifefieldops.data.local.AppDatabase.VERSION)
         val last = com.strobingn.wildlifefieldops.data.local.Migrations.ALL.last()
-        assertEquals(10, last.startVersion)
-        assertEquals(11, last.endVersion)
-        assertEquals(8, com.strobingn.wildlifefieldops.data.local.Migrations.ALL.size)
+        assertEquals(11, last.startVersion)
+        assertEquals(12, last.endVersion)
+        assertEquals(9, com.strobingn.wildlifefieldops.data.local.Migrations.ALL.size)
     }
 
     private fun sampleManifest() = FieldOpsBackupManifest(

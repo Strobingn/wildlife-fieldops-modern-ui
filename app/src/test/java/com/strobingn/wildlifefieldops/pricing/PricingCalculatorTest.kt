@@ -310,4 +310,21 @@ class PricingCalculatorTest {
         val pdf = PricingCalculator.compute(local.pricing).effectiveContractTotals()
         assertEquals(850.0, pdf.total, 0.0)
     }
+
+    @Test
+    fun photoLineItemsAddToSubtotalAndStayEditable() {
+        val line = InvoiceLineItem(description = "Soffit close-up", quantity = 4.0, unit = "lf", unitPrice = 24.0)
+        val result = PricingCalculator.compute(
+            JobPricing(
+                laborHours = 0.0,
+                laborRate = 0.0,
+                taxRatePercent = 0.0,
+                photoLineItems = listOf(line)
+            )
+        )
+        assertEquals(96.00, result.subtotal.effective, 0.0)
+        assertEquals(96.00, result.total.effective, 0.0)
+        assertTrue(JobPricing(confirmedSpecies = "raccoon", nextStep = "Check traps").isEmptyWorksheet())
+        assertFalse(JobPricing(photoLineItems = listOf(line)).isEmptyWorksheet())
+    }
 }

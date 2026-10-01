@@ -254,7 +254,7 @@ fun RemoteJobDto.toLocal(existing: Job? = null): Job {
         county = existing?.county,
         state = existing?.state ?: this.state,
         pricing = resolvedPricing
-    )
+    ).let { com.strobingn.wildlifefieldops.ai.fieldops.JobFieldOpsCodec.applyFromPricing(it) }
 }
 
 fun FieldObservation.toRemoteDto(
@@ -287,6 +287,8 @@ fun Inspection.toRemoteDtoOrNull(): RemoteInspectionDto {
         put("inspector", inspectorName)
         put("weather", weatherConditions)
         put("damage", damageAssessment)
+        put("ai_narrative", aiNarrativeDraft)
+        put("ai_narrative_source", aiDraftSource)
     }
     return RemoteInspectionDto(
         id = id.ifBlank { UUID.randomUUID().toString() },

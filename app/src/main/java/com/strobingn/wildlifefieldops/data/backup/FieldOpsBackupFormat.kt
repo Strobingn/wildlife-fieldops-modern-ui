@@ -19,7 +19,7 @@ object FieldOpsBackupFormat {
     const val DATASTORE_DIR = "datastore"
     const val PENDING_ZIP = "pending_restore.zip"
     /** Matches [com.strobingn.wildlifefieldops.data.local.AppDatabase.VERSION]. */
-    const val CURRENT_ROOM_VERSION = 11
+    const val CURRENT_ROOM_VERSION = 12
     private const val SQLITE_USER_VERSION_OFFSET = 60
 
     private val gson = Gson()
