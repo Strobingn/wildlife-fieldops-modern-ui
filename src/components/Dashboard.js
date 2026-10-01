@@ -22,6 +22,30 @@ function estimateJob(j) {
   return Math.round(base * 1.35);
 }
 
+function buildJobStats(visits, repairs, photos, signatures) {
+  const visitCounts = {};
+  for (let i = 0; i < visits.length; i++) {
+    const id = visits[i].job_id || visits[i].jobId;
+    if (id) visitCounts[id] = (visitCounts[id] || 0) + 1;
+  }
+  const repairCounts = {};
+  for (let i = 0; i < repairs.length; i++) {
+    const id = repairs[i].job_id || repairs[i].jobId;
+    if (id) repairCounts[id] = (repairCounts[id] || 0) + 1;
+  }
+  const photoCounts = {};
+  for (let i = 0; i < photos.length; i++) {
+    const id = photos[i].job_id || photos[i].jobId;
+    if (id) photoCounts[id] = (photoCounts[id] || 0) + 1;
+  }
+  const sigSet = new Set();
+  for (let i = 0; i < signatures.length; i++) {
+    const id = signatures[i].job_id || signatures[i].jobId;
+    if (id) sigSet.add(id);
+  }
+  return { visitCounts, repairCounts, photoCounts, sigSet };
+}
+
 function scoreJob(j, visits, repairs, photos, signatures) {
   const v = visits.some((x) => x.job_id === j.id);
   const p = photos.some((x) => x.job_id === j.id);
@@ -117,14 +141,17 @@ export const Dashboard = {
       <!-- Recent Jobs -->
       <div class="section-title reveal">Recent Jobs</div>
       <div id="recentJobs" class="reveal delay-2">
-        ${jobs.slice(0, 5).length
-          ? jobs.slice(0, 5).map((j) => this._jobCard(j, visits, repairs, photos, signatures)).join("")
-          : `<div class="empty-state">
-              <div class="empty-icon" aria-hidden="true">🦝</div>
-              <h4>No jobs yet</h4>
-              <p>Tap the + button or "New Job" to create your first job.</p>
-             </div>`
-        }
+        ${(() => {
+          const stats = buildJobStats(visits, repairs, photos, signatures);
+          const recent = jobs.slice(0, 5);
+          return recent.length
+            ? recent.map((j) => this._jobCard(j, stats)).join("")
+            : `<div class="empty-state">
+                <div class="empty-icon" aria-hidden="true">🦝</div>
+                <h4>No jobs yet</h4>
+                <p>Tap the + button or "New Job" to create your first job.</p>
+               </div>`;
+        })()}
       </div>
 
       ${jobs.length > 5
@@ -209,13 +236,24 @@ export const Dashboard = {
   },
 
   // ─── Job Card (compact for dashboard) ───
-  _jobCard(j, visits, repairs, photos, signatures) {
+  _jobCard(j, statsOrVisits, repairs, photos, signatures) {
     const icon = SPECIES_ICONS[j.species] || "🐾";
     const sc = STATUS_STYLES[j.status] || "active";
-    const v = visits.filter((x) => x.job_id === j.id).length;
-    const r = repairs.filter((x) => x.job_id === j.id).length;
-    const p = photos.filter((x) => x.job_id === j.id).length;
-    const s = scoreJob(j, visits, repairs, photos, signatures);
+    let v, r, p, s;
+    if (statsOrVisits && typeof statsOrVisits === "object" && statsOrVisits.visitCounts) {
+      const stats = statsOrVisits;
+      v = stats.visitCounts[j.id] || 0;
+      r = stats.repairCounts[j.id] || 0;
+      p = stats.photoCounts[j.id] || 0;
+      const sig = stats.sigSet.has(j.id);
+      s = Math.min(100, (v ? 25 : 0) + (p ? 25 : 0) + (r ? 25 : 0) + (sig ? 25 : 0));
+    } else {
+      const visits = Array.isArray(statsOrVisits) ? statsOrVisits : [];
+      v = visits.filter((x) => x.job_id === j.id).length;
+      r = (repairs || []).filter((x) => x.job_id === j.id).length;
+      p = (photos || []).filter((x) => x.job_id === j.id).length;
+      s = scoreJob(j, visits, repairs || [], photos || [], signatures || []);
+    }
     const est = estimateJob(j);
 
     return /* html */ `
