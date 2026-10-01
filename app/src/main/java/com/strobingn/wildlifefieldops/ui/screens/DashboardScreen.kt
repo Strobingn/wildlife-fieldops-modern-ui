@@ -198,13 +198,13 @@ fun DashboardScreen(
                                 Text(
                                     "Today",
                                     style = MaterialTheme.typography.labelLarge,
-                                    color = Color.White.copy(alpha = 0.8f)
+                                    color = OnPrimary.copy(alpha = 0.8f)
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     "${stats.todayJobs} jobs scheduled",
                                     style = MaterialTheme.typography.titleLarge,
-                                    color = Color.White,
+                                    color = OnPrimary,
                                     fontWeight = FontWeight.Bold
                                 )
                                 if (stats.overdueJobs > 0) {
@@ -218,8 +218,8 @@ fun DashboardScreen(
                             FilledTonalButton(
                                 onClick = onNavigateToSchedule,
                                 colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = Color.White.copy(alpha = 0.18f),
-                                    contentColor = Color.White
+                                    containerColor = OnPrimary.copy(alpha = 0.18f),
+                                    contentColor = OnPrimary
                                 ),
                                 shape = FieldShapes.button
                             ) {

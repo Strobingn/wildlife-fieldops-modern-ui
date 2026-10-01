@@ -314,7 +314,7 @@ fun CustomerFormScreen(
                     onBack()
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
                 shape = RoundedCornerShape(12.dp),
                 enabled = firstName.isNotBlank() && lastName.isNotBlank()
             ) {

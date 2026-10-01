@@ -57,6 +57,9 @@ import com.strobingn.wildlifefieldops.ai.camera.ChecklistSession
 import com.strobingn.wildlifefieldops.ai.camera.LiveCameraAnalyzer
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundDark
+import com.strobingn.wildlifefieldops.ui.theme.OnPrimary
+import com.strobingn.wildlifefieldops.ui.theme.OverlayOnDark
+import com.strobingn.wildlifefieldops.ui.theme.OverlayOnDarkMuted
 import com.strobingn.wildlifefieldops.ui.theme.PrimaryGreen
 import com.strobingn.wildlifefieldops.ui.theme.TextPrimary
 import com.strobingn.wildlifefieldops.ui.theme.TextSecondary
@@ -527,7 +530,7 @@ fun LiveCaptureScreen(
                             )
                         },
                         containerColor = if (acceptReady && !busy) PrimaryGreen else Color(0xFF455A64),
-                        contentColor = if (acceptReady && !busy) Color.Black else TextPrimary
+                        contentColor = if (acceptReady && !busy) OnPrimary else OverlayOnDark
                     )
                 }
             }
@@ -685,14 +688,14 @@ private fun JobBanner(
                 Column(Modifier.weight(1f)) {
                     Text(
                         if (job != null) "Job · ${job.customerName.ifBlank { "Untitled" }}" else "No job linked",
-                        color = TextPrimary,
+                        color = OverlayOnDark,
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.labelLarge
                     )
                     Text(
                         job?.let { listOf(it.address, it.type).filter { s -> s.isNotBlank() }.joinToString(" · ") }
                             ?: "Tap work icon to attach photos to a job",
-                        color = TextSecondary,
+                        color = OverlayOnDarkMuted,
                         style = MaterialTheme.typography.labelSmall
                     )
                 }
@@ -710,7 +713,7 @@ private fun JobBanner(
             if (listening || voicePreview.isNotBlank()) {
                 Text(
                     if (listening) "Listening… $voicePreview" else "Voice · $voicePreview",
-                    color = if (listening) PrimaryGreen else TextSecondary,
+                    color = if (listening) PrimaryGreen else OverlayOnDarkMuted,
                     style = MaterialTheme.typography.labelSmall,
                     maxLines = 2
                 )
@@ -783,12 +786,12 @@ private fun ChecklistBar(
             ) {
                 Text(
                     "Guided inspection",
-                    color = TextPrimary,
+                    color = OverlayOnDark,
                     fontWeight = FontWeight.SemiBold,
                     style = MaterialTheme.typography.labelLarge
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("On", color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+                    Text("On", color = OverlayOnDarkMuted, style = MaterialTheme.typography.labelSmall)
                     Switch(
                         checked = enabled,
                         onCheckedChange = onToggle,
@@ -799,7 +802,7 @@ private fun ChecklistBar(
             if (enabled) {
                 Text(
                     session.active?.def?.hint ?: "All checklist items done",
-                    color = TextSecondary,
+                    color = OverlayOnDarkMuted,
                     style = MaterialTheme.typography.bodySmall
                 )
                 Spacer(Modifier.height(8.dp))
@@ -828,8 +831,8 @@ private fun ChecklistBar(
                             } else null,
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = PrimaryGreen.copy(alpha = 0.3f),
-                                selectedLabelColor = TextPrimary,
-                                labelColor = TextSecondary
+                                selectedLabelColor = OverlayOnDark,
+                                labelColor = OverlayOnDarkMuted
                             )
                         )
                     }
@@ -944,7 +947,7 @@ private fun SmartCaptureResultSheet(
             Spacer(Modifier.height(12.dp))
             Button(
                 onClick = onCaptureMore,
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.Black),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Done — next checklist item") }
         }
@@ -1002,7 +1005,7 @@ private fun LiveSpeciesConfirmBlock(
         Button(
             onClick = onConfirmSpecies,
             enabled = state.technicianSpeciesLabel.isNotBlank() || suggestion != null,
-            colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.Black)
+            colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
         ) {
             Text(if (state.speciesConfirmed) "Confirmed" else "Confirm ID")
         }
@@ -1060,7 +1063,7 @@ private fun GuidanceHud(
         CaptureGuidanceAction.HOLD_STEADY -> Color(0xFFFFC107)
         CaptureGuidanceAction.IMPROVE_LIGHTING -> Color(0xFFFF9800)
         CaptureGuidanceAction.MOVE_CLOSER, CaptureGuidanceAction.REFRAME -> Color(0xFF64B5F6)
-        CaptureGuidanceAction.WAIT -> TextSecondary
+        CaptureGuidanceAction.WAIT -> OverlayOnDarkMuted
     }
     Surface(
         color = Color.Black.copy(alpha = 0.72f),
@@ -1083,13 +1086,13 @@ private fun GuidanceHud(
             if (g != null) {
                 Text(
                     "action=${g.action} · reason=${g.reasonCode} · frame=${g.frameId}",
-                    color = TextSecondary,
+                    color = OverlayOnDarkMuted,
                     style = MaterialTheme.typography.labelSmall
                 )
                 Text(
                     "resultAge=${g.resultAgeFromArrivalMs}ms · analysis=${g.analysisDurationMs}ms · " +
                         "luma=${"%.0f".format(g.signals.meanLuma)} · sharp=${"%.0f".format(g.signals.sharpness)}",
-                    color = TextSecondary,
+                    color = OverlayOnDarkMuted,
                     style = MaterialTheme.typography.labelSmall
                 )
                 val overlayBits = buildString {
@@ -1130,7 +1133,7 @@ private fun GuidanceHud(
                 if (g.signals.labelHints.isNotEmpty()) {
                     Text(
                         "labels · ${g.signals.labelHints.take(4).joinToString()}",
-                        color = TextSecondary,
+                        color = OverlayOnDarkMuted,
                         style = MaterialTheme.typography.labelSmall
                     )
                 }

@@ -373,7 +373,7 @@ fun InspectionFormScreen(
                             onClick = { toggleDictate() },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (isListening) ErrorRed else AccentBlue,
-                                contentColor = Color.White
+                                contentColor = if (isListening) Color.White else OnPrimary
                             ),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.weight(1f)
@@ -420,13 +420,13 @@ fun InspectionFormScreen(
                             enabled = !reportLoading,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = AccentBlue,
-                                contentColor = Color.White
+                                contentColor = OnPrimary
                             ),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.weight(1.15f)
                         ) {
                             if (reportLoading) {
-                                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = OnPrimary)
                             } else {
                                 Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
                             }
@@ -550,7 +550,7 @@ fun InspectionFormScreen(
                                 onBack()
                             },
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
                             shape = RoundedCornerShape(12.dp),
                             enabled = customerName.isNotBlank()
                         ) {
@@ -694,13 +694,13 @@ fun InspectionFormScreen(
                         enabled = !walkthroughLoading && !reportLoading,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = AccentBlue,
-                            contentColor = Color.White
+                            contentColor = OnPrimary
                         ),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         if (walkthroughLoading) {
-                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = OnPrimary)
                             Spacer(Modifier.width(8.dp))
                             Text("Analyzing walkthrough…")
                         } else {

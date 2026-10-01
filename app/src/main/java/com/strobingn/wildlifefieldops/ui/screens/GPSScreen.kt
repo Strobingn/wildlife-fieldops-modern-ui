@@ -194,7 +194,7 @@ fun GPSScreen(
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (trackingEnabled) ErrorRed else PrimaryGreen,
-                        contentColor = if (trackingEnabled) Color.White else Color.Black
+                        contentColor = if (trackingEnabled) Color.White else OnPrimary
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {

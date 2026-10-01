@@ -10,52 +10,64 @@ object ThemeMode {
     var isDark by mutableStateOf(true)
 }
 
-private fun pick(dark: Color, light: Color): Color = if (ThemeMode.isDark) dark else light
+private fun pick(dark: Long, light: Long): Color =
+    Color(if (ThemeMode.isDark) dark else light)
 
-// Field-ops chrome stays greyscale; accent/highlight tokens are dark blue.
-// Legacy name PrimaryGreen kept for source compatibility — values are dark blue.
-val PrimaryGreen: Color get() = pick(Color(0xFF1565C0), Color(0xFF0D47A1))
-val PrimaryGreenDark: Color get() = pick(Color(0xFF0D47A1), Color(0xFF002171))
-val PrimaryGreenLight: Color get() = pick(Color(0xFF42A5F5), Color(0xFF1565C0))
-val PrimaryContainer: Color get() = pick(Color(0xFF0A2744), Color(0xFFD6E4F5))
-val OnPrimaryContainer: Color get() = pick(Color(0xFFD6E4F5), Color(0xFF0A2744))
+private fun swatch(argb: Long): Color = Color(argb)
 
-val BackgroundDark: Color get() = pick(Color(0xFF0D0D0D), Color(0xFFF6F6F6))
-val BackgroundCard: Color get() = pick(Color(0xFF171717), Color(0xFFFFFFFF))
-val BackgroundElevated: Color get() = pick(Color(0xFF222222), Color(0xFFF0F0F0))
-val SurfaceDark: Color get() = pick(Color(0xFF171717), Color(0xFFFFFFFF))
-val SurfaceVariant: Color get() = pick(Color(0xFF292929), Color(0xFFE5E5E5))
-val SurfaceBright: Color get() = pick(Color(0xFF383838), Color(0xFFFFFFFF))
+// Field-ops chrome is greyscale. Legacy name PrimaryGreen kept for source
+// compatibility — values are neutral gray (dark gray in light, light gray in dark).
+val PrimaryGreen: Color get() = pick(FieldSwatch.Dark.Primary, FieldSwatch.Light.Primary)
+val PrimaryGreenDark: Color get() = pick(FieldSwatch.Dark.PrimaryDark, FieldSwatch.Light.PrimaryDark)
+val PrimaryGreenLight: Color get() = pick(FieldSwatch.Dark.PrimaryLight, FieldSwatch.Light.PrimaryLight)
+val PrimaryContainer: Color get() = pick(FieldSwatch.Dark.PrimaryContainer, FieldSwatch.Light.PrimaryContainer)
+val OnPrimaryContainer: Color get() = pick(FieldSwatch.Dark.OnPrimaryContainer, FieldSwatch.Light.OnPrimaryContainer)
+/** Text/icons on primary fills — white on dark gray (light theme), near-black on light gray (dark theme). */
+val OnPrimary: Color get() = pick(FieldSwatch.Dark.OnPrimary, FieldSwatch.Light.OnPrimary)
 
-val TextPrimary: Color get() = pick(Color(0xFFF5F5F5), Color(0xFF111111))
-val TextSecondary: Color get() = pick(Color(0xFFBDBDBD), Color(0xFF555555))
-val TextTertiary: Color get() = pick(Color(0xFF858585), Color(0xFF727272))
+val BackgroundDark: Color get() = pick(FieldSwatch.Dark.Background, FieldSwatch.Light.Background)
+val BackgroundCard: Color get() = pick(FieldSwatch.Dark.Card, FieldSwatch.Light.Card)
+val BackgroundElevated: Color get() = pick(FieldSwatch.Dark.Elevated, FieldSwatch.Light.Elevated)
+val SurfaceDark: Color get() = pick(FieldSwatch.Dark.Card, FieldSwatch.Light.Card)
+val SurfaceVariant: Color get() = pick(FieldSwatch.Dark.SurfaceVariant, FieldSwatch.Light.SurfaceVariant)
+val SurfaceBright: Color get() = pick(FieldSwatch.Dark.SurfaceBright, FieldSwatch.Light.SurfaceBright)
 
-// Status — distinguishable greyscale luminance steps (not rainbow)
-val StatusPending: Color get() = Color(0xFFD6D6D6)
-val StatusInProgress: Color get() = Color(0xFFB8B8B8)
-val StatusCompleted: Color get() = Color(0xFFECECEC)
-val StatusCancelled: Color get() = Color(0xFF8F8F8F)
-val StatusUrgent: Color get() = Color(0xFFF8F8F8)
+val TextPrimary: Color get() = pick(FieldSwatch.Dark.OnSurface, FieldSwatch.Light.OnSurface)
+val TextSecondary: Color get() = pick(FieldSwatch.Dark.OnSurfaceVariant, FieldSwatch.Light.OnSurfaceVariant)
+val TextTertiary: Color get() = pick(FieldSwatch.Dark.OnSurfaceMuted, FieldSwatch.Light.OnSurfaceMuted)
 
-// Accents — dark blue family under existing names
-val AccentBlue: Color get() = Color(0xFF1976D2)
-val AccentPurple: Color get() = Color(0xFF1565C0)
-val AccentOrange: Color get() = Color(0xFF42A5F5)
-val AccentCyan: Color get() = Color(0xFF0288D1)
-val AccentPink: Color get() = Color(0xFF5C6BC0)
-val AccentAmber: Color get() = Color(0xFF1E88E5)
+val StatusPending: Color get() = pick(FieldSwatch.Dark.StatusPending, FieldSwatch.Light.StatusPending)
+val StatusInProgress: Color get() = pick(FieldSwatch.Dark.StatusInProgress, FieldSwatch.Light.StatusInProgress)
+val StatusCompleted: Color get() = pick(FieldSwatch.Dark.StatusCompleted, FieldSwatch.Light.StatusCompleted)
+val StatusCancelled: Color get() = pick(FieldSwatch.Dark.StatusCancelled, FieldSwatch.Light.StatusCancelled)
+val StatusUrgent: Color get() = pick(FieldSwatch.Dark.StatusUrgent, FieldSwatch.Light.StatusUrgent)
 
-val BorderDark: Color get() = pick(Color(0xFF3D3D3D), Color(0xFFBDBDBD))
-val DividerDark: Color get() = pick(Color(0xFF252525), Color(0xFFDADADA))
-val ScrimDark: Color get() = pick(Color(0xCC000000), Color(0x66000000))
+val AccentBlue: Color get() = pick(FieldSwatch.Dark.AccentBlue, FieldSwatch.Light.AccentBlue)
+val AccentPurple: Color get() = pick(FieldSwatch.Dark.AccentPurple, FieldSwatch.Light.AccentPurple)
+val AccentOrange: Color get() = pick(FieldSwatch.Dark.AccentOrange, FieldSwatch.Light.AccentOrange)
+val AccentCyan: Color get() = pick(FieldSwatch.Dark.AccentCyan, FieldSwatch.Light.AccentCyan)
+val AccentPink: Color get() = pick(FieldSwatch.Dark.AccentPink, FieldSwatch.Light.AccentPink)
+val AccentAmber: Color get() = pick(FieldSwatch.Dark.AccentAmber, FieldSwatch.Light.AccentAmber)
 
-val ErrorRed: Color get() = Color(0xFFEF5350)
-val ErrorRedDark: Color get() = Color(0xFFC62828)
-val SuccessGreen: Color get() = Color(0xFF1565C0)
-val WarningYellow: Color get() = Color(0xFF42A5F5)
-val InfoBlue: Color get() = Color(0xFF1976D2)
+val BorderDark: Color get() = pick(FieldSwatch.Dark.Outline, FieldSwatch.Light.Outline)
+val DividerDark: Color get() = pick(FieldSwatch.Dark.OutlineVariant, FieldSwatch.Light.OutlineVariant)
+val ScrimDark: Color get() = pick(FieldSwatch.Dark.Scrim, FieldSwatch.Light.Scrim)
 
-val GradientStart: Color get() = pick(Color(0xFF0A1628), Color(0xFF0D47A1))
-val GradientMid: Color get() = pick(Color(0xFF0D47A1), Color(0xFF1565C0))
-val GradientEnd: Color get() = pick(Color(0xFF1565C0), Color(0xFF42A5F5))
+val ErrorRed: Color get() = pick(FieldSwatch.Dark.Error, FieldSwatch.Light.Error)
+val ErrorRedDark: Color get() = pick(FieldSwatch.Dark.ErrorContainer, FieldSwatch.Light.Error)
+val SuccessGreen: Color get() = pick(FieldSwatch.Dark.Success, FieldSwatch.Light.Success)
+val WarningYellow: Color get() = pick(FieldSwatch.Dark.StatusUrgent, FieldSwatch.Light.StatusUrgent)
+val InfoBlue: Color get() = pick(FieldSwatch.Dark.AccentBlue, FieldSwatch.Light.AccentBlue)
+
+val GradientStart: Color get() = pick(FieldSwatch.Dark.GradientStart, FieldSwatch.Light.GradientStart)
+val GradientMid: Color get() = pick(FieldSwatch.Dark.GradientMid, FieldSwatch.Light.GradientMid)
+val GradientEnd: Color get() = pick(FieldSwatch.Dark.GradientEnd, FieldSwatch.Light.GradientEnd)
+
+/** Camera / AR / map HUDs sit on video or tiles — always light-on-dark, independent of app theme. */
+val OverlayOnDark: Color get() = swatch(FieldSwatch.OverlayOnDark)
+val OverlayOnDarkMuted: Color get() = swatch(FieldSwatch.OverlayOnDarkMuted)
+val OverlayScrim: Color get() = swatch(FieldSwatch.OverlayScrim)
+
+/** Invoice/inspection PDF paper and on-screen signature pads stay white regardless of theme. */
+val PaperWhite: Color get() = swatch(FieldSwatch.Paper)
+val OnPaper: Color get() = swatch(FieldSwatch.OnPaper)

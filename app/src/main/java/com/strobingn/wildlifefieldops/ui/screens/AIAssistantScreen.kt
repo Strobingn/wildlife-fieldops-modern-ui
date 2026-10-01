@@ -195,7 +195,7 @@ fun AIAssistantScreen(
                     enabled = inputText.isNotBlank() && !isTyping,
                     colors = IconButtonDefaults.iconButtonColors(
                         containerColor = AccentPurple,
-                        contentColor = androidx.compose.ui.graphics.Color.White,
+                        contentColor = OnPrimary,
                         disabledContainerColor = SurfaceVariant,
                         disabledContentColor = TextTertiary
                     )

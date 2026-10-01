@@ -74,7 +74,7 @@ fun ScheduleScreen(
             FloatingActionButton(
                 onClick = onNavigateToJobForm,
                 containerColor = PrimaryGreen,
-                contentColor = Color.White
+                contentColor = OnPrimary
             ) {
                 Icon(Icons.Default.Add, contentDescription = "New Job")
             }
@@ -312,7 +312,7 @@ private fun CalendarDayCell(
         Text(
             day.toString(),
             color = when {
-                isSelected -> Color.Black
+                isSelected -> OnPrimary
                 isToday -> PrimaryGreen
                 else -> TextPrimary
             },

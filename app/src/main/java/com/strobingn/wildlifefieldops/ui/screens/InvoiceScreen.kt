@@ -360,7 +360,7 @@ fun InvoiceScreen(
                 Button(
                     onClick = { showSignaturePad = true },
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue, contentColor = OnPrimary),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.Draw, contentDescription = null)
@@ -388,7 +388,7 @@ fun InvoiceScreen(
                         }
                     },
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.PictureAsPdf, contentDescription = null)
@@ -415,7 +415,7 @@ fun InvoiceScreen(
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = AccentPurple),
+                colors = ButtonDefaults.buttonColors(containerColor = AccentPurple, contentColor = OnPrimary),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(Icons.Default.Save, contentDescription = null)
@@ -730,7 +730,7 @@ private fun SignaturePadDialog(onDismiss: () -> Unit, onSave: (Bitmap) -> Unit) 
                     Text(
                         "Sign with your finger",
                         modifier = Modifier.align(Alignment.Center),
-                        color = Color.Gray.copy(alpha = 0.5f)
+                        color = Color(0xFF616161)
                     )
                 }
             }
@@ -767,7 +767,7 @@ private fun SignaturePadDialog(onDismiss: () -> Unit, onSave: (Bitmap) -> Unit) 
                     androidCanvas.drawPath(androidPath, paint)
                     onSave(bm)
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White)
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
             ) {
                 Text("Save Signature", fontWeight = FontWeight.Bold)
             }
@@ -792,7 +792,7 @@ private fun PdfShareDialog(pdfPath: String, onDismiss: () -> Unit, onShare: () -
         confirmButton = {
             Button(
                 onClick = onShare,
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White)
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
             ) {
                 Icon(Icons.Default.Share, contentDescription = null)
                 Spacer(modifier = Modifier.width(4.dp))

@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,11 +49,16 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         try {
             setContent {
                 val settingsVm: SettingsViewModel = hiltViewModel()
-                val darkTheme by settingsVm.darkTheme.collectAsState(initial = true)
+                val themePreference by settingsVm.themePreference.collectAsState(
+                    initial = ThemePreference.SYSTEM
+                )
+                val systemDark = isSystemInDarkTheme()
+                val darkTheme = themePreference.resolveIsDark(systemDark)
                 SideEffect { ThemeMode.isDark = darkTheme }
                 WildlifeFieldOpsTheme(darkTheme = darkTheme) {
                     Surface(
@@ -428,11 +435,11 @@ private fun AppDrawer(onNavigate: (String) -> Unit, onClose: () -> Unit) {
                     BrandMark(size = 48)
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Wildlife Whisperer", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
-                        Text("FieldOps · Cornwall, NY", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.75f))
+                        Text("Wildlife Whisperer", style = MaterialTheme.typography.titleLarge, color = OnPrimary, fontWeight = FontWeight.Bold)
+                        Text("FieldOps · Cornwall, NY", style = MaterialTheme.typography.bodySmall, color = OnPrimary.copy(alpha = 0.75f))
                     }
                     IconButton(onClick = onClose) {
-                        Text("✕", color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.titleMedium)
+                        Text("✕", color = OnPrimary.copy(alpha = 0.9f), style = MaterialTheme.typography.titleMedium)
                     }
                 }
             }

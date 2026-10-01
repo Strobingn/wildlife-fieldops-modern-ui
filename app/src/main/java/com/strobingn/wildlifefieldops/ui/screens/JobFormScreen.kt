@@ -136,7 +136,7 @@ fun JobFormScreen(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(onClick = onBack, colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen)) {
-                    Text("Go back", color = Color.Black)
+                    Text("Go back", color = OnPrimary)
                 }
             }
             return@Scaffold
@@ -388,14 +388,14 @@ fun JobFormScreen(
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
                 shape = RoundedCornerShape(12.dp),
                 enabled = title.isNotBlank() && !workspaceSaving
             ) {
                 if (workspaceSaving) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
-                        color = Color.Black,
+                        color = OnPrimary,
                         strokeWidth = 2.dp
                     )
                     Spacer(modifier = Modifier.width(8.dp))

@@ -3,6 +3,8 @@ package com.strobingn.wildlifefieldops.ui.theme
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -13,78 +15,78 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFF1565C0),
-    onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFF0A2744),
-    onPrimaryContainer = Color(0xFFD6E4F5),
-    secondary = Color(0xFF42A5F5),
-    onSecondary = Color(0xFF0A1628),
-    secondaryContainer = Color(0xFF0D47A1),
-    onSecondaryContainer = Color(0xFFD6E4F5),
-    tertiary = Color(0xFF64B5F6),
-    onTertiary = Color(0xFF0A1628),
-    tertiaryContainer = Color(0xFF1565C0),
-    onTertiaryContainer = Color(0xFFFFFFFF),
-    background = Color(0xFF0D0D0D),
-    onBackground = Color(0xFFF5F5F5),
-    surface = Color(0xFF171717),
-    onSurface = Color(0xFFF5F5F5),
-    surfaceVariant = Color(0xFF292929),
-    onSurfaceVariant = Color(0xFFBDBDBD),
-    surfaceBright = Color(0xFF383838),
-    surfaceContainerLowest = Color(0xFF0D0D0D),
-    surfaceContainerLow = Color(0xFF171717),
-    surfaceContainer = Color(0xFF222222),
-    surfaceContainerHigh = Color(0xFF292929),
-    surfaceContainerHighest = Color(0xFF383838),
-    error = Color(0xFFF0F0F0),
-    onError = Color(0xFF111111),
-    errorContainer = Color(0xFF292929),
-    onErrorContainer = Color(0xFFF5F5F5),
-    outline = Color(0xFF3D3D3D),
-    outlineVariant = Color(0xFF252525),
-    scrim = Color(0xCC000000),
+internal val DarkColorScheme = darkColorScheme(
+    primary = Color(FieldSwatch.Dark.Primary),
+    onPrimary = Color(FieldSwatch.Dark.OnPrimary),
+    primaryContainer = Color(FieldSwatch.Dark.PrimaryContainer),
+    onPrimaryContainer = Color(FieldSwatch.Dark.OnPrimaryContainer),
+    secondary = Color(FieldSwatch.Dark.PrimaryLight),
+    onSecondary = Color(FieldSwatch.Dark.OnPrimary),
+    secondaryContainer = Color(FieldSwatch.Dark.PrimaryDark),
+    onSecondaryContainer = Color(FieldSwatch.Dark.OnPrimary),
+    tertiary = Color(FieldSwatch.Dark.AccentCyan),
+    onTertiary = Color(FieldSwatch.Dark.OnPrimary),
+    tertiaryContainer = Color(FieldSwatch.Dark.PrimaryContainer),
+    onTertiaryContainer = Color(FieldSwatch.Dark.OnPrimaryContainer),
+    background = Color(FieldSwatch.Dark.Background),
+    onBackground = Color(FieldSwatch.Dark.OnBackground),
+    surface = Color(FieldSwatch.Dark.Card),
+    onSurface = Color(FieldSwatch.Dark.OnSurface),
+    surfaceVariant = Color(FieldSwatch.Dark.SurfaceVariant),
+    onSurfaceVariant = Color(FieldSwatch.Dark.OnSurfaceVariant),
+    surfaceBright = Color(FieldSwatch.Dark.SurfaceBright),
+    surfaceContainerLowest = Color(FieldSwatch.Dark.Background),
+    surfaceContainerLow = Color(FieldSwatch.Dark.Card),
+    surfaceContainer = Color(FieldSwatch.Dark.Elevated),
+    surfaceContainerHigh = Color(FieldSwatch.Dark.SurfaceVariant),
+    surfaceContainerHighest = Color(FieldSwatch.Dark.SurfaceBright),
+    error = Color(FieldSwatch.Dark.Error),
+    onError = Color(FieldSwatch.Dark.OnError),
+    errorContainer = Color(FieldSwatch.Dark.ErrorContainer),
+    onErrorContainer = Color(FieldSwatch.Dark.OnErrorContainer),
+    outline = Color(FieldSwatch.Dark.Outline),
+    outlineVariant = Color(FieldSwatch.Dark.OutlineVariant),
+    scrim = Color(FieldSwatch.Dark.Scrim),
     inverseSurface = Color(0xFFE5E5E5),
     inverseOnSurface = Color(0xFF111111),
-    inversePrimary = Color(0xFF1565C0)
+    inversePrimary = Color(FieldSwatch.Light.Primary)
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF0D47A1),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFD6E4F5),
-    onPrimaryContainer = Color(0xFF0A2744),
-    secondary = Color(0xFF1565C0),
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFE3F2FD),
-    onSecondaryContainer = Color(0xFF0A2744),
-    tertiary = Color(0xFF1976D2),
-    onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFBBDEFB),
-    onTertiaryContainer = Color(0xFF0A2744),
-    background = Color(0xFFF6F6F6),
-    onBackground = Color(0xFF111111),
-    surface = Color.White,
-    onSurface = Color(0xFF111111),
-    surfaceVariant = Color(0xFFE5E5E5),
-    onSurfaceVariant = Color(0xFF555555),
-    surfaceBright = Color.White,
-    surfaceContainerLowest = Color.White,
-    surfaceContainerLow = Color(0xFFF0F0F0),
-    surfaceContainer = Color(0xFFEAEAEA),
+internal val LightColorScheme = lightColorScheme(
+    primary = Color(FieldSwatch.Light.Primary),
+    onPrimary = Color(FieldSwatch.Light.OnPrimary),
+    primaryContainer = Color(FieldSwatch.Light.PrimaryContainer),
+    onPrimaryContainer = Color(FieldSwatch.Light.OnPrimaryContainer),
+    secondary = Color(FieldSwatch.Light.PrimaryLight),
+    onSecondary = Color(FieldSwatch.Light.OnPrimary),
+    secondaryContainer = Color(0xFFE0E0E0),
+    onSecondaryContainer = Color(FieldSwatch.Light.OnPrimaryContainer),
+    tertiary = Color(FieldSwatch.Light.AccentCyan),
+    onTertiary = Color(FieldSwatch.Light.OnPrimary),
+    tertiaryContainer = Color(0xFFD8D8D8),
+    onTertiaryContainer = Color(FieldSwatch.Light.OnPrimaryContainer),
+    background = Color(FieldSwatch.Light.Background),
+    onBackground = Color(FieldSwatch.Light.OnBackground),
+    surface = Color(FieldSwatch.Light.Card),
+    onSurface = Color(FieldSwatch.Light.OnSurface),
+    surfaceVariant = Color(FieldSwatch.Light.SurfaceVariant),
+    onSurfaceVariant = Color(FieldSwatch.Light.OnSurfaceVariant),
+    surfaceBright = Color(FieldSwatch.Light.SurfaceBright),
+    surfaceContainerLowest = Color(FieldSwatch.Light.Card),
+    surfaceContainerLow = Color(FieldSwatch.Light.Elevated),
+    surfaceContainer = Color(0xFFE8E8E8),
     surfaceContainerHigh = Color(0xFFE3E3E3),
-    surfaceContainerHighest = Color(0xFFDADADA),
-    error = Color(0xFF5C5C5C),
-    onError = Color.White,
-    errorContainer = Color(0xFFE5E5E5),
-    onErrorContainer = Color(0xFF111111),
-    outline = Color(0xFFBDBDBD),
-    outlineVariant = Color(0xFFDADADA),
-    scrim = Color.Black,
-    inverseSurface = Color(0xFF292929),
-    inverseOnSurface = Color(0xFFF7F7F7),
-    inversePrimary = Color(0xFF42A5F5)
+    surfaceContainerHighest = Color(0xFFDCDCDC),
+    error = Color(FieldSwatch.Light.Error),
+    onError = Color(FieldSwatch.Light.OnError),
+    errorContainer = Color(FieldSwatch.Light.ErrorContainer),
+    onErrorContainer = Color(FieldSwatch.Light.OnErrorContainer),
+    outline = Color(FieldSwatch.Light.Outline),
+    outlineVariant = Color(FieldSwatch.Light.OutlineVariant),
+    scrim = Color(FieldSwatch.Light.Scrim),
+    inverseSurface = Color(0xFF2F3133),
+    inverseOnSurface = Color(0xFFF4F6F8),
+    inversePrimary = Color(FieldSwatch.Dark.Primary)
 )
 
 private fun Context.findActivity(): Activity? {
@@ -98,12 +100,12 @@ private fun Context.findActivity(): Activity? {
 
 @Composable
 fun WildlifeFieldOpsTheme(
-    darkTheme: Boolean = true,
+    darkTheme: Boolean = isSystemInDarkTheme(),
     @Suppress("UNUSED_PARAMETER") dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     ThemeMode.isDark = darkTheme
-    // Dynamic Material You off — greyscale chrome with dark-blue primary accents.
+    // Dynamic Material You off — greyscale chrome with a gray primary in both schemes.
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
     val view = LocalView.current
@@ -111,12 +113,17 @@ fun WildlifeFieldOpsTheme(
         SideEffect {
             val activity = view.context.findActivity() ?: return@SideEffect
             val window = activity.window
+            WindowCompat.setDecorFitsSystemWindows(window, false)
             @Suppress("DEPRECATION")
-            window.statusBarColor = colorScheme.background.toArgb()
+            window.statusBarColor = Color.Transparent.toArgb()
             @Suppress("DEPRECATION")
-            window.navigationBarColor = colorScheme.surfaceContainerLow.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
-            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
+            window.navigationBarColor = Color.Transparent.toArgb()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                window.isNavigationBarContrastEnforced = false
+            }
+            val insets = WindowCompat.getInsetsController(window, view)
+            insets.isAppearanceLightStatusBars = !darkTheme
+            insets.isAppearanceLightNavigationBars = !darkTheme
         }
     }
 

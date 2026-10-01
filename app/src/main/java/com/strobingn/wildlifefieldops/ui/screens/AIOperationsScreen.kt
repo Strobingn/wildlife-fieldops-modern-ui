@@ -234,7 +234,7 @@ private fun IndividualAIToolScreen(tool: IndividualAIToolCatalog.Tool, dashboard
             Button(
                 onClick = { clipboard.setText(AnnotatedString(report)); copied = true },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = BackgroundDark)
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
             ) {
                 Text(if (copied) "Report Copied" else "Copy AI Report", fontWeight = FontWeight.Bold)
             }

@@ -20,6 +20,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.BuildConfig
+import com.strobingn.wildlifefieldops.ui.components.ThemePreferencePicker
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.SettingsViewModel
 import com.strobingn.wildlifefieldops.util.WildlifeWhispererBrand
@@ -30,7 +31,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
-    val darkTheme by viewModel.darkTheme.collectAsState(initial = true)
+    val themePreference by viewModel.themePreference.collectAsState(initial = ThemePreference.SYSTEM)
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsState(initial = true)
     val autoSync by viewModel.autoSync.collectAsState(initial = true)
     val companyName by viewModel.companyName.collectAsState(initial = "Wildlife Whisperer LLC")
@@ -143,7 +144,7 @@ fun SettingsScreen(
                 Button(
                     onClick = { showAiOperations = true },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White)
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
                 ) {
                     Icon(Icons.Default.AutoAwesome, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
@@ -214,7 +215,7 @@ fun SettingsScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = newService.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
@@ -259,7 +260,10 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
             SettingsSectionTitle("Appearance")
             SettingsCard {
-                SettingsSwitchItem("Dark Theme", "Use dark color scheme", Icons.Default.DarkMode, darkTheme, viewModel::setDarkTheme)
+                ThemePreferencePicker(
+                    selected = themePreference,
+                    onSelect = viewModel::setThemePreference
+                )
             }
             Spacer(modifier = Modifier.height(8.dp))
             SettingsSectionTitle("Notifications")
@@ -295,10 +299,10 @@ fun SettingsScreen(
                     onClick = { viewModel.triggerManualSync() },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isSyncing,
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue, contentColor = OnPrimary),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    if (isSyncing) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                    if (isSyncing) CircularProgressIndicator(Modifier.size(18.dp), color = OnPrimary, strokeWidth = 2.dp)
                     else Icon(Icons.Default.Sync, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(if (isSyncing) "Syncing…" else "Sync Now", fontWeight = FontWeight.Bold)
@@ -318,10 +322,10 @@ fun SettingsScreen(
                     onClick = { viewModel.exportData() },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isBackingUp && !isSyncing,
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    if (isBackingUp) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                    if (isBackingUp) CircularProgressIndicator(Modifier.size(18.dp), color = OnPrimary, strokeWidth = 2.dp)
                     else Icon(Icons.Default.Download, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(if (isBackingUp) "Working…" else "Export data", fontWeight = FontWeight.Bold)
