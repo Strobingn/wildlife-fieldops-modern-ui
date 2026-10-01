@@ -21,6 +21,7 @@ import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.components.ScheduleDateTimeField
 import com.strobingn.wildlifefieldops.ui.components.defaultAppointmentTime
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
+import com.strobingn.wildlifefieldops.ui.viewmodel.JobWorkspaceViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.ServiceTypesViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -29,16 +30,18 @@ fun JobFormScreen(
     jobId: String? = null,
     onBack: () -> Unit,
     viewModel: JobsViewModel = hiltViewModel(),
+    workspaceViewModel: JobWorkspaceViewModel = hiltViewModel(),
     serviceTypesViewModel: ServiceTypesViewModel = hiltViewModel()
 ) {
     val serviceTypes by serviceTypesViewModel.allTypes.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val customerDraft by workspaceViewModel.draft.collectAsState()
+    val customerQuery by workspaceViewModel.searchQuery.collectAsState()
+    val customerMatches by workspaceViewModel.matches.collectAsState()
+    val workspaceSaving by workspaceViewModel.isSaving.collectAsState()
 
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var customerId by remember { mutableStateOf("") }
-    var customerName by remember { mutableStateOf("") }
-    var address by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(DefaultServiceTypes.all.first()) }
     var selectedPriority by remember { mutableStateOf(JobPriority.MEDIUM) }
     var estimatedValue by remember { mutableStateOf("") }
@@ -51,7 +54,6 @@ fun JobFormScreen(
     var isEditing by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(jobId == null) }
     var existingJob by remember { mutableStateOf<Job?>(null) }
-    var isSaving by remember { mutableStateOf(false) }
     val appointmentTimes = remember { mutableStateListOf(defaultAppointmentTime()) }
 
     // Load job once when editing so party-entered jobs can be revised later.
@@ -67,9 +69,6 @@ fun JobFormScreen(
             existingJob = job
             title = job.title
             description = job.description
-            customerId = job.customerId
-            customerName = job.customerName
-            address = job.address
             selectedType = DefaultServiceTypes.display(job.type)
             selectedPriority = job.priority
             estimatedValue = if (job.estimatedValue > 0) job.estimatedValue.toString() else ""
@@ -83,6 +82,10 @@ fun JobFormScreen(
             if (appointmentTimes.isEmpty()) appointmentTimes.add(defaultAppointmentTime())
         }
         loaded = true
+    }
+
+    LaunchedEffect(loaded, existingJob?.id) {
+        if (loaded) workspaceViewModel.loadForJob(existingJob)
     }
 
     Scaffold(
@@ -167,27 +170,14 @@ fun JobFormScreen(
                 singleLine = true
             )
 
-            OutlinedTextField(
-                value = customerName,
-                onValueChange = { customerName = it },
-                label = { Text("Customer Name") },
-                leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = TextSecondary) },
-                colors = fieldColors(),
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                singleLine = true
-            )
-
-            OutlinedTextField(
-                value = address,
-                onValueChange = { address = it },
-                label = { Text("Address") },
-                leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = TextSecondary) },
-                colors = fieldColors(),
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
-                shape = RoundedCornerShape(12.dp),
-                singleLine = true
+            JobCustomerSection(
+                draft = customerDraft,
+                onDraftChange = workspaceViewModel::updateDraft,
+                searchQuery = customerQuery,
+                onSearchQueryChange = workspaceViewModel::searchCustomers,
+                matches = customerMatches,
+                onPickCustomer = workspaceViewModel::applyCustomer,
+                onNewCustomer = workspaceViewModel::startNewCustomer
             )
 
             // Service type + Priority
@@ -380,17 +370,13 @@ fun JobFormScreen(
 
             Button(
                 onClick = {
-                    if (title.isBlank() || isSaving) return@Button
-                    isSaving = true
+                    if (title.isBlank() || workspaceSaving) return@Button
                     val estVal = estimatedValue.toDoubleOrNull() ?: 0.0
                     val service = DefaultServiceTypes.display(selectedType)
-                    viewModel.saveJobWithSchedule(
+                    workspaceViewModel.saveJob(
                         existingJob = existingJob,
                         title = title.trim(),
                         description = description.trim(),
-                        customerId = customerId,
-                        customerName = customerName.trim(),
-                        address = address.trim(),
                         type = service,
                         priority = selectedPriority,
                         estimatedValue = estVal,
@@ -398,16 +384,15 @@ fun JobFormScreen(
                         appointmentTimes = appointmentTimes.toList(),
                         actualCost = actualCost.toDoubleOrNull()
                     ) {
-                        isSaving = false
                         onBack()
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
                 shape = RoundedCornerShape(12.dp),
-                enabled = title.isNotBlank() && !isSaving
+                enabled = title.isNotBlank() && !workspaceSaving
             ) {
-                if (isSaving) {
+                if (workspaceSaving) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
                         color = Color.Black,
@@ -420,7 +405,7 @@ fun JobFormScreen(
                 }
                 Text(
                     when {
-                        isSaving -> "Saving…"
+                        workspaceSaving -> "Saving…"
                         isEditing -> "Save changes"
                         else -> "Create Job"
                     },

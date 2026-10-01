@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Room
 import com.strobingn.wildlifefieldops.data.local.AppDatabase
 import com.strobingn.wildlifefieldops.data.local.Migrations
+import com.strobingn.wildlifefieldops.data.remote.GeocodingService
+import com.strobingn.wildlifefieldops.data.workspace.AddressGeocoder
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -28,6 +30,10 @@ object AppModule {
             // Room user_version 10 (pre-pricing) and must migrate in place to 11.
             .build()
     }
+
+    @Provides
+    fun provideAddressGeocoder(geocodingService: GeocodingService): AddressGeocoder =
+        AddressGeocoder { address -> geocodingService.geocode(address) }
 
     @Provides
     fun provideJobDao(database: AppDatabase) = database.jobDao()

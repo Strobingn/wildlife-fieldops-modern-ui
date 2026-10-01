@@ -89,7 +89,6 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     companion object {
         val bottomNavItems = listOf(Dashboard, JobList, InspectionList, Schedule, GPS)
         val drawerItems = listOf(
-            CustomerList,
             Map,
             CountyReports,
             PhotoGallery,

@@ -177,7 +177,6 @@ private fun AppNavHost(
                 onNavigateToSchedule = { navController.navigate(Screen.Schedule.route) },
                 onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) },
                 onNavigateToJobForm = { navController.navigate(Screen.JobDictate.route) },
-                onNavigateToCustomers = { navController.navigate(Screen.CustomerList.route) },
                 onNavigateToMap = { navController.navigate(Screen.Map.route) },
                 onNavigateToRoutes = { navController.navigate(Screen.RouteOptimizer.route) },
                 onNavigateToCountyReports = { navController.navigate(Screen.CountyReports.route) },

@@ -23,6 +23,7 @@ import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.components.WeatherBanner
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobAiViewModel
+import com.strobingn.wildlifefieldops.ui.viewmodel.JobWorkspaceViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.LiveWeatherViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
 import java.text.SimpleDateFormat
@@ -40,9 +41,14 @@ fun JobDetailScreen(
     onNavigateToVoiceLog: (String) -> Unit,
     onBack: () -> Unit,
     viewModel: JobsViewModel = hiltViewModel(),
+    workspaceViewModel: JobWorkspaceViewModel = hiltViewModel(),
     jobAiViewModel: JobAiViewModel = hiltViewModel()
 ) {
     val job by viewModel.getJobById(jobId).collectAsState(initial = null)
+    val customerDraft by workspaceViewModel.draft.collectAsState()
+    val customerQuery by workspaceViewModel.searchQuery.collectAsState()
+    val customerMatches by workspaceViewModel.matches.collectAsState()
+    val customerSaving by workspaceViewModel.isSaving.collectAsState()
     val summary by jobAiViewModel.summary.collectAsState()
     val summaryLoading by jobAiViewModel.summaryLoading.collectAsState()
     val aiMessage by jobAiViewModel.message.collectAsState()
@@ -53,6 +59,9 @@ fun JobDetailScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     job?.let { currentJob ->
+        LaunchedEffect(currentJob.id, currentJob.customerId) {
+            workspaceViewModel.loadForJob(currentJob)
+        }
         LaunchedEffect(currentJob.id, currentJob.latitude, currentJob.longitude, currentJob.address) {
             weatherVm.loadJobWeather(currentJob.latitude, currentJob.longitude, currentJob.address)
         }
@@ -128,13 +137,40 @@ fun JobDetailScreen(
                     }
                 }
 
-                // Customer Info
-                InfoCard(title = "Customer Information") {
-                    InfoRow(Icons.Default.Person, currentJob.customerName.ifBlank { "Not assigned" })
-                    InfoRow(Icons.Default.LocationOn, currentJob.address.ifBlank { "No address" })
-                    if (currentJob.latitude != null && currentJob.longitude != null) {
-                        InfoRow(Icons.Default.GpsFixed, "${currentJob.latitude}, ${currentJob.longitude}")
+                JobCustomerSection(
+                    draft = customerDraft,
+                    onDraftChange = workspaceViewModel::updateDraft,
+                    searchQuery = customerQuery,
+                    onSearchQueryChange = workspaceViewModel::searchCustomers,
+                    matches = customerMatches,
+                    onPickCustomer = workspaceViewModel::applyCustomer,
+                    onNewCustomer = workspaceViewModel::startNewCustomer
+                )
+                Button(
+                    onClick = { workspaceViewModel.saveCustomerOnJob(currentJob) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AccentBlue,
+                        contentColor = androidx.compose.ui.graphics.Color.White
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = !customerSaving
+                ) {
+                    if (customerSaving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = androidx.compose.ui.graphics.Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    } else {
+                        Icon(Icons.Default.Person, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
                     }
+                    Text(
+                        if (customerSaving) "Saving customer…" else "Save customer",
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
                 // Job Details

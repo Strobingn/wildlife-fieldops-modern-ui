@@ -35,10 +35,16 @@ data class Customer(
     val isSynced: Boolean = false,
     val syncError: String? = null
 ) {
+    val personName: String
+        get() = "$firstName $lastName".trim()
+
     val fullName: String
-        get() = if (companyName.isNotBlank()) {
-            "$firstName $lastName ($companyName)"
-        } else {
-            "$firstName $lastName"
+        get() {
+            val person = personName
+            return when {
+                companyName.isNotBlank() && person.isNotBlank() -> "$person ($companyName)"
+                companyName.isNotBlank() -> companyName
+                else -> person
+            }
         }
 }

@@ -7,12 +7,14 @@ import com.strobingn.wildlifefieldops.data.local.JobDao
 import com.strobingn.wildlifefieldops.data.local.VisitDao
 import com.strobingn.wildlifefieldops.data.model.DeletedRecord
 import com.strobingn.wildlifefieldops.data.model.Job
+import com.strobingn.wildlifefieldops.data.model.JobCustomerDraft
 import com.strobingn.wildlifefieldops.data.model.JobStatus
-import com.strobingn.wildlifefieldops.data.model.Visit
 import com.strobingn.wildlifefieldops.data.remote.AiService
 import com.strobingn.wildlifefieldops.data.remote.GeocodingService
 import com.strobingn.wildlifefieldops.data.remote.JobIntakeDraft
 import com.strobingn.wildlifefieldops.data.repository.SyncRepository
+import com.strobingn.wildlifefieldops.data.workspace.JobCustomerWorkspace
+import com.strobingn.wildlifefieldops.data.workspace.JobSaveRequest
 import com.strobingn.wildlifefieldops.pricing.JobPricing
 import com.strobingn.wildlifefieldops.pricing.PricingCalculator
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -27,7 +29,8 @@ class JobsViewModel @Inject constructor(
     private val deletedRecordDao: DeletedRecordDao,
     private val syncRepository: SyncRepository,
     private val geocodingService: GeocodingService,
-    private val aiService: AiService
+    private val aiService: AiService,
+    private val jobCustomerWorkspace: JobCustomerWorkspace
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -251,42 +254,28 @@ class JobsViewModel @Inject constructor(
         notes: String,
         appointmentTimes: List<Long>,
         actualCost: Double? = null,
+        customer: JobCustomerDraft? = null,
         onSaved: () -> Unit
     ) = viewModelScope.launch {
-        val base = existingJob ?: Job()
-        val nextPricing = PricingCalculator.withTypedJobTotal(base.pricing, estimatedValue.takeIf { it > 0.0 })
-        val quote = PricingCalculator.compute(nextPricing)
-        val job = base.copy(
-            title = title,
-            description = description,
+        val draft = customer ?: JobCustomerDraft(
             customerId = customerId,
-            customerName = customerName,
-            address = address,
-            type = com.strobingn.wildlifefieldops.data.model.DefaultServiceTypes.display(type),
-            priority = priority,
-            estimatedValue = quote.total.effective,
-            actualCost = actualCost ?: base.actualCost,
-            notes = notes,
-            scheduledDate = appointmentTimes.minOrNull(),
-            updatedAt = System.currentTimeMillis(),
-            isSynced = false,
-            pricing = nextPricing
+            name = customerName,
+            address = address
         )
-        val saved = withCoordinates(job)
-        jobDao.insert(saved)
-        visitDao.deletePendingForJob(job.id)
-        appointmentTimes.distinct().sorted().forEach { scheduledAt ->
-            visitDao.insert(
-                Visit(
-                    jobId = job.id,
-                    customerId = job.customerId,
-                    customerName = job.customerName,
-                    technicianName = job.assignedTo,
-                    visitDate = scheduledAt,
-                    startTime = scheduledAt
-                )
+        jobCustomerWorkspace.save(
+            JobSaveRequest(
+                existingJob = existingJob,
+                title = title,
+                description = description,
+                type = type,
+                priority = priority,
+                estimatedValue = estimatedValue,
+                notes = notes,
+                appointmentTimes = appointmentTimes,
+                actualCost = actualCost,
+                customer = draft
             )
-        }
+        )
         onSaved()
     }
 
