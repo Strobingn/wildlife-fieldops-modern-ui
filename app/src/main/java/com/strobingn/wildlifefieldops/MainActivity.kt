@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,11 +49,16 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         try {
             setContent {
                 val settingsVm: SettingsViewModel = hiltViewModel()
-                val darkTheme by settingsVm.darkTheme.collectAsState(initial = true)
+                val themePreference by settingsVm.themePreference.collectAsState(
+                    initial = ThemePreference.SYSTEM
+                )
+                val systemDark = isSystemInDarkTheme()
+                val darkTheme = themePreference.resolveIsDark(systemDark)
                 SideEffect { ThemeMode.isDark = darkTheme }
                 WildlifeFieldOpsTheme(darkTheme = darkTheme) {
                     Surface(

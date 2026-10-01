@@ -84,8 +84,10 @@ fun MapScreen(
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
     }
-    val mapStyleOptions = remember(context) {
-        runCatching { MapStyleOptions.loadRawResourceStyle(context, R.raw.map_style_grayscale) }.getOrNull()
+    val darkMap = ThemeMode.isDark
+    val mapStyleOptions = remember(context, darkMap) {
+        val styleRes = if (darkMap) R.raw.map_style_grayscale else R.raw.map_style_light
+        runCatching { MapStyleOptions.loadRawResourceStyle(context, styleRes) }.getOrNull()
     }
 
     var showSearch by remember { mutableStateOf(false) }
@@ -640,18 +642,18 @@ fun MapScreen(
                         .padding(top = if (showSearch || isOffline || hasCachedTiles) 80.dp else 16.dp)
                         .padding(horizontal = 16.dp)
                         .zIndex(2f),
-                    colors = CardDefaults.cardColors(containerColor = AccentAmber.copy(alpha = 0.92f)),
+                    colors = CardDefaults.cardColors(containerColor = OverlayScrim),
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.TouchApp, contentDescription = null, tint = Color.White)
+                        Icon(Icons.Default.TouchApp, contentDescription = null, tint = OverlayOnDark)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             "Tap the map to drop an observation pin",
-                            color = Color.White,
+                            color = OverlayOnDark,
                             style = MaterialTheme.typography.labelMedium
                         )
                     }
@@ -665,18 +667,18 @@ fun MapScreen(
                         .align(Alignment.TopCenter)
                         .padding(top = if (showSearch) 80.dp else 16.dp)
                         .padding(horizontal = 16.dp),
-                    colors = CardDefaults.cardColors(containerColor = StatusPending.copy(alpha = 0.9f)),
+                    colors = CardDefaults.cardColors(containerColor = OverlayScrim),
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.TouchApp, contentDescription = null, tint = androidx.compose.ui.graphics.Color.White)
+                        Icon(Icons.Default.TouchApp, contentDescription = null, tint = OverlayOnDark)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             "Tap map to add boundary points (${boundaryPoints.size} set)",
-                            color = androidx.compose.ui.graphics.Color.White,
+                            color = OverlayOnDark,
                             style = MaterialTheme.typography.labelMedium
                         )
                     }

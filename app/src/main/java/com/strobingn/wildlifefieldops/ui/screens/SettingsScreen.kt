@@ -20,6 +20,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.BuildConfig
+import com.strobingn.wildlifefieldops.ui.components.ThemePreferencePicker
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.SettingsViewModel
 import com.strobingn.wildlifefieldops.util.WildlifeWhispererBrand
@@ -30,7 +31,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
-    val darkTheme by viewModel.darkTheme.collectAsState(initial = true)
+    val themePreference by viewModel.themePreference.collectAsState(initial = ThemePreference.SYSTEM)
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsState(initial = true)
     val autoSync by viewModel.autoSync.collectAsState(initial = true)
     val companyName by viewModel.companyName.collectAsState(initial = "Wildlife Whisperer LLC")
@@ -259,7 +260,10 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
             SettingsSectionTitle("Appearance")
             SettingsCard {
-                SettingsSwitchItem("Dark Theme", "Use dark color scheme", Icons.Default.DarkMode, darkTheme, viewModel::setDarkTheme)
+                ThemePreferencePicker(
+                    selected = themePreference,
+                    onSelect = viewModel::setThemePreference
+                )
             }
             Spacer(modifier = Modifier.height(8.dp))
             SettingsSectionTitle("Notifications")

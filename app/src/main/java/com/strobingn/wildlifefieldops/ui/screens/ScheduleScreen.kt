@@ -312,7 +312,7 @@ private fun CalendarDayCell(
         Text(
             day.toString(),
             color = when {
-                isSelected -> Color.Black
+                isSelected -> OnPrimary
                 isToday -> PrimaryGreen
                 else -> TextPrimary
             },

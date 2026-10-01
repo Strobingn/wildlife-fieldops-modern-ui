@@ -277,7 +277,7 @@ fun JobDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = PrimaryGreen,
-                        contentColor = androidx.compose.ui.graphics.Color.Black
+                        contentColor = androidx.compose.ui.graphics.Color.White
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {

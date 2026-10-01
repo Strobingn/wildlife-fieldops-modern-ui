@@ -17,8 +17,8 @@ import androidx.compose.ui.unit.dp
 import com.strobingn.wildlifefieldops.ui.theme.*
 
 /**
- * Species icon and grayscale tone mapping.
- * Shape and luminance distinguish species without introducing color.
+ * Species icon and tone mapping. Light theme uses darker greys so chips
+ * meet WCAG AA on paper surfaces; dark theme keeps the original light greys.
  */
 object SpeciesTheme {
 
@@ -27,30 +27,44 @@ object SpeciesTheme {
         val color: Color
     )
 
-    private val styles = mapOf(
-        "Raccoon" to SpeciesStyle(Icons.Default.Pets, Color(0xFFD8D8D8)),
-        "Grey Squirrel" to SpeciesStyle(Icons.Default.Forest, Color(0xFFBEBEBE)),
-        "Red Squirrel" to SpeciesStyle(Icons.Default.Forest, Color(0xFFA8A8A8)),
-        "Flying Squirrel" to SpeciesStyle(Icons.Default.Air, Color(0xFFC8C8C8)),
-        "Bat" to SpeciesStyle(Icons.Default.NightsStay, Color(0xFFE0E0E0)),
-        "Skunk" to SpeciesStyle(Icons.Default.Warning, Color(0xFFF0F0F0)),
-        "Groundhog" to SpeciesStyle(Icons.Default.Grass, Color(0xFF969696)),
-        "Bird" to SpeciesStyle(Icons.Default.Flight, Color(0xFFCCCCCC)),
-        "Snake" to SpeciesStyle(Icons.Default.LinearScale, Color(0xFFB4B4B4)),
-        "Opossum" to SpeciesStyle(Icons.Default.Pets, Color(0xFF9C9C9C)),
-        "Rodent" to SpeciesStyle(Icons.Default.PestControl, Color(0xFF888888)),
-        "Mouse" to SpeciesStyle(Icons.Default.PestControl, Color(0xFF888888)),
-        "Rat" to SpeciesStyle(Icons.Default.PestControl, Color(0xFF747474)),
-        "Carpenter Bee" to SpeciesStyle(Icons.Default.BugReport, Color(0xFFD0D0D0)),
-        "Other" to SpeciesStyle(Icons.Default.HelpOutline, Color(0xFFAAAAAA)),
-    )
-
     fun forSpecies(species: String?): SpeciesStyle {
-        return styles[species] ?: SpeciesStyle(
-            Icons.Default.HelpOutline,
-            TextSecondary
-        )
+        val icon = when (species) {
+            "Raccoon" -> Icons.Default.Pets
+            "Grey Squirrel" -> Icons.Default.Forest
+            "Red Squirrel" -> Icons.Default.Forest
+            "Flying Squirrel" -> Icons.Default.Air
+            "Bat" -> Icons.Default.NightsStay
+            "Skunk" -> Icons.Default.Warning
+            "Groundhog" -> Icons.Default.Grass
+            "Bird" -> Icons.Default.Flight
+            "Snake" -> Icons.Default.LinearScale
+            "Opossum" -> Icons.Default.Pets
+            "Rodent", "Mouse" -> Icons.Default.PestControl
+            "Rat" -> Icons.Default.PestControl
+            "Carpenter Bee" -> Icons.Default.BugReport
+            else -> Icons.Default.HelpOutline
+        }
+        val color = when (species) {
+            "Raccoon" -> pickTone(0xFFD8D8D8, 0xFF424242)
+            "Grey Squirrel" -> pickTone(0xFFBEBEBE, 0xFF3C4043)
+            "Red Squirrel" -> pickTone(0xFFA8A8A8, 0xFF5D4037)
+            "Flying Squirrel" -> pickTone(0xFFC8C8C8, 0xFF455A64)
+            "Bat" -> pickTone(0xFFE0E0E0, 0xFF37474F)
+            "Skunk" -> pickTone(0xFFF0F0F0, 0xFF212121)
+            "Groundhog" -> pickTone(0xFF969696, 0xFF33691E)
+            "Bird" -> pickTone(0xFFCCCCCC, 0xFF1565C0)
+            "Snake" -> pickTone(0xFFB4B4B4, 0xFF4E342E)
+            "Opossum" -> pickTone(0xFF9C9C9C, 0xFF4A4A4A)
+            "Rodent", "Mouse" -> pickTone(0xFF888888, 0xFF4E342E)
+            "Rat" -> pickTone(0xFF747474, 0xFF3E2723)
+            "Carpenter Bee" -> pickTone(0xFFD0D0D0, 0xFF6D4C41)
+            else -> TextSecondary
+        }
+        return SpeciesStyle(icon, color)
     }
+
+    private fun pickTone(darkArgb: Long, lightArgb: Long): Color =
+        Color(if (ThemeMode.isDark) darkArgb else lightArgb)
 }
 
 /**

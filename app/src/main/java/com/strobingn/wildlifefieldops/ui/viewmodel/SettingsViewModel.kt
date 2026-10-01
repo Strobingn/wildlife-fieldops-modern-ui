@@ -16,6 +16,7 @@ import com.strobingn.wildlifefieldops.data.repository.SyncBacklogSnapshot
 import com.strobingn.wildlifefieldops.data.repository.SyncRepository
 import com.strobingn.wildlifefieldops.sync.work.FieldOpsSyncScheduler
 import com.strobingn.wildlifefieldops.sync.work.WorkManagerSyncCanaryFlag
+import com.strobingn.wildlifefieldops.ui.theme.ThemePreference
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,7 @@ class SettingsViewModel @Inject constructor(
     companion object {
         const val DEFAULT_TAX_PERCENT = 8.125f
         val DARK_THEME = booleanPreferencesKey("dark_theme")
+        val THEME_MODE = stringPreferencesKey("theme_mode")
         val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
         val AUTO_SYNC = booleanPreferencesKey("auto_sync")
         val SYNC_INTERVAL = intPreferencesKey("sync_interval")
@@ -87,7 +89,11 @@ class SettingsViewModel @Inject constructor(
     val lastSyncOk: StateFlow<Boolean?> = settings.map { it[LAST_SYNC_OK] }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    val darkTheme = settings.map { it[DARK_THEME] ?: true }
+    val themePreference = settings.map {
+        ThemePreference.fromPersisted(it[THEME_MODE], it[DARK_THEME])
+    }
+    /** Legacy boolean for any leftover collectors; prefer [themePreference]. */
+    val darkTheme = themePreference.map { it == ThemePreference.DARK }
     val notificationsEnabled = settings.map { it[NOTIFICATIONS_ENABLED] ?: true }
     val autoSync = settings.map { it[AUTO_SYNC] ?: true }
     val syncInterval = settings.map { it[SYNC_INTERVAL] ?: 15 }
@@ -132,9 +138,16 @@ class SettingsViewModel @Inject constructor(
         return "$cloud · $maps · $weather · $wm"
     }
 
-    fun setDarkTheme(enabled: Boolean) = viewModelScope.launch {
-        dataStore.edit { it[DARK_THEME] = enabled }
+    fun setThemePreference(preference: ThemePreference) = viewModelScope.launch {
+        dataStore.edit {
+            it[THEME_MODE] = preference.storageValue
+            it[DARK_THEME] = preference == ThemePreference.DARK
+        }
     }
+
+    fun setDarkTheme(enabled: Boolean) = setThemePreference(
+        if (enabled) ThemePreference.DARK else ThemePreference.LIGHT
+    )
 
     fun setNotificationsEnabled(enabled: Boolean) = viewModelScope.launch {
         dataStore.edit { it[NOTIFICATIONS_ENABLED] = enabled }

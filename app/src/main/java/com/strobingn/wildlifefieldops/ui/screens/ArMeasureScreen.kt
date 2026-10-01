@@ -54,6 +54,7 @@ import com.google.ar.core.Pose
 import com.strobingn.wildlifefieldops.ai.ARMeasurementHelper
 import com.strobingn.wildlifefieldops.ui.ar.ArTwoTapSurfaceView
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundDark
+import com.strobingn.wildlifefieldops.ui.theme.OnPrimary
 import com.strobingn.wildlifefieldops.ui.theme.PrimaryGreen
 import com.strobingn.wildlifefieldops.ui.theme.TextPrimary
 import com.strobingn.wildlifefieldops.ui.theme.TextSecondary
@@ -376,7 +377,7 @@ private fun TwoTapArMeasureContent(
                             onClick = { onConfirm(result) },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = PrimaryGreen,
-                                contentColor = Color.Black
+                                contentColor = OnPrimary
                             ),
                             modifier = Modifier.weight(1f)
                         ) {
@@ -401,7 +402,7 @@ private fun TwoTapArMeasureContent(
                         enabled = tracking,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = PrimaryGreen,
-                            contentColor = Color.Black
+                            contentColor = OnPrimary
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -504,7 +505,7 @@ private fun ManualArMeasureFallback(
             )
             Button(
                 onClick = { onConfirm(preview) },
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.Black),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Save measurement to capture")

@@ -730,7 +730,7 @@ private fun SignaturePadDialog(onDismiss: () -> Unit, onSave: (Bitmap) -> Unit) 
                     Text(
                         "Sign with your finger",
                         modifier = Modifier.align(Alignment.Center),
-                        color = Color.Gray.copy(alpha = 0.5f)
+                        color = Color(0xFF616161)
                     )
                 }
             }

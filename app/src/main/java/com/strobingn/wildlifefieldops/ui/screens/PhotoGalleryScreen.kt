@@ -94,7 +94,7 @@ fun PhotoGalleryScreen(
                     cameraLauncher.launch(uri)
                 },
                 containerColor = PrimaryGreen,
-                contentColor = androidx.compose.ui.graphics.Color.Black
+                contentColor = OnPrimary
             ) {
                 Icon(Icons.Default.CameraAlt, contentDescription = "Take Photo")
             }

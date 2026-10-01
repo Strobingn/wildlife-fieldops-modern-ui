@@ -136,7 +136,7 @@ fun JobFormScreen(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(onClick = onBack, colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen)) {
-                    Text("Go back", color = Color.Black)
+                    Text("Go back", color = OnPrimary)
                 }
             }
             return@Scaffold
@@ -395,7 +395,7 @@ fun JobFormScreen(
                 if (workspaceSaving) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
-                        color = Color.Black,
+                        color = OnPrimary,
                         strokeWidth = 2.dp
                     )
                     Spacer(modifier = Modifier.width(8.dp))

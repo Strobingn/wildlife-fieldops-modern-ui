@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary_green">#FF1565C0</color>
+    <color name="background_dark">#FF0D0D0D</color>
+    <color name="surface_dark">#FF171717</color>
+    <color name="text_primary">#FFF5F5F5</color>
+    <color name="text_secondary">#FFBDBDBD</color>
+    <color name="ic_launcher_background">#FF171717</color>
+    <color name="splash_background">#FF0D0D0D</color>
+    <color name="accent_purple">#FF90CAF9</color>
+    <color name="accent_blue">#FF64B5F6</color>
+    <color name="system_bar_scrim">#00000000</color>
+</resources>
