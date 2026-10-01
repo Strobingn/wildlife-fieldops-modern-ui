@@ -31,6 +31,9 @@ interface JobDao {
     @Query("SELECT * FROM jobs WHERE customerId = :customerId ORDER BY createdAt DESC")
     fun getByCustomer(customerId: String): Flow<List<Job>>
 
+    @Query("SELECT * FROM jobs WHERE customerId = :customerId ORDER BY createdAt DESC")
+    suspend fun getByCustomerOnce(customerId: String): List<Job>
+
     @Query("SELECT * FROM jobs WHERE isSynced = 0")
     suspend fun getUnsynced(): List<Job>
 

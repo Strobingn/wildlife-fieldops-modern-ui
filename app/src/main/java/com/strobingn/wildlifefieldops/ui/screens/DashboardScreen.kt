@@ -38,7 +38,6 @@ fun DashboardScreen(
     onNavigateToSchedule: () -> Unit,
     onNavigateToJobDetail: (String) -> Unit,
     onNavigateToJobForm: () -> Unit,
-    onNavigateToCustomers: () -> Unit,
     onNavigateToMap: () -> Unit,
     onNavigateToRoutes: () -> Unit,
     onNavigateToCountyReports: () -> Unit = {},
@@ -341,7 +340,7 @@ fun DashboardScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         QuickActionTile("New job", Icons.Default.AddBox, PrimaryGreen, Modifier.weight(1f), onNavigateToJobForm)
-                        QuickActionTile("Customers", Icons.Default.People, AccentPurple, Modifier.weight(1f), onNavigateToCustomers)
+                        QuickActionTile("Schedule", Icons.Default.CalendarMonth, AccentPurple, Modifier.weight(1f), onNavigateToSchedule)
                         QuickActionTile("Map", Icons.Default.Map, AccentBlue, Modifier.weight(1f), onNavigateToMap)
                     }
                     Row(

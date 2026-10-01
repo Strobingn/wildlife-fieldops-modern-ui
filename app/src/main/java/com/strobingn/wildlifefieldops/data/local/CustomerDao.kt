@@ -24,6 +24,12 @@ interface CustomerDao {
     @Query("SELECT * FROM customers WHERE firstName LIKE '%' || :query || '%' OR lastName LIKE '%' || :query || '%' OR companyName LIKE '%' || :query || '%' OR phone LIKE '%' || :query || '%' OR email LIKE '%' || :query || '%'")
     fun search(query: String): Flow<List<Customer>>
 
+    @Query("SELECT * FROM customers WHERE isActive = 1 AND (firstName LIKE '%' || :query || '%' OR lastName LIKE '%' || :query || '%' OR companyName LIKE '%' || :query || '%' OR phone LIKE '%' || :query || '%' OR email LIKE '%' || :query || '%' OR address LIKE '%' || :query || '%') ORDER BY firstName, lastName LIMIT 12")
+    suspend fun searchOnce(query: String): List<Customer>
+
+    @Query("SELECT * FROM customers WHERE id = :id")
+    fun observeById(id: String): Flow<Customer?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(customer: Customer)
 
