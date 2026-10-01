@@ -84,8 +84,8 @@ private fun DashboardThemePreview() {
                         )
                         .padding(18.dp)
                 ) {
-                    Text("Today", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelLarge)
-                    Text("3 jobs scheduled", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Today", color = OnPrimary.copy(alpha = 0.8f), style = MaterialTheme.typography.labelLarge)
+                    Text("3 jobs scheduled", color = OnPrimary, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(6.dp))
                     StatusChip(text = "1 overdue", color = StatusUrgent)
                 }
@@ -94,6 +94,14 @@ private fun DashboardThemePreview() {
                 StatPillCard("Active", 2, icon = Icons.Default.PlayCircle, color = AccentBlue, modifier = Modifier.weight(1f), onClick = {})
                 StatPillCard("Pending", 4, icon = Icons.Default.Schedule, color = StatusPending, modifier = Modifier.weight(1f), onClick = {})
                 StatPillCard("Done", 8, icon = Icons.Default.CheckCircle, color = SuccessGreen, modifier = Modifier.weight(1f), onClick = {})
+            }
+            Surface(shape = FieldShapes.button, color = PrimaryGreen, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "New job",
+                    color = OnPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                )
             }
         }
     }

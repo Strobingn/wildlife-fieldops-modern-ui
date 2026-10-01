@@ -200,7 +200,7 @@ fun JobVoiceIntakePanel(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (aiFillLoading) {
-                    CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                    CircularProgressIndicator(Modifier.size(18.dp), color = OnPrimary, strokeWidth = 2.dp)
                     Spacer(Modifier.width(8.dp))
                 } else {
                     Icon(Icons.Default.AutoAwesome, contentDescription = null)

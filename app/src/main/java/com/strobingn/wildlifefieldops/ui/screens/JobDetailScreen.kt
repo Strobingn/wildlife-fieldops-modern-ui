@@ -245,7 +245,7 @@ fun JobDetailScreen(
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = AccentBlue,
-                                contentColor = androidx.compose.ui.graphics.Color.White
+                                contentColor = OnPrimary
                             )
                         ) {
                             Icon(Icons.Default.Calculate, contentDescription = null, modifier = Modifier.size(18.dp))

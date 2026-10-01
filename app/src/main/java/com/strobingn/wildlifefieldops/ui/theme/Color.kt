@@ -15,15 +15,15 @@ private fun pick(dark: Long, light: Long): Color =
 
 private fun swatch(argb: Long): Color = Color(argb)
 
-// Field-ops chrome stays greyscale in dark; light is paper + navy. Legacy name
-// PrimaryGreen kept for source compatibility — values are Wildlife Whisperer navy.
+// Field-ops chrome is greyscale. Legacy name PrimaryGreen kept for source
+// compatibility — values are neutral gray (dark gray in light, light gray in dark).
 val PrimaryGreen: Color get() = pick(FieldSwatch.Dark.Primary, FieldSwatch.Light.Primary)
 val PrimaryGreenDark: Color get() = pick(FieldSwatch.Dark.PrimaryDark, FieldSwatch.Light.PrimaryDark)
 val PrimaryGreenLight: Color get() = pick(FieldSwatch.Dark.PrimaryLight, FieldSwatch.Light.PrimaryLight)
 val PrimaryContainer: Color get() = pick(FieldSwatch.Dark.PrimaryContainer, FieldSwatch.Light.PrimaryContainer)
 val OnPrimaryContainer: Color get() = pick(FieldSwatch.Dark.OnPrimaryContainer, FieldSwatch.Light.OnPrimaryContainer)
-/** Text/icons on [PrimaryGreen] buttons — navy is dark in both schemes. */
-val OnPrimary: Color get() = swatch(FieldSwatch.OnPrimary)
+/** Text/icons on primary fills — white on dark gray (light theme), near-black on light gray (dark theme). */
+val OnPrimary: Color get() = pick(FieldSwatch.Dark.OnPrimary, FieldSwatch.Light.OnPrimary)
 
 val BackgroundDark: Color get() = pick(FieldSwatch.Dark.Background, FieldSwatch.Light.Background)
 val BackgroundCard: Color get() = pick(FieldSwatch.Dark.Card, FieldSwatch.Light.Card)
@@ -56,7 +56,7 @@ val ScrimDark: Color get() = pick(FieldSwatch.Dark.Scrim, FieldSwatch.Light.Scri
 val ErrorRed: Color get() = pick(FieldSwatch.Dark.Error, FieldSwatch.Light.Error)
 val ErrorRedDark: Color get() = pick(FieldSwatch.Dark.ErrorContainer, FieldSwatch.Light.Error)
 val SuccessGreen: Color get() = pick(FieldSwatch.Dark.Success, FieldSwatch.Light.Success)
-val WarningYellow: Color get() = pick(FieldSwatch.Dark.AccentOrange, FieldSwatch.Light.AccentOrange)
+val WarningYellow: Color get() = pick(FieldSwatch.Dark.StatusUrgent, FieldSwatch.Light.StatusUrgent)
 val InfoBlue: Color get() = pick(FieldSwatch.Dark.AccentBlue, FieldSwatch.Light.AccentBlue)
 
 val GradientStart: Color get() = pick(FieldSwatch.Dark.GradientStart, FieldSwatch.Light.GradientStart)

@@ -52,7 +52,7 @@ fun ExpenseScreen(
             FloatingActionButton(
                 onClick = { showAddDialog = true },
                 containerColor = PrimaryGreen,
-                contentColor = Color.White
+                contentColor = OnPrimary
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Expense")
             }
@@ -326,7 +326,7 @@ private fun AddExpenseDialog(
                         onSave(selectedCategory, description, amt, t, System.currentTimeMillis(), vendor, mil, notes)
                     }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
                 enabled = description.isNotBlank() && amount.isNotBlank()
             ) {
                 Text("Save", fontWeight = FontWeight.Bold)

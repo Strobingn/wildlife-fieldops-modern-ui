@@ -17,17 +17,17 @@ import androidx.core.view.WindowCompat
 
 internal val DarkColorScheme = darkColorScheme(
     primary = Color(FieldSwatch.Dark.Primary),
-    onPrimary = Color(FieldSwatch.OnPrimary),
+    onPrimary = Color(FieldSwatch.Dark.OnPrimary),
     primaryContainer = Color(FieldSwatch.Dark.PrimaryContainer),
     onPrimaryContainer = Color(FieldSwatch.Dark.OnPrimaryContainer),
     secondary = Color(FieldSwatch.Dark.PrimaryLight),
-    onSecondary = Color(0xFF0A1628),
+    onSecondary = Color(FieldSwatch.Dark.OnPrimary),
     secondaryContainer = Color(FieldSwatch.Dark.PrimaryDark),
-    onSecondaryContainer = Color(FieldSwatch.Dark.OnPrimaryContainer),
+    onSecondaryContainer = Color(FieldSwatch.Dark.OnPrimary),
     tertiary = Color(FieldSwatch.Dark.AccentCyan),
-    onTertiary = Color(0xFF0A1628),
-    tertiaryContainer = Color(FieldSwatch.Dark.Primary),
-    onTertiaryContainer = Color(FieldSwatch.OnPrimary),
+    onTertiary = Color(FieldSwatch.Dark.OnPrimary),
+    tertiaryContainer = Color(FieldSwatch.Dark.PrimaryContainer),
+    onTertiaryContainer = Color(FieldSwatch.Dark.OnPrimaryContainer),
     background = Color(FieldSwatch.Dark.Background),
     onBackground = Color(FieldSwatch.Dark.OnBackground),
     surface = Color(FieldSwatch.Dark.Card),
@@ -49,21 +49,21 @@ internal val DarkColorScheme = darkColorScheme(
     scrim = Color(FieldSwatch.Dark.Scrim),
     inverseSurface = Color(0xFFE5E5E5),
     inverseOnSurface = Color(0xFF111111),
-    inversePrimary = Color(FieldSwatch.Dark.PrimaryLight)
+    inversePrimary = Color(FieldSwatch.Light.Primary)
 )
 
 internal val LightColorScheme = lightColorScheme(
     primary = Color(FieldSwatch.Light.Primary),
-    onPrimary = Color(FieldSwatch.OnPrimary),
+    onPrimary = Color(FieldSwatch.Light.OnPrimary),
     primaryContainer = Color(FieldSwatch.Light.PrimaryContainer),
     onPrimaryContainer = Color(FieldSwatch.Light.OnPrimaryContainer),
     secondary = Color(FieldSwatch.Light.PrimaryLight),
-    onSecondary = Color(FieldSwatch.OnPrimary),
-    secondaryContainer = Color(0xFFE3F2FD),
+    onSecondary = Color(FieldSwatch.Light.OnPrimary),
+    secondaryContainer = Color(0xFFE0E0E0),
     onSecondaryContainer = Color(FieldSwatch.Light.OnPrimaryContainer),
-    tertiary = Color(0xFF1976D2),
-    onTertiary = Color(FieldSwatch.OnPrimary),
-    tertiaryContainer = Color(0xFFBBDEFB),
+    tertiary = Color(FieldSwatch.Light.AccentCyan),
+    onTertiary = Color(FieldSwatch.Light.OnPrimary),
+    tertiaryContainer = Color(0xFFD8D8D8),
     onTertiaryContainer = Color(FieldSwatch.Light.OnPrimaryContainer),
     background = Color(FieldSwatch.Light.Background),
     onBackground = Color(FieldSwatch.Light.OnBackground),
@@ -74,9 +74,9 @@ internal val LightColorScheme = lightColorScheme(
     surfaceBright = Color(FieldSwatch.Light.SurfaceBright),
     surfaceContainerLowest = Color(FieldSwatch.Light.Card),
     surfaceContainerLow = Color(FieldSwatch.Light.Elevated),
-    surfaceContainer = Color(0xFFE8ECF0),
-    surfaceContainerHigh = Color(0xFFE3E7ED),
-    surfaceContainerHighest = Color(0xFFDCE0E6),
+    surfaceContainer = Color(0xFFE8E8E8),
+    surfaceContainerHigh = Color(0xFFE3E3E3),
+    surfaceContainerHighest = Color(0xFFDCDCDC),
     error = Color(FieldSwatch.Light.Error),
     onError = Color(FieldSwatch.Light.OnError),
     errorContainer = Color(FieldSwatch.Light.ErrorContainer),
@@ -86,7 +86,7 @@ internal val LightColorScheme = lightColorScheme(
     scrim = Color(FieldSwatch.Light.Scrim),
     inverseSurface = Color(0xFF2F3133),
     inverseOnSurface = Color(0xFFF4F6F8),
-    inversePrimary = Color(FieldSwatch.Dark.PrimaryLight)
+    inversePrimary = Color(FieldSwatch.Dark.Primary)
 )
 
 private fun Context.findActivity(): Activity? {
@@ -105,8 +105,7 @@ fun WildlifeFieldOpsTheme(
     content: @Composable () -> Unit
 ) {
     ThemeMode.isDark = darkTheme
-    // Dynamic Material You off — greyscale chrome (dark) / paper chrome (light)
-    // with Wildlife Whisperer navy primary.
+    // Dynamic Material You off — greyscale chrome with a gray primary in both schemes.
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
     val view = LocalView.current

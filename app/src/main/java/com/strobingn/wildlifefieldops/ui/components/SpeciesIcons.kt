@@ -52,7 +52,7 @@ object SpeciesTheme {
             "Bat" -> pickTone(0xFFE0E0E0, 0xFF37474F)
             "Skunk" -> pickTone(0xFFF0F0F0, 0xFF212121)
             "Groundhog" -> pickTone(0xFF969696, 0xFF33691E)
-            "Bird" -> pickTone(0xFFCCCCCC, 0xFF1565C0)
+            "Bird" -> pickTone(0xFFCCCCCC, 0xFF455A64)
             "Snake" -> pickTone(0xFFB4B4B4, 0xFF4E342E)
             "Opossum" -> pickTone(0xFF9C9C9C, 0xFF4A4A4A)
             "Rodent", "Mouse" -> pickTone(0xFF888888, 0xFF4E342E)

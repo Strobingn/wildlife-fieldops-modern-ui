@@ -144,7 +144,7 @@ fun SettingsScreen(
                 Button(
                     onClick = { showAiOperations = true },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White)
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
                 ) {
                     Icon(Icons.Default.AutoAwesome, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
@@ -215,7 +215,7 @@ fun SettingsScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = newService.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
@@ -299,10 +299,10 @@ fun SettingsScreen(
                     onClick = { viewModel.triggerManualSync() },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isSyncing,
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue, contentColor = OnPrimary),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    if (isSyncing) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                    if (isSyncing) CircularProgressIndicator(Modifier.size(18.dp), color = OnPrimary, strokeWidth = 2.dp)
                     else Icon(Icons.Default.Sync, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(if (isSyncing) "Syncing…" else "Sync Now", fontWeight = FontWeight.Bold)
@@ -322,10 +322,10 @@ fun SettingsScreen(
                     onClick = { viewModel.exportData() },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isBackingUp && !isSyncing,
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    if (isBackingUp) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                    if (isBackingUp) CircularProgressIndicator(Modifier.size(18.dp), color = OnPrimary, strokeWidth = 2.dp)
                     else Icon(Icons.Default.Download, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(if (isBackingUp) "Working…" else "Export data", fontWeight = FontWeight.Bold)

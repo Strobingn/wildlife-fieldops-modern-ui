@@ -60,6 +60,7 @@ import com.strobingn.wildlifefieldops.ui.theme.AccentPurple
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundCard
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundDark
 import com.strobingn.wildlifefieldops.ui.theme.BorderDark
+import com.strobingn.wildlifefieldops.ui.theme.OnPrimary
 import com.strobingn.wildlifefieldops.ui.theme.PrimaryGreen
 import com.strobingn.wildlifefieldops.ui.theme.TextPrimary
 import com.strobingn.wildlifefieldops.ui.theme.TextSecondary
@@ -239,11 +240,11 @@ fun EstimateScreen(
                 onClick = { job?.let { jobAiViewModel.draftEstimate(it) } },
                 enabled = job != null && !estimateLoading,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = AccentPurple, contentColor = Color.White),
+                colors = ButtonDefaults.buttonColors(containerColor = AccentPurple, contentColor = OnPrimary),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 if (estimateLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = OnPrimary, strokeWidth = 2.dp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Looking up miles + drafting…")
                 } else {
@@ -428,7 +429,7 @@ fun EstimateScreen(
                         showPdfShare = true
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.PictureAsPdf, contentDescription = null)
