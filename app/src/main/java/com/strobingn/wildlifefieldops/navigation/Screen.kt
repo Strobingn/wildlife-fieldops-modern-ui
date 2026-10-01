@@ -59,6 +59,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
 
     // Other Screens
     object Map : Screen("map", "Property Map", Icons.Default.Map)
+    object TrapChecks : Screen("trap_checks", "Trap checks", Icons.Default.PestControl)
     object Invoice : Screen("invoice/{jobId}", "Invoice") {
         fun createRoute(jobId: String) = "invoice/$jobId"
     }
@@ -90,6 +91,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
         val bottomNavItems = listOf(Dashboard, JobList, InspectionList, Schedule, GPS)
         val drawerItems = listOf(
             Map,
+            TrapChecks,
             CountyReports,
             PhotoGallery,
             LiveCapture,

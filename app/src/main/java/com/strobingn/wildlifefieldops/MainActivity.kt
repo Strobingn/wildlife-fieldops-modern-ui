@@ -189,6 +189,7 @@ private fun AppNavHost(
                 onNavigateToCountyReports = { navController.navigate(Screen.CountyReports.route) },
                 onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                 onNavigateToAI = { navController.navigate(Screen.AIAssistant.route) },
+                onNavigateToTrapChecks = { navController.navigate(Screen.TrapChecks.route) },
                 onOpenDrawer = onOpenDrawer
             )
         }
@@ -210,6 +211,7 @@ private fun AppNavHost(
                 onNavigateToInspectionForm = { jid -> navController.navigate(Screen.InspectionForm.createRoute(jobId = jid)) },
                 onNavigateToLiveCapture = { jid -> navController.navigate(Screen.LiveCapture.createRoute(jobId = jid)) },
                 onNavigateToVoiceLog = { jid -> navController.navigate(Screen.VoiceLog.createRoute(jobId = jid)) },
+                onNavigateToTrapChecks = { navController.navigate(Screen.TrapChecks.route) },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -297,6 +299,12 @@ private fun AppNavHost(
         }
         composable(Screen.Map.route) {
             MapScreen(onBack = { navController.popBackStack() }, onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) })
+        }
+        composable(Screen.TrapChecks.route) {
+            TrapCheckScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) }
+            )
         }
         composable(Screen.CountyReports.route) {
             CountyReportScreen(onBack = { navController.popBackStack() })

@@ -26,7 +26,8 @@ class DashboardViewModel @Inject constructor(
     private val jobDao: JobDao,
     private val customerDao: CustomerDao,
     private val inspectionDao: InspectionDao,
-    private val reminderDao: ReminderDao
+    private val reminderDao: ReminderDao,
+    private val trapLogDao: TrapLogDao
 ) : ViewModel() {
 
     private val _isLoading = MutableStateFlow(true)
@@ -89,4 +90,11 @@ class DashboardViewModel @Inject constructor(
                 .take(5)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val dueTrapChecks = combine(trapLogDao.getAll(), jobDao.getAll()) { traps, jobs ->
+        val titles = jobs.associate { it.id to it.title.ifBlank { it.customerName } }
+        com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckPlanner.todaysList(traps)
+            .map { item -> item.copy(jobTitle = titles[item.trap.jobId].orEmpty()) }
+            .take(5)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 }

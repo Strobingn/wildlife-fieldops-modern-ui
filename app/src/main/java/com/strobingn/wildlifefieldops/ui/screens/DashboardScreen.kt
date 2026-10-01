@@ -44,6 +44,7 @@ fun DashboardScreen(
     onNavigateToCountyReports: () -> Unit = {},
     onNavigateToSettings: () -> Unit,
     onNavigateToAI: () -> Unit,
+    onNavigateToTrapChecks: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
@@ -51,6 +52,7 @@ fun DashboardScreen(
     val recentJobs by viewModel.recentJobs.collectAsState()
     val reminders by viewModel.pendingReminders.collectAsState()
     val dueNextSteps by viewModel.dueNextSteps.collectAsState()
+    val dueTrapChecks by viewModel.dueTrapChecks.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val weatherVm: LiveWeatherViewModel = hiltViewModel()
     val weatherState by weatherVm.state.collectAsState()
@@ -388,6 +390,42 @@ fun DashboardScreen(
                             job = job,
                             onClick = { onNavigateToJobDetail(job.id) }
                         )
+                    }
+                }
+            }
+
+            if (dueTrapChecks.isNotEmpty()) {
+                item {
+                    SectionHeader(title = "Trap checks due")
+                }
+                items(dueTrapChecks) { item ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (item.trap.jobId.isNotBlank()) onNavigateToJobDetail(item.trap.jobId)
+                                else onNavigateToTrapChecks()
+                            },
+                        colors = CardDefaults.cardColors(containerColor = BackgroundCard),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                item.trap.trapId.ifBlank { "Trap" } + " · " + item.trap.status.name.replace('_', ' '),
+                                color = TextPrimary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            if (item.jobTitle.isNotBlank()) {
+                                Text(item.jobTitle, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                            } else if (item.trap.trapLocation.isNotBlank()) {
+                                Text(item.trap.trapLocation, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                            }
+                            Text(
+                                item.dueState.name.replace('_', ' '),
+                                color = TextTertiary,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
                     }
                 }
             }

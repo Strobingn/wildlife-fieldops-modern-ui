@@ -325,6 +325,13 @@ class PricingCalculatorTest {
         assertEquals(96.00, result.subtotal.effective, 0.0)
         assertEquals(96.00, result.total.effective, 0.0)
         assertTrue(JobPricing(confirmedSpecies = "raccoon", nextStep = "Check traps").isEmptyWorksheet())
+        assertTrue(
+            JobPricing(
+                weatherTrapAdvice = "Check after rain",
+                followUpKind = "TRAP_PULL",
+                trapRecords = listOf(SyncedTrapRecord(id = "t1", trapId = "Deck"))
+            ).isEmptyWorksheet()
+        )
         assertFalse(JobPricing(photoLineItems = listOf(line)).isEmptyWorksheet())
     }
 }

@@ -73,8 +73,12 @@ fun MapScreen(
     val cacheProgress by viewModel.cacheProgress.collectAsState()
     val cacheMessage by viewModel.cacheMessage.collectAsState()
     val observations by viewModel.observations.collectAsState()
+    val traps by viewModel.traps.collectAsState()
     val isObserving by viewModel.isObserving.collectAsState()
+    val isPlacingTrap by viewModel.isPlacingTrap.collectAsState()
     val pendingPin by viewModel.pendingPin.collectAsState()
+    val pendingTrapPin by viewModel.pendingTrapPin.collectAsState()
+    val jobsForTrap by viewModel.jobsForTrapPin.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     val mapApiKeyConfigured = BuildConfig.GOOGLE_MAPS_API_KEY.trim().let { key ->
@@ -354,12 +358,37 @@ fun MapScreen(
                     }
                 }
 
+                traps.filter { it.latitude != null && it.longitude != null }.forEach { trap ->
+                    key(trap.id) {
+                        val overdue = trap.nextCheckDate != null && trap.nextCheckDate < System.currentTimeMillis()
+                        Marker(
+                            state = MarkerState(position = LatLng(trap.latitude!!, trap.longitude!!)),
+                            title = trap.trapId.ifBlank { "Trap" } + " · " + trap.status.name.replace('_', ' '),
+                            snippet = trap.trapLocation.ifBlank { "Trap pin" },
+                            icon = remember(trap.id, overdue) { createTrapMarkerIcon(overdue) },
+                            onClick = {
+                                if (trap.jobId.isNotBlank()) onNavigateToJobDetail(trap.jobId)
+                                true
+                            }
+                        )
+                    }
+                }
+
                 pendingPin?.let { pin ->
                     Marker(
                         state = MarkerState(position = pin),
                         title = "New observation",
                         snippet = "Add a note and optional photo",
                         icon = remember { createObservationMarkerIcon(false) }
+                    )
+                }
+
+                pendingTrapPin?.let { pin ->
+                    Marker(
+                        state = MarkerState(position = pin),
+                        title = "New trap",
+                        snippet = "Pick the job and save the pin",
+                        icon = remember { createTrapMarkerIcon(false) }
                     )
                 }
 
@@ -454,7 +483,7 @@ fun MapScreen(
             }
 
             // Bottom Controls
-            if (showControls && pendingPin == null) {
+            if (showControls && pendingPin == null && pendingTrapPin == null) {
                 Card(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -466,7 +495,7 @@ fun MapScreen(
                     Column(modifier = Modifier.padding(12.dp)) {
                         // Property count
                         Text(
-                            "${visibleProperties.size} jobs · ${observations.size} observations · $unlocatedJobCount without coordinates",
+                            "${visibleProperties.size} jobs · ${traps.size} traps · ${observations.size} observations · $unlocatedJobCount without coordinates",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextTertiary,
                             modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
@@ -540,6 +569,14 @@ fun MapScreen(
                                 active = isObserving,
                                 modifier = Modifier.weight(1f),
                                 onClick = { viewModel.toggleObserveMode() }
+                            )
+
+                            MapControlButton(
+                                label = if (isPlacingTrap) "Trap pin…" else "Trap pin",
+                                icon = Icons.Default.PestControl,
+                                active = isPlacingTrap,
+                                modifier = Modifier.weight(1f),
+                                onClick = { viewModel.togglePlaceTrapMode() }
                             )
 
                             MapControlButton(
@@ -633,6 +670,46 @@ fun MapScreen(
                         pendingPhotoUri = null
                     }
                 )
+            }
+
+            if (pendingTrapPin != null) {
+                TrapPinComposerCard(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                        .zIndex(3f),
+                    jobs = jobsForTrap,
+                    onCancel = { viewModel.cancelPendingTrap() },
+                    onSave = { jobId, trapId, location ->
+                        viewModel.saveTrapPin(jobId, trapId, location)
+                    }
+                )
+            }
+
+            if (isPlacingTrap && pendingTrapPin == null) {
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = if (showSearch || isOffline || hasCachedTiles) 80.dp else 16.dp)
+                        .padding(horizontal = 16.dp)
+                        .zIndex(2f),
+                    colors = CardDefaults.cardColors(containerColor = OverlayScrim),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.PestControl, contentDescription = null, tint = OverlayOnDark)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Tap the map to drop a trap pin",
+                            color = OverlayOnDark,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
             }
 
             if (isObserving && pendingPin == null) {
@@ -871,6 +948,93 @@ internal fun SpeciesIdConfirmBlock(
             colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen)
         ) {
             Text(if (speciesId.confirmed) "Confirmed" else "Confirm ID")
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TrapPinComposerCard(
+    modifier: Modifier = Modifier,
+    jobs: List<com.strobingn.wildlifefieldops.data.model.Job>,
+    onCancel: () -> Unit,
+    onSave: (jobId: String, trapId: String, location: String) -> Unit
+) {
+    var jobId by remember { mutableStateOf(jobs.firstOrNull()?.id.orEmpty()) }
+    var trapId by remember { mutableStateOf("") }
+    var location by remember { mutableStateOf("") }
+    var jobOpen by remember { mutableStateOf(false) }
+    val selected = jobs.find { it.id == jobId }
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = BackgroundCard),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Place trap pin", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+            ExposedDropdownMenuBox(expanded = jobOpen, onExpandedChange = { jobOpen = it }) {
+                OutlinedTextField(
+                    value = selected?.title?.ifBlank { selected.customerName }.orEmpty().ifBlank { "Select job" },
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Job") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(jobOpen) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryGreen,
+                        unfocusedBorderColor = BorderDark,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary
+                    )
+                )
+                ExposedDropdownMenu(expanded = jobOpen, onDismissRequest = { jobOpen = false }) {
+                    jobs.forEach { job ->
+                        DropdownMenuItem(
+                            text = { Text(job.title.ifBlank { job.customerName }.ifBlank { job.id }) },
+                            onClick = {
+                                jobId = job.id
+                                if (location.isBlank()) location = job.address
+                                jobOpen = false
+                            }
+                        )
+                    }
+                }
+            }
+            OutlinedTextField(
+                value = trapId,
+                onValueChange = { trapId = it },
+                label = { Text("Trap ID / tag") },
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = PrimaryGreen,
+                    unfocusedBorderColor = BorderDark,
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary
+                )
+            )
+            OutlinedTextField(
+                value = location,
+                onValueChange = { location = it },
+                label = { Text("Location on property") },
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = PrimaryGreen,
+                    unfocusedBorderColor = BorderDark,
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary
+                )
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Cancel") }
+                Button(
+                    onClick = { onSave(jobId, trapId, location) },
+                    enabled = jobId.isNotBlank(),
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
+                ) { Text("Save pin") }
+            }
         }
     }
 }

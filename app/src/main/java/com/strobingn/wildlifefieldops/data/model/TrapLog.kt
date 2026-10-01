@@ -35,6 +35,10 @@ data class TrapLog(
     val nextCheckDate: Long? = null,
     val weatherConditions: String = "",
     val temperature: Float? = null,
+    /** NY DEC disposition (released / relocated / euthanized / empty / …). */
+    val disposition: String = "",
+    /** Take method (live cage, one-way, hand catch, …). */
+    val method: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val isSynced: Boolean = false

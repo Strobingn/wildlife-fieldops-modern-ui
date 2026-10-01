@@ -50,3 +50,22 @@ internal fun createObservationMarkerIcon(synced: Boolean): BitmapDescriptor {
     canvas.drawCircle(cx, cy, size * 0.28f, fill)
     return BitmapDescriptorFactory.fromBitmap(bitmap)
 }
+
+internal fun createTrapMarkerIcon(overdue: Boolean): BitmapDescriptor {
+    val size = 56
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val cx = size / 2f
+    val cy = size / 2f
+    val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
+    val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = if (overdue) {
+            android.graphics.Color.rgb(120, 120, 120)
+        } else {
+            android.graphics.Color.rgb(84, 84, 84)
+        }
+    }
+    canvas.drawCircle(cx, cy, size * 0.40f, ring)
+    canvas.drawRect(cx - size * 0.18f, cy - size * 0.18f, cx + size * 0.18f, cy + size * 0.18f, fill)
+    return BitmapDescriptorFactory.fromBitmap(bitmap)
+}

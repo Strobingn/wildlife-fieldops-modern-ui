@@ -19,11 +19,16 @@ class JobFieldOpsCodecTest {
             nextStep = "Check the deck trap",
             nextStepDueAt = 50L,
             nextStepSource = "heuristic",
-            aiRuntime = "heuristic"
+            aiRuntime = "heuristic",
+            weatherTrapAdvice = "Check after the rain",
+            followUpKind = "TRAP_PULL",
+            followUpNotes = "Pull the deck cage"
         )
         val saved = JobFieldOpsCodec.mergeForSave(job)
         assertEquals("raccoon", saved.pricing.confirmedSpecies)
         assertEquals("Check the deck trap", saved.pricing.nextStep)
+        assertEquals("Check after the rain", saved.pricing.weatherTrapAdvice)
+        assertEquals("TRAP_PULL", saved.pricing.followUpKind)
         val roundTrip = PricingJson.decode(PricingJson.encode(saved.pricing))
         assertEquals("raccoon", roundTrip.confirmedSpecies)
         assertEquals(50L, roundTrip.nextStepDueAt)
@@ -34,12 +39,16 @@ class JobFieldOpsCodecTest {
         val pricing = JobPricing(
             confirmedSpecies = "bat",
             nextStep = "One-way at the ridge",
-            photoLineItems = listOf(InvoiceLineItem(description = "Cone", quantity = 1.0, unitPrice = 85.0))
+            photoLineItems = listOf(InvoiceLineItem(description = "Cone", quantity = 1.0, unitPrice = 85.0)),
+            weatherTrapAdvice = "Check at dawn",
+            followUpKind = "EXCLUSION"
         )
         val job = JobFieldOpsCodec.applyFromPricing(Job(pricing = pricing))
         assertEquals("bat", job.confirmedSpecies)
         assertEquals("One-way at the ridge", job.nextStep)
         assertEquals(1, job.pricing.photoLineItems.size)
+        assertEquals("Check at dawn", job.weatherTrapAdvice)
+        assertEquals("EXCLUSION", job.followUpKind)
     }
 
     @Test

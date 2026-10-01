@@ -42,10 +42,12 @@ fun JobDetailScreen(
     onNavigateToInspectionForm: (String) -> Unit,
     onNavigateToLiveCapture: (String) -> Unit,
     onNavigateToVoiceLog: (String) -> Unit,
+    onNavigateToTrapChecks: () -> Unit = {},
     onBack: () -> Unit,
     viewModel: JobsViewModel = hiltViewModel(),
     workspaceViewModel: JobWorkspaceViewModel = hiltViewModel(),
-    jobAiViewModel: JobAiViewModel = hiltViewModel()
+    jobAiViewModel: JobAiViewModel = hiltViewModel(),
+    trapCheckViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.TrapCheckViewModel = hiltViewModel()
 ) {
     val job by viewModel.getJobById(jobId).collectAsState(initial = null)
     val customerDraft by workspaceViewModel.draft.collectAsState()
@@ -59,6 +61,7 @@ fun JobDetailScreen(
     val nextStepDraft by jobAiViewModel.nextStepDraft.collectAsState()
     val weatherVm: LiveWeatherViewModel = hiltViewModel()
     val weatherState by weatherVm.state.collectAsState()
+    val allTraps by trapCheckViewModel.traps.collectAsState()
 
     var showStatusDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -429,6 +432,14 @@ fun JobDetailScreen(
                     onRefresh = {
                         weatherVm.loadJobWeather(currentJob.latitude, currentJob.longitude, currentJob.address)
                     }
+                )
+
+                JobBatch2Section(
+                    job = currentJob,
+                    traps = allTraps.filter { it.jobId == currentJob.id },
+                    weatherState = weatherState,
+                    trapVm = trapCheckViewModel,
+                    onOpenTrapChecks = onNavigateToTrapChecks
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
