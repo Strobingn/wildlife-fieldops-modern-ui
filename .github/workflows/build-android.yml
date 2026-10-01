@@ -28,6 +28,8 @@ jobs:
       DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
 
       - uses: actions/setup-java@v4
         with:
@@ -118,6 +120,13 @@ jobs:
           test -n "$(ls -A app/build/outputs/apk/debug/*.apk 2>/dev/null)"
           echo "=== End check ==="
 
+      - name: Unit tests
+        run: |
+          set -o pipefail
+          export GRADLE_OPTS="-Xmx6g -XX:MaxMetaspaceSize=512m -XX:+UseG1GC"
+          ./gradlew :app:testDebugUnitTest :observation-core:test --no-daemon --stacktrace
+        timeout-minutes: 25
+
       - name: Verify CI debug APK signer
         if: success() && env.HAS_CI_DEBUG_KEYSTORE == 'true'
         run: |
@@ -179,7 +188,124 @@ jobs:
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "title=$TITLE" >> "$GITHUB_OUTPUT"
+          BODY_PATH="${RUNNER_TEMP}/fieldops-release-body.md"
+          {
+            echo "Native Kotlin / Jetpack Compose debug APK from \`${{ github.sha }}\` (run ${{ github.run_number }}, branch \`${{ github.ref_name }}\`)."
+            echo "Direct download: the \`.apk\` asset on this release (no unzip)."
+            echo "Actions artifact name remains \`wildlife-field-ops-debug-apk\`."
+            if [ "$RAW" = "main" ] || [ "$RAW" = "master" ]; then
+              echo
+              echo "In-app updates read only this \`${TAG}\` release (channel \`main\`). Branch/PR APKs are not offered in the app."
+            else
+              echo
+              echo "This branch/PR build is **not** an in-app update source. The app only checks \`debug-latest\`."
+            fi
+          } > "$BODY_PATH"
+          echo "body_path=$BODY_PATH" >> "$GITHUB_OUTPUT"
+          {
+            echo "assets<<EOF"
+            echo "app/build/outputs/apk/debug/*.apk"
+            if [ "$RAW" = "main" ] || [ "$RAW" = "master" ]; then
+              echo "app/build/outputs/update/update.json"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
           echo "Publishing release tag: $TAG"
+
+      - name: Write main-channel update.json
+        if: success() && github.event_name == 'push' && env.HAS_CI_DEBUG_KEYSTORE == 'true' && (github.ref_name == 'main' || github.ref_name == 'master')
+        env:
+          BODY_PATH: ${{ steps.apk_tag.outputs.body_path }}
+        run: |
+          set -euo pipefail
+          APK="$(ls app/build/outputs/apk/debug/*.apk | head -n 1)"
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          AAPT=""
+          if [ -x "${SDK}/build-tools/35.0.0/aapt" ]; then
+            AAPT="${SDK}/build-tools/35.0.0/aapt"
+          else
+            AAPT="$(find "$SDK/build-tools" -name aapt -type f | sort | tail -n 1)"
+          fi
+          if [ -z "$AAPT" ] || [ ! -x "$AAPT" ]; then
+            echo "::error::aapt not found under $SDK/build-tools"
+            exit 1
+          fi
+          BADGING="$("$AAPT" dump badging "$APK")"
+          VERSION_CODE="$(printf '%s\n' "$BADGING" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -n 1)"
+          VERSION_NAME="$(printf '%s\n' "$BADGING" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -n 1)"
+          if [ -z "$VERSION_CODE" ]; then
+            echo "::error::Could not read versionCode from APK badging"
+            exit 1
+          fi
+          APK_URL="https://github.com/${{ github.repository }}/releases/download/debug-latest/app-debug.apk"
+          BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          PREV_SHA=""
+          if curl -fsSL -A "WildlifeFieldOps-CI" \
+            "https://github.com/${{ github.repository }}/releases/download/debug-latest/update.json" \
+            -o "${RUNNER_TEMP}/prev-update.json"; then
+            PREV_SHA="$(python3 -c "import json; print(json.load(open('${RUNNER_TEMP}/prev-update.json')).get('commitSha',''))" || true)"
+          fi
+          CHANGELOG=""
+          if [ -n "$PREV_SHA" ] && git cat-file -e "${PREV_SHA}^{commit}" 2>/dev/null; then
+            CHANGELOG="$(git log --pretty=format:'- %s' --no-merges "${PREV_SHA}..${{ github.sha }}" | head -n 20)"
+          else
+            CHANGELOG="$(git log --pretty=format:'- %s' --no-merges -15)"
+          fi
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="- Main build ${{ github.sha }}"
+          fi
+          mkdir -p app/build/outputs/update
+          jq -n \
+            --argjson schemaVersion 1 \
+            --arg channel "main" \
+            --arg tag "debug-latest" \
+            --arg packageName "com.strobingn.wildlifefieldops" \
+            --argjson versionCode "$VERSION_CODE" \
+            --arg versionName "$VERSION_NAME" \
+            --arg apkUrl "$APK_URL" \
+            --arg apkAssetName "app-debug.apk" \
+            --arg commitSha "${{ github.sha }}" \
+            --arg buildTime "$BUILD_TIME" \
+            --argjson runNumber "${{ github.run_number }}" \
+            --arg changelog "$CHANGELOG" \
+            '{
+              schemaVersion: $schemaVersion,
+              channel: $channel,
+              tag: $tag,
+              packageName: $packageName,
+              versionCode: $versionCode,
+              versionName: $versionName,
+              apkUrl: $apkUrl,
+              apkAssetName: $apkAssetName,
+              commitSha: $commitSha,
+              buildTime: $buildTime,
+              runNumber: $runNumber,
+              changelog: $changelog
+            }' > app/build/outputs/update/update.json
+          cat app/build/outputs/update/update.json
+          {
+            echo
+            echo "<!-- fieldops-update"
+            echo "versionCode=${VERSION_CODE}"
+            echo "versionName=${VERSION_NAME}"
+            echo "channel=main"
+            echo "tag=debug-latest"
+            echo "packageName=com.strobingn.wildlifefieldops"
+            echo "apkUrl=${APK_URL}"
+            echo "commitSha=${{ github.sha }}"
+            echo "buildTime=${BUILD_TIME}"
+            echo "runNumber=${{ github.run_number }}"
+            echo "-->"
+            echo
+            echo "## In-app update"
+            echo "- Machine-readable: \`update.json\` on this release (only \`debug-latest\` / channel \`main\`)."
+            echo "- versionCode: \`${VERSION_CODE}\`"
+            echo "- versionName: \`${VERSION_NAME}\`"
+            echo
+            echo "### Changes since last main build"
+            echo "$CHANGELOG"
+          } >> "$BODY_PATH"
+          echo "Wrote app/build/outputs/update/update.json versionCode=${VERSION_CODE} versionName=${VERSION_NAME}"
 
       - name: Publish APK on Releases (easy download)
         if: success() && github.event_name == 'push' && env.HAS_CI_DEBUG_KEYSTORE == 'true'
@@ -187,13 +313,10 @@ jobs:
         with:
           tag_name: ${{ steps.apk_tag.outputs.tag }}
           name: ${{ steps.apk_tag.outputs.title }}
-          files: app/build/outputs/apk/debug/*.apk
+          files: ${{ steps.apk_tag.outputs.assets }}
+          body_path: ${{ steps.apk_tag.outputs.body_path }}
           fail_on_unmatched_files: true
           make_latest: false
-          body: |
-            Native Kotlin / Jetpack Compose debug APK from `${{ github.sha }}` (run ${{ github.run_number }}, branch `${{ github.ref_name }}`).
-            Direct download: the `.apk` asset on this release (no unzip).
-            Actions artifact name remains `wildlife-field-ops-debug-apk`.
 
       - name: Summary
         if: success()
@@ -203,6 +326,9 @@ jobs:
           if [ "${{ github.event_name }}" = "push" ] && [ "${HAS_CI_DEBUG_KEYSTORE:-false}" = "true" ]; then
             TAG="${{ steps.apk_tag.outputs.tag }}"
             echo "Public download: https://github.com/${{ github.repository }}/releases/download/${TAG}/app-debug.apk"
+            if [ "$TAG" = "debug-latest" ]; then
+              echo "In-app update manifest: https://github.com/${{ github.repository }}/releases/download/debug-latest/update.json"
+            fi
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "PR builds upload Artifacts only (no Releases publish)."
           else
