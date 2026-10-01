@@ -27,7 +27,7 @@ object AppModule {
         )
             .addMigrations(*Migrations.ALL)
             // Never fallbackToDestructiveMigration: a restored backup may be
-            // Room user_version 10 (pre-pricing) and must migrate in place to 11.
+            // Room user_version 10 (pre-pricing) and must migrate in place to current.
             .build()
     }
 

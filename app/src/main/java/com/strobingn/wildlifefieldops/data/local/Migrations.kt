@@ -31,6 +31,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * MIGRATION_11_12 adds FieldOps AI columns on jobs and inspections. Existing
  * rows stay valid (empty strings / NULL due). Values also ride in
  * `jobs.pricing` jsonb and `inspections.findings` jsonb for live sync.
+ *
+ * MIGRATION_12_13 adds DEC fields on trap_logs and weather/follow-up columns
+ * on jobs. Values also ride in `jobs.pricing` jsonb (trapRecords, advice,
+ * follow-up) so live PostgREST does not need dedicated columns.
  */
 object Migrations {
 
@@ -186,7 +190,18 @@ object Migrations {
         }
     }
 
-    /** Ordered 3→12. Restored backups may be older than VERSION 12; Room must migrate, never wipe. */
+    val MIGRATION_12_13 = object : Migration(12, 13) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE trap_logs ADD COLUMN disposition TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE trap_logs ADD COLUMN method TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE jobs ADD COLUMN weatherTrapAdvice TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE jobs ADD COLUMN followUpKind TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE jobs ADD COLUMN followUpDueAt INTEGER")
+            db.execSQL("ALTER TABLE jobs ADD COLUMN followUpNotes TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
+    /** Ordered 3→13. Restored backups may be older than VERSION 13; Room must migrate, never wipe. */
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_3_4,
         MIGRATION_4_5,
@@ -197,5 +212,6 @@ object Migrations {
         MIGRATION_9_10,
         MIGRATION_10_11,
         MIGRATION_11_12,
+        MIGRATION_12_13,
     )
 }

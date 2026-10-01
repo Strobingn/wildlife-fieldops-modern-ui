@@ -1,6 +1,6 @@
 # Wildlife FieldOps — 25 new field features
 
-Audit of `main` (Kotlin/Compose, Room v11, Supabase AutoSync, HybridAI / TFLite / voice, estimates, invoices, PDFs, unified Job+customer page). These 25 items are **not** already wired end-to-end. Existing building blocks (TrapLog/Reminder/Visit/Inventory tables, species safety catalog, invoice signatures, Job Dictate, weather banner, generic Live Capture checklist) are reused, not re-listed as new products.
+Audit of `main` (Kotlin/Compose, Room v13 after batch 2, Supabase AutoSync, HybridAI / TFLite / voice, estimates, invoices, PDFs, unified Job+customer page). These 25 items are **not** already wired end-to-end. Existing building blocks (TrapLog/Reminder/Visit/Inventory tables, species safety catalog, invoice signatures, Job Dictate, weather banner, generic Live Capture checklist) are reused, not re-listed as new products.
 
 Rule for every feature: real Room data, operator-editable fields (AI suggests, Sir’s typing wins), `isSynced = false` + AutoSync on every add/edit/delete, Supabase push for new user data, no stubs or “coming soon”.
 
@@ -12,7 +12,7 @@ Rule for every feature: real Room data, operator-editable fields (AI suggests, S
 4. **AI next-step on each job** — Suggest the next field action and due time from status, species, notes, and inspections; persist and edit on the job; surface due items on Home.
 5. **Offline AI fallback indicator** — Show Cloud / On-device / Heuristic on Job, Inspection, and Estimate so Sir knows which brain filled the draft.
 
-## Batch 2 — Traps, DEC, follow-ups
+## Batch 2 — Traps, DEC, follow-ups (`2.5.1-ai-batch2`)
 
 6. **Daily trap-check list** — Schedule trap checks from `trap_logs`, show today’s due/overdue list, mark set/empty/catch, set next check.
 7. **Trap pins on the job map** — Place and edit trap GPS/location per job and see them on the property map.
@@ -50,4 +50,4 @@ Voice-to-job, invoice signature pad, generic Live Capture checklist, inventory l
 
 ## Sync notes
 
-New user data rides existing AutoSync watchers (`jobs`, `inspections`, …) or adds tables + DTO push. Batch 1 stores extras in `jobs.pricing` jsonb and `inspections.findings` jsonb so live PostgREST does not 400 if optional columns are not applied yet. Optional SQL comments/columns are listed on each PR.
+New user data rides existing AutoSync watchers (`jobs`, `inspections`, …) or adds tables + DTO push. Batch 1 and batch 2 store extras in `jobs.pricing` jsonb (and batch 1 also `inspections.findings` jsonb) so live PostgREST does not 400. Dedicated SQL columns stay unapplied unless a later batch genuinely needs them.

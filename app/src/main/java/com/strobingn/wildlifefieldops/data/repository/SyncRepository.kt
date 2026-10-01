@@ -25,6 +25,7 @@ import com.strobingn.wildlifefieldops.data.remote.SyncErrorFormatter
 import com.strobingn.wildlifefieldops.data.remote.SyncItemFailure
 import com.strobingn.wildlifefieldops.data.remote.SyncItemOutcome
 import com.strobingn.wildlifefieldops.data.remote.SyncItemRunner
+import com.strobingn.wildlifefieldops.ai.fieldops.TrapFieldOpsStore
 import com.strobingn.wildlifefieldops.data.remote.toLocal
 import com.strobingn.wildlifefieldops.sync.work.FieldOpsSyncGateway
 import io.github.jan.supabase.SupabaseClient
@@ -61,7 +62,8 @@ class SyncRepository @Inject constructor(
     private val observationPhotoUploader: ObservationPhotoUploader,
     private val jobPhotoUploader: JobPhotoUploader,
     private val deletedRecordDao: DeletedRecordDao,
-    private val itemRunner: SyncItemRunner
+    private val itemRunner: SyncItemRunner,
+    private val trapFieldOpsStore: TrapFieldOpsStore
 ) : FieldOpsSyncGateway {
     override fun isCloudConfigured(): Boolean = supabaseService.isConfigured
 
@@ -422,7 +424,10 @@ class SyncRepository @Inject constructor(
             val mapped = runCatching { dto.toLocal(existing) }.getOrNull() ?: return@forEach
             incoming += mapped
         }
-        if (incoming.isNotEmpty()) jobDao.insertAll(incoming)
+        if (incoming.isNotEmpty()) {
+            jobDao.insertAll(incoming)
+            incoming.forEach { trapFieldOpsStore.hydrateFromJob(it) }
+        }
         return incoming.size
     }
 

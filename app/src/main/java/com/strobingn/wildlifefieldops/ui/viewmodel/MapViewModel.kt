@@ -17,9 +17,11 @@ import com.strobingn.wildlifefieldops.data.local.CachedMapMarker
 import com.strobingn.wildlifefieldops.data.local.CachedMapRegion
 import com.strobingn.wildlifefieldops.data.local.CustomerDao
 import com.strobingn.wildlifefieldops.data.local.FieldObservationDao
+import com.strobingn.wildlifefieldops.ai.fieldops.TrapFieldOpsStore
 import com.strobingn.wildlifefieldops.data.local.JobDao
 import com.strobingn.wildlifefieldops.data.local.MapOfflineCache
 import com.strobingn.wildlifefieldops.data.local.PhotoDao
+import com.strobingn.wildlifefieldops.data.local.TrapLogDao
 import com.strobingn.wildlifefieldops.data.map.CachedMapTileProvider
 import com.strobingn.wildlifefieldops.data.map.MapTileCache
 import com.strobingn.wildlifefieldops.data.map.MapTileCachePlanner
@@ -27,6 +29,8 @@ import com.strobingn.wildlifefieldops.data.model.FieldObservation
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.data.model.Photo
 import com.strobingn.wildlifefieldops.data.model.PhotoCategory
+import com.strobingn.wildlifefieldops.data.model.TrapLog
+import com.strobingn.wildlifefieldops.data.model.TrapStatus
 import com.strobingn.wildlifefieldops.data.observation.ObservationEventStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -68,6 +72,8 @@ class MapViewModel @Inject constructor(
     private val customerDao: CustomerDao,
     private val fieldObservationDao: FieldObservationDao,
     private val photoDao: PhotoDao,
+    private val trapLogDao: TrapLogDao,
+    private val trapFieldOpsStore: TrapFieldOpsStore,
     private val mapOfflineCache: MapOfflineCache,
     private val mapTileCache: MapTileCache,
     private val observationEventStore: ObservationEventStore,
@@ -85,8 +91,14 @@ class MapViewModel @Inject constructor(
     private val _isObserving = MutableStateFlow(false)
     val isObserving = _isObserving.asStateFlow()
 
+    private val _isPlacingTrap = MutableStateFlow(false)
+    val isPlacingTrap = _isPlacingTrap.asStateFlow()
+
     private val _pendingPin = MutableStateFlow<com.google.android.gms.maps.model.LatLng?>(null)
     val pendingPin = _pendingPin.asStateFlow()
+
+    private val _pendingTrapPin = MutableStateFlow<com.google.android.gms.maps.model.LatLng?>(null)
+    val pendingTrapPin = _pendingTrapPin.asStateFlow()
 
     private val _isOffline = MutableStateFlow(!mapOfflineCache.isNetworkAvailable())
     val isOffline = _isOffline.asStateFlow()
@@ -161,6 +173,12 @@ class MapViewModel @Inject constructor(
     val observations: StateFlow<List<FieldObservation>> = fieldObservationDao.getAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val traps: StateFlow<List<TrapLog>> = trapLogDao.getAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val jobsForTrapPin: StateFlow<List<com.strobingn.wildlifefieldops.data.model.Job>> = jobDao.getAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val unlocatedJobCount: StateFlow<Int> = combine(
         jobDao.getAll(),
         properties
@@ -211,7 +229,9 @@ class MapViewModel @Inject constructor(
         _isDrawingBoundary.value = !_isDrawingBoundary.value
         if (_isDrawingBoundary.value) {
             _isObserving.value = false
+            _isPlacingTrap.value = false
             _pendingPin.value = null
+            _pendingTrapPin.value = null
         }
         if (!_isDrawingBoundary.value) {
             _boundaryPoints.value = emptyList()
@@ -222,15 +242,66 @@ class MapViewModel @Inject constructor(
         _isObserving.value = !_isObserving.value
         if (_isObserving.value) {
             _isDrawingBoundary.value = false
+            _isPlacingTrap.value = false
+            _pendingTrapPin.value = null
         } else {
             _pendingPin.value = null
+        }
+    }
+
+    fun togglePlaceTrapMode() {
+        _isPlacingTrap.value = !_isPlacingTrap.value
+        if (_isPlacingTrap.value) {
+            _isDrawingBoundary.value = false
+            _isObserving.value = false
+            _pendingPin.value = null
+        } else {
+            _pendingTrapPin.value = null
         }
     }
 
     fun onMapTapped(point: com.google.android.gms.maps.model.LatLng) {
         when {
             _isObserving.value -> _pendingPin.value = point
+            _isPlacingTrap.value -> _pendingTrapPin.value = point
             _isDrawingBoundary.value -> addBoundaryPoint(point)
+        }
+    }
+
+    fun cancelPendingTrap() {
+        _pendingTrapPin.value = null
+        _isPlacingTrap.value = false
+    }
+
+    fun saveTrapPin(
+        jobId: String,
+        trapId: String,
+        location: String,
+        existingId: String? = null
+    ) {
+        viewModelScope.launch {
+            val pin = _pendingTrapPin.value ?: return@launch
+            val now = System.currentTimeMillis()
+            val existing = existingId?.let { trapLogDao.getById(it) }
+            trapFieldOpsStore.saveTrap(
+                (existing ?: TrapLog()).copy(
+                    id = existing?.id ?: java.util.UUID.randomUUID().toString(),
+                    jobId = jobId,
+                    trapId = trapId.ifBlank { existing?.trapId.orEmpty().ifBlank { "Trap" } },
+                    trapLocation = location,
+                    latitude = pin.latitude,
+                    longitude = pin.longitude,
+                    status = existing?.status ?: TrapStatus.SET,
+                    nextCheckDate = existing?.nextCheckDate ?: now + 86_400_000L,
+                    checkDate = existing?.checkDate ?: now,
+                    createdAt = existing?.createdAt ?: now,
+                    updatedAt = now,
+                    isSynced = false
+                )
+            )
+            _pendingTrapPin.value = null
+            _isPlacingTrap.value = false
+            _cacheMessage.value = "Trap pin saved on the job — pending cloud sync."
         }
     }
 

@@ -39,7 +39,17 @@ data class JobPricing(
     val nextStep: String = "",
     val nextStepDueAt: Long? = null,
     val nextStepSource: String = "",
-    val aiRuntime: String = ""
+    val aiRuntime: String = "",
+    /** Trap checks dual-written here so AutoSync pushes via jobs.pricing jsonb. */
+    val trapRecords: List<SyncedTrapRecord> = emptyList(),
+    val weatherTrapAdvice: String = "",
+    val weatherTrapAdviceAt: Long? = null,
+    val weatherTrapAdviceSource: String = "",
+    val followUpKind: String = "",
+    val followUpDueAt: Long? = null,
+    val followUpNotes: String = "",
+    val followUpVisitId: String = "",
+    val followUpReminderId: String = ""
 ) {
     /**
      * Money worksheet only. Field-ops extras (species, next step) must not
@@ -152,7 +162,16 @@ object PricingCalculator {
                 nextStepDueAt = extras.nextStepDueAt,
                 nextStepSource = extras.nextStepSource,
                 aiRuntime = extras.aiRuntime,
-                photoLineItems = extras.photoLineItems
+                photoLineItems = extras.photoLineItems,
+                trapRecords = extras.trapRecords,
+                weatherTrapAdvice = extras.weatherTrapAdvice,
+                weatherTrapAdviceAt = extras.weatherTrapAdviceAt,
+                weatherTrapAdviceSource = extras.weatherTrapAdviceSource,
+                followUpKind = extras.followUpKind,
+                followUpDueAt = extras.followUpDueAt,
+                followUpNotes = extras.followUpNotes,
+                followUpVisitId = extras.followUpVisitId,
+                followUpReminderId = extras.followUpReminderId
             )
         }
         return starterWorksheet().copy(
@@ -162,7 +181,16 @@ object PricingCalculator {
             nextStepDueAt = extras.nextStepDueAt,
             nextStepSource = extras.nextStepSource,
             aiRuntime = extras.aiRuntime,
-            photoLineItems = extras.photoLineItems
+            photoLineItems = extras.photoLineItems,
+            trapRecords = extras.trapRecords,
+            weatherTrapAdvice = extras.weatherTrapAdvice,
+            weatherTrapAdviceAt = extras.weatherTrapAdviceAt,
+            weatherTrapAdviceSource = extras.weatherTrapAdviceSource,
+            followUpKind = extras.followUpKind,
+            followUpDueAt = extras.followUpDueAt,
+            followUpNotes = extras.followUpNotes,
+            followUpVisitId = extras.followUpVisitId,
+            followUpReminderId = extras.followUpReminderId
         )
     }
 
@@ -320,3 +348,30 @@ fun InvoiceLineItem.effectiveTotal(): Double {
     val locked = totalOverride
     return if (locked != null) Money.round(locked) else calculatedTotal()
 }
+
+/** Trap row that rides inside [JobPricing] for live `jobs.pricing` jsonb sync. */
+@Serializable
+data class SyncedTrapRecord(
+    val id: String = "",
+    val jobId: String = "",
+    val trapId: String = "",
+    val trapLocation: String = "",
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val technicianName: String = "",
+    val checkDate: Long = 0L,
+    val status: String = "SET",
+    val catchType: String = "NONE",
+    val catchCount: Int = 0,
+    val baitType: String = "",
+    val baitCondition: String = "",
+    val conditionNotes: String = "",
+    val actionTaken: String = "",
+    val nextCheckDate: Long? = null,
+    val weatherConditions: String = "",
+    val temperature: Float? = null,
+    val disposition: String = "",
+    val method: String = "",
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L
+)

@@ -99,7 +99,16 @@ class LiveSyncPayloadsTest {
                             quantity = 1.0,
                             unitPrice = 95.0
                         )
-                    )
+                    ),
+                    trapRecords = listOf(
+                        com.strobingn.wildlifefieldops.pricing.SyncedTrapRecord(
+                            id = "t1",
+                            trapId = "Deck-1",
+                            status = "SET"
+                        )
+                    ),
+                    weatherTrapAdvice = "Check after the rain",
+                    followUpKind = "TRAP_PULL"
                 )
             )
         )
@@ -113,6 +122,10 @@ class LiveSyncPayloadsTest {
         assertEquals("raccoon", pricing.getValue("confirmedSpecies").jsonPrimitive.content)
         assertEquals("Check the deck trap", pricing.getValue("nextStep").jsonPrimitive.content)
         assertTrue("photoLineItems" in pricing.keys)
+        assertTrue("trapRecords" in pricing.keys)
+        assertEquals("Check after the rain", pricing.getValue("weatherTrapAdvice").jsonPrimitive.content)
+        assertFalse("weather_trap_advice" in encoded.keys)
+        assertFalse("trap_logs" in encoded.keys)
     }
 
     @Test
