@@ -305,6 +305,11 @@ export function deepClone(obj) {
 
 /**
  * Merge two arrays by a key field (server wins on conflict).
+ *
+ * Performance optimization:
+ * Uses a Map index lookup (O(1) per lookup) instead of Array.prototype.findIndex (O(N) per lookup).
+ * Reduces time complexity from O(N * M) down to O(N + M).
+ *
  * @template T
  * @param {T[]} local - Local array
  * @param {T[]} server - Server array
@@ -314,11 +319,28 @@ export function deepClone(obj) {
 export function mergeArrays(local, server, key) {
   if (!Array.isArray(local) || !Array.isArray(server)) return [...(local || [])];
   const merged = [...local];
-  for (const sItem of server) {
-    const idx = merged.findIndex((item) => item?.[key] === sItem?.[key]);
-    if (idx >= 0) merged[idx] = deepClone(sItem);
-    else merged.push(deepClone(sItem));
+  const indexByKey = new Map();
+
+  for (let i = 0; i < merged.length; i++) {
+    const k = merged[i]?.[key];
+    if (k !== undefined && k !== null && !indexByKey.has(k)) {
+      indexByKey.set(k, i);
+    }
   }
+
+  for (const sItem of server) {
+    const k = sItem?.[key];
+    const idx = k !== undefined && k !== null ? indexByKey.get(k) : undefined;
+    if (idx !== undefined) {
+      merged[idx] = deepClone(sItem);
+    } else {
+      merged.push(deepClone(sItem));
+      if (k !== undefined && k !== null && !indexByKey.has(k)) {
+        indexByKey.set(k, merged.length - 1);
+      }
+    }
+  }
+
   return merged;
 }
 
