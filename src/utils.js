@@ -305,6 +305,7 @@ export function deepClone(obj) {
 
 /**
  * Merge two arrays by a key field (server wins on conflict).
+ * Uses Map lookup for O(N + M) complexity instead of O(N * M) nested scanning.
  * @template T
  * @param {T[]} local - Local array
  * @param {T[]} server - Server array
@@ -314,10 +315,20 @@ export function deepClone(obj) {
 export function mergeArrays(local, server, key) {
   if (!Array.isArray(local) || !Array.isArray(server)) return [...(local || [])];
   const merged = [...local];
+  const indexMap = new Map();
+  for (let i = 0; i < merged.length; i++) {
+    const k = merged[i]?.[key];
+    if (k !== undefined) indexMap.set(k, i);
+  }
   for (const sItem of server) {
-    const idx = merged.findIndex((item) => item?.[key] === sItem?.[key]);
-    if (idx >= 0) merged[idx] = deepClone(sItem);
-    else merged.push(deepClone(sItem));
+    const k = sItem?.[key];
+    const idx = k !== undefined ? indexMap.get(k) : undefined;
+    if (idx !== undefined) {
+      merged[idx] = deepClone(sItem);
+    } else {
+      merged.push(deepClone(sItem));
+      if (k !== undefined) indexMap.set(k, merged.length - 1);
+    }
   }
   return merged;
 }
@@ -490,22 +501,28 @@ export function generatePDF(job, services = [], photos = []) {
 
 /**
  * Full-text search across job fields.
+ * Performance optimized: short-circuits on empty query and skips falsy property evaluation.
  * @param {Array<Record<string, any>>} jobs - Jobs array
  * @param {string} query - Search term
  * @returns {Array<Record<string, any>>} Filtered jobs
  */
 export function searchJobs(jobs, query) {
   if (!query || !Array.isArray(jobs)) return jobs || [];
-  const term = query.toLowerCase().trim();
+  const term = String(query).toLowerCase().trim();
   if (!term) return jobs;
   const fields = ['title', 'customer', 'address', 'town', 'species', 'scope', 'status', 'phone'];
   return jobs.filter((j) =>
-    fields.some((f) => String(j?.[f] ?? '').toLowerCase().includes(term))
+    fields.some((f) => {
+      const val = j?.[f];
+      return val != null && String(val).toLowerCase().includes(term);
+    })
   );
 }
 
 /**
  * Filter jobs by multiple criteria.
+ * Performance optimized: pre-computes active filters once to short-circuit O(1)
+ * when no filters are set and avoid O(N * K) Object.entries allocations.
  * @param {Array<Record<string, any>>} jobs
  * @param {Record<string, string>} filters
  * @returns {Array<Record<string, any>>}
@@ -513,10 +530,16 @@ export function searchJobs(jobs, query) {
 export function filterJobs(jobs, filters) {
   if (!Array.isArray(jobs)) return [];
   if (!filters || typeof filters !== 'object') return jobs;
+
+  const activeFilters = Object.entries(filters)
+    .filter(([, val]) => val !== null && val !== undefined && val !== '')
+    .map(([key, val]) => [key, String(val).toLowerCase()]);
+
+  if (activeFilters.length === 0) return jobs;
+
   return jobs.filter((j) =>
-    Object.entries(filters).every(([key, val]) => {
-      if (!val) return true;
-      return String(j?.[key] ?? '').toLowerCase() === String(val).toLowerCase();
-    })
+    activeFilters.every(([key, val]) =>
+      String(j?.[key] ?? '').toLowerCase() === val
+    )
   );
 }
