@@ -32,6 +32,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.strobingn.wildlifefieldops.data.model.JobCustomerDraft
+import com.strobingn.wildlifefieldops.data.model.PreferredContact
 import com.strobingn.wildlifefieldops.pricing.MoneyField
 import com.strobingn.wildlifefieldops.ui.components.BrandMark
 import com.strobingn.wildlifefieldops.ui.components.FieldCard
@@ -41,6 +43,7 @@ import com.strobingn.wildlifefieldops.ui.components.SpeciesChip
 import com.strobingn.wildlifefieldops.ui.components.StatPillCard
 import com.strobingn.wildlifefieldops.ui.components.StatusChip
 import com.strobingn.wildlifefieldops.ui.components.ThemePreferencePicker
+import com.strobingn.wildlifefieldops.ui.screens.JobCustomerSection
 
 @Composable
 private fun PreviewTheme(dark: Boolean, content: @Composable () -> Unit) {
@@ -221,6 +224,37 @@ private fun DialogThemePreview() {
             dismissButton = { TextButton(onClick = {}) { Text("Cancel", color = TextSecondary) } },
             containerColor = BackgroundCard
         )
+    }
+}
+
+@Preview(name = "Job customer · light", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Job customer · dark", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun JobCustomerSectionThemePreview() {
+    val dark = androidx.compose.foundation.isSystemInDarkTheme()
+    PreviewTheme(dark = dark) {
+        Column(Modifier.padding(16.dp)) {
+            JobCustomerSection(
+                draft = JobCustomerDraft(
+                    customerId = "cust-1",
+                    name = "Hudson Valley Customer",
+                    companyName = "Willow Properties",
+                    phone = "845-555-0142",
+                    email = "ops@example.com",
+                    address = "12 Willow Ave",
+                    city = "Cornwall",
+                    state = "NY",
+                    zipCode = "12518",
+                    preferredContact = PreferredContact.PHONE
+                ),
+                onDraftChange = {},
+                searchQuery = "",
+                onSearchQueryChange = {},
+                matches = emptyList(),
+                onPickCustomer = {},
+                onNewCustomer = {}
+            )
+        }
     }
 }
 

@@ -151,7 +151,7 @@ fun JobDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = AccentBlue,
-                        contentColor = androidx.compose.ui.graphics.Color.White
+                        contentColor = OnPrimary
                     ),
                     shape = RoundedCornerShape(12.dp),
                     enabled = !customerSaving
@@ -159,7 +159,7 @@ fun JobDetailScreen(
                     if (customerSaving) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(18.dp),
-                            color = androidx.compose.ui.graphics.Color.White,
+                            color = OnPrimary,
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -277,7 +277,7 @@ fun JobDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = PrimaryGreen,
-                        contentColor = androidx.compose.ui.graphics.Color.White
+                        contentColor = OnPrimary
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
