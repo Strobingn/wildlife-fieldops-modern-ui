@@ -2,6 +2,7 @@ package com.strobingn.wildlifefieldops.data.backup
 
 import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
+import java.io.File
 
 /**
  * On-device Wildlife Whisperer field-data backup format (zip + JSON manifest).
@@ -17,6 +18,9 @@ object FieldOpsBackupFormat {
     const val PHOTOS_DIR = "photos"
     const val DATASTORE_DIR = "datastore"
     const val PENDING_ZIP = "pending_restore.zip"
+    /** Matches [com.strobingn.wildlifefieldops.data.local.AppDatabase.VERSION]. */
+    const val CURRENT_ROOM_VERSION = 11
+    private const val SQLITE_USER_VERSION_OFFSET = 60
 
     private val gson = Gson()
 
@@ -50,6 +54,29 @@ object FieldOpsBackupFormat {
         if (normalized == ".." || normalized.endsWith("/..")) return false
         return true
     }
+
+    /**
+     * SQLite user_version at header offset 60 (big-endian). Restore must leave this
+     * unchanged so Room can run MIGRATION_* up to [CURRENT_ROOM_VERSION].
+     */
+    fun readSqliteUserVersion(dbFile: File): Int? {
+        if (!dbFile.isFile || dbFile.length() < SQLITE_USER_VERSION_OFFSET + 4L) return null
+        val header = ByteArray(SQLITE_USER_VERSION_OFFSET + 4)
+        dbFile.inputStream().use { input ->
+            var offset = 0
+            while (offset < header.size) {
+                val read = input.read(header, offset, header.size - offset)
+                if (read <= 0) return null
+                offset += read
+            }
+        }
+        val magic = header.copyOfRange(0, 16).toString(Charsets.US_ASCII)
+        if (!magic.startsWith("SQLite format 3")) return null
+        return ((header[60].toInt() and 0xFF) shl 24) or
+            ((header[61].toInt() and 0xFF) shl 16) or
+            ((header[62].toInt() and 0xFF) shl 8) or
+            (header[63].toInt() and 0xFF)
+    }
 }
 
 data class FieldOpsBackupManifest(
@@ -58,7 +85,8 @@ data class FieldOpsBackupManifest(
     val brand: String = FieldOpsBackupFormat.BRAND,
     val createdAt: String = "",
     val versionName: String = "",
-    val versionCode: Int = 0
+    val versionCode: Int = 0,
+    val roomVersion: Int = 0
 )
 
 sealed class FieldOpsBackupValidation {

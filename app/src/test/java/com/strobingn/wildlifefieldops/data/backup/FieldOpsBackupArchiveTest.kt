@@ -146,14 +146,72 @@ class FieldOpsBackupArchiveTest {
         assertFalse(FieldOpsBackupFormat.isSafeZipPath("../databases/x"))
     }
 
+    @Test
+    fun restorePreservesOlderSqliteUserVersionForRoomMigration() {
+        val root = newTempDir()
+        try {
+            val db = File(root, "wildlife_fieldops.db").apply {
+                writeBytes(sqliteHeaderWithUserVersion(userVersion = 10, payload = "pre-pricing-jobs"))
+            }
+            assertEquals(10, FieldOpsBackupFormat.readSqliteUserVersion(db))
+            val zip = File(root, "v10.zip")
+            FieldOpsBackupArchive.createZip(
+                dest = zip,
+                manifest = sampleManifest().copy(roomVersion = 10, versionName = "2.3.7-sync-backlog"),
+                dbFile = db
+            )
+            val unpacked = File(root, "unpacked")
+            val validated = FieldOpsBackupArchive.extractZip(zip, unpacked)
+            assertTrue(validated is FieldOpsBackupValidation.Ok)
+            assertEquals(10, (validated as FieldOpsBackupValidation.Ok).manifest.roomVersion)
+
+            val destDb = File(root, "databases/wildlife_fieldops.db")
+            FieldOpsBackupArchive.applyUnpackedBackup(
+                unpacked = unpacked,
+                databaseFile = destDb,
+                filesDir = File(root, "files").apply { mkdirs() }
+            )
+            assertEquals(
+                "Restored DB must stay at user_version 10 so Room runs MIGRATION_10_11",
+                10,
+                FieldOpsBackupFormat.readSqliteUserVersion(destDb)
+            )
+            assertTrue(destDb.readBytes().contentEquals(db.readBytes()))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun currentRoomVersionMatchesAppDatabaseV11() {
+        assertEquals(11, FieldOpsBackupFormat.CURRENT_ROOM_VERSION)
+        assertEquals(FieldOpsBackupFormat.CURRENT_ROOM_VERSION, com.strobingn.wildlifefieldops.data.local.AppDatabase.VERSION)
+        val last = com.strobingn.wildlifefieldops.data.local.Migrations.ALL.last()
+        assertEquals(10, last.startVersion)
+        assertEquals(11, last.endVersion)
+        assertEquals(8, com.strobingn.wildlifefieldops.data.local.Migrations.ALL.size)
+    }
+
     private fun sampleManifest() = FieldOpsBackupManifest(
         format = FieldOpsBackupFormat.FORMAT_ID,
         appId = FieldOpsBackupFormat.APPLICATION_ID,
         brand = FieldOpsBackupFormat.BRAND,
         createdAt = "2026-09-30T22:00:00Z",
-        versionName = "2.3.8-stable-signing",
-        versionCode = 50
+        versionName = "2.3.9-stable-signing",
+        versionCode = 50,
+        roomVersion = FieldOpsBackupFormat.CURRENT_ROOM_VERSION
     )
+
+    private fun sqliteHeaderWithUserVersion(userVersion: Int, payload: String): ByteArray {
+        val header = ByteArray(100)
+        val magic = "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII)
+        magic.copyInto(header)
+        header[60] = ((userVersion ushr 24) and 0xFF).toByte()
+        header[61] = ((userVersion ushr 16) and 0xFF).toByte()
+        header[62] = ((userVersion ushr 8) and 0xFF).toByte()
+        header[63] = (userVersion and 0xFF).toByte()
+        return header + payload.toByteArray(Charsets.UTF_8)
+    }
 
     private fun newTempDir(): File =
         File(System.getProperty("java.io.tmpdir"), "fieldops-backup-${System.nanoTime()}").also { it.mkdirs() }

@@ -116,6 +116,8 @@ object FieldOpsBackupArchive {
         listOf("", "-wal", "-shm", "-journal").forEach { suffix ->
             File(databaseFile.path + suffix).delete()
         }
+        // Copy the SQLite file as-is. Do not bump user_version here: a v10 (or
+        // older) backup must still be v10 on disk so Room runs MIGRATION_* to v11.
         dbSrc.copyTo(databaseFile, overwrite = true)
         File(unpacked, "${FieldOpsBackupFormat.DB_DIR}/${FieldOpsBackupFormat.DB_FILE}-wal")
             .takeIf { it.isFile }?.copyTo(File(databaseFile.path + "-wal"), overwrite = true)

@@ -45,4 +45,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun voiceObservationDao(): VoiceObservationDao
     abstract fun observationEventDao(): ObservationEventDao
     abstract fun syncOperationDao(): SyncOperationDao
+
+    companion object {
+        const val VERSION = 11
+        const val NAME = "wildlife_fieldops.db"
+    }
 }

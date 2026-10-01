@@ -21,7 +21,7 @@ import kotlin.system.exitProcess
  * SAF restore. Pending restore is applied in [WildlifeFieldOpsApp] before Room opens.
  */
 object FieldOpsBackupManager {
-    const val DB_NAME = "wildlife_fieldops.db"
+    const val DB_NAME = AppDatabase.NAME
     private const val TAG = "FieldOpsBackup"
 
     fun pendingZip(context: Context): File =
@@ -50,7 +50,9 @@ object FieldOpsBackupManager {
                     )
                     Log.i(
                         TAG,
-                        "Restored ${WildlifeWhispererBrand.COMPANY} backup from ${result.manifest.createdAt}"
+                        "Restored ${WildlifeWhispererBrand.COMPANY} backup from ${result.manifest.createdAt} " +
+                            "(roomVersion=${result.manifest.roomVersion.let { if (it > 0) it else "unknown" }}). " +
+                            "Room will migrate to v${AppDatabase.VERSION} if needed; schema is not rewritten here."
                     )
                     true
                 }
@@ -87,7 +89,8 @@ object FieldOpsBackupManager {
                     brand = WildlifeWhispererBrand.COMPANY,
                     createdAt = Instant.now().toString(),
                     versionName = BuildConfig.VERSION_NAME,
-                    versionCode = BuildConfig.VERSION_CODE
+                    versionCode = BuildConfig.VERSION_CODE,
+                    roomVersion = AppDatabase.VERSION
                 ),
                 dbFile = dbFile,
                 extraDbSidecars = sidecars,

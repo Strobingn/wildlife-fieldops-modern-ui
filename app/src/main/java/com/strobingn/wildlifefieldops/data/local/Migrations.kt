@@ -168,4 +168,16 @@ object Migrations {
             db.execSQL("ALTER TABLE invoices ADD COLUMN taxRateManual INTEGER NOT NULL DEFAULT 0")
         }
     }
+
+    /** Ordered 3→11. Restored backups may be older than VERSION 11; Room must migrate, never wipe. */
+    val ALL: Array<Migration> = arrayOf(
+        MIGRATION_3_4,
+        MIGRATION_4_5,
+        MIGRATION_5_6,
+        MIGRATION_6_7,
+        MIGRATION_7_8,
+        MIGRATION_8_9,
+        MIGRATION_9_10,
+        MIGRATION_10_11,
+    )
 }

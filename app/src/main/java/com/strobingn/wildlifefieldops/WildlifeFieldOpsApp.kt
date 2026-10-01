@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.work.Configuration
 import com.strobingn.wildlifefieldops.data.backup.FieldOpsBackupManager
+import com.strobingn.wildlifefieldops.data.local.AppDatabase
 import com.strobingn.wildlifefieldops.sync.work.AutoSync
 import com.strobingn.wildlifefieldops.sync.work.WorkManagerConfigurationFactory
 import dagger.hilt.android.HiltAndroidApp
@@ -20,7 +21,12 @@ class WildlifeFieldOpsApp : Application(), Configuration.Provider {
         // Restore a staged SAF backup before Hilt opens Room.
         runCatching { FieldOpsBackupManager.applyPendingRestore(this) }
             .onSuccess { restored ->
-                if (restored) Log.i("WildlifeFieldOps", "Applied Wildlife Whisperer field-data backup")
+                if (restored) {
+                    Log.i(
+                        "WildlifeFieldOps",
+                        "Applied Wildlife Whisperer field-data backup; Room migrates to v${AppDatabase.VERSION} on open"
+                    )
+                }
             }
             .onFailure { Log.e("WildlifeFieldOps", "Pending backup restore failed", it) }
         super.onCreate()
