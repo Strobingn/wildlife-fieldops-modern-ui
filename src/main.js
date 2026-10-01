@@ -401,16 +401,79 @@ function O(arr, selected = '') {
 }
 
 /**
+ * Pre-aggregate counts for visits, repairs, photos, and signatures by jobId.
+ * Reduces O(N * M) nested array iterations during list rendering to O(N + M).
+ *
+ * @param {import('./types').AppState} state
+ * @returns {Map<string, { visits: number, repairs: number, photos: number, signatures: number }>}
+ */
+function buildJobCountsMap(state) {
+  const counts = new Map();
+  const getEntry = (id) => {
+    let e = counts.get(id);
+    if (!e) {
+      e = { visits: 0, repairs: 0, photos: 0, signatures: 0 };
+      counts.set(id, e);
+    }
+    return e;
+  };
+
+  if (state.visits) {
+    for (let i = 0; i < state.visits.length; i++) {
+      const v = state.visits[i];
+      const id = v.jobId || v.job_id;
+      if (id) getEntry(id).visits++;
+    }
+  }
+  if (state.repairs) {
+    for (let i = 0; i < state.repairs.length; i++) {
+      const r = state.repairs[i];
+      const id = r.jobId || r.job_id;
+      if (id) getEntry(id).repairs++;
+    }
+  }
+  if (state.photos) {
+    for (let i = 0; i < state.photos.length; i++) {
+      const p = state.photos[i];
+      const id = p.jobId || p.job_id;
+      if (id) getEntry(id).photos++;
+    }
+  }
+  if (state.signatures) {
+    for (let i = 0; i < state.signatures.length; i++) {
+      const s = state.signatures[i];
+      const id = s.jobId || s.job_id;
+      if (id) getEntry(id).signatures++;
+    }
+  }
+  return counts;
+}
+
+/**
  * Calculate job completeness score (0-100).
+ * Supports optional precomputed countsMap or state object to avoid repeated store lookups and O(N*M) nested iterations.
+ *
  * @param {string} jobId
+ * @param {import('./types').AppState} [state]
+ * @param {Map<string, { visits: number, repairs: number, photos: number, signatures: number }>} [countsMap]
  * @returns {number}
  */
-function jobScore(jobId) {
-  const s = store.getState();
-  const hasVisits = s.visits.some((v) => v.jobId === jobId || v.job_id === jobId);
-  const hasPhotos = s.photos.some((p) => p.jobId === jobId || p.job_id === jobId);
-  const hasRepairs = s.repairs.some((r) => r.jobId === jobId || r.job_id === jobId);
-  const hasSig = s.signatures.some((sig) => sig.jobId === jobId || sig.job_id === jobId);
+function jobScore(jobId, state = null, countsMap = null) {
+  if (countsMap) {
+    const c = countsMap.get(jobId);
+    if (!c) return 0;
+    return Math.min(100,
+      (c.visits > 0 ? 25 : 0) +
+      (c.photos > 0 ? 25 : 0) +
+      (c.repairs > 0 ? 25 : 0) +
+      (c.signatures > 0 ? 25 : 0)
+    );
+  }
+  const s = state || store.getState();
+  const hasVisits = (s.visits || []).some((v) => (v.jobId || v.job_id) === jobId);
+  const hasPhotos = (s.photos || []).some((p) => (p.jobId || p.job_id) === jobId);
+  const hasRepairs = (s.repairs || []).some((r) => (r.jobId || r.job_id) === jobId);
+  const hasSig = (s.signatures || []).some((sig) => (sig.jobId || sig.job_id) === jobId);
   return Math.min(100,
     (hasVisits ? 25 : 0) +
     (hasPhotos ? 25 : 0) +
@@ -550,8 +613,10 @@ const Dashboard = {
         <!-- Recent Jobs -->
         <h2 class="section-title">${q ? 'Search Results' : 'Recent Jobs'}</h2>
         <div class="job-list">
-          ${recentJobs.length ? recentJobs.map((j) => this._jobCard(j, state)).join('')
-            : '<div class="card empty">No jobs yet.</div>'}
+          ${recentJobs.length ? (() => {
+            const countsMap = buildJobCountsMap(state);
+            return recentJobs.map((j) => this._jobCard(j, state, countsMap)).join('');
+          })() : '<div class="card empty">No jobs yet.</div>'}
         </div>
 
         <!-- Top Towns -->
@@ -601,13 +666,14 @@ const Dashboard = {
     `;
   },
 
-  _jobCard(j, state) {
-    const s = jobScore(j.id);
+  _jobCard(j, state, countsMap = null) {
+    const counts = countsMap ? countsMap.get(j.id) : null;
+    const s = jobScore(j.id, state, countsMap);
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
-    const vCount = (state.visits || []).filter((v) => (v.jobId || v.job_id) === j.id).length;
-    const rCount = (state.repairs || []).filter((r) => (r.jobId || r.job_id) === j.id).length;
-    const pCount = (state.photos || []).filter((p) => (p.jobId || p.job_id) === j.id).length;
+    const vCount = countsMap ? (counts?.visits ?? 0) : (state.visits || []).filter((v) => (v.jobId || v.job_id) === j.id).length;
+    const rCount = countsMap ? (counts?.repairs ?? 0) : (state.repairs || []).filter((r) => (r.jobId || r.job_id) === j.id).length;
+    const pCount = countsMap ? (counts?.photos ?? 0) : (state.photos || []).filter((p) => (p.jobId || p.job_id) === j.id).length;
     return `
       <div class="card job-card" data-job-id="${E(j.id)}">
         <div class="job-header">
@@ -705,6 +771,8 @@ const JobList = {
     jobs = filterJobs(jobs, state.filters);
     jobs = sortBy(jobs, 'updated_at', 'desc');
 
+    const countsMap = buildJobCountsMap(state);
+
     return `
       <div class="page job-list-page">
         <div class="list-toolbar">
@@ -721,15 +789,15 @@ const JobList = {
           <button class="btn primary" data-action="new-job">➕ New Job</button>
         </div>
         <div class="job-list">
-          ${jobs.length ? jobs.map((j) => this._jobCard(j, state)).join('')
+          ${jobs.length ? jobs.map((j) => this._jobCard(j, state, countsMap)).join('')
             : `<div class="card empty">${q ? 'No matching jobs.' : 'No jobs yet.'}</div>`}
         </div>
       </div>
     `;
   },
 
-  _jobCard(j, state) {
-    const s = jobScore(j.id);
+  _jobCard(j, state, countsMap = null) {
+    const s = jobScore(j.id, state, countsMap);
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
     return `
