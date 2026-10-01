@@ -401,11 +401,63 @@ function O(arr, selected = '') {
 }
 
 /**
+ * Pre-compute job collection counts in a single O(V+P+R+S) pass to avoid repeated scans during list rendering.
+ * @param {Record<string, any>} state
+ * @returns {{ vCounts: Record<string, number>, pCounts: Record<string, number>, rCounts: Record<string, number>, sCounts: Record<string, number> }}
+ */
+export function buildJobCounts(state) {
+  const vCounts = {};
+  const pCounts = {};
+  const rCounts = {};
+  const sCounts = {};
+
+  if (state?.visits) {
+    for (let i = 0; i < state.visits.length; i++) {
+      const id = state.visits[i].jobId || state.visits[i].job_id;
+      if (id) vCounts[id] = (vCounts[id] || 0) + 1;
+    }
+  }
+  if (state?.photos) {
+    for (let i = 0; i < state.photos.length; i++) {
+      const id = state.photos[i].jobId || state.photos[i].job_id;
+      if (id) pCounts[id] = (pCounts[id] || 0) + 1;
+    }
+  }
+  if (state?.repairs) {
+    for (let i = 0; i < state.repairs.length; i++) {
+      const id = state.repairs[i].jobId || state.repairs[i].job_id;
+      if (id) rCounts[id] = (rCounts[id] || 0) + 1;
+    }
+  }
+  if (state?.signatures) {
+    for (let i = 0; i < state.signatures.length; i++) {
+      const id = state.signatures[i].jobId || state.signatures[i].job_id;
+      if (id) sCounts[id] = (sCounts[id] || 0) + 1;
+    }
+  }
+
+  return { vCounts, pCounts, rCounts, sCounts };
+}
+
+/**
  * Calculate job completeness score (0-100).
  * @param {string} jobId
+ * @param {{ vCounts: Record<string, number>, pCounts: Record<string, number>, rCounts: Record<string, number>, sCounts: Record<string, number> }|null} [counts=null]
  * @returns {number}
  */
-function jobScore(jobId) {
+export function jobScore(jobId, counts = null) {
+  if (counts) {
+    const hasVisits = Boolean(counts.vCounts[jobId]);
+    const hasPhotos = Boolean(counts.pCounts[jobId]);
+    const hasRepairs = Boolean(counts.rCounts[jobId]);
+    const hasSig = Boolean(counts.sCounts[jobId]);
+    return Math.min(100,
+      (hasVisits ? 25 : 0) +
+      (hasPhotos ? 25 : 0) +
+      (hasRepairs ? 25 : 0) +
+      (hasSig ? 25 : 0)
+    );
+  }
   const s = store.getState();
   const hasVisits = s.visits.some((v) => v.jobId === jobId || v.job_id === jobId);
   const hasPhotos = s.photos.some((p) => p.jobId === jobId || p.job_id === jobId);
@@ -550,8 +602,10 @@ const Dashboard = {
         <!-- Recent Jobs -->
         <h2 class="section-title">${q ? 'Search Results' : 'Recent Jobs'}</h2>
         <div class="job-list">
-          ${recentJobs.length ? recentJobs.map((j) => this._jobCard(j, state)).join('')
-            : '<div class="card empty">No jobs yet.</div>'}
+          ${recentJobs.length ? (() => {
+            const counts = buildJobCounts(state);
+            return recentJobs.map((j) => this._jobCard(j, state, counts)).join('');
+          })() : '<div class="card empty">No jobs yet.</div>'}
         </div>
 
         <!-- Top Towns -->
@@ -601,13 +655,14 @@ const Dashboard = {
     `;
   },
 
-  _jobCard(j, state) {
-    const s = jobScore(j.id);
+  _jobCard(j, state, counts = null) {
+    // Optimization: Use pre-computed counts map if available to avoid 7 O(M) array scans per job card.
+    const s = jobScore(j.id, counts);
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
-    const vCount = (state.visits || []).filter((v) => (v.jobId || v.job_id) === j.id).length;
-    const rCount = (state.repairs || []).filter((r) => (r.jobId || r.job_id) === j.id).length;
-    const pCount = (state.photos || []).filter((p) => (p.jobId || p.job_id) === j.id).length;
+    const vCount = counts ? (counts.vCounts[j.id] || 0) : (state.visits || []).filter((v) => (v.jobId || v.job_id) === j.id).length;
+    const rCount = counts ? (counts.rCounts[j.id] || 0) : (state.repairs || []).filter((r) => (r.jobId || r.job_id) === j.id).length;
+    const pCount = counts ? (counts.pCounts[j.id] || 0) : (state.photos || []).filter((p) => (p.jobId || p.job_id) === j.id).length;
     return `
       <div class="card job-card" data-job-id="${E(j.id)}">
         <div class="job-header">
@@ -721,15 +776,18 @@ const JobList = {
           <button class="btn primary" data-action="new-job">➕ New Job</button>
         </div>
         <div class="job-list">
-          ${jobs.length ? jobs.map((j) => this._jobCard(j, state)).join('')
-            : `<div class="card empty">${q ? 'No matching jobs.' : 'No jobs yet.'}</div>`}
+          ${jobs.length ? (() => {
+            const counts = buildJobCounts(state);
+            return jobs.map((j) => this._jobCard(j, state, counts)).join('');
+          })() : `<div class="card empty">${q ? 'No matching jobs.' : 'No jobs yet.'}</div>`}
         </div>
       </div>
     `;
   },
 
-  _jobCard(j, state) {
-    const s = jobScore(j.id);
+  _jobCard(j, state, counts = null) {
+    // Optimization: Use pre-computed counts map if available to avoid O(M) array scans per job card.
+    const s = jobScore(j.id, counts);
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
     return `
@@ -4289,10 +4347,12 @@ export function destroyApp() {
 // Auto-initialize on DOM ready
 // ═══════════════════════════════════════════════════
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initApp);
-} else {
-  initApp();
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+  } else {
+    initApp();
+  }
 }
 
 // ═══════════════════════════════════════════════════
