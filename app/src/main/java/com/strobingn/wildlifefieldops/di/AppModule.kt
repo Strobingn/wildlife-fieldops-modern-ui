@@ -21,18 +21,11 @@ object AppModule {
         return Room.databaseBuilder(
             context,
             AppDatabase::class.java,
-            "wildlife_fieldops.db"
+            AppDatabase.NAME
         )
-            .addMigrations(
-                Migrations.MIGRATION_3_4,
-                Migrations.MIGRATION_4_5,
-                Migrations.MIGRATION_5_6,
-                Migrations.MIGRATION_6_7,
-                Migrations.MIGRATION_7_8,
-                Migrations.MIGRATION_8_9,
-                Migrations.MIGRATION_9_10,
-                Migrations.MIGRATION_10_11,
-            )
+            .addMigrations(*Migrations.ALL)
+            // Never fallbackToDestructiveMigration: a restored backup may be
+            // Room user_version 10 (pre-pricing) and must migrate in place to 11.
             .build()
     }
 

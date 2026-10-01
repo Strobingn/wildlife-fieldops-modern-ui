@@ -12,6 +12,11 @@ build/
 *.apk
 local.properties
 
+# Signing material — never commit keystores or PKCS12 files
+*.jks
+*.keystore
+*.p12
+
 # Cloud Agent install writes machine-local SDK/JDK exports here.
 .cursor/env.sh
 

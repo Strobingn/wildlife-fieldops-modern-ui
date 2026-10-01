@@ -1,5 +1,7 @@
 package com.strobingn.wildlifefieldops.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -19,6 +22,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.BuildConfig
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.SettingsViewModel
+import com.strobingn.wildlifefieldops.util.WildlifeWhispererBrand
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,12 +42,20 @@ fun SettingsScreen(
     val connectionStatus by viewModel.connectionStatus.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
+    val isBackingUp by viewModel.isBackingUp.collectAsState()
     val backlog by viewModel.backlog.collectAsState()
     val lastSyncMessage by viewModel.lastSyncMessage.collectAsState()
     val lastSyncOk by viewModel.lastSyncOk.collectAsState()
+    val context = LocalContext.current
     var showClearDataDialog by remember { mutableStateOf(false) }
+    var showRestoreDialog by remember { mutableStateOf(false) }
     var showAiOperations by remember { mutableStateOf(false) }
     var showDiagnostics by remember { mutableStateOf(false) }
+    val restoreLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) viewModel.restoreFromBackup(context, uri)
+    }
 
     if (showAiOperations) {
         AIOperationsScreen(onBack = { showAiOperations = false })
@@ -294,6 +306,40 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
+            SettingsSectionTitle("Backup & restore")
+            SettingsCard {
+                Text(
+                    "${WildlifeWhispererBrand.COMPANY} one-tap backup: checkpoints the field database, then zips it with photos and settings into Downloads. Restore from a zip before installing a new APK if you still have unsynced jobs.",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { viewModel.exportData() },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isBackingUp && !isSyncing,
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = Color.White),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    if (isBackingUp) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                    else Icon(Icons.Default.Download, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(if (isBackingUp) "Working…" else "Export data", fontWeight = FontWeight.Bold)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { showRestoreDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isBackingUp && !isSyncing,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.UploadFile, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Restore from backup")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
             SettingsSectionTitle("Danger Zone")
             SettingsCard {
                 Button(
@@ -311,6 +357,29 @@ fun SettingsScreen(
             Text("Wildlife FieldOps v${BuildConfig.VERSION_NAME} (code ${BuildConfig.VERSION_CODE})", style = MaterialTheme.typography.labelSmall, color = TextTertiary, modifier = Modifier.align(Alignment.CenterHorizontally))
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+
+    if (showRestoreDialog) {
+        AlertDialog(
+            onDismissRequest = { showRestoreDialog = false },
+            title = { Text("Restore Wildlife Whisperer backup?", color = TextPrimary) },
+            text = {
+                Text(
+                    "This replaces jobs, photos, and settings on this phone with the zip you pick. The app restarts so Room opens on the restored database.",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRestoreDialog = false
+                    restoreLauncher.launch(arrayOf("application/zip", "*/*"))
+                }) { Text("Pick backup zip", color = PrimaryGreen) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestoreDialog = false }) { Text("Cancel", color = TextSecondary) }
+            },
+            containerColor = BackgroundCard
+        )
     }
 
     if (showClearDataDialog) {

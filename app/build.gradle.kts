@@ -19,8 +19,13 @@ android {
         applicationId = "com.strobingn.wildlifefieldops"
         minSdk = 29
         targetSdk = 35
-        versionCode = 49
-        versionName = "2.3.8-editable-pricing"
+        // Local/dev installs keep this hand-set code. GitHub Actions overrides with
+        // 1_000_000 + GITHUB_RUN_NUMBER so branch APKs never VERSION_DOWNGRADE (48/49/50+).
+        versionCode = 50
+        versionName = "2.3.9-stable-signing"
+        System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.takeIf { it > 0 }?.let { runNumber ->
+            versionCode = 1_000_000 + runNumber
+        }
 
         val supabaseUrl = System.getenv("SUPABASE_URL") ?: "https://your-project.supabase.co"
         val supabaseKey = System.getenv("SUPABASE_ANON_KEY") ?: "your-anon-key"
@@ -82,6 +87,17 @@ android {
     }
 
     signingConfigs {
+        // Persistent CI debug key (PKCS12). Path/password come from env; never logged.
+        create("ci") {
+            val keystorePath = System.getenv("DEBUG_KEYSTORE_PATH")?.trim().orEmpty()
+            if (keystorePath.isNotEmpty() && file(keystorePath).exists()) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("DEBUG_KEYSTORE_PASSWORD") ?: ""
+                keyPassword = System.getenv("DEBUG_KEYSTORE_PASSWORD") ?: ""
+                keyAlias = "androiddebugkey"
+                storeType = "PKCS12"
+            }
+        }
         create("release") {
             val keystorePath = System.getenv("KEYSTORE_PATH")
             if (keystorePath != null && file(keystorePath).exists()) {
@@ -106,6 +122,10 @@ android {
         debug {
             isDebuggable = true
             buildConfigField("boolean", "WM_SYNC_CANARY_ENABLED", "true")
+            val ciKeystore = System.getenv("DEBUG_KEYSTORE_PATH")?.trim().orEmpty()
+            if (ciKeystore.isNotEmpty() && file(ciKeystore).exists()) {
+                signingConfig = signingConfigs.getByName("ci")
+            }
         }
     }
 
