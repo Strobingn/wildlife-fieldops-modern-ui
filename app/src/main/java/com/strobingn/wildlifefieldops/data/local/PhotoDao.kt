@@ -15,6 +15,9 @@ interface PhotoDao {
     @Query("SELECT * FROM photos WHERE jobId = :jobId ORDER BY takenAt DESC")
     fun getByJob(jobId: String): Flow<List<Photo>>
 
+    @Query("SELECT * FROM photos WHERE jobId = :jobId ORDER BY takenAt DESC")
+    suspend fun getByJobOnce(jobId: String): List<Photo>
+
     @Query("SELECT * FROM photos WHERE inspectionId = :inspectionId ORDER BY takenAt DESC")
     fun getByInspection(inspectionId: String): Flow<List<Photo>>
 

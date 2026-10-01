@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -49,6 +50,7 @@ fun DashboardScreen(
     val stats by viewModel.stats.collectAsState()
     val recentJobs by viewModel.recentJobs.collectAsState()
     val reminders by viewModel.pendingReminders.collectAsState()
+    val dueNextSteps by viewModel.dueNextSteps.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val weatherVm: LiveWeatherViewModel = hiltViewModel()
     val weatherState by weatherVm.state.collectAsState()
@@ -386,6 +388,33 @@ fun DashboardScreen(
                             job = job,
                             onClick = { onNavigateToJobDetail(job.id) }
                         )
+                    }
+                }
+            }
+
+            if (dueNextSteps.isNotEmpty()) {
+                item {
+                    SectionHeader(title = "Next steps due")
+                }
+                items(dueNextSteps) { job ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onNavigateToJobDetail(job.id) },
+                        colors = CardDefaults.cardColors(containerColor = BackgroundCard),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(job.title.ifBlank { job.customerName }, color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                            Text(job.nextStep, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                            job.nextStepDueAt?.let { due ->
+                                Text(
+                                    SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).format(Date(due)),
+                                    color = TextTertiary,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
                     }
                 }
             }

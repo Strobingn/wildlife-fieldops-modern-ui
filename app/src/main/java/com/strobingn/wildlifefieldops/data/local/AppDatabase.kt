@@ -24,7 +24,7 @@ import com.strobingn.wildlifefieldops.data.model.*
         ObservationEventRecord::class,
         SyncOperationRecord::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -47,7 +47,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun syncOperationDao(): SyncOperationDao
 
     companion object {
-        const val VERSION = 11
+        const val VERSION = 12
         const val NAME = "wildlife_fieldops.db"
     }
 }

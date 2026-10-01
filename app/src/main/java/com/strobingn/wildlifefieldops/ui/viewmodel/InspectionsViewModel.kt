@@ -5,9 +5,16 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.strobingn.wildlifefieldops.ai.WalkthroughVideoAnalyzer
+import com.strobingn.wildlifefieldops.ai.fieldops.AiRuntimeMode
+import com.strobingn.wildlifefieldops.ai.fieldops.AiRuntimeStatus
+import com.strobingn.wildlifefieldops.ai.fieldops.InspectionEvidence
+import com.strobingn.wildlifefieldops.ai.fieldops.InspectionNarrativeDraft
+import com.strobingn.wildlifefieldops.ai.fieldops.InspectionNarrativeEngine
+import com.strobingn.wildlifefieldops.ai.fieldops.PhotoEvidence
 import com.strobingn.wildlifefieldops.data.local.DeletedRecordDao
 import com.strobingn.wildlifefieldops.data.local.InspectionDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
+import com.strobingn.wildlifefieldops.data.local.PhotoDao
 import com.strobingn.wildlifefieldops.data.model.DeletedRecord
 import com.strobingn.wildlifefieldops.data.model.FindingSeverity
 import com.strobingn.wildlifefieldops.data.model.Inspection
@@ -26,6 +33,7 @@ import javax.inject.Inject
 class InspectionsViewModel @Inject constructor(
     private val inspectionDao: InspectionDao,
     private val jobDao: JobDao,
+    private val photoDao: PhotoDao,
     private val deletedRecordDao: DeletedRecordDao,
     private val syncRepository: SyncRepository,
     private val aiService: AiService
@@ -135,6 +143,86 @@ class InspectionsViewModel @Inject constructor(
 
     fun clearEstimatePrepMessage() {
         _estimatePrepMessage.value = null
+    }
+
+    fun aiRuntime(): AiRuntimeStatus = AiRuntimeStatus.resolve(
+        cloudConfigured = aiService.isConfigured,
+        onDeviceReady = aiService.localLlmReady
+    )
+
+    fun draftNarrativeFromEvidence(
+        jobId: String,
+        context: InspectionReportContext,
+        replace: Boolean,
+        onFilled: (InspectionNarrativeDraft) -> Unit
+    ) {
+        if (_reportLoading.value) return
+        _reportLoading.value = true
+        _reportError.value = null
+        _reportSource.value = null
+        viewModelScope.launch {
+            val photos = if (jobId.isBlank()) emptyList() else photoDao.getByJobOnce(jobId)
+            val job = if (jobId.isBlank()) null else jobDao.getById(jobId)
+            val evidence = InspectionEvidence(
+                customerName = context.customerName,
+                jobTitle = context.jobTitle.ifBlank { job?.title.orEmpty() },
+                jobAddress = context.jobAddress.ifBlank { job?.address.orEmpty() },
+                jobType = job?.confirmedSpecies?.ifBlank { job.type }.orEmpty(),
+                jobNotes = job?.notes.orEmpty(),
+                existingFindings = context.existingFindings,
+                existingRecommendations = context.existingRecommendations,
+                existingSpecies = context.existingSpecies,
+                existingEntryPoints = context.existingEntryPoints,
+                existingDamage = context.existingDamage,
+                existingNotes = context.existingNotes,
+                photoTags = PhotoEvidence.tags(photos),
+                photoNotes = PhotoEvidence.notes(photos)
+            )
+            val heuristic = InspectionNarrativeEngine.draft(evidence)
+            val current = InspectionNarrativeDraft(
+                findings = context.existingFindings,
+                recommendations = context.existingRecommendations,
+                speciesIdentified = context.existingSpecies,
+                entryPoints = context.existingEntryPoints,
+                damageAssessment = context.existingDamage,
+                notes = context.existingNotes
+            )
+            val transcript = InspectionNarrativeEngine.evidenceTranscript(evidence)
+            val ai = aiService.writeInspectionReportFromDictation(transcript, context)
+            val suggested = if (ai.draft != null) {
+                InspectionNarrativeDraft(
+                    findings = ai.draft.findings,
+                    recommendations = ai.draft.recommendations,
+                    speciesIdentified = ai.draft.speciesIdentified,
+                    entryPoints = ai.draft.entryPoints,
+                    damageAssessment = ai.draft.damageAssessment,
+                    notes = listOf(ai.draft.notes, ai.draft.summary).filter { it.isNotBlank() }.joinToString("\n"),
+                    source = when {
+                        ai.sourceLabel.contains("On-device", ignoreCase = true) -> AiRuntimeMode.ON_DEVICE
+                        ai.sourceLabel.contains("Cloud", ignoreCase = true) -> AiRuntimeMode.CLOUD
+                        else -> AiRuntimeMode.HEURISTIC
+                    }
+                )
+            } else {
+                heuristic
+            }
+            val merged = InspectionNarrativeEngine.apply(current, suggested, replace)
+            _lastReportDraft.value = com.strobingn.wildlifefieldops.data.remote.InspectionReportDraft(
+                findings = merged.findings,
+                recommendations = merged.recommendations,
+                speciesIdentified = merged.speciesIdentified,
+                entryPoints = merged.entryPoints,
+                damageAssessment = merged.damageAssessment,
+                notes = merged.notes,
+                summary = merged.findings
+            )
+            _reportSource.value = AiRuntimeStatus.of(merged.source).label
+            _reportLoading.value = false
+            if (ai.draft == null && ai.error != null && suggested.source == AiRuntimeMode.HEURISTIC) {
+                _reportError.value = null
+            }
+            onFilled(merged)
+        }
     }
 
     fun writeReportFromDictation(
@@ -291,7 +379,9 @@ class InspectionsViewModel @Inject constructor(
         followUpRequired: Boolean,
         followUpDate: Long?,
         weatherConditions: String,
-        notes: String
+        notes: String,
+        aiNarrativeDraft: String = "",
+        aiDraftSource: String = ""
     ) = viewModelScope.launch {
         val inspection = Inspection(
             jobId = jobId,
@@ -309,7 +399,10 @@ class InspectionsViewModel @Inject constructor(
             followUpRequired = followUpRequired,
             followUpDate = followUpDate,
             weatherConditions = weatherConditions,
-            notes = notes
+            notes = notes,
+            isSynced = false,
+            aiNarrativeDraft = aiNarrativeDraft,
+            aiDraftSource = aiDraftSource
         )
         inspectionDao.insert(inspection)
     }

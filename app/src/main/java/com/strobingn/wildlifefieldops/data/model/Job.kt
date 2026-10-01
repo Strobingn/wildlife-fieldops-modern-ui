@@ -47,5 +47,15 @@ data class Job(
      * Estimate worksheet + computed-field overrides. Empty default preserves
      * existing jobs; [estimatedValue] stays the effective quote total.
      */
-    val pricing: JobPricing = JobPricing()
+    val pricing: JobPricing = JobPricing(),
+    /** Operator-confirmed species (AI may suggest; typed value wins). */
+    val confirmedSpecies: String = "",
+    /** NY DEC / rabies / protected-species notes Sir accepted or rewrote. */
+    val legalNotes: String = "",
+    /** Next field action (AI draft or typed). */
+    val nextStep: String = "",
+    val nextStepDueAt: Long? = null,
+    val nextStepSource: String = "",
+    /** Last AI runtime used on this job: cloud / on_device / heuristic. */
+    val aiRuntime: String = ""
 )

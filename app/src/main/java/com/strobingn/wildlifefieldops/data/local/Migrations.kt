@@ -27,6 +27,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * MIGRATION_10_11 persists the estimate worksheet and computed-field overrides
  * on jobs (`pricing` JSON) and invoices (nullable override columns). Existing
  * rows stay valid: empty pricing JSON and NULL overrides mean "use calculated".
+ *
+ * MIGRATION_11_12 adds FieldOps AI columns on jobs and inspections. Existing
+ * rows stay valid (empty strings / NULL due). Values also ride in
+ * `jobs.pricing` jsonb and `inspections.findings` jsonb for live sync.
  */
 object Migrations {
 
@@ -169,7 +173,20 @@ object Migrations {
         }
     }
 
-    /** Ordered 3→11. Restored backups may be older than VERSION 11; Room must migrate, never wipe. */
+    val MIGRATION_11_12 = object : Migration(11, 12) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE jobs ADD COLUMN confirmedSpecies TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE jobs ADD COLUMN legalNotes TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE jobs ADD COLUMN nextStep TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE jobs ADD COLUMN nextStepDueAt INTEGER")
+            db.execSQL("ALTER TABLE jobs ADD COLUMN nextStepSource TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE jobs ADD COLUMN aiRuntime TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE inspections ADD COLUMN aiNarrativeDraft TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE inspections ADD COLUMN aiDraftSource TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
+    /** Ordered 3→12. Restored backups may be older than VERSION 12; Room must migrate, never wipe. */
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_3_4,
         MIGRATION_4_5,
@@ -179,5 +196,6 @@ object Migrations {
         MIGRATION_8_9,
         MIGRATION_9_10,
         MIGRATION_10_11,
+        MIGRATION_11_12,
     )
 }

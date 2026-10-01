@@ -2,6 +2,7 @@ package com.strobingn.wildlifefieldops.data.model
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 import java.util.UUID
 
 enum class InvoiceStatus {
@@ -45,6 +46,7 @@ data class Invoice(
     val isSynced: Boolean = false
 )
 
+@Serializable
 data class InvoiceLineItem(
     val id: String = UUID.randomUUID().toString(),
     val description: String = "",

@@ -47,6 +47,9 @@ fun JobFormScreen(
     var estimatedValue by remember { mutableStateOf("") }
     var actualCost by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
+    var confirmedSpecies by remember { mutableStateOf("") }
+    var legalNotes by remember { mutableStateOf("") }
+    var nextStep by remember { mutableStateOf("") }
     var showTypeDropdown by remember { mutableStateOf(false) }
     var showPriorityDropdown by remember { mutableStateOf(false) }
     var showAddServiceDialog by remember { mutableStateOf(false) }
@@ -74,6 +77,9 @@ fun JobFormScreen(
             estimatedValue = if (job.estimatedValue > 0) job.estimatedValue.toString() else ""
             actualCost = if (job.actualCost > 0) job.actualCost.toString() else ""
             notes = job.notes
+            confirmedSpecies = job.confirmedSpecies
+            legalNotes = job.legalNotes
+            nextStep = job.nextStep
             val visits = viewModel.loadScheduledVisits(job.id)
             appointmentTimes.clear()
             appointmentTimes.addAll(
@@ -317,6 +323,38 @@ fun JobFormScreen(
             )
 
             OutlinedTextField(
+                value = confirmedSpecies,
+                onValueChange = { confirmedSpecies = it },
+                label = { Text("Confirmed species") },
+                supportingText = { Text("Type the animal you confirmed. Safety notes use this.", color = TextTertiary) },
+                colors = fieldColors(),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = legalNotes,
+                onValueChange = { legalNotes = it },
+                label = { Text("NY legal / safety notes") },
+                supportingText = { Text("Catalog text is a draft. Anything you type here is what we keep.", color = TextTertiary) },
+                colors = fieldColors(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(90.dp),
+                shape = RoundedCornerShape(12.dp),
+                maxLines = 4
+            )
+            OutlinedTextField(
+                value = nextStep,
+                onValueChange = { nextStep = it },
+                label = { Text("Next step") },
+                colors = fieldColors(),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                maxLines = 3
+            )
+
+            OutlinedTextField(
                 value = notes,
                 onValueChange = { notes = it },
                 label = { Text("Notes") },
@@ -382,7 +420,10 @@ fun JobFormScreen(
                         estimatedValue = estVal,
                         notes = notes.trim(),
                         appointmentTimes = appointmentTimes.toList(),
-                        actualCost = actualCost.toDoubleOrNull()
+                        actualCost = actualCost.toDoubleOrNull(),
+                        confirmedSpecies = confirmedSpecies.trim(),
+                        legalNotes = legalNotes.trim(),
+                        nextStep = nextStep.trim()
                     ) {
                         onBack()
                     }

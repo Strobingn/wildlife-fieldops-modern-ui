@@ -31,8 +31,10 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.strobingn.wildlifefieldops.ai.fieldops.AiRuntimeStatus
 import com.strobingn.wildlifefieldops.data.model.*
 import com.strobingn.wildlifefieldops.data.remote.InspectionReportContext
+import com.strobingn.wildlifefieldops.ui.components.AiRuntimeBadge
 import com.strobingn.wildlifefieldops.ui.components.ScheduleDateTimeField
 import com.strobingn.wildlifefieldops.ui.components.defaultAppointmentTime
 import com.strobingn.wildlifefieldops.ui.theme.*
@@ -90,6 +92,9 @@ fun InspectionFormScreen(
     var linkedJobTitle by remember { mutableStateOf("") }
     var linkedJobAddress by remember { mutableStateOf("") }
     var linkedJobDescription by remember { mutableStateOf("") }
+    var replaceAiFields by remember { mutableStateOf(false) }
+    var aiNarrativeDraft by remember { mutableStateOf("") }
+    var aiDraftSource by remember { mutableStateOf("") }
 
     LaunchedEffect(existing) {
         val insp = existing ?: return@LaunchedEffect
@@ -107,6 +112,8 @@ fun InspectionFormScreen(
         notes = insp.notes
         scheduledAt = insp.inspectionDate
         if (insp.jobId.isNotBlank()) linkedJobId = insp.jobId
+        aiNarrativeDraft = insp.aiNarrativeDraft
+        aiDraftSource = insp.aiDraftSource
     }
 
     LaunchedEffect(linkedJobId) {
@@ -434,6 +441,64 @@ fun InspectionFormScreen(
                             Text("AI Report", fontWeight = FontWeight.Bold)
                         }
                     }
+                    AiRuntimeBadge(
+                        status = viewModel.aiRuntime(),
+                        lastUsed = aiDraftSource,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.draftNarrativeFromEvidence(
+                                    jobId = linkedJobId,
+                                    context = InspectionReportContext(
+                                        customerName = customerName,
+                                        inspectorName = inspectorName,
+                                        inspectionType = selectedType.name,
+                                        jobTitle = linkedJobTitle,
+                                        jobAddress = linkedJobAddress,
+                                        jobDescription = linkedJobDescription,
+                                        existingFindings = findings,
+                                        existingRecommendations = recommendations,
+                                        existingSpecies = speciesIdentified,
+                                        existingEntryPoints = entryPoints,
+                                        existingDamage = damageAssessment,
+                                        existingNotes = notes
+                                    ),
+                                    replace = replaceAiFields
+                                ) { draft ->
+                                    findings = draft.findings
+                                    recommendations = draft.recommendations
+                                    if (draft.speciesIdentified.isNotBlank()) speciesIdentified = draft.speciesIdentified
+                                    if (draft.entryPoints.isNotBlank()) entryPoints = draft.entryPoints
+                                    if (draft.damageAssessment.isNotBlank()) damageAssessment = draft.damageAssessment
+                                    if (draft.notes.isNotBlank() && notes.isBlank()) notes = draft.notes
+                                    aiNarrativeDraft = draft.findings
+                                    aiDraftSource = AiRuntimeStatus.wireName(draft.source)
+                                }
+                            },
+                            enabled = !reportLoading,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGreen),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (replaceAiFields) "Replace from photos" else "Draft from photos")
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = replaceAiFields,
+                                onCheckedChange = { replaceAiFields = it },
+                                colors = CheckboxDefaults.colors(checkedColor = PrimaryGreen)
+                            )
+                            Text("Replace mine", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                        }
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -524,7 +589,9 @@ fun InspectionFormScreen(
                                             } else null,
                                             weatherConditions = weatherConditions,
                                             notes = notes,
-                                            isSynced = false
+                                            isSynced = false,
+                                            aiNarrativeDraft = aiNarrativeDraft,
+                                            aiDraftSource = aiDraftSource
                                         )
                                     )
                                 } else {
@@ -544,7 +611,9 @@ fun InspectionFormScreen(
                                         followUpRequired = followUpRequired,
                                         followUpDate = if (followUpRequired) System.currentTimeMillis() + 7 * 86400000L else null,
                                         weatherConditions = weatherConditions,
-                                        notes = notes
+                                        notes = notes,
+                                        aiNarrativeDraft = aiNarrativeDraft,
+                                        aiDraftSource = aiDraftSource
                                     )
                                 }
                                 onBack()

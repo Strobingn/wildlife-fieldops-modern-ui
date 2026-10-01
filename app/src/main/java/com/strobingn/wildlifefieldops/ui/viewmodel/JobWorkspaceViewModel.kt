@@ -76,6 +76,10 @@ class JobWorkspaceViewModel @Inject constructor(
         notes: String,
         appointmentTimes: List<Long>,
         actualCost: Double? = null,
+        confirmedSpecies: String? = null,
+        legalNotes: String? = null,
+        nextStep: String? = null,
+        nextStepDueAt: Long? = null,
         onSaved: (JobSaveResult) -> Unit
     ) {
         if (_isSaving.value) return
@@ -93,7 +97,11 @@ class JobWorkspaceViewModel @Inject constructor(
                         notes = notes,
                         appointmentTimes = appointmentTimes,
                         actualCost = actualCost,
-                        customer = _draft.value
+                        customer = _draft.value,
+                        confirmedSpecies = confirmedSpecies,
+                        legalNotes = legalNotes,
+                        nextStep = nextStep,
+                        nextStepDueAt = nextStepDueAt
                     )
                 )
                 onSaved(result)

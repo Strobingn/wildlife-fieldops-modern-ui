@@ -15,6 +15,7 @@ import com.strobingn.wildlifefieldops.data.remote.JobIntakeDraft
 import com.strobingn.wildlifefieldops.data.repository.SyncRepository
 import com.strobingn.wildlifefieldops.data.workspace.JobCustomerWorkspace
 import com.strobingn.wildlifefieldops.data.workspace.JobSaveRequest
+import com.strobingn.wildlifefieldops.ai.fieldops.JobFieldOpsCodec
 import com.strobingn.wildlifefieldops.pricing.JobPricing
 import com.strobingn.wildlifefieldops.pricing.PricingCalculator
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -114,15 +115,21 @@ class JobsViewModel @Inject constructor(
     }
 
     fun saveJob(job: Job) = viewModelScope.launch {
-        jobDao.insert(withCoordinates(job.copy(isSynced = false, updatedAt = System.currentTimeMillis())))
+        jobDao.insert(
+            JobFieldOpsCodec.mergeForSave(
+                withCoordinates(job.copy(isSynced = false, updatedAt = System.currentTimeMillis()))
+            )
+        )
     }
 
     fun updateJob(job: Job) = viewModelScope.launch {
         jobDao.insert(
-            withCoordinates(
-                job.copy(
-                    updatedAt = System.currentTimeMillis(),
-                    isSynced = false
+            JobFieldOpsCodec.mergeForSave(
+                withCoordinates(
+                    job.copy(
+                        updatedAt = System.currentTimeMillis(),
+                        isSynced = false
+                    )
                 )
             )
         )
@@ -164,7 +171,7 @@ class JobsViewModel @Inject constructor(
                     isSynced = false,
                     pricing = nextPricing
                 )
-            )
+            ).let { JobFieldOpsCodec.mergeForSave(it) }
         )
     }
 
@@ -282,12 +289,43 @@ class JobsViewModel @Inject constructor(
     fun saveJobPricing(jobId: String, pricing: JobPricing) = viewModelScope.launch {
         val existing = jobDao.getById(jobId) ?: return@launch
         val quote = PricingCalculator.compute(pricing)
+        val next = existing.copy(
+            pricing = pricing,
+            estimatedValue = quote.total.effective,
+            confirmedSpecies = pricing.confirmedSpecies.ifBlank { existing.confirmedSpecies },
+            legalNotes = pricing.legalNotes.ifBlank { existing.legalNotes },
+            nextStep = pricing.nextStep.ifBlank { existing.nextStep },
+            nextStepDueAt = pricing.nextStepDueAt ?: existing.nextStepDueAt,
+            nextStepSource = pricing.nextStepSource.ifBlank { existing.nextStepSource },
+            aiRuntime = pricing.aiRuntime.ifBlank { existing.aiRuntime },
+            updatedAt = System.currentTimeMillis(),
+            isSynced = false
+        )
+        jobDao.insert(JobFieldOpsCodec.mergeForSave(next))
+    }
+
+    fun saveFieldOps(
+        job: Job,
+        confirmedSpecies: String = job.confirmedSpecies,
+        legalNotes: String = job.legalNotes,
+        nextStep: String = job.nextStep,
+        nextStepDueAt: Long? = job.nextStepDueAt,
+        nextStepSource: String = job.nextStepSource,
+        aiRuntime: String = job.aiRuntime
+    ) = viewModelScope.launch {
+        val latest = jobDao.getById(job.id) ?: job
         jobDao.insert(
-            existing.copy(
-                pricing = pricing,
-                estimatedValue = quote.total.effective,
-                updatedAt = System.currentTimeMillis(),
-                isSynced = false
+            JobFieldOpsCodec.mergeForSave(
+                latest.copy(
+                    confirmedSpecies = confirmedSpecies,
+                    legalNotes = legalNotes,
+                    nextStep = nextStep,
+                    nextStepDueAt = nextStepDueAt,
+                    nextStepSource = nextStepSource,
+                    aiRuntime = aiRuntime,
+                    updatedAt = System.currentTimeMillis(),
+                    isSynced = false
+                )
             )
         )
     }

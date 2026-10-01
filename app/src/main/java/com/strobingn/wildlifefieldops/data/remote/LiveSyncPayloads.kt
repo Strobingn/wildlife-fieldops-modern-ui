@@ -127,6 +127,8 @@ object LiveSyncPayloads {
             put("inspector", inspection.inspectorName)
             put("weather", inspection.weatherConditions)
             put("damage", inspection.damageAssessment)
+            put("ai_narrative", inspection.aiNarrativeDraft)
+            put("ai_narrative_source", inspection.aiDraftSource)
         }
         return LiveInspectionUpsert(
             id = inspection.id.ifBlank { UUID.randomUUID().toString() },

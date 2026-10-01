@@ -10,6 +10,7 @@ import com.strobingn.wildlifefieldops.data.model.JobCustomerDraft
 import com.strobingn.wildlifefieldops.data.model.JobPriority
 import com.strobingn.wildlifefieldops.data.model.Visit
 import com.strobingn.wildlifefieldops.data.remote.GeoPoint
+import com.strobingn.wildlifefieldops.ai.fieldops.JobFieldOpsCodec
 import com.strobingn.wildlifefieldops.pricing.PricingCalculator
 import java.util.UUID
 import javax.inject.Inject
@@ -28,7 +29,11 @@ data class JobSaveRequest(
     val notes: String,
     val appointmentTimes: List<Long>,
     val actualCost: Double? = null,
-    val customer: JobCustomerDraft
+    val customer: JobCustomerDraft,
+    val confirmedSpecies: String? = null,
+    val legalNotes: String? = null,
+    val nextStep: String? = null,
+    val nextStepDueAt: Long? = null
 )
 
 data class JobSaveResult(
@@ -95,9 +100,13 @@ class JobCustomerWorkspace @Inject constructor(
             isSynced = false,
             pricing = nextPricing,
             latitude = if (!addressChanged) base.latitude else null,
-            longitude = if (!addressChanged) base.longitude else null
+            longitude = if (!addressChanged) base.longitude else null,
+            confirmedSpecies = request.confirmedSpecies ?: base.confirmedSpecies,
+            legalNotes = request.legalNotes ?: base.legalNotes,
+            nextStep = request.nextStep ?: base.nextStep,
+            nextStepDueAt = request.nextStepDueAt ?: base.nextStepDueAt
         )
-        job = withCoordinates(job, linked)
+        job = JobFieldOpsCodec.mergeForSave(withCoordinates(job, linked))
         jobDao.insert(job)
         if (linked != null) {
             propagateToSiblingJobs(linked, job.id, now)

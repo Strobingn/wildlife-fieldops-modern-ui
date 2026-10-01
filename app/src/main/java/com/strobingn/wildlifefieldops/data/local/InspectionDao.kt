@@ -15,6 +15,9 @@ interface InspectionDao {
     @Query("SELECT * FROM inspections WHERE jobId = :jobId ORDER BY inspectionDate DESC")
     fun getByJob(jobId: String): Flow<List<Inspection>>
 
+    @Query("SELECT * FROM inspections WHERE jobId = :jobId ORDER BY inspectionDate DESC")
+    suspend fun getByJobOnce(jobId: String): List<Inspection>
+
     @Query("SELECT * FROM inspections WHERE customerId = :customerId ORDER BY inspectionDate DESC")
     fun getByCustomer(customerId: String): Flow<List<Inspection>>
 

@@ -85,6 +85,37 @@ class LiveSyncPayloadsTest {
     }
 
     @Test
+    fun fieldOpsExtrasStayInsidePricingJsonbNotNewJobColumns() {
+        val payload = LiveSyncPayloads.job(
+            middletown.copy(
+                confirmedSpecies = "raccoon",
+                nextStep = "Check the deck trap",
+                pricing = com.strobingn.wildlifefieldops.pricing.JobPricing(
+                    confirmedSpecies = "raccoon",
+                    nextStep = "Check the deck trap",
+                    photoLineItems = listOf(
+                        com.strobingn.wildlifefieldops.data.model.InvoiceLineItem(
+                            description = "Cage trap",
+                            quantity = 1.0,
+                            unitPrice = 95.0
+                        )
+                    )
+                )
+            )
+        )
+        val encoded = LiveSyncPayloads.json.encodeToJsonElement(LiveJobUpsert.serializer(), payload).jsonObject
+        encoded.keys.forEach { key ->
+            assertTrue("unexpected column $key", key in LiveSyncPayloads.JOB_WRITE_COLUMNS)
+        }
+        assertFalse("confirmed_species" in encoded.keys)
+        assertFalse("next_step" in encoded.keys)
+        val pricing = encoded.getValue("pricing").jsonObject
+        assertEquals("raccoon", pricing.getValue("confirmedSpecies").jsonPrimitive.content)
+        assertEquals("Check the deck trap", pricing.getValue("nextStep").jsonPrimitive.content)
+        assertTrue("photoLineItems" in pricing.keys)
+    }
+
+    @Test
     fun inferTownFromUsStyleAddress() {
         assertEquals("Middletown", LiveSyncPayloads.inferTown("12 Oak St, Middletown, NY", "NY"))
         assertEquals("Middletown", LiveSyncPayloads.inferTown("Middletown, NY", "NY"))

@@ -16,6 +16,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.strobingn.wildlifefieldops.ai.fieldops.AiRuntimeStatus
+import com.strobingn.wildlifefieldops.ai.fieldops.JobNextStepEngine
+import com.strobingn.wildlifefieldops.ai.fieldops.SpeciesJobLegal
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobPriority
 import com.strobingn.wildlifefieldops.data.model.JobStatus
@@ -52,15 +55,29 @@ fun JobDetailScreen(
     val summary by jobAiViewModel.summary.collectAsState()
     val summaryLoading by jobAiViewModel.summaryLoading.collectAsState()
     val aiMessage by jobAiViewModel.message.collectAsState()
+    val nextStepLoading by jobAiViewModel.nextStepLoading.collectAsState()
+    val nextStepDraft by jobAiViewModel.nextStepDraft.collectAsState()
     val weatherVm: LiveWeatherViewModel = hiltViewModel()
     val weatherState by weatherVm.state.collectAsState()
 
     var showStatusDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var speciesText by remember { mutableStateOf("") }
+    var legalNotesText by remember { mutableStateOf("") }
+    var nextStepText by remember { mutableStateOf("") }
 
     job?.let { currentJob ->
         LaunchedEffect(currentJob.id, currentJob.customerId) {
             workspaceViewModel.loadForJob(currentJob)
+        }
+        LaunchedEffect(currentJob.id) {
+            speciesText = currentJob.confirmedSpecies.ifBlank { currentJob.type }
+            legalNotesText = currentJob.legalNotes
+            nextStepText = currentJob.nextStep
+        }
+        LaunchedEffect(nextStepDraft) {
+            val draft = nextStepDraft ?: return@LaunchedEffect
+            if (nextStepText.isBlank()) nextStepText = draft.text
         }
         LaunchedEffect(currentJob.id, currentJob.latitude, currentJob.longitude, currentJob.address) {
             weatherVm.loadJobWeather(currentJob.latitude, currentJob.longitude, currentJob.address)
@@ -202,6 +219,124 @@ fun JobDetailScreen(
                 if (currentJob.notes.isNotBlank()) {
                     InfoCard(title = "Notes") {
                         Text(currentJob.notes, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                    }
+                }
+
+                val runtime = jobAiViewModel.runtimeStatus
+                AiRuntimeCard(
+                    status = runtime,
+                    lastUsed = currentJob.aiRuntime,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                val legal = SpeciesJobLegal.card(
+                    speciesText.ifBlank { currentJob.confirmedSpecies.ifBlank { currentJob.type } },
+                    legalNotesText
+                )
+                InfoCard(title = "Species safety & NY legal") {
+                    OutlinedTextField(
+                        value = speciesText,
+                        onValueChange = { speciesText = it },
+                        label = { Text("Confirmed species") },
+                        supportingText = { Text("AI / service type is a suggestion. Type the animal you confirmed.", color = TextTertiary) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = PrimaryGreen,
+                            unfocusedBorderColor = BorderDark,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Risk: ${legal.risk}", style = MaterialTheme.typography.labelMedium, color = StatusUrgent)
+                    legal.decNotes.take(3).forEach {
+                        Text("• $it", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = legalNotesText.ifBlank { legal.displayNotes },
+                        onValueChange = { legalNotesText = it },
+                        label = { Text("Legal / safety notes (yours win)") },
+                        minLines = 3,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = PrimaryGreen,
+                            unfocusedBorderColor = BorderDark,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    TextButton(onClick = {
+                        legalNotesText = legal.catalogNotes.joinToString("\n")
+                    }) {
+                        Text("Reset to catalog", color = PrimaryGreen)
+                    }
+                }
+
+                InfoCard(title = "Next step") {
+                    Text(
+                        "AI suggests; you edit and save. Due items also show on Home.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextTertiary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = nextStepText,
+                        onValueChange = { nextStepText = it },
+                        label = { Text("Next field action") },
+                        minLines = 2,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = PrimaryGreen,
+                            unfocusedBorderColor = BorderDark,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { jobAiViewModel.suggestNextStep(currentJob) },
+                            enabled = !nextStepLoading,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGreen)
+                        ) {
+                            if (nextStepLoading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = PrimaryGreen)
+                            else Text("Suggest")
+                        }
+                        Button(
+                            onClick = {
+                                val draft = jobAiViewModel.consumeNextStep()
+                                viewModel.saveFieldOps(
+                                    job = currentJob,
+                                    confirmedSpecies = speciesText.trim(),
+                                    legalNotes = legalNotesText.trim().ifBlank { legal.displayNotes },
+                                    nextStep = nextStepText.trim().ifBlank { draft?.text.orEmpty() },
+                                    nextStepDueAt = draft?.dueAt ?: currentJob.nextStepDueAt
+                                        ?: JobNextStepEngine.suggest(
+                                            com.strobingn.wildlifefieldops.ai.fieldops.NextStepInput(
+                                                status = currentJob.status.name,
+                                                species = speciesText,
+                                                jobType = currentJob.type,
+                                                notes = currentJob.notes,
+                                                estimatedValue = currentJob.estimatedValue,
+                                                invoiced = currentJob.status == JobStatus.INVOICED,
+                                                paid = currentJob.status == JobStatus.PAID
+                                            )
+                                        ).dueAt,
+                                    nextStepSource = draft?.source?.name?.lowercase() ?: currentJob.nextStepSource.ifBlank { "manual" },
+                                    aiRuntime = AiRuntimeStatus.wireName(runtime.mode)
+                                )
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
+                        ) {
+                            Text("Save field notes")
+                        }
+                    }
+                    currentJob.nextStepDueAt?.let { due ->
+                        Text(
+                            "Due: ${SimpleDateFormat("MMM dd, yyyy h:mm a", Locale.getDefault()).format(Date(due))}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextTertiary
+                        )
                     }
                 }
 

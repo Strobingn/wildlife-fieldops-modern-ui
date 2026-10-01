@@ -2,8 +2,19 @@ package com.strobingn.wildlifefieldops.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.strobingn.wildlifefieldops.ai.fieldops.AiRuntimeMode
+import com.strobingn.wildlifefieldops.ai.fieldops.AiRuntimeStatus
+import com.strobingn.wildlifefieldops.ai.fieldops.EstimateLineSuggester
+import com.strobingn.wildlifefieldops.ai.fieldops.JobNextStepEngine
+import com.strobingn.wildlifefieldops.ai.fieldops.NextStepDraft
+import com.strobingn.wildlifefieldops.ai.fieldops.NextStepInput
+import com.strobingn.wildlifefieldops.ai.fieldops.PhotoEvidence
+import com.strobingn.wildlifefieldops.data.local.InspectionDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
+import com.strobingn.wildlifefieldops.data.local.PhotoDao
+import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
 import com.strobingn.wildlifefieldops.data.model.Job
+import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.data.remote.AiService
 import com.strobingn.wildlifefieldops.data.remote.DistanceService
 import com.strobingn.wildlifefieldops.data.remote.EstimateDraft
@@ -24,6 +35,8 @@ import kotlin.math.sqrt
 class JobAiViewModel @Inject constructor(
     private val aiService: AiService,
     private val jobDao: JobDao,
+    private val photoDao: PhotoDao,
+    private val inspectionDao: InspectionDao,
     private val distanceService: DistanceService,
     private val geocodingService: GeocodingService,
     private val shopSettings: ShopSettings
@@ -31,6 +44,20 @@ class JobAiViewModel @Inject constructor(
 
     val isConfigured: Boolean get() = aiService.isConfigured
     val providerLabel: String get() = aiService.providerLabel
+    val runtimeStatus: AiRuntimeStatus
+        get() = AiRuntimeStatus.resolve(aiService.isConfigured, aiService.localLlmReady)
+
+    private val _photoLinesLoading = MutableStateFlow(false)
+    val photoLinesLoading: StateFlow<Boolean> = _photoLinesLoading.asStateFlow()
+
+    private val _suggestedLines = MutableStateFlow<List<InvoiceLineItem>>(emptyList())
+    val suggestedLines: StateFlow<List<InvoiceLineItem>> = _suggestedLines.asStateFlow()
+
+    private val _nextStepLoading = MutableStateFlow(false)
+    val nextStepLoading: StateFlow<Boolean> = _nextStepLoading.asStateFlow()
+
+    private val _nextStepDraft = MutableStateFlow<NextStepDraft?>(null)
+    val nextStepDraft: StateFlow<NextStepDraft?> = _nextStepDraft.asStateFlow()
 
     private val _summary = MutableStateFlow<String?>(null)
     val summary: StateFlow<String?> = _summary.asStateFlow()
@@ -144,6 +171,67 @@ class JobAiViewModel @Inject constructor(
 
     fun clearMessage() {
         _message.value = null
+    }
+
+    fun suggestPhotoLineItems(job: Job) {
+        if (_photoLinesLoading.value) return
+        _photoLinesLoading.value = true
+        viewModelScope.launch {
+            val photos = photoDao.getByJobOnce(job.id)
+            val inspections = inspectionDao.getByJobOnce(job.id)
+            val latest = inspections.maxByOrNull { it.inspectionDate }
+            val lines = EstimateLineSuggester.suggest(
+                com.strobingn.wildlifefieldops.ai.fieldops.EstimateLineContext(
+                    species = job.confirmedSpecies.ifBlank { latest?.speciesIdentified.orEmpty() },
+                    jobType = job.type,
+                    notes = listOf(job.notes, job.description, latest?.findings.orEmpty()).filter { it.isNotBlank() }.joinToString("\n"),
+                    entryPoints = latest?.entryPoints.orEmpty(),
+                    damage = latest?.damageAssessment.orEmpty(),
+                    photoTags = PhotoEvidence.tags(photos),
+                    photoNotes = PhotoEvidence.notes(photos)
+                )
+            )
+            _suggestedLines.value = lines
+            _photoLinesLoading.value = false
+            _message.value = "Suggested ${lines.size} line items from photos/notes (${runtimeStatus.label}). Edit any price."
+        }
+    }
+
+    fun suggestNextStep(job: Job) {
+        if (_nextStepLoading.value) return
+        _nextStepLoading.value = true
+        viewModelScope.launch {
+            val inspections = inspectionDao.getByJobOnce(job.id)
+            val draft = JobNextStepEngine.suggest(
+                NextStepInput(
+                    status = job.status.name,
+                    species = job.confirmedSpecies,
+                    jobType = job.type,
+                    notes = job.notes,
+                    description = job.description,
+                    hasInspection = inspections.isNotEmpty(),
+                    inspectionFollowUp = inspections.any { it.followUpRequired },
+                    estimatedValue = job.estimatedValue,
+                    invoiced = job.status == JobStatus.INVOICED,
+                    paid = job.status == JobStatus.PAID
+                )
+            )
+            _nextStepDraft.value = draft
+            _nextStepLoading.value = false
+            _message.value = "Next step drafted (${AiRuntimeStatus.of(AiRuntimeMode.HEURISTIC).label}). Edit before saving."
+        }
+    }
+
+    fun consumeSuggestedLines(): List<InvoiceLineItem> {
+        val lines = _suggestedLines.value
+        _suggestedLines.value = emptyList()
+        return lines
+    }
+
+    fun consumeNextStep(): NextStepDraft? {
+        val d = _nextStepDraft.value
+        _nextStepDraft.value = null
+        return d
     }
 
     fun consumeEstimateDraft(): EstimateDraft? {

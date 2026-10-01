@@ -31,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,8 +50,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.strobingn.wildlifefieldops.ai.fieldops.EstimateLineSuggester
 import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
 import com.strobingn.wildlifefieldops.pricing.JobPricing
+import com.strobingn.wildlifefieldops.pricing.effectiveTotal
+import com.strobingn.wildlifefieldops.ui.components.AiRuntimeBadge
 import com.strobingn.wildlifefieldops.pricing.Money
 import com.strobingn.wildlifefieldops.pricing.PricingCalculator
 import com.strobingn.wildlifefieldops.ui.components.DecimalField
@@ -87,6 +91,8 @@ fun EstimateScreen(
     val draft by jobAiViewModel.estimateDraft.collectAsState()
     val estimateLoading by jobAiViewModel.estimateLoading.collectAsState()
     val aiMessage by jobAiViewModel.message.collectAsState()
+    val photoLinesLoading by jobAiViewModel.photoLinesLoading.collectAsState()
+    val suggestedLines by jobAiViewModel.suggestedLines.collectAsState()
     val countyTaxState by invoiceViewModel.countyTaxState.collectAsState()
     var autoDraftFired by remember { mutableStateOf(false) }
 
@@ -254,6 +260,92 @@ fun EstimateScreen(
                 }
             }
             if (!aiMessage.isNullOrBlank()) Text(aiMessage!!, style = MaterialTheme.typography.labelMedium, color = PrimaryGreen)
+            AiRuntimeBadge(
+                status = jobAiViewModel.runtimeStatus,
+                lastUsed = job?.aiRuntime.orEmpty(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Button(
+                onClick = { job?.let { jobAiViewModel.suggestPhotoLineItems(it) } },
+                enabled = job != null && !photoLinesLoading,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                if (photoLinesLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = OnPrimary, strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Reading photos + notes…")
+                } else {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Suggest lines from photos", fontWeight = FontWeight.SemiBold)
+                }
+            }
+            if (suggestedLines.isNotEmpty()) {
+                OutlinedButton(
+                    onClick = {
+                        val incoming = jobAiViewModel.consumeSuggestedLines()
+                        applyPricing(
+                            pricing.copy(
+                                photoLineItems = EstimateLineSuggester.merge(pricing.photoLineItems, incoming, replace = false)
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGreen)
+                ) {
+                    Text("Add ${suggestedLines.size} suggested lines (keeps yours)")
+                }
+            }
+            if (pricing.photoLineItems.isNotEmpty()) {
+                EstimateSection("Photo / exclusion lines") {
+                    Text(
+                        "Every qty and price is yours. AI only adds suggestions.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    pricing.photoLineItems.forEachIndexed { index, item ->
+                        OutlinedTextField(
+                            value = item.description,
+                            onValueChange = { text ->
+                                applyPricing(pricing.copy(photoLineItems = pricing.photoLineItems.toMutableList().also {
+                                    it[index] = item.copy(description = text)
+                                }))
+                            },
+                            label = { Text("Line ${index + 1}") },
+                            colors = com.strobingn.wildlifefieldops.ui.components.pricingFieldColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            DecimalField("Qty", formatNum(item.quantity), {
+                                val qty = it.toDoubleOrNull() ?: 0.0
+                                applyPricing(pricing.copy(photoLineItems = pricing.photoLineItems.toMutableList().also { list ->
+                                    list[index] = item.copy(quantity = qty, total = qty * item.unitPrice)
+                                }))
+                            }, Modifier.weight(1f))
+                            DecimalField("Unit $", formatNum(item.unitPrice), {
+                                val price = it.toDoubleOrNull() ?: 0.0
+                                applyPricing(pricing.copy(photoLineItems = pricing.photoLineItems.toMutableList().also { list ->
+                                    list[index] = item.copy(unitPrice = price, total = item.quantity * price)
+                                }))
+                            }, Modifier.weight(1f))
+                        }
+                        Text(
+                            "${item.unit} · ${com.strobingn.wildlifefieldops.pricing.Money.formatUsd(item.effectiveTotal())}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextTertiary
+                        )
+                        TextButton(onClick = {
+                            applyPricing(pricing.copy(photoLineItems = pricing.photoLineItems.filterIndexed { i, _ -> i != index }))
+                        }) {
+                            Text("Remove line", color = TextSecondary)
+                        }
+                    }
+                }
+            }
             if (pricing.rationale.isNotBlank()) {
                 Card(colors = CardDefaults.cardColors(containerColor = BackgroundCard), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp)) {
