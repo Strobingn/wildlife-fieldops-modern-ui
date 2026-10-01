@@ -17,21 +17,24 @@ import { SEVERITY_MULTIPLIERS, BASE_PRICES } from './constants.js';
 // HTML / String Utilities
 // ═══════════════════════════════════════════════════
 
+// Static map to avoid re-allocating object on every HTML escape call.
+const HTML_ESCAPE_MAP = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
 /**
  * Escape HTML special characters to prevent XSS.
+ * Performance optimization: Static map to avoid allocations per invocation.
  * @param {string|number|null|undefined} str - Raw input string
  * @returns {string} HTML-escaped string
  */
 export function E(str) {
   const s = String(str ?? '');
-  const map = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-  };
-  return s.replace(/[&<>"']/g, (ch) => map[ch]);
+  return s.replace(/[&<>"']/g, (ch) => HTML_ESCAPE_MAP[ch]);
 }
 
 /**
@@ -241,6 +244,7 @@ export function throttle(fn, ms) {
 
 /**
  * Group an array of objects by a key.
+ * Performance optimization: Use a direct for-loop instead of reduce() to avoid callback overhead.
  * @template T
  * @param {T[]} array
  * @param {string} key - Property name to group by
@@ -248,11 +252,13 @@ export function throttle(fn, ms) {
  */
 export function groupBy(array, key) {
   if (!Array.isArray(array)) return {};
-  return array.reduce((acc, item) => {
+  const result = /** @type {Record<string, T[]>} */ ({});
+  for (let i = 0; i < array.length; i++) {
+    const item = array[i];
     const group = item?.[key] ?? 'undefined';
-    (acc[group] ??= []).push(item);
-    return acc;
-  }, /** @type {Record<string, T[]>} */({}));
+    (result[group] ??= []).push(item);
+  }
+  return result;
 }
 
 /**
@@ -305,6 +311,7 @@ export function deepClone(obj) {
 
 /**
  * Merge two arrays by a key field (server wins on conflict).
+ * Performance optimization: O(N + M) Map lookup instead of O(N * M) nested findIndex.
  * @template T
  * @param {T[]} local - Local array
  * @param {T[]} server - Server array
@@ -313,13 +320,28 @@ export function deepClone(obj) {
  */
 export function mergeArrays(local, server, key) {
   if (!Array.isArray(local) || !Array.isArray(server)) return [...(local || [])];
-  const merged = [...local];
-  for (const sItem of server) {
-    const idx = merged.findIndex((item) => item?.[key] === sItem?.[key]);
-    if (idx >= 0) merged[idx] = deepClone(sItem);
-    else merged.push(deepClone(sItem));
+  const map = new Map();
+  const noKeyItems = [];
+
+  for (let i = 0; i < local.length; i++) {
+    const item = local[i];
+    if (item && item[key] !== undefined && item[key] !== null) {
+      map.set(item[key], item);
+    } else {
+      noKeyItems.push(item);
+    }
   }
-  return merged;
+
+  for (let i = 0; i < server.length; i++) {
+    const sItem = server[i];
+    if (sItem && sItem[key] !== undefined && sItem[key] !== null) {
+      map.set(sItem[key], deepClone(sItem));
+    } else {
+      noKeyItems.push(deepClone(sItem));
+    }
+  }
+
+  return [...map.values(), ...noKeyItems];
 }
 
 // ═══════════════════════════════════════════════════
@@ -488,8 +510,11 @@ export function generatePDF(job, services = [], photos = []) {
 // Search
 // ═══════════════════════════════════════════════════
 
+const SEARCH_FIELDS = ['title', 'customer', 'customer_name', 'address', 'town', 'species', 'scope', 'status', 'phone'];
+
 /**
  * Full-text search across job fields.
+ * Performance optimization: Static field list outside function loop.
  * @param {Array<Record<string, any>>} jobs - Jobs array
  * @param {string} query - Search term
  * @returns {Array<Record<string, any>>} Filtered jobs
@@ -498,14 +523,16 @@ export function searchJobs(jobs, query) {
   if (!query || !Array.isArray(jobs)) return jobs || [];
   const term = query.toLowerCase().trim();
   if (!term) return jobs;
-  const fields = ['title', 'customer', 'address', 'town', 'species', 'scope', 'status', 'phone'];
   return jobs.filter((j) =>
-    fields.some((f) => String(j?.[f] ?? '').toLowerCase().includes(term))
+    SEARCH_FIELDS.some((f) => String(j?.[f] ?? '').toLowerCase().includes(term))
   );
 }
 
 /**
  * Filter jobs by multiple criteria.
+ * Performance optimization: Extract active filter criteria outside loop to avoid
+ * calling Object.entries(filters) and String().toLowerCase() for every job element.
+ * Returns early when no active filters are provided.
  * @param {Array<Record<string, any>>} jobs
  * @param {Record<string, string>} filters
  * @returns {Array<Record<string, any>>}
@@ -513,10 +540,20 @@ export function searchJobs(jobs, query) {
 export function filterJobs(jobs, filters) {
   if (!Array.isArray(jobs)) return [];
   if (!filters || typeof filters !== 'object') return jobs;
+
+  const activeFilters = [];
+  const entries = Object.entries(filters);
+  for (let i = 0; i < entries.length; i++) {
+    const [key, val] = entries[i];
+    if (val) {
+      activeFilters.push([key, String(val).toLowerCase()]);
+    }
+  }
+  if (activeFilters.length === 0) return jobs;
+
   return jobs.filter((j) =>
-    Object.entries(filters).every(([key, val]) => {
-      if (!val) return true;
-      return String(j?.[key] ?? '').toLowerCase() === String(val).toLowerCase();
-    })
+    activeFilters.every(([key, valLower]) =>
+      String(j?.[key] ?? '').toLowerCase() === valLower
+    )
   );
 }
