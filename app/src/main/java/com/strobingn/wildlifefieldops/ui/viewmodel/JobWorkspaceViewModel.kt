@@ -3,6 +3,7 @@ package com.strobingn.wildlifefieldops.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.strobingn.wildlifefieldops.data.model.Customer
+import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobCustomerDraft
 import com.strobingn.wildlifefieldops.data.model.JobPriority
@@ -80,6 +81,7 @@ class JobWorkspaceViewModel @Inject constructor(
         legalNotes: String? = null,
         nextStep: String? = null,
         nextStepDueAt: Long? = null,
+        priceLines: List<InvoiceLineItem>? = null,
         onSaved: (JobSaveResult) -> Unit
     ) {
         if (_isSaving.value) return
@@ -101,7 +103,8 @@ class JobWorkspaceViewModel @Inject constructor(
                         confirmedSpecies = confirmedSpecies,
                         legalNotes = legalNotes,
                         nextStep = nextStep,
-                        nextStepDueAt = nextStepDueAt
+                        nextStepDueAt = nextStepDueAt,
+                        priceLines = priceLines
                     )
                 )
                 onSaved(result)

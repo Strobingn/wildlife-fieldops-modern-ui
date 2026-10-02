@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobStatus
+import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.DashboardViewModel
@@ -77,7 +78,7 @@ fun DashboardScreen(
                 shape = FieldShapes.fab,
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
                 text = {
-                    Text("New job", fontWeight = FontWeight.SemiBold)
+                    Text(ManualJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold)
                 }
             )
         },
@@ -341,7 +342,7 @@ fun DashboardScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        QuickActionTile("New job", Icons.Default.AddBox, PrimaryGreen, Modifier.weight(1f), onNavigateToJobForm)
+                        QuickActionTile(ManualJobEntry.ACTION_LABEL, Icons.Default.AddBox, PrimaryGreen, Modifier.weight(1f), onNavigateToJobForm)
                         QuickActionTile("Schedule", Icons.Default.CalendarMonth, AccentPurple, Modifier.weight(1f), onNavigateToSchedule)
                         QuickActionTile("Map", Icons.Default.Map, AccentBlue, Modifier.weight(1f), onNavigateToMap)
                     }
@@ -377,7 +378,7 @@ fun DashboardScreen(
                             )
                         },
                         title = "No jobs yet",
-                        subtitle = "Tap New job to create your first one",
+                        subtitle = "Tap ${ManualJobEntry.ACTION_LABEL} to create your first one",
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

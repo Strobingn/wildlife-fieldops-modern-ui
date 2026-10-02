@@ -11,6 +11,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -28,6 +30,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
+import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
 import com.strobingn.wildlifefieldops.navigation.Screen
 import com.strobingn.wildlifefieldops.ui.components.BrandMark
 import com.strobingn.wildlifefieldops.ui.screens.*
@@ -185,7 +188,7 @@ private fun AppNavHost(
                 onNavigateToInspections = { navController.navigate(Screen.InspectionList.route) },
                 onNavigateToSchedule = { navController.navigate(Screen.Schedule.route) },
                 onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) },
-                onNavigateToJobForm = { navController.navigate(Screen.JobDictate.route) },
+                onNavigateToJobForm = { navController.navigate(ManualJobEntry.createRoute()) },
                 onNavigateToMap = { navController.navigate(Screen.Map.route) },
                 onNavigateToRoutes = { navController.navigate(Screen.RouteOptimizer.route) },
                 onNavigateToCountyReports = { navController.navigate(Screen.CountyReports.route) },
@@ -197,7 +200,7 @@ private fun AppNavHost(
         composable(Screen.JobList.route) {
             JobListScreen(
                 onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) },
-                onNavigateToJobForm = { navController.navigate(Screen.JobForm.createRoute()) },
+                onNavigateToJobForm = { navController.navigate(ManualJobEntry.createRoute()) },
                 onBack = { navController.popBackStack() },
                 showBack = false
             )
@@ -226,6 +229,10 @@ private fun AppNavHost(
                 onCreated = {
                     navController.popBackStack()
                     navController.navigate(Screen.JobList.route)
+                },
+                onTypeManually = {
+                    navController.popBackStack()
+                    navController.navigate(ManualJobEntry.createRoute())
                 }
             )
         }
@@ -281,7 +288,7 @@ private fun AppNavHost(
         composable(Screen.Schedule.route) {
             ScheduleScreen(
                 onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) },
-                onNavigateToJobForm = { navController.navigate(Screen.JobForm.createRoute()) },
+                onNavigateToJobForm = { navController.navigate(ManualJobEntry.createRoute()) },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -446,6 +453,22 @@ private fun AppDrawer(onNavigate: (String) -> Unit, onClose: () -> Unit) {
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
+            NavigationDrawerItem(
+                icon = { Icon(Icons.Default.Add, contentDescription = ManualJobEntry.ACTION_LABEL) },
+                label = { Text(ManualJobEntry.ACTION_LABEL, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold) },
+                selected = false,
+                onClick = { onNavigate(ManualJobEntry.createRoute()) },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                shape = FieldShapes.button,
+                colors = NavigationDrawerItemDefaults.colors(
+                    unselectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                    unselectedTextColor = MaterialTheme.colorScheme.primary,
+                    unselectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    selectedIconColor = MaterialTheme.colorScheme.primary
+                )
+            )
             Text(
                 "TOOLS",
                 style = MaterialTheme.typography.labelSmall,

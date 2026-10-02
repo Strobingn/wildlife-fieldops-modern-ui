@@ -63,6 +63,16 @@ class FieldOpsEnginesTest {
     }
 
     @Test
+    fun failedOrEmptyAiNeverWipesTypedLines() {
+        val typed = listOf(InvoiceLineItem(description = "Hand-entered flashing", quantity = 3.0, unitPrice = 22.0))
+        val emptyAi = EstimateLineSuggester.merge(typed, emptyList(), replace = false)
+        assertEquals(1, emptyAi.size)
+        assertEquals("Hand-entered flashing", emptyAi[0].description)
+        assertEquals("Sir wrote this", OperatorWins.text("Sir wrote this", "", replace = false))
+        assertEquals("Sir wrote this", OperatorWins.text("Sir wrote this", "", replace = true))
+    }
+
+    @Test
     fun estimateMergeKeepsOperatorLines() {
         val existing = listOf(InvoiceLineItem(description = "My custom flashing", quantity = 2.0, unitPrice = 40.0))
         val suggested = EstimateLineSuggester.suggest(EstimateLineContext(species = "bat"))
