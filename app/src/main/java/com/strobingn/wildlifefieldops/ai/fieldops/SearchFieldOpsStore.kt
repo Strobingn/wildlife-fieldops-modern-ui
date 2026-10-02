@@ -26,7 +26,16 @@ class SearchFieldOpsStore @Inject constructor(
     )
 
     suspend fun savePhotoTag(photo: Photo, tag: SyncedPhotoTag) {
-        val merged = tag.copy(photoId = photo.id)
+        val jobId = photo.jobId?.takeIf { it.isNotBlank() }
+        val previous = jobId?.let { id -> jobDao.getById(id)?.pricing?.photoAutoTags?.firstOrNull { it.photoId == photo.id } }
+        val merged = PhotoAutoTags.persistTyped(
+            photoId = photo.id,
+            species = tag.species,
+            damage = tag.damage,
+            entry = tag.entry,
+            extra = tag.extra,
+            previous = previous?.copy(clearedKeys = previous.clearedKeys + tag.clearedKeys)
+        )
         val description = applyTagsToDescription(photo.description, merged)
         photoDao.insert(
             photo.copy(
@@ -34,9 +43,8 @@ class SearchFieldOpsStore @Inject constructor(
                 takenAt = photo.takenAt
             )
         )
-        val jobId = photo.jobId?.takeIf { it.isNotBlank() } ?: return
-        val job = jobDao.getById(jobId) ?: return
-        persist(job.id) { pricing ->
+        if (jobId == null) return
+        persist(jobId) { pricing ->
             pricing.copy(photoAutoTags = pricing.photoAutoTags.filterNot { it.photoId == photo.id } + merged)
         }
     }

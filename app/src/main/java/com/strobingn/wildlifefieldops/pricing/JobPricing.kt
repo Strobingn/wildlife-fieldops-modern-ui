@@ -72,7 +72,14 @@ data class JobPricing(
     val earningsAdjustments: List<com.strobingn.wildlifefieldops.ai.fieldops.EarningsAdjustment> = emptyList(),
     val earningsPeriodOverrides: List<com.strobingn.wildlifefieldops.ai.fieldops.EarningsPeriodOverride> = emptyList(),
     val decNwcoRows: List<com.strobingn.wildlifefieldops.ai.fieldops.NwcoLogRecord> = emptyList(),
-    val decNwcoOperator: com.strobingn.wildlifefieldops.ai.fieldops.NwcoOperatorProfile? = null
+    val decNwcoOperator: com.strobingn.wildlifefieldops.ai.fieldops.NwcoOperatorProfile? = null,
+    /**
+     * Fields the operator typed or cleared. Suggest / codec merge / sync pull
+     * must not refill these, including when the stored value is blank.
+     */
+    val manualFields: Set<String> = emptySet(),
+    val seasonalTitle: String = "",
+    val seasonalNotes: String = ""
 ) {
     /**
      * Money worksheet only. Field-ops extras (species, next step) must not
@@ -205,7 +212,10 @@ object PricingCalculator {
                 earningsAdjustments = extras.earningsAdjustments,
                 earningsPeriodOverrides = extras.earningsPeriodOverrides,
                 decNwcoRows = extras.decNwcoRows,
-                decNwcoOperator = extras.decNwcoOperator
+                decNwcoOperator = extras.decNwcoOperator,
+                manualFields = extras.manualFields,
+                seasonalTitle = extras.seasonalTitle,
+                seasonalNotes = extras.seasonalNotes
             )
         }
         return starterWorksheet().copy(
@@ -235,7 +245,10 @@ object PricingCalculator {
             earningsAdjustments = extras.earningsAdjustments,
             earningsPeriodOverrides = extras.earningsPeriodOverrides,
             decNwcoRows = extras.decNwcoRows,
-            decNwcoOperator = extras.decNwcoOperator
+            decNwcoOperator = extras.decNwcoOperator,
+            manualFields = extras.manualFields,
+            seasonalTitle = extras.seasonalTitle,
+            seasonalNotes = extras.seasonalNotes
         )
     }
 
@@ -386,6 +399,14 @@ object PricingCalculator {
     fun resetTaxAmount(p: JobPricing) = p.copy(taxAmountOverride = null)
     fun resetTotal(p: JobPricing) = p.copy(totalOverride = null)
 }
+
+fun JobPricing.markManual(vararg keys: String): JobPricing =
+    copy(manualFields = manualFields + keys.filter { it.isNotBlank() })
+
+fun JobPricing.isManual(key: String): Boolean = key in manualFields
+
+/** True when this pricing is more than a default empty object (money or field-ops). */
+fun JobPricing.hasSyncPayload(): Boolean = this != JobPricing()
 
 fun InvoiceLineItem.calculatedTotal(): Double = Money.times(quantity, unitPrice)
 

@@ -4,31 +4,36 @@ import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.pricing.JobPricing
 import com.strobingn.wildlifefieldops.pricing.SyncedTrapRecord
+import com.strobingn.wildlifefieldops.pricing.isManual
 
 /**
  * Field-ops extras live on [Job] columns (Room query/UI) and inside
  * [JobPricing] so they sync on the existing live `jobs.pricing` jsonb
  * without adding PostgREST keys that 400 when the SQL file is not applied yet.
+ *
+ * Empty string is a real value. On save, job columns win (including blank).
+ * On pull, pricing wins when the field is marked manual or the column is blank
+ * only because live PostgREST has no dedicated extras columns.
  */
 object JobFieldOpsCodec {
 
     fun mergeForSave(job: Job): Job {
         val fromPricing = extract(job.pricing)
         val extras = JobFieldOps(
-            confirmedSpecies = job.confirmedSpecies.ifBlank { fromPricing.confirmedSpecies },
-            legalNotes = job.legalNotes.ifBlank { fromPricing.legalNotes },
-            nextStep = job.nextStep.ifBlank { fromPricing.nextStep },
-            nextStepDueAt = job.nextStepDueAt ?: fromPricing.nextStepDueAt,
-            nextStepSource = job.nextStepSource.ifBlank { fromPricing.nextStepSource },
-            aiRuntime = job.aiRuntime.ifBlank { fromPricing.aiRuntime },
+            confirmedSpecies = job.confirmedSpecies,
+            legalNotes = job.legalNotes,
+            nextStep = job.nextStep,
+            nextStepDueAt = job.nextStepDueAt,
+            nextStepSource = job.nextStepSource,
+            aiRuntime = job.aiRuntime,
             photoLineItems = job.pricing.photoLineItems.ifEmpty { fromPricing.photoLineItems },
             trapRecords = job.pricing.trapRecords.ifEmpty { fromPricing.trapRecords },
-            weatherTrapAdvice = job.weatherTrapAdvice.ifBlank { fromPricing.weatherTrapAdvice },
+            weatherTrapAdvice = job.weatherTrapAdvice,
             weatherTrapAdviceAt = job.pricing.weatherTrapAdviceAt ?: fromPricing.weatherTrapAdviceAt,
             weatherTrapAdviceSource = job.pricing.weatherTrapAdviceSource.ifBlank { fromPricing.weatherTrapAdviceSource },
-            followUpKind = job.followUpKind.ifBlank { fromPricing.followUpKind },
-            followUpDueAt = job.followUpDueAt ?: fromPricing.followUpDueAt,
-            followUpNotes = job.followUpNotes.ifBlank { fromPricing.followUpNotes },
+            followUpKind = job.followUpKind,
+            followUpDueAt = job.followUpDueAt,
+            followUpNotes = job.followUpNotes,
             followUpVisitId = job.pricing.followUpVisitId.ifBlank { fromPricing.followUpVisitId },
             followUpReminderId = job.pricing.followUpReminderId.ifBlank { fromPricing.followUpReminderId }
         )
@@ -49,17 +54,18 @@ object JobFieldOpsCodec {
 
     fun applyFromPricing(job: Job): Job {
         val extras = extract(job.pricing)
+        val pricing = job.pricing
         return job.copy(
-            confirmedSpecies = job.confirmedSpecies.ifBlank { extras.confirmedSpecies },
-            legalNotes = job.legalNotes.ifBlank { extras.legalNotes },
-            nextStep = job.nextStep.ifBlank { extras.nextStep },
-            nextStepDueAt = job.nextStepDueAt ?: extras.nextStepDueAt,
-            nextStepSource = job.nextStepSource.ifBlank { extras.nextStepSource },
+            confirmedSpecies = hydrate(job.confirmedSpecies, extras.confirmedSpecies, pricing.isManual(ManualField.SPECIES)),
+            legalNotes = hydrate(job.legalNotes, extras.legalNotes, pricing.isManual(ManualField.LEGAL_NOTES)),
+            nextStep = hydrate(job.nextStep, extras.nextStep, pricing.isManual(ManualField.NEXT_STEP)),
+            nextStepDueAt = hydrateDue(job.nextStepDueAt, extras.nextStepDueAt, pricing.isManual(ManualField.NEXT_STEP_DUE)),
+            nextStepSource = hydrate(job.nextStepSource, extras.nextStepSource, pricing.isManual(ManualField.NEXT_STEP)),
             aiRuntime = job.aiRuntime.ifBlank { extras.aiRuntime },
-            weatherTrapAdvice = job.weatherTrapAdvice.ifBlank { extras.weatherTrapAdvice },
-            followUpKind = job.followUpKind.ifBlank { extras.followUpKind },
-            followUpDueAt = job.followUpDueAt ?: extras.followUpDueAt,
-            followUpNotes = job.followUpNotes.ifBlank { extras.followUpNotes }
+            weatherTrapAdvice = hydrate(job.weatherTrapAdvice, extras.weatherTrapAdvice, pricing.isManual(ManualField.WEATHER)),
+            followUpKind = hydrate(job.followUpKind, extras.followUpKind, pricing.isManual(ManualField.FOLLOW_KIND)),
+            followUpDueAt = hydrateDue(job.followUpDueAt, extras.followUpDueAt, pricing.isManual(ManualField.FOLLOW_DUE)),
+            followUpNotes = hydrate(job.followUpNotes, extras.followUpNotes, pricing.isManual(ManualField.FOLLOW_NOTES))
         )
     }
 
@@ -100,6 +106,16 @@ object JobFieldOpsCodec {
         followUpVisitId = pricing.followUpVisitId,
         followUpReminderId = pricing.followUpReminderId
     )
+
+    private fun hydrate(column: String, pricing: String, manual: Boolean): String {
+        if (manual) return pricing
+        return column.ifBlank { pricing }
+    }
+
+    private fun hydrateDue(column: Long?, pricing: Long?, manual: Boolean): Long? {
+        if (manual) return pricing
+        return column ?: pricing
+    }
 }
 
 data class JobFieldOps(

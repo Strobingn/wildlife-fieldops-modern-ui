@@ -10,6 +10,7 @@ import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoPaths
 import com.strobingn.wildlifefieldops.pricing.JobPricing
 import com.strobingn.wildlifefieldops.pricing.PricingCalculator
+import com.strobingn.wildlifefieldops.pricing.hasSyncPayload
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -220,7 +221,7 @@ fun RemoteJobDto.toLocal(existing: Job? = null): Job {
     val mappedType = species.takeIf { it.isNotBlank() && !it.equals("Wildlife", ignoreCase = true) }
         ?: existing?.type
         ?: "Inspection"
-    val pulledPricing = pricing.takeUnless { it.isEmptyWorksheet() } ?: existing?.pricing ?: JobPricing()
+    val pulledPricing = if (pricing.hasSyncPayload()) pricing else existing?.pricing ?: JobPricing()
     val pulledEstimate = (estimate ?: 0.0).takeIf { it > 0 } ?: (existing?.estimatedValue ?: 0.0)
     val resolvedPricing = when {
         !pulledPricing.isEmptyWorksheet() -> pulledPricing

@@ -8,10 +8,19 @@ import com.strobingn.wildlifefieldops.data.model.Photo
 import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoPaths
 import com.strobingn.wildlifefieldops.pricing.JobPricing
 import com.strobingn.wildlifefieldops.pricing.PricingCalculator
+import com.strobingn.wildlifefieldops.pricing.PricingJson
+import com.strobingn.wildlifefieldops.pricing.hasSyncPayload
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.descriptors.buildClassSerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonEncoder
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
@@ -129,6 +138,10 @@ object LiveSyncPayloads {
             put("damage", inspection.damageAssessment)
             put("ai_narrative", inspection.aiNarrativeDraft)
             put("ai_narrative_source", inspection.aiDraftSource)
+            val cleared = com.strobingn.wildlifefieldops.ai.fieldops.NarrativeCleared.cleared(inspection.aiDraftSource)
+            if (cleared.isNotEmpty()) {
+                put("manual_fields", cleared.sorted().joinToString(","))
+            }
         }
         return LiveInspectionUpsert(
             id = inspection.id.ifBlank { UUID.randomUUID().toString() },
@@ -238,6 +251,7 @@ data class LiveJobUpsert(
     @SerialName("tax_rate") val taxRate: Double? = null,
     @SerialName("tax_amount") val taxAmount: Double? = null,
     @SerialName("grand_total") val grandTotal: Double? = null,
+    @Serializable(with = FieldOpsPricingSerializer::class)
     val pricing: JobPricing,
     @SerialName("scheduled_start") val scheduledStart: String? = null,
     @SerialName("completed_at") val completedAt: String? = null
@@ -303,4 +317,28 @@ data class LiveJobPhotoUpsert(
 object SyncIds {
     fun isUuid(value: String): Boolean =
         runCatching { UUID.fromString(value); true }.getOrDefault(false)
+}
+
+/**
+ * Live upserts use encodeDefaults=false globally (omit unused PostgREST keys).
+ * Field-ops extras must still send blank strings and [JobPricing.manualFields]
+ * so a remote replace cannot resurrect an old AI value.
+ */
+object FieldOpsPricingSerializer : KSerializer<JobPricing> {
+    override val descriptor: SerialDescriptor = buildClassSerialDescriptor("FieldOpsPricing")
+
+    override fun serialize(encoder: Encoder, value: JobPricing) {
+        val json = encoder as JsonEncoder
+        val element = if (value.hasSyncPayload()) {
+            PricingJson.json.encodeToJsonElement(JobPricing.serializer(), value)
+        } else {
+            JsonObject(emptyMap())
+        }
+        json.encodeJsonElement(element)
+    }
+
+    override fun deserialize(decoder: Decoder): JobPricing {
+        val json = decoder as JsonDecoder
+        return PricingJson.decode(json.decodeJsonElement().toString())
+    }
 }

@@ -14,6 +14,7 @@ import com.strobingn.wildlifefieldops.data.model.TrapLog
 import com.strobingn.wildlifefieldops.data.model.TrapStatus
 import com.strobingn.wildlifefieldops.data.model.Visit
 import com.strobingn.wildlifefieldops.pricing.SyncedTrapRecord
+import com.strobingn.wildlifefieldops.pricing.markManual
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -98,7 +99,7 @@ class TrapFieldOpsStore @Inject constructor(
             JobFieldOpsCodec.mergeForSave(
                 job.copy(
                     weatherTrapAdvice = advice,
-                    pricing = JobFieldOpsCodec.embed(job.pricing, extras),
+                    pricing = JobFieldOpsCodec.embed(job.pricing.markManual(ManualField.WEATHER), extras),
                     updatedAt = now,
                     isSynced = false
                 )
@@ -162,7 +163,10 @@ class TrapFieldOpsStore @Inject constructor(
                 followUpKind = kind.name,
                 followUpDueAt = dueAt,
                 followUpNotes = notes,
-                pricing = JobFieldOpsCodec.embed(latest.pricing, extras),
+                pricing = JobFieldOpsCodec.embed(
+                    latest.pricing.markManual(ManualField.FOLLOW_KIND, ManualField.FOLLOW_NOTES, ManualField.FOLLOW_DUE),
+                    extras
+                ),
                 updatedAt = now,
                 isSynced = false
             )

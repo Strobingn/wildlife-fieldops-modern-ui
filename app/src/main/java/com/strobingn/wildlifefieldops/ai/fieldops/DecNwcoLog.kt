@@ -220,8 +220,8 @@ object DecNwcoLog {
             trapsSet = if ("trapsSet" in locked) saved.trapsSet else auto.trapsSet,
             speciesAndNumberTaken = if ("speciesAndNumberTaken" in locked) saved.speciesAndNumberTaken else auto.speciesAndNumberTaken,
             disposition = if ("disposition" in locked) saved.disposition else auto.disposition,
-            county = if ("county" in locked) saved.county else auto.county.ifBlank { saved.county },
-            town = if ("town" in locked) saved.town else auto.town.ifBlank { saved.town }
+            county = if ("county" in locked) saved.county else auto.county,
+            town = if ("town" in locked) saved.town else auto.town
         )
     }
 

@@ -7,13 +7,13 @@ import com.strobingn.wildlifefieldops.ai.fieldops.EarningsAdjustment
 import com.strobingn.wildlifefieldops.ai.fieldops.EarningsPeriodOverride
 import com.strobingn.wildlifefieldops.ai.fieldops.EarningsTaxEngine
 import com.strobingn.wildlifefieldops.ai.fieldops.EarningsTaxSnapshot
+import com.strobingn.wildlifefieldops.ai.fieldops.ManualField
 import com.strobingn.wildlifefieldops.ai.fieldops.MoneyFieldOpsStore
 import com.strobingn.wildlifefieldops.ai.fieldops.NySalesQuarter
 import com.strobingn.wildlifefieldops.ai.fieldops.NySalesTaxPeriods
 import com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger
 import com.strobingn.wildlifefieldops.data.local.InvoiceDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
-import com.strobingn.wildlifefieldops.pricing.Money
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -115,14 +115,14 @@ class EarningsTaxViewModel @Inject constructor(
             val current = store.allOverrides(jobs.value).firstOrNull {
                 it.grain == _grain.value.name && it.startMs == start
             } ?: EarningsPeriodOverride(grain = _grain.value.name, startMs = start)
-            val parsed = raw.trim().toDoubleOrNull()?.let { Money.round(it) }
+            val parsed = EarningsTaxEngine.parseLock(raw)
             val next = when (field) {
-                "paid" -> current.copy(paid = parsed)
-                "invoiced" -> current.copy(invoiced = parsed)
-                "estimated" -> current.copy(estimated = parsed)
-                "taxCollected" -> current.copy(taxCollected = parsed)
-                "taxable" -> current.copy(taxable = parsed)
-                "nontaxable" -> current.copy(nontaxable = parsed)
+                "paid" -> current.copy(paid = parsed, locked = current.locked + ManualField.TAX_PAID)
+                "invoiced" -> current.copy(invoiced = parsed, locked = current.locked + ManualField.TAX_INVOICED)
+                "estimated" -> current.copy(estimated = parsed, locked = current.locked + ManualField.TAX_ESTIMATED)
+                "taxCollected" -> current.copy(taxCollected = parsed, locked = current.locked + ManualField.TAX_COLLECTED)
+                "taxable" -> current.copy(taxable = parsed, locked = current.locked + ManualField.TAX_TAXABLE)
+                "nontaxable" -> current.copy(nontaxable = parsed, locked = current.locked + ManualField.TAX_NONTAXABLE)
                 else -> current
             }
             store.savePeriodOverride(next)

@@ -234,10 +234,18 @@ fun WeatherAdviceCard(
     savedAdvice: String,
     draft: com.strobingn.wildlifefieldops.ai.fieldops.WeatherAdviceDraft?,
     onSuggest: () -> Unit,
-    onAccept: (String) -> Unit
+    onAccept: (String) -> Unit,
+    adviceManual: Boolean = false
 ) {
-    var edited by remember(draft?.text, savedAdvice) {
-        mutableStateOf(draft?.text.orEmpty().ifBlank { savedAdvice })
+    var edited by remember(savedAdvice) { mutableStateOf(savedAdvice) }
+    var manual by remember(savedAdvice) { mutableStateOf(adviceManual || savedAdvice.isNotBlank()) }
+    var preview by remember { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(draft?.text) {
+        val suggestion = draft?.text.orEmpty()
+        if (suggestion.isBlank()) return@LaunchedEffect
+        val applied = com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins.suggest(edited, suggestion, manual)
+        if (applied != edited) edited = applied
+        preview = com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins.preview(edited, suggestion, manual)
     }
     Card(
         colors = CardDefaults.cardColors(containerColor = BackgroundCard),
@@ -258,7 +266,10 @@ fun WeatherAdviceCard(
             }
             OutlinedTextField(
                 value = edited,
-                onValueChange = { edited = it },
+                onValueChange = {
+                    edited = it
+                    manual = true
+                },
                 label = { Text("Advice (yours win)") },
                 minLines = 3,
                 modifier = Modifier.fillMaxWidth(),
@@ -270,9 +281,13 @@ fun WeatherAdviceCard(
                 }) { Text("Suggest") }
                 Button(
                     onClick = { onAccept(edited.trim()) },
-                    enabled = edited.isNotBlank(),
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
                 ) { Text("Save advice") }
+            }
+            com.strobingn.wildlifefieldops.ui.components.ApplySuggestionChip(preview) {
+                edited = it
+                manual = true
+                preview = null
             }
         }
     }

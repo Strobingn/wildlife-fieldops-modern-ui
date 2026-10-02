@@ -11,6 +11,7 @@ import com.strobingn.wildlifefieldops.data.model.ReminderPriority
 import com.strobingn.wildlifefieldops.data.model.ReminderStatus
 import com.strobingn.wildlifefieldops.data.model.ReminderType
 import com.strobingn.wildlifefieldops.pricing.JobPricing
+import com.strobingn.wildlifefieldops.pricing.markManual
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -61,9 +62,9 @@ class CustomerFieldOpsStore @Inject constructor(
     suspend fun saveWarranty(jobId: String, startAt: Long, termMonths: Int, covered: String) {
         val job = jobDao.getById(jobId) ?: return
         persist(job) {
-            it.copy(
+            it.markManual(ManualField.WARRANTY_COVERED).copy(
                 warrantyStartAt = startAt,
-                warrantyTermMonths = termMonths.coerceAtLeast(1),
+                warrantyTermMonths = termMonths.coerceAtLeast(0),
                 warrantyCovered = covered
             )
         }
@@ -87,7 +88,14 @@ class CustomerFieldOpsStore @Inject constructor(
     }
 
     suspend fun saveSeasonal(job: Job, draft: SeasonalDraft) {
-        persist(job) { it.copy(seasonalKind = draft.kind.name, seasonalDueAt = draft.dueAt) }
+        persist(job) {
+            it.markManual(ManualField.SEASONAL_TITLE, ManualField.SEASONAL_NOTES, ManualField.SEASONAL_DUE).copy(
+                seasonalKind = draft.kind.name,
+                seasonalDueAt = draft.dueAt,
+                seasonalTitle = draft.title,
+                seasonalNotes = draft.notes
+            )
+        }
         reminderDao.insert(
             Reminder(
                 title = draft.title,

@@ -8,10 +8,10 @@ data class WarrantyPlan(
     val covered: String = ""
 ) {
     val expiresAt: Long?
-        get() = startAt?.let {
+        get() = startAt?.takeIf { termMonths > 0 }?.let {
             Calendar.getInstance().apply {
                 timeInMillis = it
-                add(Calendar.MONTH, termMonths.coerceAtLeast(1))
+                add(Calendar.MONTH, termMonths)
             }.timeInMillis
         }
 
@@ -28,5 +28,5 @@ data class WarrantyPlan(
 
 object WarrantyTracker {
     fun fromJob(startAt: Long?, termMonths: Int, covered: String): WarrantyPlan =
-        WarrantyPlan(startAt = startAt, termMonths = termMonths.coerceAtLeast(1), covered = covered)
+        WarrantyPlan(startAt = startAt, termMonths = termMonths.coerceAtLeast(0), covered = covered)
 }

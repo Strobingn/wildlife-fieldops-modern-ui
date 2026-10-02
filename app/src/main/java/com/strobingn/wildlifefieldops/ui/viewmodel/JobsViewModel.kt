@@ -16,8 +16,10 @@ import com.strobingn.wildlifefieldops.data.repository.SyncRepository
 import com.strobingn.wildlifefieldops.data.workspace.JobCustomerWorkspace
 import com.strobingn.wildlifefieldops.data.workspace.JobSaveRequest
 import com.strobingn.wildlifefieldops.ai.fieldops.JobFieldOpsCodec
+import com.strobingn.wildlifefieldops.ai.fieldops.ManualField
 import com.strobingn.wildlifefieldops.pricing.JobPricing
 import com.strobingn.wildlifefieldops.pricing.PricingCalculator
+import com.strobingn.wildlifefieldops.pricing.markManual
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -293,16 +295,16 @@ class JobsViewModel @Inject constructor(
         val next = existing.copy(
             pricing = pricing,
             estimatedValue = quote.total.effective,
-            confirmedSpecies = pricing.confirmedSpecies.ifBlank { existing.confirmedSpecies },
-            legalNotes = pricing.legalNotes.ifBlank { existing.legalNotes },
-            nextStep = pricing.nextStep.ifBlank { existing.nextStep },
-            nextStepDueAt = pricing.nextStepDueAt ?: existing.nextStepDueAt,
-            nextStepSource = pricing.nextStepSource.ifBlank { existing.nextStepSource },
+            confirmedSpecies = pricing.confirmedSpecies,
+            legalNotes = pricing.legalNotes,
+            nextStep = pricing.nextStep,
+            nextStepDueAt = pricing.nextStepDueAt,
+            nextStepSource = pricing.nextStepSource,
             aiRuntime = pricing.aiRuntime.ifBlank { existing.aiRuntime },
-            weatherTrapAdvice = pricing.weatherTrapAdvice.ifBlank { existing.weatherTrapAdvice },
-            followUpKind = pricing.followUpKind.ifBlank { existing.followUpKind },
-            followUpDueAt = pricing.followUpDueAt ?: existing.followUpDueAt,
-            followUpNotes = pricing.followUpNotes.ifBlank { existing.followUpNotes },
+            weatherTrapAdvice = pricing.weatherTrapAdvice,
+            followUpKind = pricing.followUpKind,
+            followUpDueAt = pricing.followUpDueAt,
+            followUpNotes = pricing.followUpNotes,
             updatedAt = System.currentTimeMillis(),
             isSynced = false
         )
@@ -319,6 +321,12 @@ class JobsViewModel @Inject constructor(
         aiRuntime: String = job.aiRuntime
     ) = viewModelScope.launch {
         val latest = jobDao.getById(job.id) ?: job
+        val marked = latest.pricing.markManual(
+            ManualField.SPECIES,
+            ManualField.LEGAL_NOTES,
+            ManualField.NEXT_STEP,
+            ManualField.NEXT_STEP_DUE
+        )
         jobDao.insert(
             JobFieldOpsCodec.mergeForSave(
                 latest.copy(
@@ -328,6 +336,7 @@ class JobsViewModel @Inject constructor(
                     nextStepDueAt = nextStepDueAt,
                     nextStepSource = nextStepSource,
                     aiRuntime = aiRuntime,
+                    pricing = marked,
                     updatedAt = System.currentTimeMillis(),
                     isSynced = false
                 )
