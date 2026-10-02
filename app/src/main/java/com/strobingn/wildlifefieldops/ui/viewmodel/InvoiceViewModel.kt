@@ -6,15 +6,15 @@ import com.strobingn.wildlifefieldops.data.local.InvoiceDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
 import com.strobingn.wildlifefieldops.data.model.*
 import com.strobingn.wildlifefieldops.data.repository.JobRepository
-import com.strobingn.wildlifefieldops.pricing.InvoicePricingInputs
-import com.strobingn.wildlifefieldops.pricing.PricingCalculator
-import com.strobingn.wildlifefieldops.pricing.effectiveTotal
+import com.strobingn.wildlifefieldops.pricing.EstimateInvoiceCarry
 import com.strobingn.wildlifefieldops.tax.CountyLookupService
 import com.strobingn.wildlifefieldops.ai.fieldops.MoneyFieldOpsStore
 import com.strobingn.wildlifefieldops.tax.NyCountyTaxRates
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 /** Outcome of an automatic county + tax-rate resolution attempt. */
@@ -53,6 +53,8 @@ class InvoiceViewModel @Inject constructor(
 
     private val _countyTaxState = MutableStateFlow<CountyTaxState>(CountyTaxState.Idle)
     val countyTaxState: StateFlow<CountyTaxState> = _countyTaxState.asStateFlow()
+
+    private val invoiceWrite = Mutex()
 
     fun getInvoiceById(id: String): Flow<Invoice?> = flow {
         emit(invoiceDao.getById(id))
@@ -137,64 +139,77 @@ class InvoiceViewModel @Inject constructor(
         }
     }
 
-    fun generateInvoiceFromJob(
+    /**
+     * Writes the editor onto the job's invoice and embeds the full body in
+     * `jobs.pricing` so background sync keeps line items, blanks, and tax locks.
+     * [markJobInvoiced] stays on the explicit Save button.
+     */
+    fun saveEditorInvoice(
         jobId: String,
-        lineItems: List<InvoiceLineItem>,
-        taxRate: Double,
-        discountPercent: Double,
-        notes: String,
-        terms: String,
-        subtotalOverride: Double? = null,
-        taxAmountOverride: Double? = null,
-        discountAmountOverride: Double? = null,
-        totalOverride: Double? = null,
-        taxRateManual: Boolean = false
+        existingId: String?,
+        form: EstimateInvoiceCarry.InvoiceFormState,
+        manuallyEdited: Boolean,
+        markJobInvoiced: Boolean
     ) = viewModelScope.launch {
-        val job = jobDao.getById(jobId) ?: return@launch
-        val priced = PricingCalculator.computeInvoice(
-            InvoicePricingInputs(
-                lineItems = lineItems,
-                taxRatePercent = taxRate,
-                discountPercent = discountPercent,
-                subtotalOverride = subtotalOverride,
-                discountAmountOverride = discountAmountOverride,
-                taxAmountOverride = taxAmountOverride,
-                totalOverride = totalOverride
+        invoiceWrite.withLock {
+            val job = jobDao.getById(jobId) ?: return@withLock
+            val existing = resolveExisting(jobId, existingId)
+            val now = System.currentTimeMillis()
+            val invoice = EstimateInvoiceCarry.buildInvoice(
+                job = job,
+                form = form,
+                existing = existing,
+                invoiceNumber = generateInvoiceNumber(),
+                now = now,
+                manuallyEdited = manuallyEdited
             )
-        )
-        val persistedLines = lineItems.map { item ->
-            item.copy(total = item.effectiveTotal())
+            val unchanged = existing != null && EstimateInvoiceCarry.sameMoneyContent(existing, invoice)
+            if (!unchanged) moneyFieldOpsStore.saveInvoice(invoice)
+            if (!markJobInvoiced) return@withLock
+            val fresh = jobDao.getById(jobId) ?: return@withLock
+            val status = if (fresh.status == JobStatus.PAID) JobStatus.PAID else JobStatus.INVOICED
+            jobDao.update(
+                fresh.copy(
+                    status = status,
+                    actualCost = invoice.totalAmount,
+                    updatedAt = System.currentTimeMillis(),
+                    isSynced = false
+                )
+            )
         }
-        val invoice = Invoice(
-            invoiceNumber = generateInvoiceNumber(),
-            jobId = jobId,
-            customerId = job.customerId,
-            customerName = job.customerName,
-            subtotal = priced.subtotal.effective,
-            taxRate = taxRate,
-            taxAmount = priced.taxAmount.effective,
-            discountPercent = discountPercent,
-            discountAmount = priced.discountAmount.effective,
-            totalAmount = priced.total.effective,
-            subtotalOverride = subtotalOverride,
-            taxAmountOverride = taxAmountOverride,
-            discountAmountOverride = discountAmountOverride,
-            totalOverride = totalOverride,
-            taxRateManual = taxRateManual,
-            balanceDue = priced.total.effective,
-            lineItems = persistedLines,
-            notes = notes,
-            terms = terms
-        )
-        invoiceDao.insert(invoice)
-        jobDao.update(
-            job.copy(
-                status = JobStatus.INVOICED,
-                actualCost = priced.total.effective,
-                updatedAt = System.currentTimeMillis(),
-                isSynced = false
+    }
+
+    /**
+     * An invoice that was never manually edited keeps matching the estimate.
+     * Does not create an invoice and does not change job status.
+     */
+    fun refreshUntouchedFromEstimate(jobId: String, existingId: String?) = viewModelScope.launch {
+        if (existingId.isNullOrBlank()) return@launch
+        invoiceWrite.withLock {
+            val job = jobDao.getById(jobId) ?: return@withLock
+            val existing = invoiceDao.getById(existingId) ?: return@withLock
+            if (existing.manuallyEdited) return@withLock
+            val worksheet = EstimateInvoiceCarry.worksheetForCarry(job.pricing, job.estimatedValue) ?: return@withLock
+            val form = EstimateInvoiceCarry.formFromEstimate(worksheet)
+            val now = System.currentTimeMillis()
+            val invoice = EstimateInvoiceCarry.buildInvoice(
+                job = job,
+                form = form,
+                existing = existing,
+                invoiceNumber = existing.invoiceNumber,
+                now = now,
+                manuallyEdited = false
             )
-        )
+            if (EstimateInvoiceCarry.sameMoneyContent(existing, invoice)) return@withLock
+            moneyFieldOpsStore.saveInvoice(invoice)
+        }
+    }
+
+    private suspend fun resolveExisting(jobId: String, existingId: String?): Invoice? {
+        if (!existingId.isNullOrBlank()) {
+            invoiceDao.getById(existingId)?.let { return it }
+        }
+        return invoiceDao.getByJobOnce(jobId).maxByOrNull { it.updatedAt }
     }
 
     fun markAsPaid(invoiceId: String) = viewModelScope.launch {

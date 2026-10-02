@@ -11,17 +11,17 @@ import java.sql.DriverManager
 
 /**
  * Main after batch 1 + in-app updater is Room 12. Batches 2–5 land at Room 13
- * via a single non-destructive ALTER (MIGRATION_12_13). Batches 3–5 add no
- * further schema versions — extras stay in jobs.pricing jsonb.
+ * via a single non-destructive ALTER (MIGRATION_12_13). Invoice carry marks
+ * existing invoices operator-owned in MIGRATION_13_14 (Room 14).
  */
 class RoomMigrationMainToFinalTest {
 
     @Test
     fun mainV12MigratesToFinalV13WithoutDroppingRows() {
-        assertEquals(13, AppDatabase.VERSION)
-        val last = Migrations.ALL.last()
-        assertEquals(12, last.startVersion)
-        assertEquals(13, last.endVersion)
+        assertEquals(14, AppDatabase.VERSION)
+        val step = Migrations.MIGRATION_12_13
+        assertEquals(12, step.startVersion)
+        assertEquals(13, step.endVersion)
 
         Class.forName("org.sqlite.JDBC")
         DriverManager.getConnection("jdbc:sqlite::memory:").use { conn ->
@@ -50,7 +50,7 @@ class RoomMigrationMainToFinalTest {
                 )
                 st.execute("INSERT INTO trap_logs (id, jobId, trapId) VALUES ('t1', '1', 'Deck-1')")
             }
-            Migrations.MIGRATION_12_13.migrate(supportSqlite(conn))
+            step.migrate(supportSqlite(conn))
             val jobs = columns(conn, "jobs")
             assertTrue(jobs.containsAll(listOf("weatherTrapAdvice", "followUpKind", "followUpDueAt", "followUpNotes", "confirmedSpecies")))
             val traps = columns(conn, "trap_logs")
@@ -70,14 +70,14 @@ class RoomMigrationMainToFinalTest {
     }
 
     @Test
-    fun migrationsAreSequentialFrom3ToFinal13() {
+    fun migrationsAreSequentialFrom3ToFinal14() {
         var expected = 3
         Migrations.ALL.forEach { migration: Migration ->
             assertEquals(expected, migration.startVersion)
             assertEquals(expected + 1, migration.endVersion)
             expected = migration.endVersion
         }
-        assertEquals(13, expected)
+        assertEquals(14, expected)
     }
 
     private fun columns(conn: Connection, table: String): Set<String> =

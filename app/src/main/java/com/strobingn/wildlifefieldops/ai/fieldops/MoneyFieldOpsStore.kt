@@ -9,6 +9,7 @@ import com.strobingn.wildlifefieldops.data.model.Invoice
 import com.strobingn.wildlifefieldops.data.model.InvoiceStatus
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.Visit
+import com.strobingn.wildlifefieldops.pricing.EstimateInvoiceCarry
 import com.strobingn.wildlifefieldops.pricing.JobPricing
 import com.strobingn.wildlifefieldops.pricing.PricingJson
 import com.strobingn.wildlifefieldops.pricing.SyncedInvoiceRecord
@@ -215,9 +216,20 @@ class MoneyFieldOpsStore @Inject constructor(
 
     suspend fun hydrateFromJob(job: Job) {
         job.pricing.invoiceRecords.forEach { rec ->
-            val local = invoiceDao.getById(rec.id)
+            val local = if (rec.id.isBlank()) null else invoiceDao.getById(rec.id)
+            val incoming = rec.toInvoice(job)
             if (local == null) {
-                invoiceDao.insert(rec.toInvoice(job))
+                invoiceDao.insert(incoming)
+            } else if (EstimateInvoiceCarry.shouldReplaceWithRemote(local, rec)) {
+                invoiceDao.insert(
+                    incoming.copy(
+                        id = local.id,
+                        createdAt = local.createdAt,
+                        invoiceNumber = incoming.invoiceNumber.ifBlank { local.invoiceNumber },
+                        technicianSignature = incoming.technicianSignature.ifBlank { local.technicianSignature },
+                        customerSignature = incoming.customerSignature.ifBlank { local.customerSignature }
+                    )
+                )
             }
         }
     }
@@ -289,7 +301,23 @@ fun Invoice.toSynced(): SyncedInvoiceRecord = SyncedInvoiceRecord(
     dueDate = dueDate,
     issueDate = issueDate,
     customerName = customerName,
-    customerEmail = customerEmail
+    customerEmail = customerEmail,
+    subtotal = subtotal,
+    taxRate = taxRate,
+    taxAmount = taxAmount,
+    discountPercent = discountPercent,
+    discountAmount = discountAmount,
+    notes = notes,
+    terms = terms,
+    lineItems = lineItems,
+    subtotalOverride = subtotalOverride,
+    taxAmountOverride = taxAmountOverride,
+    discountAmountOverride = discountAmountOverride,
+    totalOverride = totalOverride,
+    taxRateManual = taxRateManual,
+    manuallyEdited = manuallyEdited,
+    updatedAt = updatedAt,
+    customerAddress = customerAddress
 )
 
 fun SyncedInvoiceRecord.toInvoice(job: Job): Invoice = Invoice(
@@ -299,12 +327,27 @@ fun SyncedInvoiceRecord.toInvoice(job: Job): Invoice = Invoice(
     customerId = job.customerId,
     customerName = customerName.ifBlank { job.customerName },
     customerEmail = customerEmail,
-    customerAddress = job.address,
+    customerAddress = customerAddress.ifBlank { job.address },
     issueDate = issueDate,
     dueDate = dueDate,
     status = runCatching { InvoiceStatus.valueOf(status) }.getOrDefault(InvoiceStatus.DRAFT),
+    subtotal = subtotal,
+    taxRate = taxRate,
+    taxAmount = taxAmount,
+    discountPercent = discountPercent,
+    discountAmount = discountAmount,
     totalAmount = totalAmount,
+    subtotalOverride = subtotalOverride,
+    taxAmountOverride = taxAmountOverride,
+    discountAmountOverride = discountAmountOverride,
+    totalOverride = totalOverride,
+    taxRateManual = taxRateManual,
     amountPaid = amountPaid,
     balanceDue = balanceDue,
-    isSynced = false
+    lineItems = lineItems,
+    notes = notes,
+    terms = terms,
+    updatedAt = updatedAt,
+    isSynced = false,
+    manuallyEdited = manuallyEdited
 )

@@ -43,7 +43,13 @@ data class Invoice(
     val pdfPath: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
-    val isSynced: Boolean = false
+    val isSynced: Boolean = false,
+    /**
+     * True once the operator typed, cleared, copied, or saved this invoice.
+     * Existing rows migrate to true so an estimate can never refill them.
+     * An untouched carry (false) still follows the latest estimate.
+     */
+    val manuallyEdited: Boolean = true
 )
 
 @Serializable

@@ -594,58 +594,7 @@ fun EstimateScreen(
 internal fun buildEstimateLineItems(
     pricing: JobPricing,
     result: com.strobingn.wildlifefieldops.pricing.JobPricingResult
-): List<InvoiceLineItem> {
-    val items = mutableListOf<InvoiceLineItem>()
-    if (pricing.laborHours > 0 || result.laborTotal.effective > 0) {
-        items += InvoiceLineItem(
-            description = "Labor / Trap Service",
-            quantity = pricing.laborHours,
-            unit = "hr",
-            unitPrice = pricing.laborRate,
-            total = result.laborTotal.effective,
-            totalOverride = pricing.laborTotalOverride
-        )
-    }
-    if (pricing.materialsQty > 0 || pricing.materialsPrice > 0 || result.materialsTotal.effective > 0) {
-        items += InvoiceLineItem(
-            description = "Materials / Exclusion & Repairs",
-            quantity = pricing.materialsQty,
-            unit = "ea",
-            unitPrice = pricing.materialsPrice,
-            total = result.materialsTotal.effective,
-            totalOverride = pricing.materialsTotalOverride
-        )
-    }
-    if (pricing.equipmentCost > 0) {
-        items += InvoiceLineItem(description = "Equipment", quantity = 1.0, unit = "ea", unitPrice = pricing.equipmentCost, total = result.equipmentTotal.effective)
-    }
-    if (pricing.permitCost > 0) {
-        items += InvoiceLineItem(description = "Permits", quantity = 1.0, unit = "ea", unitPrice = pricing.permitCost, total = result.permitTotal.effective)
-    }
-    if (pricing.disposalCost > 0) {
-        items += InvoiceLineItem(description = "Disposal", quantity = 1.0, unit = "ea", unitPrice = pricing.disposalCost, total = result.disposalTotal.effective)
-    }
-    if (pricing.mileage > 0 || result.mileageTotal.effective > 0) {
-        items += InvoiceLineItem(
-            description = "Mileage",
-            quantity = pricing.mileage,
-            unit = "mi",
-            unitPrice = pricing.mileageRate,
-            total = result.mileageTotal.effective,
-            totalOverride = pricing.mileageTotalOverride
-        )
-    }
-    if (items.isEmpty() && pricing.notes.isNotBlank()) {
-        items += InvoiceLineItem(description = pricing.notes.take(80), quantity = 1.0, unit = "ea", unitPrice = result.total.effective, total = result.total.effective, totalOverride = pricing.totalOverride)
-    }
-    if (items.isEmpty() && pricing.rationale.isNotBlank()) {
-        items += InvoiceLineItem(description = "Inspection / estimate", quantity = 1.0, unit = "ea", unitPrice = result.total.effective, total = result.total.effective, totalOverride = pricing.totalOverride)
-    }
-    if (items.isEmpty() && result.total.effective > 0) {
-        items += InvoiceLineItem(description = "Job total", quantity = 1.0, unit = "ea", unitPrice = result.total.effective, total = result.total.effective, totalOverride = pricing.totalOverride)
-    }
-    return items
-}
+): List<InvoiceLineItem> = com.strobingn.wildlifefieldops.pricing.EstimateInvoiceCarry.lineItems(pricing, result)
 
 private fun formatNum(value: Double): String {
     return if (value == value.toLong().toDouble()) value.toLong().toString()
