@@ -21,7 +21,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object JobForm : Screen("job_form/{jobId}", "Job Form") {
         fun createRoute(jobId: String? = null) = "job_form/${jobId ?: "new"}"
     }
-    object JobDictate : Screen("job_dictate", "Voice Job")
+    object JobDictate : Screen("job_dictate", "Dictate job", Icons.Default.Mic)
     object VoiceLog : Screen(
         "voice_log?jobId={jobId}&observationEventId={observationEventId}",
         "Voice Log",

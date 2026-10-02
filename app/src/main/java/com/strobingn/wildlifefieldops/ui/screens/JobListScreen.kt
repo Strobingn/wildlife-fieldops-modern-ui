@@ -18,6 +18,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
+import com.strobingn.wildlifefieldops.navigation.VoiceJobEntry
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
@@ -27,6 +28,7 @@ import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
 fun JobListScreen(
     onNavigateToJobDetail: (String) -> Unit,
     onNavigateToJobForm: () -> Unit,
+    onNavigateToDictate: () -> Unit = {},
     onBack: () -> Unit,
     showBack: Boolean = true,
     viewModel: JobsViewModel = hiltViewModel()
@@ -42,6 +44,13 @@ fun JobListScreen(
                 title = "Jobs",
                 onBack = if (showBack) onBack else null,
                 actions = {
+                    IconButton(onClick = onNavigateToDictate) {
+                        Icon(
+                            Icons.Default.Mic,
+                            contentDescription = VoiceJobEntry.ACTION_LABEL,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     IconButton(onClick = onNavigateToJobForm) {
                         Icon(
                             Icons.Default.Add,
@@ -53,14 +62,27 @@ fun JobListScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onNavigateToJobForm,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = FieldShapes.fab,
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text(ManualJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold) }
-            )
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                SmallFloatingActionButton(
+                    onClick = onNavigateToDictate,
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    shape = FieldShapes.fab
+                ) {
+                    Icon(Icons.Default.Mic, contentDescription = VoiceJobEntry.ACTION_LABEL)
+                }
+                ExtendedFloatingActionButton(
+                    onClick = onNavigateToJobForm,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    shape = FieldShapes.fab,
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text(ManualJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold) }
+                )
+            }
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
