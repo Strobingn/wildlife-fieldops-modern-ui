@@ -20,7 +20,7 @@ Rule for every feature: real Room data, operator-editable fields (AI suggests, S
 9. **Weather-aware trap-check advice** — Use the job-site forecast to advise bait, check timing, and skip/unsafe conditions; persist the advice Sir accepts.
 10. **Follow-up visit planner** — From a completed job, create a dated follow-up visit + reminder (warranty / exclusion / trap pull).
 
-## Batch 3 — Money, time, tax
+## Batch 3 — Money, time, tax (`2.5.2-ai-batch3`)
 
 11. **On-site job timer** — Start/stop a visit timer on the job; persist elapsed minutes and sync with the visit record.
 12. **Profit per job** — Materials + labor time vs quoted/paid price, shown on the job and editable cost inputs.

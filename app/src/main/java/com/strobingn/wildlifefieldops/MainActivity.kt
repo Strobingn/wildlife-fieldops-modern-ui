@@ -190,6 +190,8 @@ private fun AppNavHost(
                 onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                 onNavigateToAI = { navController.navigate(Screen.AIAssistant.route) },
                 onNavigateToTrapChecks = { navController.navigate(Screen.TrapChecks.route) },
+                onNavigateToInvoices = { navController.navigate(Screen.InvoiceList.route) },
+                onNavigateToMileage = { navController.navigate(Screen.MileageLog.route) },
                 onOpenDrawer = onOpenDrawer
             )
         }
@@ -304,6 +306,15 @@ private fun AppNavHost(
             TrapCheckScreen(
                 onBack = { navController.popBackStack() },
                 onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) }
+            )
+        }
+        composable(Screen.MileageLog.route) {
+            MileageLogScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Screen.InvoiceList.route) {
+            InvoiceListScreen(
+                onBack = { navController.popBackStack() },
+                onOpenJob = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) }
             )
         }
         composable(Screen.CountyReports.route) {

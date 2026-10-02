@@ -10,6 +10,7 @@ import com.strobingn.wildlifefieldops.pricing.InvoicePricingInputs
 import com.strobingn.wildlifefieldops.pricing.PricingCalculator
 import com.strobingn.wildlifefieldops.pricing.effectiveTotal
 import com.strobingn.wildlifefieldops.tax.CountyLookupService
+import com.strobingn.wildlifefieldops.ai.fieldops.MoneyFieldOpsStore
 import com.strobingn.wildlifefieldops.tax.NyCountyTaxRates
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -43,7 +44,8 @@ class InvoiceViewModel @Inject constructor(
     private val invoiceDao: InvoiceDao,
     private val jobDao: JobDao,
     private val jobRepository: JobRepository,
-    private val countyLookupService: CountyLookupService
+    private val countyLookupService: CountyLookupService,
+    private val moneyFieldOpsStore: MoneyFieldOpsStore
 ) : ViewModel() {
 
     val invoices = invoiceDao.getAll()
@@ -60,7 +62,7 @@ class InvoiceViewModel @Inject constructor(
         invoiceDao.getByJob(jobId)
 
     fun saveInvoice(invoice: Invoice) = viewModelScope.launch {
-        invoiceDao.insert(invoice)
+        moneyFieldOpsStore.saveInvoice(invoice)
     }
 
     fun deleteInvoice(invoice: Invoice) = viewModelScope.launch {
