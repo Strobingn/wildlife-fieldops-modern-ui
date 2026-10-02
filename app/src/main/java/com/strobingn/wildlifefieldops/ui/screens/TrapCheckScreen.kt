@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.PestControl
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -84,6 +85,7 @@ import java.util.Locale
 fun TrapCheckScreen(
     onBack: () -> Unit,
     onNavigateToJobDetail: (String) -> Unit = {},
+    onOpenNwcoLog: () -> Unit = {},
     viewModel: TrapCheckViewModel = hiltViewModel()
 ) {
     val dueToday by viewModel.dueToday.collectAsState()
@@ -116,6 +118,9 @@ fun TrapCheckScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onOpenNwcoLog) {
+                        Icon(Icons.Default.Assignment, contentDescription = "Official NWCO log", tint = TextSecondary)
+                    }
                     IconButton(onClick = { DecLogShare.shareCsv(context, viewModel.decCsv()) }) {
                         Icon(Icons.Default.Share, contentDescription = "Export DEC log", tint = TextSecondary)
                     }

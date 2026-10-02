@@ -14,6 +14,8 @@ import com.strobingn.wildlifefieldops.data.remote.WeatherService
 import com.strobingn.wildlifefieldops.data.repository.SyncBacklogRepository
 import com.strobingn.wildlifefieldops.data.repository.SyncBacklogSnapshot
 import com.strobingn.wildlifefieldops.data.repository.SyncRepository
+import com.strobingn.wildlifefieldops.ai.fieldops.DecNwcoLogStore
+import com.strobingn.wildlifefieldops.ai.fieldops.NwcoOperatorProfile
 import com.strobingn.wildlifefieldops.sync.work.FieldOpsSyncScheduler
 import com.strobingn.wildlifefieldops.sync.work.WorkManagerSyncCanaryFlag
 import com.strobingn.wildlifefieldops.ui.theme.ThemePreference
@@ -37,7 +39,8 @@ class SettingsViewModel @Inject constructor(
     private val database: AppDatabase,
     private val aiService: AiService,
     private val workManagerSyncCanaryFlag: WorkManagerSyncCanaryFlag,
-    private val fieldOpsSyncScheduler: FieldOpsSyncScheduler
+    private val fieldOpsSyncScheduler: FieldOpsSyncScheduler,
+    private val decNwcoLogStore: DecNwcoLogStore
 ) : ViewModel() {
 
     private val dataStore = context.settingsDataStore
@@ -62,6 +65,11 @@ class SettingsViewModel @Inject constructor(
         val LAST_SYNC_MESSAGE = stringPreferencesKey("last_sync_message")
         val LAST_SYNC_OK = booleanPreferencesKey("last_sync_ok")
         val LAST_SYNC_AT = longPreferencesKey("last_sync_at")
+        val NWCO_NAME = stringPreferencesKey("nwco_operator_name")
+        val NWCO_LICENSE = stringPreferencesKey("nwco_license")
+        val NWCO_REGION = stringPreferencesKey("nwco_region")
+        val NWCO_COUNTY = stringPreferencesKey("nwco_county")
+        val NWCO_PHONE = stringPreferencesKey("nwco_phone")
     }
 
     private val _syncMessage = MutableStateFlow<String?>(null)
@@ -103,6 +111,11 @@ class SettingsViewModel @Inject constructor(
     val defaultTaxRate = settings.map { storedTax(it[DEFAULT_TAX_RATE]) }
     val offlineMode = settings.map { it[OFFLINE_MODE] ?: false }
     val highAccuracyGps = settings.map { it[HIGH_ACCURACY_GPS] ?: true }
+    val nwcoName = settings.map { it[NWCO_NAME] ?: (it[TECHNICIAN_NAME] ?: "") }
+    val nwcoLicense = settings.map { it[NWCO_LICENSE] ?: "" }
+    val nwcoRegion = settings.map { it[NWCO_REGION] ?: "" }
+    val nwcoCounty = settings.map { it[NWCO_COUNTY] ?: "" }
+    val nwcoPhone = settings.map { it[NWCO_PHONE] ?: "" }
 
     init {
         refreshBacklog()
@@ -204,6 +217,50 @@ class SettingsViewModel @Inject constructor(
 
     fun setHighAccuracyGps(enabled: Boolean) = viewModelScope.launch {
         dataStore.edit { it[HIGH_ACCURACY_GPS] = enabled }
+    }
+
+    fun setNwcoName(value: String) = viewModelScope.launch {
+        dataStore.edit { it[NWCO_NAME] = value }
+        persistNwcoProfile()
+    }
+
+    fun setNwcoLicense(value: String) = viewModelScope.launch {
+        dataStore.edit { it[NWCO_LICENSE] = value }
+        persistNwcoProfile()
+    }
+
+    fun setNwcoRegion(value: String) = viewModelScope.launch {
+        dataStore.edit { it[NWCO_REGION] = value }
+        persistNwcoProfile()
+    }
+
+    fun setNwcoCounty(value: String) = viewModelScope.launch {
+        dataStore.edit { it[NWCO_COUNTY] = value }
+        persistNwcoProfile()
+    }
+
+    fun setNwcoPhone(value: String) = viewModelScope.launch {
+        dataStore.edit { it[NWCO_PHONE] = value }
+        persistNwcoProfile()
+    }
+
+    private suspend fun persistNwcoProfile() {
+        val prefs = dataStore.data.first()
+        val name = prefs[NWCO_NAME] ?: prefs[TECHNICIAN_NAME].orEmpty()
+        val parts = name.trim().split(" ").filter { it.isNotBlank() }
+        val first = parts.firstOrNull().orEmpty()
+        val last = parts.drop(1).joinToString(" ").ifBlank { parts.firstOrNull().orEmpty() }
+        decNwcoLogStore.saveOperator(
+            NwcoOperatorProfile(
+                firstName = first,
+                lastName = if (parts.size > 1) last else "",
+                address = prefs[COMPANY_ADDRESS].orEmpty(),
+                phone = prefs[NWCO_PHONE].orEmpty(),
+                licenseNumber = prefs[NWCO_LICENSE].orEmpty(),
+                decRegion = prefs[NWCO_REGION].orEmpty(),
+                countyOfResidence = prefs[NWCO_COUNTY].orEmpty()
+            )
+        )
     }
 
     fun triggerManualSync() = viewModelScope.launch {

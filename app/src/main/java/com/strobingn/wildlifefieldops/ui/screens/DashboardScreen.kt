@@ -51,6 +51,7 @@ fun DashboardScreen(
     onNavigateToMileage: () -> Unit = {},
     onNavigateToWarranties: () -> Unit = {},
     onNavigateToDuplicates: () -> Unit = {},
+    onNavigateToEarnings: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
@@ -354,19 +355,24 @@ fun DashboardScreen(
                 Card(
                     colors = CardDefaults.cardColors(containerColor = BackgroundCard),
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToEarnings() }
                 ) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            "Today  paid $${"%.0f".format(today.paid)} · invoiced $${"%.0f".format(today.invoiced)} · estimated $${"%.0f".format(today.estimated)}",
+                            "Today  paid $${"%.0f".format(today.paid)} · invoiced $${"%.0f".format(today.invoiced)}",
                             color = TextSecondary,
                             style = MaterialTheme.typography.bodySmall
                         )
                         Text(
-                            "This week  paid $${"%.0f".format(week.paid)} · invoiced $${"%.0f".format(week.invoiced)} · estimated $${"%.0f".format(week.estimated)}",
+                            "This week  paid $${"%.0f".format(week.paid)} · invoiced $${"%.0f".format(week.invoiced)}",
                             color = TextPrimary,
                             fontWeight = FontWeight.Medium
                         )
+                        TextButton(onClick = onNavigateToEarnings) {
+                            Text("Open Earnings & sales tax", color = PrimaryGreen)
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = onNavigateToInvoices) { Text("Invoices", color = PrimaryGreen) }
                             TextButton(onClick = onNavigateToMileage) { Text("Mileage", color = PrimaryGreen) }

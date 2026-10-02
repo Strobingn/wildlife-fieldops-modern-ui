@@ -11,6 +11,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object InspectionList : Screen("inspections", "Inspections", Icons.Default.Search)
     object Schedule : Screen("schedule", "Schedule", Icons.Default.CalendarMonth)
     object GPS : Screen("gps", "GPS", Icons.Default.LocationOn)
+    object EarningsTax : Screen("earnings_tax", "Tax", Icons.Default.AccountBalance)
 
     // Job Screens
     object JobDetail : Screen("job_detail/{jobId}", "Job Detail") {
@@ -60,6 +61,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     // Other Screens
     object Map : Screen("map", "Property Map", Icons.Default.Map)
     object TrapChecks : Screen("trap_checks", "Trap checks", Icons.Default.PestControl)
+    object DecNwcoLog : Screen("dec_nwco_log", "DEC NWCO log", Icons.Default.Assignment)
     object SmartSearch : Screen("smart_search", "Search", Icons.Default.ManageSearch)
     object MileageLog : Screen("mileage_log", "Mileage log", Icons.Default.DirectionsCar)
     object InvoiceList : Screen("invoice_list", "Invoices", Icons.Default.ReceiptLong)
@@ -93,11 +95,14 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     }
 
     companion object {
-        val bottomNavItems = listOf(Dashboard, JobList, InspectionList, Schedule, GPS)
+        val bottomNavItems = listOf(Dashboard, JobList, InspectionList, Schedule, EarningsTax)
         val drawerItems = listOf(
             Map,
+            EarningsTax,
+            DecNwcoLog,
             SmartSearch,
             TrapChecks,
+            GPS,
             InvoiceList,
             WarrantyList,
             DuplicateCustomers,

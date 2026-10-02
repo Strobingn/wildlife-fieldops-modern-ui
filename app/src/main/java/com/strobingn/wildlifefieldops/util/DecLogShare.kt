@@ -7,15 +7,21 @@ import java.io.File
 
 object DecLogShare {
     fun shareCsv(context: Context, csv: String, fileName: String = "ny-dec-nuisance-log.csv") {
-        val file = File(context.cacheDir, fileName)
-        file.writeText(csv)
+        shareFile(context, File(context.cacheDir, fileName).also { it.writeText(csv) }, "text/csv", "NY DEC nuisance wildlife log")
+    }
+
+    fun sharePdf(context: Context, file: File, subject: String) {
+        shareFile(context, file, "application/pdf", subject)
+    }
+
+    fun shareFile(context: Context, file: File, mime: String, subject: String) {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
         val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/csv"
+            type = mime
             putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, "NY DEC nuisance wildlife log")
+            putExtra(Intent.EXTRA_SUBJECT, subject)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        context.startActivity(Intent.createChooser(intent, "Share DEC log"))
+        context.startActivity(Intent.createChooser(intent, subject))
     }
 }

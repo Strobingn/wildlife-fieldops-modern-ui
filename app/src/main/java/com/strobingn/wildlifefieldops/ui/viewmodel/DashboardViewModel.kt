@@ -38,7 +38,8 @@ class DashboardViewModel @Inject constructor(
         customerDao.getAll(),
         inspectionDao.getAll(),
         reminderDao.getPending()
-    ) { jobs, customers, inspections, reminders ->
+    ) { allJobs, customers, inspections, reminders ->
+        val jobs = allJobs.filterNot { com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger.isLedger(it) }
         val now = System.currentTimeMillis()
         val dayStart = now - (now % 86400000L)
         val dayEnd = dayStart + 86400000L
@@ -71,7 +72,7 @@ class DashboardViewModel @Inject constructor(
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardStats())
 
     val recentJobs = jobDao.getAll()
-        .map { it.take(5) }
+        .map { list -> list.filterNot { com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger.isLedger(it) }.take(5) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val pendingReminders = reminderDao.getPending()

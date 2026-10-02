@@ -201,6 +201,7 @@ private fun AppNavHost(
                 onNavigateToMileage = { navController.navigate(Screen.MileageLog.route) },
                 onNavigateToWarranties = { navController.navigate(Screen.WarrantyList.route) },
                 onNavigateToDuplicates = { navController.navigate(Screen.DuplicateCustomers.route) },
+                onNavigateToEarnings = { navController.navigate(Screen.EarningsTax.route) },
                 onOpenDrawer = onOpenDrawer
             )
         }
@@ -329,7 +330,17 @@ private fun AppNavHost(
         composable(Screen.TrapChecks.route) {
             TrapCheckScreen(
                 onBack = { navController.popBackStack() },
-                onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) }
+                onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) },
+                onOpenNwcoLog = { navController.navigate(Screen.DecNwcoLog.route) }
+            )
+        }
+        composable(Screen.EarningsTax.route) {
+            EarningsTaxScreen(onBack = { navController.popBackStack() }, showBack = false)
+        }
+        composable(Screen.DecNwcoLog.route) {
+            DecNwcoLogScreen(
+                onBack = { navController.popBackStack() },
+                onOpenSettings = { navController.navigate(Screen.Settings.route) }
             )
         }
         composable(Screen.MileageLog.route) {
