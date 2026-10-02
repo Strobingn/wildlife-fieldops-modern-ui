@@ -75,4 +75,21 @@ object TrapCheckPlanner {
             TrapStatus.REMOVED, TrapStatus.DISABLED -> null
             else -> now + DAY_MS
         }
+
+    /**
+     * Opening Add trap or Log trap check starts at today and the planner's
+     * next check. Both stay editable; save stores whatever is in the boxes.
+     */
+    fun editorDates(status: TrapStatus, now: Long = System.currentTimeMillis()): TrapEditorDates {
+        val next = nextCheckAfter(status, now)
+        return TrapEditorDates(
+            checkDay = FieldDate.formatDay(now),
+            nextCheckDay = next?.let { FieldDate.formatDay(it) }.orEmpty()
+        )
+    }
 }
+
+data class TrapEditorDates(
+    val checkDay: String,
+    val nextCheckDay: String
+)

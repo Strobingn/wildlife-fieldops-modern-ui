@@ -60,6 +60,22 @@ object MileageTaxLog {
         return (entries.filterNot { it.id == id } + entry.copy(id = id)).sortedBy { it.date }
     }
 
+    /**
+     * Move one log onto [homeJobId], dropping every other copy.
+     * A ledger home stores a blank job id so the row stays "No job".
+     */
+    fun relocate(
+        logsByJob: Map<String, List<MileageLogEntry>>,
+        entry: MileageLogEntry,
+        homeJobId: String
+    ): Map<String, List<MileageLogEntry>> {
+        val id = entry.id.ifBlank { java.util.UUID.randomUUID().toString() }
+        val storedJobId = if (OpsLedger.isLedgerId(homeJobId)) "" else homeJobId
+        val saved = entry.copy(id = id, jobId = storedJobId)
+        val cleared = logsByJob.mapValues { (_, logs) -> logs.filterNot { it.id == id } }
+        return cleared + (homeJobId to upsert(cleared[homeJobId].orEmpty(), saved))
+    }
+
     fun suggestFromEstimate(jobId: String, jobTitle: String, miles: Double, date: Long, purpose: String = "Job travel"): MileageLogEntry =
         MileageLogEntry(
             id = "",

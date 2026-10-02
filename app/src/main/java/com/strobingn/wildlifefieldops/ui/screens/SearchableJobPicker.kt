@@ -16,6 +16,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.strobingn.wildlifefieldops.ai.fieldops.JobSearch
+import com.strobingn.wildlifefieldops.ai.fieldops.JobSearchRow
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.ui.theme.BorderDark
 import com.strobingn.wildlifefieldops.ui.theme.PrimaryGreen
@@ -39,22 +41,22 @@ fun SearchableJobPicker(
         allowNone && selectedId.isBlank() -> "No job"
         else -> ""
     }
-    val shown = jobs.filter { job ->
-        if (query.isBlank()) return@filter true
-        listOf(job.title, job.customerName, job.address, job.type)
-            .joinToString(" ")
-            .contains(query, ignoreCase = true)
+    val rows = jobs.map { job ->
+        JobSearchRow(
+            id = job.id,
+            label = jobLabel(job),
+            haystack = listOf(job.title, job.customerName, job.address, job.type).joinToString(" ")
+        )
     }
+    val shown = JobSearch.filter(rows, query)
     Column(modifier) {
         OutlinedTextField(
-            value = query.ifEmpty { selectedLabel },
+            value = JobSearch.fieldValue(query),
             onValueChange = { query = it },
             label = { Text(if (allowNone) "$label (optional)" else label) },
+            placeholder = { Text(selectedLabel.ifBlank { "Search jobs" }, color = TextTertiary) },
             supportingText = {
-                Text(
-                    if (query.isBlank()) "Type to search every job." else "${shown.size} match${if (shown.size == 1) "" else "es"}",
-                    color = TextTertiary
-                )
+                Text(JobSearch.selectionNote(selectedLabel, query, shown.size), color = TextTertiary)
             },
             modifier = Modifier.fillMaxWidth(),
             colors = pickerColors(),
@@ -72,15 +74,14 @@ fun SearchableJobPicker(
                     query = ""
                 }) { Text("No job", color = PrimaryGreen) }
             }
-            shown.forEach { job ->
-                val name = jobLabel(job)
+            shown.forEach { row ->
                 TextButton(onClick = {
-                    onSelect(job.id)
+                    onSelect(row.id)
                     query = ""
                 }) {
                     Text(
-                        if (job.id == selectedId) "● $name" else name,
-                        color = if (job.id == selectedId) PrimaryGreen else TextSecondary
+                        if (row.id == selectedId) "● ${row.label}" else row.label,
+                        color = if (row.id == selectedId) PrimaryGreen else TextSecondary
                     )
                 }
             }

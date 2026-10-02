@@ -19,6 +19,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.ai.fieldops.AiRuntimeStatus
 import com.strobingn.wildlifefieldops.ai.fieldops.FieldDate
 import com.strobingn.wildlifefieldops.ai.fieldops.ManualField
+import com.strobingn.wildlifefieldops.ai.fieldops.NextStepAttribution
 import com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins
 import com.strobingn.wildlifefieldops.ai.fieldops.SpeciesJobLegal
 import com.strobingn.wildlifefieldops.data.model.Job
@@ -93,10 +94,15 @@ fun JobDetailScreen(
             mutableStateOf(currentJob.pricing.isManual(ManualField.LEGAL_NOTES) || currentJob.legalNotes.isNotBlank())
         }
         var nextStepPreview by remember(currentJob.id) { mutableStateOf<String?>(null) }
+        var acceptedSuggestion by remember(currentJob.id) { mutableStateOf<String?>(null) }
+        var acceptedSource by remember(currentJob.id) { mutableStateOf<String?>(null) }
         LaunchedEffect(nextStepDraft) {
             val draft = nextStepDraft ?: return@LaunchedEffect
+            val source = AiRuntimeStatus.wireName(draft.source)
             if (nextStepText.isBlank()) {
                 nextStepText = draft.text
+                acceptedSuggestion = draft.text
+                acceptedSource = source
                 nextStepPreview = null
             } else {
                 nextStepPreview = OperatorWins.preview(nextStepText, draft.text, manual = true)
@@ -386,13 +392,20 @@ fun JobDetailScreen(
                                 }
                                 fieldError = null
                                 val step = nextStepText.trim()
+                                val source = NextStepAttribution.sourceForSave(
+                                    typed = step,
+                                    savedText = currentJob.nextStep,
+                                    savedSource = currentJob.nextStepSource,
+                                    acceptedSuggestion = acceptedSuggestion,
+                                    acceptedSource = acceptedSource
+                                )
                                 viewModel.saveFieldOps(
                                     job = currentJob,
                                     confirmedSpecies = speciesText.trim(),
                                     legalNotes = legalNotesText.trim(),
                                     nextStep = step,
                                     nextStepDueAt = due.millis,
-                                    nextStepSource = if (step.isBlank()) "" else "manual",
+                                    nextStepSource = source,
                                     aiRuntime = AiRuntimeStatus.wireName(runtime.mode)
                                 )
                             },
@@ -401,8 +414,23 @@ fun JobDetailScreen(
                             Text("Save field notes")
                         }
                     }
+                    val sourceNow = NextStepAttribution.sourceForSave(
+                        typed = nextStepText,
+                        savedText = currentJob.nextStep,
+                        savedSource = currentJob.nextStepSource,
+                        acceptedSuggestion = acceptedSuggestion,
+                        acceptedSource = acceptedSource
+                    )
+                    Text(
+                        "Source: ${sourceNow.ifBlank { "none" }}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary
+                    )
                     ApplySuggestionChip(nextStepPreview) {
                         nextStepText = it
+                        acceptedSuggestion = it
+                        acceptedSource = nextStepDraft?.source?.let { mode -> AiRuntimeStatus.wireName(mode) }
+                            ?: acceptedSource
                         nextStepPreview = null
                     }
                     currentJob.nextStepDueAt?.let { due ->

@@ -124,36 +124,75 @@ class MoneyFieldOpsStore @Inject constructor(
     }
 
     suspend fun saveMileage(entry: MileageLogEntry): Boolean {
+        importLegacyUnassigned()
         val id = entry.id.ifBlank { UUID.randomUUID().toString() }
-        if (entry.jobId.isBlank()) {
-            val saved = entry.copy(id = id, jobId = "", jobTitle = entry.jobTitle.ifBlank { "No job" })
-            writeUnassigned(MileageTaxLog.upsert(readUnassigned(), saved))
-            return true
+        val targetIsLedger = entry.jobId.isBlank() || OpsLedger.isLedgerId(entry.jobId)
+        if (!targetIsLedger && jobDao.getById(entry.jobId) == null) return false
+        val homeId = if (targetIsLedger) OpsLedger.ID else entry.jobId
+        stripMileage(id)
+        val home = if (targetIsLedger) ensureLedger() else jobDao.getById(homeId) ?: return false
+        val title = if (targetIsLedger) {
+            entry.jobTitle.ifBlank { "No job" }
+        } else {
+            entry.jobTitle.ifBlank { home.title.ifBlank { home.customerName } }
         }
-        val job = jobDao.getById(entry.jobId) ?: return false
-        val saved = entry.copy(id = id, jobTitle = entry.jobTitle.ifBlank { job.title.ifBlank { job.customerName } })
-        val next = job.pricing.mileageLogs.filterNot { it.id == id } + saved
-        persistPricing(job) { it.copy(mileageLogs = next.sortedBy { log -> log.date }) }
-        writeUnassigned(readUnassigned().filterNot { it.id == id })
+        val saved = entry.copy(id = id, jobId = if (targetIsLedger) "" else homeId, jobTitle = title)
+        val placed = MileageTaxLog.relocate(
+            logsByJob = mapOf(home.id to home.pricing.mileageLogs),
+            entry = saved,
+            homeJobId = home.id
+        )
+        persistPricing(home) { it.copy(mileageLogs = placed[home.id].orEmpty()) }
         return true
     }
 
     suspend fun deleteMileage(jobId: String, entryId: String) {
-        if (jobId.isBlank()) {
-            writeUnassigned(readUnassigned().filterNot { it.id == entryId })
-            return
+        importLegacyUnassigned()
+        if (jobId.isNotBlank()) {
+            jobDao.getById(jobId)?.let { job ->
+                if (job.pricing.mileageLogs.any { it.id == entryId }) {
+                    persistPricing(job) { it.copy(mileageLogs = it.mileageLogs.filterNot { log -> log.id == entryId }) }
+                }
+            }
         }
-        val job = jobDao.getById(jobId) ?: return
-        persistPricing(job) { it.copy(mileageLogs = it.mileageLogs.filterNot { log -> log.id == entryId }) }
-        writeUnassigned(readUnassigned().filterNot { it.id == entryId })
+        stripMileage(entryId)
     }
 
     suspend fun allMileage(): List<MileageLogEntry> {
-        val onJobs = jobDao.getAllOnce().flatMap { it.pricing.mileageLogs.map { log ->
-            if (log.jobTitle.isBlank()) log.copy(jobTitle = it.title.ifBlank { it.customerName }, jobId = log.jobId.ifBlank { it.id })
-            else log
-        } }
-        return (onJobs + readUnassigned()).sortedBy { it.date }
+        importLegacyUnassigned()
+        return jobDao.getAllOnce().flatMap { job ->
+            job.pricing.mileageLogs.map { log ->
+                if (OpsLedger.isLedger(job) || log.jobId.isBlank()) {
+                    log.copy(jobId = "", jobTitle = log.jobTitle.ifBlank { "No job" })
+                } else if (log.jobTitle.isBlank()) {
+                    log.copy(jobTitle = job.title.ifBlank { job.customerName }, jobId = log.jobId.ifBlank { job.id })
+                } else {
+                    log
+                }
+            }
+        }.sortedBy { it.date }
+    }
+
+    private suspend fun stripMileage(entryId: String) {
+        jobDao.getAllOnce().forEach { job ->
+            if (job.pricing.mileageLogs.none { it.id == entryId }) return@forEach
+            persistPricing(job) { it.copy(mileageLogs = it.mileageLogs.filterNot { log -> log.id == entryId }) }
+        }
+    }
+
+    /** One-time move of the old phone-only file onto the synced ops ledger. */
+    private suspend fun importLegacyUnassigned() {
+        val legacy = readUnassigned()
+        if (legacy.isEmpty()) {
+            if (unassignedFile.exists()) withContext(Dispatchers.IO) { unassignedFile.delete() }
+            return
+        }
+        val ledger = ensureLedger()
+        val merged = legacy.fold(ledger.pricing.mileageLogs) { acc, entry ->
+            MileageTaxLog.upsert(acc, entry.copy(jobId = "", jobTitle = entry.jobTitle.ifBlank { "No job" }))
+        }
+        persistPricing(ledger) { it.copy(mileageLogs = merged) }
+        withContext(Dispatchers.IO) { unassignedFile.delete() }
     }
 
     private suspend fun readUnassigned(): List<MileageLogEntry> = withContext(Dispatchers.IO) {

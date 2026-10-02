@@ -16,6 +16,7 @@ import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -309,19 +310,22 @@ class ManualEntryRuleTest {
             taxAmount = 7.5
         )
         val (start, end) = NySalesTaxPeriods.monthBounds(day)
-        val locked = EarningsPeriodOverride(
-            grain = "MONTH",
-            startMs = start,
-            paid = EarningsTaxEngine.parseLock(""),
-            locked = setOf(ManualField.TAX_PAID)
-        )
-        assertEquals(0.0, locked.paid!!, 0.0)
-        val snap = EarningsTaxEngine.snapshot(listOf(invoice), emptyList(), emptyList(), listOf(locked), start, end)
+        val lockedZero = EarningsTaxEngine.applyLock(
+            EarningsPeriodOverride(grain = "MONTH", startMs = start),
+            "paid",
+            "0"
+        )!!
+        assertEquals(0.0, lockedZero.paid!!, 0.0)
+        assertTrue(ManualField.TAX_PAID in lockedZero.locked)
+        val snap = EarningsTaxEngine.snapshot(listOf(invoice), emptyList(), emptyList(), listOf(lockedZero), start, end)
         assertEquals(0.0, snap.paid, 0.0)
         assertTrue(snap.overrideApplied)
-        val decoded = PricingJson.decode(PricingJson.encode(JobPricing(earningsPeriodOverrides = listOf(locked))))
-        assertEquals(0.0, decoded.earningsPeriodOverrides.first().paid!!, 0.0)
-        assertTrue(ManualField.TAX_PAID in decoded.earningsPeriodOverrides.first().locked)
+        val unlocked = EarningsTaxEngine.applyLock(lockedZero, "paid", "")!!
+        assertEquals(null, unlocked.paid)
+        assertFalse(ManualField.TAX_PAID in unlocked.locked)
+        val restored = EarningsTaxEngine.snapshot(listOf(invoice), emptyList(), emptyList(), listOf(unlocked), start, end)
+        assertEquals(100.0, restored.paid, 0.0)
+        assertFalse(restored.overrideApplied)
     }
 
     @Test

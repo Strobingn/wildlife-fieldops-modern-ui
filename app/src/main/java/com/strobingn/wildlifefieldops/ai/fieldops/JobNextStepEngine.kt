@@ -14,6 +14,27 @@ data class NextStepInput(
     val now: Long = System.currentTimeMillis()
 )
 
+object NextStepAttribution {
+    /**
+     * Keep an accepted suggestion's source. A later edit, or text that no longer
+     * matches that suggestion, is manual. A blank step clears the source.
+     */
+    fun sourceForSave(
+        typed: String,
+        savedText: String,
+        savedSource: String,
+        acceptedSuggestion: String?,
+        acceptedSource: String?
+    ): String {
+        val text = typed.trim()
+        if (text.isEmpty()) return ""
+        val accepted = acceptedSuggestion?.trim().orEmpty()
+        if (accepted.isNotEmpty() && text == accepted && !acceptedSource.isNullOrBlank()) return acceptedSource
+        if (text == savedText.trim() && savedSource.isNotBlank()) return savedSource
+        return "manual"
+    }
+}
+
 data class NextStepDraft(
     val text: String,
     val dueAt: Long?,

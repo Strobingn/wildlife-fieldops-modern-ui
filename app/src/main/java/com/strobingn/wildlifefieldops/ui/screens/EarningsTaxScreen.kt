@@ -251,9 +251,10 @@ private fun OverrideField(label: String, value: Double, onCommit: (String) -> Un
             label = { Text(label) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.weight(1f),
-            supportingText = { Text("Type a total, then Lock. Manual wins.") }
+            supportingText = { Text("Lock saves what you type, including 0.00. A blank Lock, or Unlock, returns the calculated total.") }
         )
         OutlinedButton(onClick = { onCommit(text) }) { Text("Lock") }
+        OutlinedButton(onClick = { onCommit("") }) { Text("Unlock") }
     }
 }
 

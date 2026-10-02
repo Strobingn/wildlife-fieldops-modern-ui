@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.ai.fieldops.FieldDate
+import com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger
 import com.strobingn.wildlifefieldops.ai.fieldops.MileageLogEntry
 import com.strobingn.wildlifefieldops.ai.fieldops.MileageTaxLog
 import com.strobingn.wildlifefieldops.data.model.Job
@@ -200,7 +201,7 @@ private fun MileageEditorDialog(
                     colors = field()
                 )
                 SearchableJobPicker(
-                    jobs = jobs,
+                    jobs = jobs.filterNot { OpsLedger.isLedger(it) },
                     selectedId = jobId,
                     onSelect = { jobId = it },
                     allowNone = true

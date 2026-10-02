@@ -60,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.ai.fieldops.DecLogExporter
+import com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger
 import com.strobingn.wildlifefieldops.ai.fieldops.FieldDate
 import com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckItem
 import com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckPlanner
@@ -96,6 +97,7 @@ fun TrapCheckScreen(
     val dueToday by viewModel.dueToday.collectAsState()
     val scheduled by viewModel.scheduled.collectAsState()
     val jobs by viewModel.jobs.collectAsState()
+    val customerJobs = jobs.filterNot { OpsLedger.isLedger(it) }
     val message by viewModel.message.collectAsState()
     val lastAdvice by viewModel.lastAdvice.collectAsState()
     val weatherVm: LiveWeatherViewModel = hiltViewModel()
@@ -104,9 +106,9 @@ fun TrapCheckScreen(
     val snackbar = remember { SnackbarHostState() }
     var showAdd by remember { mutableStateOf(false) }
     var adviceJobId by remember { mutableStateOf("") }
-    LaunchedEffect(jobs.map { it.id }) {
-        if (adviceJobId.isBlank() || jobs.none { it.id == adviceJobId }) {
-            adviceJobId = jobs.firstOrNull()?.id.orEmpty()
+    LaunchedEffect(customerJobs.map { it.id }) {
+        if (adviceJobId.isBlank() || customerJobs.none { it.id == adviceJobId }) {
+            adviceJobId = customerJobs.firstOrNull()?.id.orEmpty()
         }
     }
     var editing by remember { mutableStateOf<TrapLog?>(null) }
@@ -161,7 +163,7 @@ fun TrapCheckScreen(
         ) {
             item { Spacer(Modifier.height(4.dp)) }
             item {
-                val adviceJob = jobs.firstOrNull { it.id == adviceJobId }
+                val adviceJob = customerJobs.firstOrNull { it.id == adviceJobId }
                 key(adviceJobId) {
                     WeatherAdviceCard(
                         weatherState = weatherState,
@@ -176,7 +178,7 @@ fun TrapCheckScreen(
                         },
                         jobPicker = {
                             SearchableJobPicker(
-                                jobs = jobs,
+                                jobs = customerJobs,
                                 selectedId = adviceJobId,
                                 onSelect = { adviceJobId = it },
                                 label = "Save advice on"
@@ -222,7 +224,7 @@ fun TrapCheckScreen(
 
     if (showAdd) {
         TrapEditorDialog(
-            jobs = jobs,
+            jobs = customerJobs,
             initial = null,
             onDismiss = { showAdd = false },
             onSave = { trap ->
@@ -233,7 +235,7 @@ fun TrapCheckScreen(
     }
     editing?.let { trap ->
         TrapEditorDialog(
-            jobs = jobs,
+            jobs = customerJobs,
             initial = trap,
             onDismiss = { editing = null },
             onSave = { next ->
@@ -413,18 +415,11 @@ fun TrapEditorDialog(
     var notes by remember { mutableStateOf(initial?.conditionNotes.orEmpty()) }
     var lat by remember { mutableStateOf(initial?.latitude?.toString().orEmpty()) }
     var lng by remember { mutableStateOf(initial?.longitude?.toString().orEmpty()) }
-    var checkDateText by remember {
-        mutableStateOf(
-            when {
-                initial == null -> FieldDate.formatDay(System.currentTimeMillis())
-                initial.checkDate > 0L -> FieldDate.formatDay(initial.checkDate)
-                else -> ""
-            }
-        )
+    val prefill = remember {
+        TrapCheckPlanner.editorDates(initial?.status ?: TrapStatus.SET)
     }
-    var nextCheckText by remember {
-        mutableStateOf(initial?.nextCheckDate?.let { FieldDate.formatDay(it) }.orEmpty())
-    }
+    var checkDateText by remember { mutableStateOf(prefill.checkDay) }
+    var nextCheckText by remember { mutableStateOf(prefill.nextCheckDay) }
     var dateError by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
@@ -452,7 +447,7 @@ fun TrapEditorDialog(
                     value = checkDateText,
                     onValueChange = { checkDateText = it; dateError = null },
                     label = { Text("Check date (yyyy-MM-dd)") },
-                    supportingText = { Text("Blank leaves the check date unset. This is the DEC log date.", color = TextTertiary) },
+                    supportingText = { Text("Starts at today. Edit it if the check was another day. This is the DEC log date.", color = TextTertiary) },
                     isError = dateError != null,
                     modifier = Modifier.fillMaxWidth(),
                     colors = fieldColors()
@@ -461,7 +456,7 @@ fun TrapEditorDialog(
                     value = nextCheckText,
                     onValueChange = { nextCheckText = it; dateError = null },
                     label = { Text("Next check (yyyy-MM-dd)") },
-                    supportingText = { Text("Blank means no next check.", color = TextTertiary) },
+                    supportingText = { Text("Starts at the next check for this status. Clear it for no next check.", color = TextTertiary) },
                     modifier = Modifier.fillMaxWidth(),
                     colors = fieldColors()
                 )

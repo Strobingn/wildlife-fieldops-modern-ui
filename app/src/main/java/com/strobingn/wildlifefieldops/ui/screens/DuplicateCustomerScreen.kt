@@ -171,6 +171,8 @@ fun DuplicateCustomerScreen(
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.mergeCustomers(keep, drop)
+                    keepId = ""
+                    dropId = ""
                     confirm = null
                 }) { Text("Merge", color = PrimaryGreen) }
             },

@@ -7,7 +7,6 @@ import com.strobingn.wildlifefieldops.ai.fieldops.EarningsAdjustment
 import com.strobingn.wildlifefieldops.ai.fieldops.EarningsPeriodOverride
 import com.strobingn.wildlifefieldops.ai.fieldops.EarningsTaxEngine
 import com.strobingn.wildlifefieldops.ai.fieldops.EarningsTaxSnapshot
-import com.strobingn.wildlifefieldops.ai.fieldops.ManualField
 import com.strobingn.wildlifefieldops.ai.fieldops.MoneyFieldOpsStore
 import com.strobingn.wildlifefieldops.ai.fieldops.NySalesQuarter
 import com.strobingn.wildlifefieldops.ai.fieldops.NySalesTaxPeriods
@@ -115,16 +114,7 @@ class EarningsTaxViewModel @Inject constructor(
             val current = store.allOverrides(jobs.value).firstOrNull {
                 it.grain == _grain.value.name && it.startMs == start
             } ?: EarningsPeriodOverride(grain = _grain.value.name, startMs = start)
-            val parsed = EarningsTaxEngine.parseLock(raw)
-            val next = when (field) {
-                "paid" -> current.copy(paid = parsed, locked = current.locked + ManualField.TAX_PAID)
-                "invoiced" -> current.copy(invoiced = parsed, locked = current.locked + ManualField.TAX_INVOICED)
-                "estimated" -> current.copy(estimated = parsed, locked = current.locked + ManualField.TAX_ESTIMATED)
-                "taxCollected" -> current.copy(taxCollected = parsed, locked = current.locked + ManualField.TAX_COLLECTED)
-                "taxable" -> current.copy(taxable = parsed, locked = current.locked + ManualField.TAX_TAXABLE)
-                "nontaxable" -> current.copy(nontaxable = parsed, locked = current.locked + ManualField.TAX_NONTAXABLE)
-                else -> current
-            }
+            val next = EarningsTaxEngine.applyLock(current, field, raw) ?: return@launch
             store.savePeriodOverride(next)
         }
     }

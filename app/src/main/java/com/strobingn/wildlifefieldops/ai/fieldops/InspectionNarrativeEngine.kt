@@ -108,6 +108,19 @@ object InspectionNarrativeEngine {
         )
     }
 
+    /**
+     * The stored AI draft is the suggestion only when it actually replaced the
+     * text Sir had. Keeping Sir's text does not copy that text into the draft.
+     */
+    fun aiDraftToStore(previousDraft: String, typedBefore: String, merged: String, suggested: String): String {
+        val suggestion = suggested.trim()
+        val after = merged.trim()
+        val before = typedBefore.trim()
+        if (suggestion.isEmpty()) return previousDraft
+        if (after == suggestion && after != before) return suggestion
+        return previousDraft
+    }
+
     private fun guessSpecies(evidence: InspectionEvidence): String {
         val blob = blob(evidence)
         val hits = SPECIES.filter { (key, _) -> blob.contains(key) }.map { it.second }.distinct()

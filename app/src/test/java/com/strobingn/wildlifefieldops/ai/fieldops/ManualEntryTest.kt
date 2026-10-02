@@ -1,6 +1,10 @@
 package com.strobingn.wildlifefieldops.ai.fieldops
 
+import com.strobingn.wildlifefieldops.data.model.Invoice
+import com.strobingn.wildlifefieldops.data.model.InvoiceStatus
+import com.strobingn.wildlifefieldops.data.model.TrapStatus
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -118,6 +122,77 @@ class ManualEntryTest {
         assertEquals(1, rows.size)
         assertEquals(9.0, rows[0].miles, 0.0)
         assertEquals("", rows[0].jobId)
+    }
+
+    @Test
+    fun trapEditorPrefillsTodayAndPlannerNextCheck() {
+        val now = 1_712_000_000_000L
+        val open = TrapCheckPlanner.editorDates(TrapStatus.SET, now)
+        assertEquals(FieldDate.formatDay(now), open.checkDay)
+        val next = TrapCheckPlanner.nextCheckAfter(TrapStatus.SET, now)!!
+        assertEquals(FieldDate.formatDay(next), open.nextCheckDay)
+        assertTrue(open.nextCheckDay.isNotBlank())
+        val pulled = TrapCheckPlanner.editorDates(TrapStatus.REMOVED, now)
+        assertEquals(FieldDate.formatDay(now), pulled.checkDay)
+        assertEquals("", pulled.nextCheckDay)
+    }
+
+    @Test
+    fun mileageMoveDropsTheCopyOnTheOldJob() {
+        val entry = MileageLogEntry(id = "m1", date = 20L, miles = 12.0, jobId = "job-a", jobTitle = "Oak")
+        val start = mapOf(
+            "job-a" to listOf(entry),
+            "job-b" to emptyList(),
+            OpsLedger.ID to emptyList<MileageLogEntry>()
+        )
+        val toOther = MileageTaxLog.relocate(start, entry.copy(jobId = "job-b", jobTitle = "Maple"), "job-b")
+        assertTrue(toOther.getValue("job-a").isEmpty())
+        assertEquals("job-b", toOther.getValue("job-b").single().jobId)
+        assertEquals(12.0, toOther.getValue("job-b").single().miles, 0.0)
+        val toNone = MileageTaxLog.relocate(toOther, entry.copy(jobId = "", jobTitle = "No job"), OpsLedger.ID)
+        assertTrue(toNone.getValue("job-a").isEmpty())
+        assertTrue(toNone.getValue("job-b").isEmpty())
+        val loose = toNone.getValue(OpsLedger.ID).single()
+        assertEquals("", loose.jobId)
+        assertEquals("m1", loose.id)
+    }
+
+    @Test
+    fun jobSearchBoxIsTypedTextOnly() {
+        val rows = listOf(
+            JobSearchRow("1", "Oak attic", "Oak attic Pat"),
+            JobSearchRow("2", "Maple barn", "Maple barn Lee")
+        )
+        assertEquals("M", JobSearch.fieldValue("M"))
+        assertEquals(listOf("Maple barn"), JobSearch.filter(rows, JobSearch.fieldValue("M")).map { it.label })
+        assertTrue(JobSearch.filter(rows, "Oak atticM").isEmpty())
+        assertEquals("Selected: Oak attic", JobSearch.selectionNote("Oak attic", "", 2))
+    }
+
+    @Test
+    fun blankTaxLockUnlocksAndTypedZeroStays() {
+        val day = 1_712_764_800_000L
+        val invoice = Invoice(
+            id = "inv1",
+            jobId = "j1",
+            issueDate = day,
+            status = InvoiceStatus.PAID,
+            totalAmount = 100.0,
+            amountPaid = 100.0
+        )
+        val (start, end) = NySalesTaxPeriods.monthBounds(day)
+        val base = EarningsPeriodOverride(grain = "MONTH", startMs = start)
+        val locked = EarningsTaxEngine.applyLock(base, "paid", "0.00")!!
+        assertEquals(0.0, locked.paid!!, 0.0)
+        assertTrue(ManualField.TAX_PAID in locked.locked)
+        val held = EarningsTaxEngine.snapshot(listOf(invoice), emptyList(), emptyList(), listOf(locked), start, end)
+        assertEquals(0.0, held.paid, 0.0)
+        val cleared = EarningsTaxEngine.applyLock(locked, "paid", " ")!!
+        assertNull(cleared.paid)
+        assertFalse(ManualField.TAX_PAID in cleared.locked)
+        val back = EarningsTaxEngine.snapshot(listOf(invoice), emptyList(), emptyList(), listOf(cleared), start, end)
+        assertEquals(100.0, back.paid, 0.0)
+        assertNull(EarningsTaxEngine.applyLock(base, "paid", "nope"))
     }
 
     @Test

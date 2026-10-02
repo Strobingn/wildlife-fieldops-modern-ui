@@ -276,13 +276,6 @@ private fun PhotoTagDialog(
     var extraPreview by remember { mutableStateOf<String?>(null) }
     var pairNotes by remember { mutableStateOf("") }
     var pairId by remember { mutableStateOf(jobPhotos.firstOrNull()?.id.orEmpty()) }
-    fun currentTag() = com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag(
-        photoId = photo.id,
-        species = species,
-        damage = damage,
-        entry = entry,
-        extra = extra
-    )
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Photo tags") },
@@ -318,12 +311,14 @@ private fun PhotoTagDialog(
                     OutlinedTextField(value = pairNotes, onValueChange = { pairNotes = it }, label = { Text("Pair notes") })
                 }
                 pairs.forEach { pair ->
-                    var notes by remember(pair.id, pair.notes) { mutableStateOf(pair.notes) }
-                    Text("Saved pair ${pair.beforeId.take(6)} → ${pair.afterId.take(6)}", style = MaterialTheme.typography.labelSmall)
-                    OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Edit pair notes") })
-                    Row {
-                        TextButton(onClick = { onUpdatePair(pair.copy(notes = notes.trim())) }) { Text("Save pair") }
-                        TextButton(onClick = { onDeletePair(pair.id) }) { Text("Remove pair") }
+                    key(pair.id) {
+                        var notes by remember(pair.notes) { mutableStateOf(pair.notes) }
+                        Text("Saved pair ${pair.beforeId.take(6)} → ${pair.afterId.take(6)}", style = MaterialTheme.typography.labelSmall)
+                        OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Edit pair notes") })
+                        Row {
+                            TextButton(onClick = { onUpdatePair(pair.copy(notes = notes.trim())) }) { Text("Save pair") }
+                            TextButton(onClick = { onDeletePair(pair.id) }) { Text("Remove pair") }
+                        }
                     }
                 }
             }
@@ -345,7 +340,20 @@ private fun PhotoTagDialog(
         dismissButton = {
             Row {
                 if (pairId.isNotBlank() && photo.jobId != null) {
-                    TextButton(onClick = { onPair(pairId, pairNotes, currentTag()) }) { Text("Pair") }
+                    TextButton(onClick = {
+                        onPair(
+                            pairId,
+                            pairNotes,
+                            PhotoAutoTags.persistTyped(
+                                photoId = photo.id,
+                                species = species,
+                                damage = damage,
+                                entry = entry,
+                                extra = extra,
+                                previous = existing
+                            )
+                        )
+                    }) { Text("Pair") }
                 }
                 TextButton(onClick = onDismiss) { Text("Close") }
             }

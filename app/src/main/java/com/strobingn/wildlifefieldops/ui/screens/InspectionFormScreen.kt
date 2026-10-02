@@ -145,13 +145,19 @@ fun InspectionFormScreen(
             replace = replaceAiFields,
             cleared = narrativeCleared
         )
+        val draftToStore = InspectionNarrativeEngine.aiDraftToStore(
+            previousDraft = aiNarrativeDraft,
+            typedBefore = findings,
+            merged = merged.findings,
+            suggested = findingsIn
+        )
         findings = merged.findings
         recommendations = merged.recommendations
         speciesIdentified = merged.speciesIdentified
         entryPoints = merged.entryPoints
         damageAssessment = merged.damageAssessment
         notes = merged.notes
-        aiNarrativeDraft = merged.findings
+        aiNarrativeDraft = draftToStore
     }
     LaunchedEffect(existing?.id) {
         val insp = existing ?: return@LaunchedEffect
@@ -539,6 +545,7 @@ fun InspectionFormScreen(
                                     ),
                                     replace = replaceAiFields
                                 ) { draft ->
+                                    val beforeDraft = aiNarrativeDraft
                                     applyLiveNarrative(
                                         draft.findings,
                                         draft.recommendations,
@@ -547,7 +554,9 @@ fun InspectionFormScreen(
                                         draft.damageAssessment,
                                         draft.notes
                                     )
-                                    aiDraftSource = AiRuntimeStatus.wireName(draft.source)
+                                    if (aiNarrativeDraft != beforeDraft) {
+                                        aiDraftSource = AiRuntimeStatus.wireName(draft.source)
+                                    }
                                 }
                             },
                             enabled = !reportLoading,
