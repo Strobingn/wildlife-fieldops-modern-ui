@@ -37,6 +37,8 @@ data class JobSaveRequest(
     val legalNotes: String? = null,
     val nextStep: String? = null,
     val nextStepDueAt: Long? = null,
+    /** When true, [nextStepDueAt] is stored even if it is null (Sir cleared the date). */
+    val nextStepDueAtSet: Boolean = false,
     /** Null keeps existing worksheet lines; empty list clears them. */
     val priceLines: List<InvoiceLineItem>? = null
 )
@@ -120,7 +122,11 @@ class JobCustomerWorkspace @Inject constructor(
             confirmedSpecies = request.confirmedSpecies ?: base.confirmedSpecies,
             legalNotes = request.legalNotes ?: base.legalNotes,
             nextStep = request.nextStep ?: base.nextStep,
-            nextStepDueAt = request.nextStepDueAt ?: base.nextStepDueAt
+            nextStepDueAt = if (request.nextStepDueAtSet) {
+                request.nextStepDueAt
+            } else {
+                request.nextStepDueAt ?: base.nextStepDueAt
+            }
         )
         job = JobFieldOpsCodec.mergeForSave(withCoordinates(job, linked))
         jobDao.insert(job)

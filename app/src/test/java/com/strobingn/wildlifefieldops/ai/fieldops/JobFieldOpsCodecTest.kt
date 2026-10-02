@@ -62,4 +62,49 @@ class JobFieldOpsCodecTest {
         assertEquals("Sir confirmed skunk", saved.pricing.confirmedSpecies)
         assertTrue(saved.pricing.isEmptyWorksheet())
     }
+
+    @Test
+    fun blankTypedFieldsStayBlank() {
+        val job = Job(
+            confirmedSpecies = "",
+            legalNotes = "",
+            nextStep = "",
+            nextStepDueAt = null,
+            nextStepSource = "",
+            weatherTrapAdvice = "",
+            followUpKind = "",
+            followUpDueAt = null,
+            followUpNotes = "",
+            pricing = JobPricing(
+                confirmedSpecies = "raccoon",
+                legalNotes = "old legal",
+                nextStep = "old step",
+                nextStepDueAt = 50L,
+                nextStepSource = "heuristic",
+                weatherTrapAdvice = "old weather",
+                weatherTrapAdviceAt = 9L,
+                weatherTrapAdviceSource = "heuristic",
+                followUpKind = "TRAP_PULL",
+                followUpDueAt = 70L,
+                followUpNotes = "old notes"
+            )
+        )
+        val saved = JobFieldOpsCodec.mergeForSave(job)
+        assertEquals("", saved.confirmedSpecies)
+        assertEquals("", saved.pricing.confirmedSpecies)
+        assertEquals("", saved.legalNotes)
+        assertEquals("", saved.pricing.legalNotes)
+        assertEquals("", saved.nextStep)
+        assertEquals("", saved.pricing.nextStep)
+        assertEquals(null, saved.nextStepDueAt)
+        assertEquals(null, saved.pricing.nextStepDueAt)
+        assertEquals("", saved.weatherTrapAdvice)
+        assertEquals("", saved.pricing.weatherTrapAdvice)
+        assertEquals(null, saved.pricing.weatherTrapAdviceAt)
+        assertEquals("", saved.followUpKind)
+        assertEquals("", saved.pricing.followUpKind)
+        assertEquals(null, saved.followUpDueAt)
+        assertEquals("", saved.followUpNotes)
+        assertEquals("", saved.pricing.followUpNotes)
+    }
 }

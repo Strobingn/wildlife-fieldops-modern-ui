@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -20,14 +21,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,7 +55,19 @@ fun DuplicateCustomerScreen(
     viewModel: CustomerFieldOpsViewModel = hiltViewModel()
 ) {
     val matches by viewModel.duplicates.collectAsState()
+    val customers by viewModel.customers.collectAsState()
     val notice by viewModel.message.collectAsState()
+    val undo by viewModel.mergeUndo.collectAsState()
+    var query by remember { mutableStateOf("") }
+    var keepId by remember { mutableStateOf("") }
+    var dropId by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val active = customers.filter { it.isActive }
+    val filtered = active.filter { customer ->
+        query.isBlank() || listOf(customer.fullName, customer.phone, customer.address, customer.city)
+            .joinToString(" ")
+            .contains(query, ignoreCase = true)
+    }
     LaunchedEffect(Unit) { viewModel.refresh() }
 
     Scaffold(
@@ -74,17 +92,94 @@ fun DuplicateCustomerScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             notice?.let { item { Text(it, color = TextSecondary) } }
+            if (undo != null) {
+                item {
+                    OutlinedButton(onClick = { viewModel.undoMerge() }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Undo last merge")
+                    }
+                }
+            }
+            item {
+                Text("Merge any two", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Detected pairs are suggestions. Pick any two active customers. Nothing merges until you confirm.",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text("Search customers") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "Keep: ${active.find { it.id == keepId }?.fullName?.ifBlank { "selected" } ?: "none"}",
+                    color = TextSecondary
+                )
+                Text(
+                    "Remove: ${active.find { it.id == dropId }?.fullName?.ifBlank { "selected" } ?: "none"}",
+                    color = TextSecondary
+                )
+            }
+            items(filtered.take(30), key = { "pick-" + it.id }) { customer ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(customer.fullName.ifBlank { "Unnamed" }, color = TextPrimary, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { keepId = customer.id }) { Text("Keep") }
+                    TextButton(onClick = { dropId = customer.id }) { Text("Remove") }
+                }
+            }
+            item {
+                Button(
+                    onClick = {
+                        if (keepId.isNotBlank() && dropId.isNotBlank() && keepId != dropId) {
+                            confirm = keepId to dropId
+                        }
+                    },
+                    enabled = keepId.isNotBlank() && dropId.isNotBlank() && keepId != dropId,
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
+                ) { Text("Review merge") }
+            }
+            item {
+                Text("Detected pairs", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+            }
             if (matches.isEmpty()) {
                 item { Text("No same phone, address, or name pairs.", color = TextSecondary) }
             }
             items(matches, key = { it.left.id + it.right.id }) { match ->
                 DuplicateCard(
                     match = match,
-                    onKeepLeft = { viewModel.mergeCustomers(match.left.id, match.right.id) },
-                    onKeepRight = { viewModel.mergeCustomers(match.right.id, match.left.id) }
+                    onKeepLeft = { confirm = match.left.id to match.right.id },
+                    onKeepRight = { confirm = match.right.id to match.left.id }
                 )
             }
         }
+    }
+    confirm?.let { (keep, drop) ->
+        val keepCustomer = customers.find { it.id == keep }
+        val dropCustomer = customers.find { it.id == drop }
+        AlertDialog(
+            onDismissRequest = { confirm = null },
+            containerColor = BackgroundCard,
+            title = { Text("Merge these customers?", color = TextPrimary) },
+            text = {
+                Text(
+                    "Keep ${keepCustomer?.fullName?.ifBlank { "the first" } ?: "the first"}. " +
+                        "${dropCustomer?.fullName?.ifBlank { "The other" } ?: "The other"} is marked inactive and its jobs move. You can undo this merge from this screen.",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.mergeCustomers(keep, drop)
+                    keepId = ""
+                    dropId = ""
+                    confirm = null
+                }) { Text("Merge", color = PrimaryGreen) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirm = null }) { Text("Cancel", color = TextSecondary) }
+            }
+        )
     }
 }
 

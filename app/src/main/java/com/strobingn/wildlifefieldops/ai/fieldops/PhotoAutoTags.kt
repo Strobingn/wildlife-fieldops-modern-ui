@@ -29,38 +29,46 @@ object PhotoAutoTags {
         )
     }
 
-    fun mergeOperatorWins(ai: SyncedPhotoTag, typed: SyncedPhotoTag): SyncedPhotoTag {
-        fun cell(key: String, typedValue: String, aiValue: String): String {
-            if (key in typed.clearedKeys) return typedValue
-            if (typedValue.isNotBlank()) return typedValue
-            return aiValue
-        }
-        return SyncedPhotoTag(
-            photoId = typed.photoId.ifBlank { ai.photoId },
-            species = cell(ManualField.PHOTO_SPECIES, typed.species, ai.species),
-            damage = cell(ManualField.PHOTO_DAMAGE, typed.damage, ai.damage),
-            entry = cell(ManualField.PHOTO_ENTRY, typed.entry, ai.entry),
-            extra = cell(ManualField.PHOTO_EXTRA, typed.extra, ai.extra),
-            clearedKeys = typed.clearedKeys
-        )
-    }
+    /** Save path. Empty boxes stay empty; AI runs only from an explicit Suggest. */
+    fun keepTyped(typed: SyncedPhotoTag): SyncedPhotoTag = typed.copy(
+        species = typed.species.trim(),
+        damage = typed.damage.trim(),
+        entry = typed.entry.trim(),
+        extra = typed.extra.trim()
+    )
 
-    fun persistTyped(photoId: String, species: String, damage: String, entry: String, extra: String, previous: SyncedPhotoTag?): SyncedPhotoTag {
+    fun persistTyped(
+        photoId: String,
+        species: String,
+        damage: String,
+        entry: String,
+        extra: String,
+        previous: SyncedPhotoTag?
+    ): SyncedPhotoTag {
         val cleared = (previous?.clearedKeys ?: emptySet()) + buildSet {
             if (species.isBlank()) add(ManualField.PHOTO_SPECIES)
             if (damage.isBlank()) add(ManualField.PHOTO_DAMAGE)
             if (entry.isBlank()) add(ManualField.PHOTO_ENTRY)
             if (extra.isBlank()) add(ManualField.PHOTO_EXTRA)
         }
-        return SyncedPhotoTag(
-            photoId = photoId,
-            species = species,
-            damage = damage,
-            entry = entry,
-            extra = extra,
-            clearedKeys = cleared
+        return keepTyped(
+            SyncedPhotoTag(
+                photoId = photoId,
+                species = species,
+                damage = damage,
+                entry = entry,
+                extra = extra,
+                clearedKeys = cleared
+            )
         )
     }
+
+    /**
+     * Keeps the operator's tags, including blanks. Suggest fills empty boxes
+     * in the screen; this merge does not copy AI into a blank.
+     */
+    fun mergeOperatorWins(ai: SyncedPhotoTag, typed: SyncedPhotoTag): SyncedPhotoTag =
+        keepTyped(typed.copy(photoId = typed.photoId.ifBlank { ai.photoId }))
 
     fun matchesFilter(tag: SyncedPhotoTag, query: String): Boolean {
         val q = query.trim().lowercase()

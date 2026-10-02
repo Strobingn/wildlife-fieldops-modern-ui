@@ -351,6 +351,18 @@ fun EstimateScreen(
                                     list[index] = item.copy(quantity = qty, total = qty * item.unitPrice)
                                 }))
                             }, Modifier.weight(1f))
+                            OutlinedTextField(
+                                value = item.unit,
+                                onValueChange = { unit ->
+                                    applyPricing(pricing.copy(photoLineItems = pricing.photoLineItems.toMutableList().also { list ->
+                                        list[index] = item.copy(unit = unit)
+                                    }))
+                                },
+                                label = { Text("Unit") },
+                                colors = com.strobingn.wildlifefieldops.ui.components.pricingFieldColors(),
+                                modifier = Modifier.weight(0.8f),
+                                singleLine = true
+                            )
                             DecimalField("Unit $", formatNum(item.unitPrice), {
                                 val price = it.toDoubleOrNull() ?: 0.0
                                 applyPricing(pricing.copy(photoLineItems = pricing.photoLineItems.toMutableList().also { list ->
@@ -359,7 +371,7 @@ fun EstimateScreen(
                             }, Modifier.weight(1f))
                         }
                         Text(
-                            "${item.unit} · ${com.strobingn.wildlifefieldops.pricing.Money.formatUsd(item.effectiveTotal())}",
+                            com.strobingn.wildlifefieldops.pricing.Money.formatUsd(item.effectiveTotal()),
                             style = MaterialTheme.typography.labelSmall,
                             color = TextTertiary
                         )

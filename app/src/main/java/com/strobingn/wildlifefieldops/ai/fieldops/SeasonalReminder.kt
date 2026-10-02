@@ -16,6 +16,21 @@ data class SeasonalDraft(
     val dueAt: Long
 )
 
+/** What Sir saved. Kind and due may be blank. */
+data class SeasonalSave(
+    val kind: SeasonalKind?,
+    val title: String,
+    val notes: String,
+    val dueAt: Long?
+)
+
+data class SeasonalFields(
+    val kind: SeasonalKind?,
+    val title: String,
+    val notes: String,
+    val dueText: String
+)
+
 object SeasonalReminder {
     fun suggest(species: String, now: Long = System.currentTimeMillis()): SeasonalDraft {
         val s = species.lowercase()
@@ -35,6 +50,26 @@ object SeasonalReminder {
                 "Fall rodent proofing",
                 "Seal gaps and set interior monitors before first freeze.")
         }
+    }
+
+    fun fillBlankFields(
+        kind: SeasonalKind?,
+        title: String,
+        notes: String,
+        dueText: String,
+        suggestion: SeasonalDraft,
+        dueTextFor: (Long) -> String
+    ): SeasonalFields = SeasonalFields(
+        kind = kind ?: suggestion.kind,
+        title = if (title.isBlank()) suggestion.title else title,
+        notes = if (notes.isBlank()) suggestion.notes else notes,
+        dueText = if (dueText.isBlank()) dueTextFor(suggestion.dueAt) else dueText
+    )
+
+    /** Reuse the reminder already on the job. A blank due removes it. */
+    fun reminderIdForSave(existingId: String, dueAt: Long?, newId: String): String {
+        if (dueAt == null) return ""
+        return existingId.ifBlank { newId }
     }
 
     fun label(kind: SeasonalKind): String = when (kind) {

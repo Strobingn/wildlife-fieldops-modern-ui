@@ -16,6 +16,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.strobingn.wildlifefieldops.ai.fieldops.FieldDate
+import com.strobingn.wildlifefieldops.ai.fieldops.SpeciesJobLegal
 import com.strobingn.wildlifefieldops.data.model.*
 import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
 import com.strobingn.wildlifefieldops.ui.theme.*
@@ -51,6 +53,9 @@ fun JobFormScreen(
     var confirmedSpecies by remember { mutableStateOf("") }
     var legalNotes by remember { mutableStateOf("") }
     var nextStep by remember { mutableStateOf("") }
+    var nextStepDue by remember { mutableStateOf("") }
+    var nextStepDueError by remember { mutableStateOf<String?>(null) }
+    var confirmCatalog by remember { mutableStateOf(false) }
     val priceLines = remember { mutableStateListOf(blankPriceLine()) }
     var showTypeDropdown by remember { mutableStateOf(false) }
     var showPriorityDropdown by remember { mutableStateOf(false) }
@@ -82,6 +87,7 @@ fun JobFormScreen(
             confirmedSpecies = job.confirmedSpecies
             legalNotes = job.legalNotes
             nextStep = job.nextStep
+            nextStepDue = job.nextStepDueAt?.let { FieldDate.formatDay(it) }.orEmpty()
             priceLines.clear()
             priceLines.addAll(
                 job.pricing.photoLineItems.ifEmpty { listOf(blankPriceLine()) }
@@ -352,7 +358,14 @@ fun JobFormScreen(
                 value = legalNotes,
                 onValueChange = { legalNotes = it },
                 label = { Text("NY legal / safety notes") },
-                supportingText = { Text("Catalog text is a draft. Anything you type here is what we keep.", color = TextTertiary) },
+                supportingText = {
+                    val hint = SpeciesJobLegal.card(confirmedSpecies.ifBlank { selectedType }).catalogNotes.take(2)
+                    Text(
+                        if (hint.isEmpty()) "Catalog is a hint. This box saves only what you type."
+                        else "Catalog hint: ${hint.joinToString(" ")}",
+                        color = TextTertiary
+                    )
+                },
                 colors = fieldColors(),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -360,6 +373,13 @@ fun JobFormScreen(
                 shape = RoundedCornerShape(12.dp),
                 maxLines = 4
             )
+            TextButton(onClick = {
+                if (legalNotes.isBlank()) {
+                    legalNotes = SpeciesJobLegal.catalogText(confirmedSpecies.ifBlank { selectedType })
+                } else {
+                    confirmCatalog = true
+                }
+            }) { Text("Insert catalog", color = PrimaryGreen) }
             OutlinedTextField(
                 value = nextStep,
                 onValueChange = { nextStep = it },
@@ -368,6 +388,22 @@ fun JobFormScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 maxLines = 3
+            )
+            OutlinedTextField(
+                value = nextStepDue,
+                onValueChange = {
+                    nextStepDue = it
+                    nextStepDueError = null
+                },
+                label = { Text("Next step due (yyyy-MM-dd)") },
+                supportingText = {
+                    Text(nextStepDueError ?: "Blank clears the due date.", color = if (nextStepDueError != null) StatusUrgent else TextTertiary)
+                },
+                isError = nextStepDueError != null,
+                colors = fieldColors(),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
             )
 
             OutlinedTextField(
@@ -425,6 +461,11 @@ fun JobFormScreen(
             Button(
                 onClick = {
                     if (title.isBlank() || workspaceSaving) return@Button
+                    val due = FieldDate.parseDay(nextStepDue)
+                    if (!due.ok) {
+                        nextStepDueError = due.error
+                        return@Button
+                    }
                     val estVal = estimatedValue.toDoubleOrNull() ?: 0.0
                     val service = DefaultServiceTypes.display(selectedType)
                     workspaceViewModel.saveJob(
@@ -440,6 +481,8 @@ fun JobFormScreen(
                         confirmedSpecies = confirmedSpecies.trim(),
                         legalNotes = legalNotes.trim(),
                         nextStep = nextStep.trim(),
+                        nextStepDueAt = due.millis,
+                        nextStepDueAtSet = true,
                         priceLines = priceLines.map { line ->
                             line.copy(total = line.quantity * line.unitPrice)
                         }.filter { it.description.isNotBlank() || it.unitPrice != 0.0 }
@@ -486,6 +529,24 @@ fun JobFormScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+
+    if (confirmCatalog) {
+        AlertDialog(
+            onDismissRequest = { confirmCatalog = false },
+            containerColor = BackgroundCard,
+            title = { Text("Replace your notes?", color = TextPrimary) },
+            text = { Text("Insert catalog replaces the legal notes you typed.", color = TextSecondary) },
+            confirmButton = {
+                TextButton(onClick = {
+                    legalNotes = SpeciesJobLegal.catalogText(confirmedSpecies.ifBlank { selectedType })
+                    confirmCatalog = false
+                }) { Text("Replace", color = PrimaryGreen) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmCatalog = false }) { Text("Keep mine", color = TextSecondary) }
+            }
+        )
     }
 
     if (showAddServiceDialog) {
@@ -590,6 +651,15 @@ private fun JobPriceLinesEditor(
                     colors = fieldColors(),
                     modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = item.unit,
+                    onValueChange = { onChange(index, item.copy(unit = it)) },
+                    label = { Text("Unit") },
+                    colors = fieldColors(),
+                    modifier = Modifier.weight(0.8f),
                     shape = RoundedCornerShape(12.dp),
                     singleLine = true
                 )

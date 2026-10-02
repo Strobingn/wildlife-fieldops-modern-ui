@@ -1,6 +1,9 @@
 package com.strobingn.wildlifefieldops.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -44,6 +47,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.strobingn.wildlifefieldops.ai.fieldops.FieldDate
+import com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger
 import com.strobingn.wildlifefieldops.ai.fieldops.MileageLogEntry
 import com.strobingn.wildlifefieldops.ai.fieldops.MileageTaxLog
 import com.strobingn.wildlifefieldops.data.model.Job
@@ -52,8 +57,10 @@ import com.strobingn.wildlifefieldops.ui.theme.BackgroundDark
 import com.strobingn.wildlifefieldops.ui.theme.BorderDark
 import com.strobingn.wildlifefieldops.ui.theme.OnPrimary
 import com.strobingn.wildlifefieldops.ui.theme.PrimaryGreen
+import com.strobingn.wildlifefieldops.ui.theme.StatusUrgent
 import com.strobingn.wildlifefieldops.ui.theme.TextPrimary
 import com.strobingn.wildlifefieldops.ui.theme.TextSecondary
+import com.strobingn.wildlifefieldops.ui.theme.TextTertiary
 import com.strobingn.wildlifefieldops.ui.viewmodel.MoneyFieldOpsViewModel
 import com.strobingn.wildlifefieldops.util.DecLogShare
 import java.text.SimpleDateFormat
@@ -161,43 +168,61 @@ private fun MileageEditorDialog(
     onDismiss: () -> Unit,
     onSave: (MileageLogEntry) -> Unit
 ) {
-    var jobId by remember { mutableStateOf(initial?.jobId ?: jobs.firstOrNull()?.id.orEmpty()) }
+    var jobId by remember { mutableStateOf(initial?.jobId.orEmpty()) }
     var miles by remember { mutableStateOf(initial?.miles?.takeIf { it > 0 }?.toString().orEmpty()) }
     var purpose by remember { mutableStateOf(initial?.purpose?.ifBlank { "Job travel" } ?: "Job travel") }
     var dateText by remember {
-        mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(initial?.date ?: System.currentTimeMillis())))
+        mutableStateOf(
+            initial?.date?.takeIf { it > 0L }?.let { FieldDate.formatDay(it) }
+                ?: FieldDate.formatDay(System.currentTimeMillis())
+        )
     }
+    var dateError by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = BackgroundCard,
         title = { Text(if (initial == null) "Add mileage" else "Edit mileage", color = TextPrimary) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                Modifier
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 OutlinedTextField(value = miles, onValueChange = { miles = it }, label = { Text("Miles") }, modifier = Modifier.fillMaxWidth(), colors = field())
                 OutlinedTextField(value = purpose, onValueChange = { purpose = it }, label = { Text("Purpose") }, modifier = Modifier.fillMaxWidth(), colors = field())
-                OutlinedTextField(value = dateText, onValueChange = { dateText = it }, label = { Text("Date yyyy-MM-dd") }, modifier = Modifier.fillMaxWidth(), colors = field())
-                val job = jobs.find { it.id == jobId }
-                Text("Job: ${job?.title?.ifBlank { job.customerName } ?: "none"}", color = TextSecondary)
-                jobs.take(8).forEach { j ->
-                    TextButton(onClick = { jobId = j.id }) {
-                        Text(j.title.ifBlank { j.customerName }.ifBlank { j.id }, color = PrimaryGreen)
-                    }
-                }
+                OutlinedTextField(
+                    value = dateText,
+                    onValueChange = { dateText = it; dateError = null },
+                    label = { Text("Date yyyy-MM-dd") },
+                    supportingText = { Text(dateError ?: "A bad date is not saved as today.", color = if (dateError != null) StatusUrgent else TextTertiary) },
+                    isError = dateError != null,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = field()
+                )
+                SearchableJobPicker(
+                    jobs = jobs.filterNot { OpsLedger.isLedger(it) },
+                    selectedId = jobId,
+                    onSelect = { jobId = it },
+                    allowNone = true
+                )
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val job = jobs.find { it.id == jobId } ?: return@Button
-                    val day = runCatching {
-                        SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(dateText.trim())?.time
-                    }.getOrNull() ?: System.currentTimeMillis()
+                    val day = FieldDate.parseDay(dateText)
+                    if (!day.ok || day.millis == null) {
+                        dateError = day.error ?: "Enter a date (yyyy-MM-dd)."
+                        return@Button
+                    }
+                    val job = jobs.find { it.id == jobId }
                     onSave(
                         MileageTaxLog.suggestFromEstimate(
-                            jobId = job.id,
-                            jobTitle = job.title.ifBlank { job.customerName },
+                            jobId = job?.id.orEmpty(),
+                            jobTitle = job?.title?.ifBlank { job.customerName }.orEmpty().ifBlank { "No job" },
                             miles = miles.toDoubleOrNull() ?: 0.0,
-                            date = day,
+                            date = day.millis,
                             purpose = purpose
                         ).copy(id = initial?.id ?: java.util.UUID.randomUUID().toString())
                     )

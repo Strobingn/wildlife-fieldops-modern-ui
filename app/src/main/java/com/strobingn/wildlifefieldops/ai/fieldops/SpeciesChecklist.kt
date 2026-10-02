@@ -39,6 +39,13 @@ object SpeciesChecklist {
     fun completion(items: List<ChecklistItemRecord>): Pair<Int, Int> =
         items.count { it.done } to items.size
 
+    /** Adds template rows whose labels are missing. Hand-added checks and notes stay. */
+    fun mergeMissing(existing: List<ChecklistItemRecord>, species: String): List<ChecklistItemRecord> {
+        val have = existing.map { it.label.trim().lowercase() }.toSet()
+        val missing = templateFor(species).filter { it.label.trim().lowercase() !in have }
+        return existing + missing
+    }
+
     private val raccoon = listOf(
         "Inspect chimney, deck voids, and soffits",
         "Confirm no kits before eviction",

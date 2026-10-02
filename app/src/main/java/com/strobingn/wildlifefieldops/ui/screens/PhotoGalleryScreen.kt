@@ -205,24 +205,35 @@ fun PhotoGalleryScreen(
         }
     }
     editing?.let { photo ->
+        val jobPricing = jobs.firstOrNull { it.id == photo.jobId }?.pricing
         PhotoTagDialog(
             photo = photo,
             jobPhotos = photos.filter { it.jobId == photo.jobId && it.id != photo.id },
-            existing = jobs.firstOrNull { it.id == photo.jobId }?.pricing?.photoAutoTags?.firstOrNull { it.photoId == photo.id },
+            existing = jobPricing?.photoAutoTags?.firstOrNull { it.photoId == photo.id },
+            pairs = jobPricing?.photoPairs?.filter { it.beforeId == photo.id || it.afterId == photo.id }.orEmpty(),
             onDismiss = { editing = null },
             onSaveTags = { tag ->
                 searchVm.savePhotoTag(photo, tag)
                 editing = null
             },
-            onPair = { otherId, notes ->
+            onPair = { otherId, notes, tag ->
                 val jobId = photo.jobId.orEmpty()
                 if (jobId.isNotBlank()) {
+                    searchVm.savePhotoTag(photo, tag)
                     searchVm.savePair(
                         jobId,
                         com.strobingn.wildlifefieldops.ai.fieldops.BeforeAfterPair.pair(photo.id, otherId, notes)
                     )
                 }
                 editing = null
+            },
+            onUpdatePair = { pair ->
+                val jobId = photo.jobId.orEmpty()
+                if (jobId.isNotBlank()) searchVm.savePair(jobId, pair)
+            },
+            onDeletePair = { pairId ->
+                val jobId = photo.jobId.orEmpty()
+                if (jobId.isNotBlank()) searchVm.deletePair(jobId, pairId)
             },
             suggest = { searchVm.suggestTags(it) }
         )
@@ -234,9 +245,12 @@ private fun PhotoTagDialog(
     photo: Photo,
     jobPhotos: List<Photo>,
     existing: com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag?,
+    pairs: List<com.strobingn.wildlifefieldops.ai.fieldops.PhotoPairRecord>,
     onDismiss: () -> Unit,
     onSaveTags: (com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag) -> Unit,
-    onPair: (String, String) -> Unit,
+    onPair: (String, String, com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag) -> Unit,
+    onUpdatePair: (com.strobingn.wildlifefieldops.ai.fieldops.PhotoPairRecord) -> Unit,
+    onDeletePair: (String) -> Unit,
     suggest: (String) -> com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag
 ) {
     val seed = existing ?: com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag(photoId = photo.id)
@@ -269,28 +283,14 @@ private fun PhotoTagDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
                     val ai = suggest(listOf(photo.description, species, damage, entry).joinToString(" "))
-                    val current = com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag(
-                        photoId = photo.id,
-                        species = species,
-                        damage = damage,
-                        entry = entry,
-                        extra = extra,
-                        clearedKeys = buildSet {
-                            if (speciesManual && species.isBlank()) add(ManualField.PHOTO_SPECIES)
-                            if (damageManual && damage.isBlank()) add(ManualField.PHOTO_DAMAGE)
-                            if (entryManual && entry.isBlank()) add(ManualField.PHOTO_ENTRY)
-                            if (extraManual && extra.isBlank()) add(ManualField.PHOTO_EXTRA)
-                        }
-                    )
-                    val merged = PhotoAutoTags.mergeOperatorWins(ai, current)
-                    speciesPreview = OperatorWins.preview(species, ai.species, speciesManual)
-                    damagePreview = OperatorWins.preview(damage, ai.damage, damageManual)
-                    entryPreview = OperatorWins.preview(entry, ai.entry, entryManual)
-                    extraPreview = OperatorWins.preview(extra, ai.extra, extraManual)
-                    species = merged.species
-                    damage = merged.damage
-                    entry = merged.entry
-                    extra = merged.extra
+                    speciesPreview = if (species.isBlank() && !speciesManual) null else OperatorWins.preview(species, ai.species, true)
+                    damagePreview = if (damage.isBlank() && !damageManual) null else OperatorWins.preview(damage, ai.damage, true)
+                    entryPreview = if (entry.isBlank() && !entryManual) null else OperatorWins.preview(entry, ai.entry, true)
+                    extraPreview = if (extra.isBlank() && !extraManual) null else OperatorWins.preview(extra, ai.extra, true)
+                    if (species.isBlank() && !speciesManual) species = ai.species
+                    if (damage.isBlank() && !damageManual) damage = ai.damage
+                    if (entry.isBlank() && !entryManual) entry = ai.entry
+                    if (extra.isBlank() && !extraManual) extra = ai.extra
                 }) { Text("Suggest from photo notes") }
                 ApplySuggestionChip(speciesPreview) { species = it; speciesManual = true; speciesPreview = null }
                 ApplySuggestionChip(damagePreview) { damage = it; damageManual = true; damagePreview = null }
@@ -309,6 +309,17 @@ private fun PhotoTagDialog(
                         }
                     }
                     OutlinedTextField(value = pairNotes, onValueChange = { pairNotes = it }, label = { Text("Pair notes") })
+                }
+                pairs.forEach { pair ->
+                    key(pair.id) {
+                        var notes by remember(pair.notes) { mutableStateOf(pair.notes) }
+                        Text("Saved pair ${pair.beforeId.take(6)} → ${pair.afterId.take(6)}", style = MaterialTheme.typography.labelSmall)
+                        OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Edit pair notes") })
+                        Row {
+                            TextButton(onClick = { onUpdatePair(pair.copy(notes = notes.trim())) }) { Text("Save pair") }
+                            TextButton(onClick = { onDeletePair(pair.id) }) { Text("Remove pair") }
+                        }
+                    }
                 }
             }
         },
@@ -329,7 +340,20 @@ private fun PhotoTagDialog(
         dismissButton = {
             Row {
                 if (pairId.isNotBlank() && photo.jobId != null) {
-                    TextButton(onClick = { onPair(pairId, pairNotes) }) { Text("Pair") }
+                    TextButton(onClick = {
+                        onPair(
+                            pairId,
+                            pairNotes,
+                            PhotoAutoTags.persistTyped(
+                                photoId = photo.id,
+                                species = species,
+                                damage = damage,
+                                entry = entry,
+                                extra = extra,
+                                previous = existing
+                            )
+                        )
+                    }) { Text("Pair") }
                 }
                 TextButton(onClick = onDismiss) { Text("Close") }
             }

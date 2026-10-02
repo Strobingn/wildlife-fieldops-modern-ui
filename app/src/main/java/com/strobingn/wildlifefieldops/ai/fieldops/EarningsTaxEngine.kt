@@ -35,7 +35,7 @@ data class EarningsPeriodOverride(
     val taxCollected: Double? = null,
     val taxable: Double? = null,
     val nontaxable: Double? = null,
-    /** Fields locked by Lock, including 0.00. Empty lock is 0, not "use computed". */
+    /** Fields Sir locked. A blank Lock or Unlock removes the key and the value. */
     val locked: Set<String> = emptySet()
 )
 
@@ -60,6 +60,12 @@ data class EarningsTaxSnapshot(
     val quarter: NySalesQuarter?,
     val overrideApplied: Boolean
 )
+
+sealed class TaxLockResult {
+    data class Locked(val amount: Double) : TaxLockResult()
+    data object Cleared : TaxLockResult()
+    data object Invalid : TaxLockResult()
+}
 
 object EarningsTaxEngine {
 
@@ -224,7 +230,50 @@ object EarningsTaxEngine {
         return lockedValue ?: computed
     }
 
-    fun parseLock(raw: String): Double = raw.trim().toDoubleOrNull()?.let { Money.round(it) } ?: 0.0
+    fun parseLock(raw: String): TaxLockResult {
+        val text = raw.trim()
+        if (text.isEmpty()) return TaxLockResult.Cleared
+        val amount = text.toDoubleOrNull() ?: return TaxLockResult.Invalid
+        return TaxLockResult.Locked(Money.round(amount))
+    }
+
+    /** Blank or Unlock drops the lock. A typed number, including 0.00, locks that amount. */
+    fun applyLock(current: EarningsPeriodOverride, field: String, raw: String): EarningsPeriodOverride? {
+        val key = taxFieldKey(field) ?: return null
+        return when (val parsed = parseLock(raw)) {
+            TaxLockResult.Invalid -> null
+            TaxLockResult.Cleared -> setLockedAmount(current, key, null, locked = false)
+            is TaxLockResult.Locked -> setLockedAmount(current, key, parsed.amount, locked = true)
+        }
+    }
+
+    private fun taxFieldKey(field: String): String? = when (field) {
+        "paid", ManualField.TAX_PAID -> ManualField.TAX_PAID
+        "invoiced", ManualField.TAX_INVOICED -> ManualField.TAX_INVOICED
+        "estimated", ManualField.TAX_ESTIMATED -> ManualField.TAX_ESTIMATED
+        "taxCollected", ManualField.TAX_COLLECTED -> ManualField.TAX_COLLECTED
+        "taxable", ManualField.TAX_TAXABLE -> ManualField.TAX_TAXABLE
+        "nontaxable", ManualField.TAX_NONTAXABLE -> ManualField.TAX_NONTAXABLE
+        else -> null
+    }
+
+    private fun setLockedAmount(
+        current: EarningsPeriodOverride,
+        key: String,
+        amount: Double?,
+        locked: Boolean
+    ): EarningsPeriodOverride {
+        val keys = if (locked) current.locked + key else current.locked - key
+        return when (key) {
+            ManualField.TAX_PAID -> current.copy(paid = amount, locked = keys)
+            ManualField.TAX_INVOICED -> current.copy(invoiced = amount, locked = keys)
+            ManualField.TAX_ESTIMATED -> current.copy(estimated = amount, locked = keys)
+            ManualField.TAX_COLLECTED -> current.copy(taxCollected = amount, locked = keys)
+            ManualField.TAX_TAXABLE -> current.copy(taxable = amount, locked = keys)
+            ManualField.TAX_NONTAXABLE -> current.copy(nontaxable = amount, locked = keys)
+            else -> current
+        }
+    }
 
     private fun money(value: Double): String = String.format(java.util.Locale.US, "%.2f", value)
 

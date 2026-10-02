@@ -54,13 +54,18 @@ class SearchFieldOpsViewModel @Inject constructor(
     fun suggestTags(text: String): SyncedPhotoTag = PhotoAutoTags.suggest(text)
 
     fun savePhotoTag(photo: Photo, tag: SyncedPhotoTag) = viewModelScope.launch {
-        store.savePhotoTag(photo, tag)
+        store.savePhotoTag(photo, PhotoAutoTags.keepTyped(tag.copy(photoId = photo.id)))
         _message.value = "Photo tags saved."
     }
 
     fun savePair(jobId: String, pair: PhotoPairRecord) = viewModelScope.launch {
         store.savePair(jobId, pair)
         _message.value = "Before / after pair saved."
+    }
+
+    fun deletePair(jobId: String, pairId: String) = viewModelScope.launch {
+        store.deletePair(jobId, pairId)
+        _message.value = "Pair removed."
     }
 
     fun applyChecklist(job: Job, species: String = job.confirmedSpecies.ifBlank { job.type }) = viewModelScope.launch {

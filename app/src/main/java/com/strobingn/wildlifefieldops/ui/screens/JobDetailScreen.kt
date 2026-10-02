@@ -17,7 +17,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.ai.fieldops.AiRuntimeStatus
+import com.strobingn.wildlifefieldops.ai.fieldops.FieldDate
 import com.strobingn.wildlifefieldops.ai.fieldops.ManualField
+import com.strobingn.wildlifefieldops.ai.fieldops.NextStepAttribution
 import com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins
 import com.strobingn.wildlifefieldops.ai.fieldops.SpeciesJobLegal
 import com.strobingn.wildlifefieldops.data.model.Job
@@ -73,6 +75,9 @@ fun JobDetailScreen(
     var speciesText by remember { mutableStateOf("") }
     var legalNotesText by remember { mutableStateOf("") }
     var nextStepText by remember { mutableStateOf("") }
+    var nextStepDueText by remember { mutableStateOf("") }
+    var fieldError by remember { mutableStateOf<String?>(null) }
+    var confirmCatalog by remember { mutableStateOf(false) }
 
     job?.let { currentJob ->
         LaunchedEffect(currentJob.id, currentJob.customerId) {
@@ -82,23 +87,29 @@ fun JobDetailScreen(
             speciesText = currentJob.confirmedSpecies
             legalNotesText = currentJob.legalNotes
             nextStepText = currentJob.nextStep
-        }
-        var speciesManual by remember(currentJob.id) {
-            mutableStateOf(currentJob.pricing.isManual(ManualField.SPECIES) || currentJob.confirmedSpecies.isNotBlank())
+            nextStepDueText = currentJob.nextStepDueAt?.let { FieldDate.formatDay(it) }.orEmpty()
+            fieldError = null
         }
         var legalManual by remember(currentJob.id) {
             mutableStateOf(currentJob.pricing.isManual(ManualField.LEGAL_NOTES) || currentJob.legalNotes.isNotBlank())
         }
-        var nextStepManual by remember(currentJob.id) {
-            mutableStateOf(currentJob.pricing.isManual(ManualField.NEXT_STEP) || currentJob.nextStep.isNotBlank())
-        }
         var nextStepPreview by remember(currentJob.id) { mutableStateOf<String?>(null) }
-        var legalPreview by remember(currentJob.id) { mutableStateOf<String?>(null) }
+        var acceptedSuggestion by remember(currentJob.id) { mutableStateOf<String?>(null) }
+        var acceptedSource by remember(currentJob.id) { mutableStateOf<String?>(null) }
         LaunchedEffect(nextStepDraft) {
             val draft = nextStepDraft ?: return@LaunchedEffect
-            val applied = OperatorWins.suggest(nextStepText, draft.text, nextStepManual)
-            if (applied != nextStepText) nextStepText = applied
-            nextStepPreview = OperatorWins.preview(nextStepText, draft.text, nextStepManual)
+            val source = AiRuntimeStatus.wireName(draft.source)
+            if (nextStepText.isBlank()) {
+                nextStepText = draft.text
+                acceptedSuggestion = draft.text
+                acceptedSource = source
+                nextStepPreview = null
+            } else {
+                nextStepPreview = OperatorWins.preview(nextStepText, draft.text, manual = true)
+            }
+            if (nextStepDueText.isBlank() && draft.dueAt != null) {
+                nextStepDueText = FieldDate.formatDay(draft.dueAt)
+            }
         }
         LaunchedEffect(currentJob.id, currentJob.latitude, currentJob.longitude, currentJob.address) {
             weatherVm.loadJobWeather(currentJob.latitude, currentJob.longitude, currentJob.address)
@@ -250,19 +261,19 @@ fun JobDetailScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                val legal = SpeciesJobLegal.card(
-                    speciesText.ifBlank { currentJob.confirmedSpecies.ifBlank { currentJob.type } },
-                    legalNotesText
-                )
+                val hintSpecies = speciesText.ifBlank { currentJob.type }
+                val legal = SpeciesJobLegal.card(hintSpecies, legalNotesText)
                 InfoCard(title = "Species safety & NY legal") {
                     OutlinedTextField(
                         value = speciesText,
-                        onValueChange = {
-                            speciesText = it
-                            speciesManual = true
-                        },
+                        onValueChange = { speciesText = it },
                         label = { Text("Confirmed species") },
-                        supportingText = { Text("AI / service type is a suggestion. Type the animal you confirmed.", color = TextTertiary) },
+                        supportingText = {
+                            Text(
+                                "Service type “${currentJob.type.ifBlank { "unset" }}” is a hint. This box saves only what you type.",
+                                color = TextTertiary
+                            )
+                        },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = PrimaryGreen,
                             unfocusedBorderColor = BorderDark,
@@ -273,7 +284,12 @@ fun JobDetailScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("Risk: ${legal.risk}", style = MaterialTheme.typography.labelMedium, color = StatusUrgent)
-                    legal.decNotes.take(3).forEach {
+                    Text(
+                        "Catalog hint (not saved until you insert it)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary
+                    )
+                    legal.catalogNotes.take(3).forEach {
                         Text("• $it", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     }
                     Spacer(modifier = Modifier.height(8.dp))
@@ -297,11 +313,14 @@ fun JobDetailScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     TextButton(onClick = {
-                        legalNotesText = legal.catalogNotes.joinToString("\n")
-                        legalManual = true
-                        legalPreview = null
+                        if (legalNotesText.isBlank()) {
+                            legalNotesText = legal.catalogNotes.joinToString("\n")
+                            legalManual = true
+                        } else {
+                            confirmCatalog = true
+                        }
                     }) {
-                        Text("Reset to catalog", color = PrimaryGreen)
+                        Text("Insert catalog", color = PrimaryGreen)
                     }
                     val catalogPreview = OperatorWins.preview(
                         legalNotesText,
@@ -311,7 +330,6 @@ fun JobDetailScreen(
                     ApplySuggestionChip(catalogPreview) {
                         legalNotesText = it
                         legalManual = true
-                        legalPreview = null
                     }
                 }
 
@@ -324,10 +342,7 @@ fun JobDetailScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = nextStepText,
-                        onValueChange = {
-                            nextStepText = it
-                            nextStepManual = true
-                        },
+                        onValueChange = { nextStepText = it },
                         label = { Text("Next field action") },
                         minLines = 2,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -338,6 +353,27 @@ fun JobDetailScreen(
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    OutlinedTextField(
+                        value = nextStepDueText,
+                        onValueChange = {
+                            nextStepDueText = it
+                            fieldError = null
+                        },
+                        label = { Text("Due date (yyyy-MM-dd)") },
+                        supportingText = { Text("Blank clears the due date. A bad date is not saved.", color = TextTertiary) },
+                        isError = fieldError != null,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = PrimaryGreen,
+                            unfocusedBorderColor = BorderDark,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            errorBorderColor = StatusUrgent
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (fieldError != null) {
+                        Text(fieldError!!, color = StatusUrgent, style = MaterialTheme.typography.labelSmall)
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
                             onClick = { jobAiViewModel.suggestNextStep(currentJob) },
@@ -349,19 +385,27 @@ fun JobDetailScreen(
                         }
                         Button(
                             onClick = {
-                                val draft = jobAiViewModel.consumeNextStep()
+                                val due = FieldDate.parseDay(nextStepDueText)
+                                if (!due.ok) {
+                                    fieldError = due.error
+                                    return@Button
+                                }
+                                fieldError = null
+                                val step = nextStepText.trim()
+                                val source = NextStepAttribution.sourceForSave(
+                                    typed = step,
+                                    savedText = currentJob.nextStep,
+                                    savedSource = currentJob.nextStepSource,
+                                    acceptedSuggestion = acceptedSuggestion,
+                                    acceptedSource = acceptedSource
+                                )
                                 viewModel.saveFieldOps(
                                     job = currentJob,
                                     confirmedSpecies = speciesText.trim(),
                                     legalNotes = legalNotesText.trim(),
-                                    nextStep = nextStepText.trim(),
-                                    nextStepDueAt = if (nextStepManual) {
-                                        currentJob.nextStepDueAt
-                                    } else {
-                                        draft?.dueAt ?: currentJob.nextStepDueAt
-                                    },
-                                    nextStepSource = draft?.source?.name?.lowercase()
-                                        ?: currentJob.nextStepSource.ifBlank { "manual" },
+                                    nextStep = step,
+                                    nextStepDueAt = due.millis,
+                                    nextStepSource = source,
                                     aiRuntime = AiRuntimeStatus.wireName(runtime.mode)
                                 )
                             },
@@ -370,9 +414,23 @@ fun JobDetailScreen(
                             Text("Save field notes")
                         }
                     }
+                    val sourceNow = NextStepAttribution.sourceForSave(
+                        typed = nextStepText,
+                        savedText = currentJob.nextStep,
+                        savedSource = currentJob.nextStepSource,
+                        acceptedSuggestion = acceptedSuggestion,
+                        acceptedSource = acceptedSource
+                    )
+                    Text(
+                        "Source: ${sourceNow.ifBlank { "none" }}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary
+                    )
                     ApplySuggestionChip(nextStepPreview) {
                         nextStepText = it
-                        nextStepManual = true
+                        acceptedSuggestion = it
+                        acceptedSource = nextStepDraft?.source?.let { mode -> AiRuntimeStatus.wireName(mode) }
+                            ?: acceptedSource
                         nextStepPreview = null
                     }
                     currentJob.nextStepDueAt?.let { due ->
@@ -545,6 +603,25 @@ fun JobDetailScreen(
         }
 
         // Status Change Dialog
+        if (confirmCatalog) {
+            AlertDialog(
+                onDismissRequest = { confirmCatalog = false },
+                containerColor = BackgroundCard,
+                title = { Text("Replace your notes?", color = TextPrimary) },
+                text = { Text("Insert catalog replaces the legal notes you typed.", color = TextSecondary) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        legalNotesText = SpeciesJobLegal.catalogText(speciesText.ifBlank { currentJob.type })
+                        legalManual = true
+                        confirmCatalog = false
+                    }) { Text("Replace", color = PrimaryGreen) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmCatalog = false }) { Text("Keep mine", color = TextSecondary) }
+                }
+            )
+        }
+
         if (showStatusDialog) {
             AlertDialog(
                 onDismissRequest = { showStatusDialog = false },

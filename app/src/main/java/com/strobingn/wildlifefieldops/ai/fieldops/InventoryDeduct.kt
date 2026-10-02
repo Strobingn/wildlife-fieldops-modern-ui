@@ -16,5 +16,11 @@ data class JobMaterialUsage(
 object InventoryDeduct {
     fun nextOnHand(current: Double, qty: Double): Double = (current - qty).coerceAtLeast(0.0)
 
+    fun restore(current: Double, qty: Double): Double = current + qty.coerceAtLeast(0.0)
+
+    /** Stock after editing a used-line quantity. Positive delta deducts more. */
+    fun adjust(current: Double, oldQty: Double, newQty: Double): Double =
+        (current + oldQty - newQty).coerceAtLeast(0.0)
+
     fun isLow(onHand: Double, reorder: Double): Boolean = reorder > 0 && onHand <= reorder
 }

@@ -3,6 +3,7 @@ package com.strobingn.wildlifefieldops.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.strobingn.wildlifefieldops.ai.fieldops.CustomerFieldOpsStore
+import com.strobingn.wildlifefieldops.ai.fieldops.CustomerMergeUndo
 import com.strobingn.wildlifefieldops.ai.fieldops.CustomerMessage
 import com.strobingn.wildlifefieldops.ai.fieldops.CustomerMessageDraft
 import com.strobingn.wildlifefieldops.ai.fieldops.CustomerMessageKind
@@ -10,6 +11,7 @@ import com.strobingn.wildlifefieldops.ai.fieldops.DuplicateCustomer
 import com.strobingn.wildlifefieldops.ai.fieldops.DuplicateMatch
 import com.strobingn.wildlifefieldops.ai.fieldops.SeasonalDraft
 import com.strobingn.wildlifefieldops.ai.fieldops.SeasonalReminder
+import com.strobingn.wildlifefieldops.ai.fieldops.SeasonalSave
 import com.strobingn.wildlifefieldops.ai.fieldops.WarrantyPlan
 import com.strobingn.wildlifefieldops.data.local.CustomerDao
 import com.strobingn.wildlifefieldops.data.local.InventoryItemDao
@@ -22,6 +24,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -51,6 +54,9 @@ class CustomerFieldOpsViewModel @Inject constructor(
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
 
+    private val _mergeUndo = MutableStateFlow<CustomerMergeUndo?>(null)
+    val mergeUndo: StateFlow<CustomerMergeUndo?> = _mergeUndo.asStateFlow()
+
     init {
         refresh()
     }
@@ -65,6 +71,16 @@ class CustomerFieldOpsViewModel @Inject constructor(
         refresh()
     }
 
+    fun updateMaterial(jobId: String, usageId: String, qty: Double) = viewModelScope.launch {
+        _message.value = store.updateMaterial(jobId, usageId, qty)
+        refresh()
+    }
+
+    fun removeMaterial(jobId: String, usageId: String) = viewModelScope.launch {
+        _message.value = store.removeMaterial(jobId, usageId)
+        refresh()
+    }
+
     fun saveWarranty(jobId: String, startAt: Long, termMonths: Int, covered: String) = viewModelScope.launch {
         store.saveWarranty(jobId, startAt, termMonths, covered)
         _message.value = "Warranty saved and reminder set."
@@ -74,8 +90,8 @@ class CustomerFieldOpsViewModel @Inject constructor(
     fun suggestSeasonal(job: Job): SeasonalDraft =
         SeasonalReminder.suggest(job.confirmedSpecies.ifBlank { job.type })
 
-    fun saveSeasonal(job: Job, draft: SeasonalDraft) = viewModelScope.launch {
-        store.saveSeasonal(job, draft)
+    fun saveSeasonal(job: Job, save: SeasonalSave) = viewModelScope.launch {
+        store.saveSeasonal(job, save)
         _message.value = "Seasonal reminder saved."
         refresh()
     }
@@ -90,8 +106,21 @@ class CustomerFieldOpsViewModel @Inject constructor(
         )
 
     fun mergeCustomers(keepId: String, dropId: String) = viewModelScope.launch {
-        store.mergeCustomers(keepId, dropId)
-        _message.value = "Customers merged. Jobs now use the kept record."
+        val undo = store.mergeCustomers(keepId, dropId)
+        if (undo == null) {
+            _message.value = "Pick two different customers."
+            return@launch
+        }
+        _mergeUndo.value = undo
+        _message.value = "Customers merged. Undo is available until you leave this screen."
+        refresh()
+    }
+
+    fun undoMerge() = viewModelScope.launch {
+        val snapshot = _mergeUndo.value ?: return@launch
+        store.undoMerge(snapshot)
+        _mergeUndo.value = null
+        _message.value = "Merge undone. Both customers are active again."
         refresh()
     }
 

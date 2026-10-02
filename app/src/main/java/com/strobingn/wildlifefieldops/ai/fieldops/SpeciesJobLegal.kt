@@ -11,8 +11,8 @@ data class SpeciesLegalCard(
 )
 
 /**
- * Job-level NY legal / safety card. Catalog text is a starting draft;
- * [SpeciesLegalCard.displayNotes] is what Sir saved (or the catalog if blank).
+ * Job-level NY legal / safety card. Catalog text is a hint until Sir taps
+ * Insert catalog. [SpeciesLegalCard.displayNotes] is only what was saved.
  */
 object SpeciesJobLegal {
 
@@ -25,9 +25,11 @@ object SpeciesJobLegal {
             risk = safety.handlingRisk.name,
             catalogNotes = catalog,
             decNotes = dec,
-            displayNotes = savedNotes.trim().ifBlank { catalog.joinToString("\n") }
+            displayNotes = savedNotes.trim()
         )
     }
+
+    fun catalogText(species: String): String = card(species).catalogNotes.joinToString("\n")
 
     fun decNotes(species: String): List<String> {
         val key = species.trim().lowercase()

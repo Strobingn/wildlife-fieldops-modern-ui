@@ -50,11 +50,15 @@ class SearchFieldOpsStore @Inject constructor(
     }
 
     suspend fun savePair(jobId: String, pair: PhotoPairRecord) {
-        persist(jobId) { it.copy(photoPairs = it.photoPairs.filterNot { existing -> existing.id == pair.id } + pair) }
+        persist(jobId) { it.copy(photoPairs = BeforeAfterPair.upsert(it.photoPairs, pair)) }
+    }
+
+    suspend fun deletePair(jobId: String, pairId: String) {
+        persist(jobId) { it.copy(photoPairs = BeforeAfterPair.remove(it.photoPairs, pairId)) }
     }
 
     suspend fun applyChecklist(jobId: String, species: String) {
-        persist(jobId) { it.copy(speciesChecklist = SpeciesChecklist.templateFor(species)) }
+        persist(jobId) { it.copy(speciesChecklist = SpeciesChecklist.mergeMissing(it.speciesChecklist, species)) }
     }
 
     suspend fun saveChecklist(jobId: String, items: List<ChecklistItemRecord>) {
