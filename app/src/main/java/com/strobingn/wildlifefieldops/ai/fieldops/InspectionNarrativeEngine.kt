@@ -271,10 +271,12 @@ object NarrativeCleared {
         return base + MARKER + cleared.sorted().joinToString(",")
     }
 
-    fun source(raw: String): String = raw.substringBefore(MARKER)
+    fun source(raw: String): String =
+        raw.substringBefore(MARKER).substringBefore("|contact=").trim()
 
     fun cleared(raw: String): Set<String> {
         val part = raw.substringAfter(MARKER, missingDelimiterValue = "")
+            .substringBefore("|contact=")
         if (part.isBlank()) return emptySet()
         return part.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
     }

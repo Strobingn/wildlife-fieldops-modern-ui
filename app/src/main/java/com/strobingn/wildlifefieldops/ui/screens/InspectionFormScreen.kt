@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -37,6 +38,8 @@ import com.strobingn.wildlifefieldops.ai.fieldops.InspectionNarrativeEngine
 import com.strobingn.wildlifefieldops.ai.fieldops.ManualField
 import com.strobingn.wildlifefieldops.ai.fieldops.NarrativeCleared
 import com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins
+import com.strobingn.wildlifefieldops.data.inspection.InspectionContact
+import com.strobingn.wildlifefieldops.data.inspection.JobInspectionLink
 import com.strobingn.wildlifefieldops.data.model.*
 import com.strobingn.wildlifefieldops.data.remote.InspectionReportContext
 import com.strobingn.wildlifefieldops.ui.components.AiRuntimeBadge
@@ -63,8 +66,14 @@ fun InspectionFormScreen(
     val context = LocalContext.current
     val weatherVm: LiveWeatherViewModel = hiltViewModel()
     val weatherState by weatherVm.state.collectAsState()
+    var customerId by remember { mutableStateOf("") }
     var customerName by remember { mutableStateOf("") }
+    var customerPhone by remember { mutableStateOf("") }
+    var serviceAddress by remember { mutableStateOf("") }
+    var serviceType by remember { mutableStateOf("") }
     var inspectorName by remember { mutableStateOf("") }
+    var inspectionTypeTouched by remember { mutableStateOf(false) }
+    var jobPrefillToken by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(InspectionType.ROUTINE) }
     var findings by remember { mutableStateOf("") }
     var recommendations by remember { mutableStateOf("") }
@@ -109,6 +118,54 @@ fun InspectionFormScreen(
 
     var hydratedInspectionId by remember { mutableStateOf<String?>(null) }
     fun keepTyped(typed: String, loaded: String) = if (typed.isBlank()) loaded else typed
+    fun packedDraftSource(): String =
+        NarrativeCleared.pack(
+            InspectionContact.embed(
+                aiDraftSource,
+                InspectionContact.Values(customerPhone, serviceAddress, serviceType)
+            ),
+            narrativeCleared
+        )
+    suspend fun applyJobPrefill(jobId: String, manual: Set<String> = narrativeCleared) {
+        val id = jobId.trim()
+        if (id.isBlank()) return
+        val token = id + ":" + (inspectionId ?: "new")
+        if (jobPrefillToken == token) return
+        jobPrefillToken = token
+        val job = viewModel.loadJobOnce(id)
+        if (job == null) {
+            jobPrefillToken = ""
+            return
+        }
+        val seeded = JobInspectionLink.inspectionForRoute(
+            job = job,
+            phone = viewModel.customerPhone(job.customerId),
+            current = Inspection(
+                jobId = id,
+                customerId = customerId,
+                customerName = customerName,
+                speciesIdentified = speciesIdentified,
+                inspectionType = selectedType,
+                aiDraftSource = InspectionContact.embed(
+                    aiDraftSource,
+                    InspectionContact.Values(customerPhone, serviceAddress, serviceType)
+                )
+            ),
+            manual = manual,
+            typeUntouched = inspectionId.isNullOrBlank() && !inspectionTypeTouched
+        )
+        val contact = InspectionContact.read(seeded.aiDraftSource)
+        if (customerId.isBlank()) customerId = seeded.customerId
+        customerName = seeded.customerName
+        customerPhone = contact.phone
+        serviceAddress = contact.address
+        serviceType = contact.serviceType
+        speciesIdentified = seeded.speciesIdentified
+        selectedType = seeded.inspectionType
+        linkedJobTitle = job.title
+        linkedJobAddress = job.address
+        linkedJobDescription = job.description
+    }
     fun applyLiveNarrative(
         findingsIn: String,
         recommendationsIn: String,
@@ -179,6 +236,11 @@ fun InspectionFormScreen(
         weatherConditions = keepTyped(weatherConditions, insp.weatherConditions)
         notes = keepTyped(notes, insp.notes)
         aiNarrativeDraft = keepTyped(aiNarrativeDraft, insp.aiNarrativeDraft)
+        val loadedContact = InspectionContact.read(insp.aiDraftSource)
+        customerPhone = keepTyped(customerPhone, loadedContact.phone)
+        serviceAddress = keepTyped(serviceAddress, loadedContact.address)
+        serviceType = keepTyped(serviceType, loadedContact.serviceType)
+        if (customerId.isBlank()) customerId = insp.customerId
         if (aiDraftSource.isBlank()) {
             aiDraftSource = NarrativeCleared.source(insp.aiDraftSource)
             narrativeCleared = NarrativeCleared.cleared(insp.aiDraftSource)
@@ -190,6 +252,7 @@ fun InspectionFormScreen(
             scheduledAt = insp.inspectionDate
         }
         if (insp.jobId.isNotBlank() && linkedJobId.isBlank()) linkedJobId = insp.jobId
+        applyJobPrefill(insp.jobId.ifBlank { linkedJobId }, narrativeCleared)
     }
 
     LaunchedEffect(linkedJobId) {
@@ -198,7 +261,7 @@ fun InspectionFormScreen(
         linkedJobTitle = job.title
         linkedJobAddress = job.address
         linkedJobDescription = job.description
-        if (customerName.isBlank()) customerName = job.customerName
+        applyJobPrefill(linkedJobId)
     }
 
 
@@ -679,13 +742,13 @@ fun InspectionFormScreen(
                                             notes = notes,
                                             isSynced = false,
                                             aiNarrativeDraft = aiNarrativeDraft,
-                                            aiDraftSource = NarrativeCleared.pack(aiDraftSource, narrativeCleared)
+                                            aiDraftSource = packedDraftSource()
                                         )
                                     )
                                 } else {
                                     viewModel.createInspection(
                                         jobId = linkedJobId,
-                                        customerId = "",
+                                        customerId = customerId,
                                         customerName = customerName,
                                         inspectorName = inspectorName,
                                         inspectionType = selectedType,
@@ -701,7 +764,7 @@ fun InspectionFormScreen(
                                         weatherConditions = weatherConditions,
                                         notes = notes,
                                         aiNarrativeDraft = aiNarrativeDraft,
-                                        aiDraftSource = NarrativeCleared.pack(aiDraftSource, narrativeCleared)
+                                        aiDraftSource = packedDraftSource()
                                     )
                                 }
                                 onBack()
@@ -872,11 +935,44 @@ fun InspectionFormScreen(
 
             OutlinedTextField(
                 value = customerName,
-                onValueChange = { customerName = it },
+                onValueChange = {
+                    customerName = it
+                    narrativeCleared = OperatorWins.markCleared(narrativeCleared, ManualField.CUSTOMER_NAME, it)
+                },
                 label = { Text("Customer Name") },
                 leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = TextSecondary) },
                 colors = fieldColors(),
                 modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
+            )
+
+            OutlinedTextField(
+                value = customerPhone,
+                onValueChange = {
+                    customerPhone = it
+                    narrativeCleared = OperatorWins.markCleared(narrativeCleared, ManualField.PHONE, it)
+                },
+                label = { Text("Phone") },
+                leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = TextSecondary) },
+                colors = fieldColors(),
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
+            )
+
+            OutlinedTextField(
+                value = serviceAddress,
+                onValueChange = {
+                    serviceAddress = it
+                    narrativeCleared = OperatorWins.markCleared(narrativeCleared, ManualField.ADDRESS, it)
+                },
+                label = { Text("Address") },
+                leadingIcon = { Icon(Icons.Default.Place, contentDescription = null, tint = TextSecondary) },
+                colors = fieldColors(),
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
                 shape = RoundedCornerShape(12.dp),
                 singleLine = true
             )
@@ -929,6 +1025,8 @@ fun InspectionFormScreen(
                                 text = { Text(type.name.lowercase().replaceFirstChar { it.uppercase() }, color = TextPrimary) },
                                 onClick = {
                                     selectedType = type
+                                    inspectionTypeTouched = true
+                                    narrativeCleared = narrativeCleared - ManualField.INSPECTION_TYPE
                                     showTypeDropdown = false
                                 }
                             )
@@ -968,6 +1066,19 @@ fun InspectionFormScreen(
                     }
                 }
             }
+
+            OutlinedTextField(
+                value = serviceType,
+                onValueChange = {
+                    serviceType = it
+                    narrativeCleared = OperatorWins.markCleared(narrativeCleared, ManualField.SERVICE_TYPE, it)
+                },
+                label = { Text("Service type") },
+                colors = fieldColors(),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
+            )
 
             OutlinedTextField(
                 value = speciesIdentified,
