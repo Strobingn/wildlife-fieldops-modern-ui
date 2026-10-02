@@ -46,6 +46,8 @@ fun DashboardScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToAI: () -> Unit,
     onNavigateToTrapChecks: () -> Unit = {},
+    onNavigateToInvoices: () -> Unit = {},
+    onNavigateToMileage: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
@@ -55,6 +57,9 @@ fun DashboardScreen(
     val dueNextSteps by viewModel.dueNextSteps.collectAsState()
     val dueTrapChecks by viewModel.dueTrapChecks.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val moneyVm: com.strobingn.wildlifefieldops.ui.viewmodel.MoneyFieldOpsViewModel = hiltViewModel()
+    val moneyInvoices by moneyVm.invoices.collectAsState()
+    val moneyJobs by moneyVm.jobs.collectAsState()
     val weatherVm: LiveWeatherViewModel = hiltViewModel()
     val weatherState by weatherVm.state.collectAsState()
     LaunchedEffect(Unit) { weatherVm.loadShopWeather() }
@@ -330,6 +335,35 @@ fun DashboardScreen(
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            item {
+                val today = remember(moneyInvoices, moneyJobs) { moneyVm.earningsToday() }
+                val week = remember(moneyInvoices, moneyJobs) { moneyVm.earningsWeek() }
+                SectionHeader(title = "Earnings")
+                Spacer(modifier = Modifier.height(4.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = BackgroundCard),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "Today  paid $${"%.0f".format(today.paid)} · invoiced $${"%.0f".format(today.invoiced)} · estimated $${"%.0f".format(today.estimated)}",
+                            color = TextSecondary,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            "This week  paid $${"%.0f".format(week.paid)} · invoiced $${"%.0f".format(week.invoiced)} · estimated $${"%.0f".format(week.estimated)}",
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = onNavigateToInvoices) { Text("Invoices", color = PrimaryGreen) }
+                            TextButton(onClick = onNavigateToMileage) { Text("Mileage", color = PrimaryGreen) }
                         }
                     }
                 }

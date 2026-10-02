@@ -108,7 +108,9 @@ class LiveSyncPayloadsTest {
                         )
                     ),
                     weatherTrapAdvice = "Check after the rain",
-                    followUpKind = "TRAP_PULL"
+                    followUpKind = "TRAP_PULL",
+                    timerElapsedMs = 1_800_000L,
+                    paidAmount = 100.0
                 )
             )
         )
@@ -124,8 +126,11 @@ class LiveSyncPayloadsTest {
         assertTrue("photoLineItems" in pricing.keys)
         assertTrue("trapRecords" in pricing.keys)
         assertEquals("Check after the rain", pricing.getValue("weatherTrapAdvice").jsonPrimitive.content)
+        assertEquals(1_800_000L, pricing.getValue("timerElapsedMs").jsonPrimitive.content.toLong())
         assertFalse("weather_trap_advice" in encoded.keys)
         assertFalse("trap_logs" in encoded.keys)
+        assertFalse("timer_elapsed_ms" in encoded.keys)
+        assertFalse("paid_amount" in encoded.keys)
     }
 
     @Test

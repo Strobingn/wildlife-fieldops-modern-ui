@@ -47,7 +47,8 @@ fun JobDetailScreen(
     viewModel: JobsViewModel = hiltViewModel(),
     workspaceViewModel: JobWorkspaceViewModel = hiltViewModel(),
     jobAiViewModel: JobAiViewModel = hiltViewModel(),
-    trapCheckViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.TrapCheckViewModel = hiltViewModel()
+    trapCheckViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.TrapCheckViewModel = hiltViewModel(),
+    moneyViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.MoneyFieldOpsViewModel = hiltViewModel()
 ) {
     val job by viewModel.getJobById(jobId).collectAsState(initial = null)
     val customerDraft by workspaceViewModel.draft.collectAsState()
@@ -433,6 +434,8 @@ fun JobDetailScreen(
                         weatherVm.loadJobWeather(currentJob.latitude, currentJob.longitude, currentJob.address)
                     }
                 )
+
+                JobMoneySection(job = currentJob, moneyVm = moneyViewModel)
 
                 JobBatch2Section(
                     job = currentJob,
