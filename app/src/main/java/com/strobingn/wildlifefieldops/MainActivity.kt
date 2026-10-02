@@ -70,6 +70,7 @@ class MainActivity : AppCompatActivity() {
                             requestLaunchPermissions()
                         }
                         WildlifeFieldOpsNavHost()
+                        AppUpdateHost()
                     }
                 }
             }
@@ -138,6 +139,7 @@ fun WildlifeFieldOpsNavHost() {
             bottomBar = {
                 if (showBottomNav) {
                     Column {
+                        AppUpdateBannerBar()
                         AutoSyncStatusBar()
                         ModernBottomBar(
                             currentRoute = currentRoute ?: Screen.Dashboard.route,

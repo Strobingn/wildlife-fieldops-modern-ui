@@ -22,7 +22,10 @@ android {
         // Local/dev installs keep this hand-set code. GitHub Actions overrides with
         // 1_000_000 + GITHUB_RUN_NUMBER so branch APKs never VERSION_DOWNGRADE (48/49/50+).
         versionCode = 50
-        versionName = "2.5.0-ai-batch1"
+        versionName = "2.5.1-in-app-update"
+        buildConfigField("String", "UPDATE_RELEASE_TAG", "\"debug-latest\"")
+        buildConfigField("String", "UPDATE_CHANNEL", "\"main\"")
+        buildConfigField("String", "CI_SIGNER_SHA256", "\"EC:75:D0:BC:BC:62:30:6B:0C:38:91:76:9E:05:4C:EB:C7:7C:6A:84:4D:11:9B:40:18:B9:0C:7E:F7:57:0C:A6\"")
         System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.takeIf { it > 0 }?.let { runNumber ->
             versionCode = 1_000_000 + runNumber
         }

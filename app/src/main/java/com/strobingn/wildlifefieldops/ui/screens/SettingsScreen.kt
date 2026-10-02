@@ -89,6 +89,12 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            SettingsSectionTitle("App updates")
+            SettingsCard {
+                AppUpdateSettingsSection()
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
             SettingsSectionTitle("Connections")
             SettingsCard {
                 Text(connectionStatus, color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
@@ -287,7 +293,7 @@ fun SettingsScreen(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Before installing an update: confirm the counts above match the jobs and photos you see in the app. An update must not clear this backlog. Then tap Sync Now.",
+                    "The in-app updater syncs this backlog before installing and never wipes local data. You can still tap Sync Now first.",
                     color = TextTertiary,
                     style = MaterialTheme.typography.bodySmall
                 )
