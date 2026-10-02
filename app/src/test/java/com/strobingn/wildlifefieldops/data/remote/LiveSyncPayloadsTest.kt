@@ -110,7 +110,17 @@ class LiveSyncPayloadsTest {
                     weatherTrapAdvice = "Check after the rain",
                     followUpKind = "TRAP_PULL",
                     timerElapsedMs = 1_800_000L,
-                    paidAmount = 100.0
+                    paidAmount = 100.0,
+                    materialUsages = listOf(
+                        com.strobingn.wildlifefieldops.ai.fieldops.JobMaterialUsage(
+                            id = "u1",
+                            name = "One-way door",
+                            quantity = 1.0,
+                            unitCost = 28.0
+                        )
+                    ),
+                    warrantyTermMonths = 12,
+                    warrantyCovered = "Exclusion"
                 )
             )
         )
@@ -127,10 +137,14 @@ class LiveSyncPayloadsTest {
         assertTrue("trapRecords" in pricing.keys)
         assertEquals("Check after the rain", pricing.getValue("weatherTrapAdvice").jsonPrimitive.content)
         assertEquals(1_800_000L, pricing.getValue("timerElapsedMs").jsonPrimitive.content.toLong())
+        assertTrue("materialUsages" in pricing.keys)
+        assertEquals("Exclusion", pricing.getValue("warrantyCovered").jsonPrimitive.content)
         assertFalse("weather_trap_advice" in encoded.keys)
         assertFalse("trap_logs" in encoded.keys)
         assertFalse("timer_elapsed_ms" in encoded.keys)
         assertFalse("paid_amount" in encoded.keys)
+        assertFalse("warranty_covered" in encoded.keys)
+        assertFalse("material_usages" in encoded.keys)
     }
 
     @Test

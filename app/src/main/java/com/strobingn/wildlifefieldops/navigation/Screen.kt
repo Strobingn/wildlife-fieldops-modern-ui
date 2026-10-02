@@ -62,6 +62,8 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object TrapChecks : Screen("trap_checks", "Trap checks", Icons.Default.PestControl)
     object MileageLog : Screen("mileage_log", "Mileage log", Icons.Default.DirectionsCar)
     object InvoiceList : Screen("invoice_list", "Invoices", Icons.Default.ReceiptLong)
+    object WarrantyList : Screen("warranty_list", "Warranties", Icons.Default.Verified)
+    object DuplicateCustomers : Screen("duplicate_customers", "Duplicate customers", Icons.Default.CallMerge)
     object Invoice : Screen("invoice/{jobId}", "Invoice") {
         fun createRoute(jobId: String) = "invoice/$jobId"
     }
@@ -95,6 +97,8 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
             Map,
             TrapChecks,
             InvoiceList,
+            WarrantyList,
+            DuplicateCustomers,
             MileageLog,
             CountyReports,
             PhotoGallery,
