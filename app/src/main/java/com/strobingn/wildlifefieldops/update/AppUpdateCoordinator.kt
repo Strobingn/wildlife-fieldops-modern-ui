@@ -8,6 +8,7 @@ import com.strobingn.wildlifefieldops.data.repository.SyncBacklogRepository
 import com.strobingn.wildlifefieldops.data.repository.SyncRepository
 import com.strobingn.wildlifefieldops.sync.work.FieldOpsSyncScheduler
 import com.strobingn.wildlifefieldops.sync.work.FieldOpsSyncWorkNames
+import com.strobingn.wildlifefieldops.sync.work.SyncEnqueueResult
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -151,10 +152,7 @@ class AppUpdateCoordinator @Inject constructor(
 
     fun onReturnedFromUnknownSources() {
         scope.launch {
-            if (installer.canRequestInstalls(context)) {
-                _state.update { it.copy(showUnknownSourcesPrompt = false) }
-                installPending(skipSyncWait = _state.value.pendingUnsynced == 0)
-            } else {
+            if (!installer.canRequestInstalls(context)) {
                 _state.update {
                     it.copy(
                         phase = AppUpdatePhase.Ready,
@@ -163,6 +161,13 @@ class AppUpdateCoordinator @Inject constructor(
                         showUnknownSourcesPrompt = false
                     )
                 }
+                return@launch
+            }
+            _state.update { it.copy(showUnknownSourcesPrompt = false) }
+            if (AppUpdatePolicy.resumeDownloadAfterPermission(resolvedPendingApk() != null)) {
+                beginUpdate()
+            } else {
+                installPending(skipSyncWait = _state.value.pendingUnsynced == 0)
             }
         }
     }
@@ -277,7 +282,7 @@ class AppUpdateCoordinator @Inject constructor(
     }
 
     private suspend fun flushThenInstall() {
-        val apk = pendingApk ?: store.pendingApkPath()?.let { File(it) }?.takeIf { it.isFile }
+        val apk = resolvedPendingApk()
         if (apk == null) {
             fail("The downloaded APK is no longer on this phone. Check for updates again.")
             return
@@ -291,9 +296,12 @@ class AppUpdateCoordinator @Inject constructor(
             )
         }
         withContext(Dispatchers.IO) {
-            runCatching { fieldOpsSyncScheduler.enqueueSync() }
-            runCatching { syncRepository.syncAll() }
-            awaitSyncWork(8_000L)
+            val enqueue = runCatching { fieldOpsSyncScheduler.enqueueSync() }.getOrNull()
+            when (enqueue) {
+                is SyncEnqueueResult.Enqueued,
+                is SyncEnqueueResult.KeptExisting -> awaitSyncWork(8_000L)
+                SyncEnqueueResult.Disabled, null -> runCatching { syncRepository.syncAll() }
+            }
         }
         val backlog = withContext(Dispatchers.IO) {
             runCatching { syncBacklogRepository.snapshot() }.getOrNull()
@@ -320,7 +328,7 @@ class AppUpdateCoordinator @Inject constructor(
             flushThenInstall()
             return
         }
-        val apk = pendingApk ?: store.pendingApkPath()?.let { File(it) }?.takeIf { it.isFile }
+        val apk = resolvedPendingApk()
             ?: return fail("The downloaded APK is no longer on this phone. Check for updates again.")
         if (!installer.canRequestInstalls(context)) {
             _state.update {
@@ -341,14 +349,27 @@ class AppUpdateCoordinator @Inject constructor(
                 statusMessage = "Installing in place — local jobs and photos stay on this phone."
             )
         }
-        withContext(Dispatchers.IO) {
+        val launch = withContext(Dispatchers.IO) {
             runCatching {
                 installer.install(context, apk, AppUpdatePolicy.EXPECTED_PACKAGE)
             }.onFailure { error ->
                 fail("Couldn't start the installer: ${error.message ?: error.javaClass.simpleName}")
+            }.getOrNull()
+        }
+        if (launch == AppUpdateInstallLaunch.ExternalInstallerOpened) {
+            _state.update {
+                it.copy(
+                    phase = AppUpdatePhase.Ready,
+                    lastError = null,
+                    statusMessage = "Android opened the package installer. Confirm it to finish. If you cancel, tap Update to try again."
+                )
             }
         }
     }
+
+    private suspend fun resolvedPendingApk(): File? =
+        pendingApk?.takeIf { it.isFile }
+            ?: store.pendingApkPath()?.let { File(it) }?.takeIf { it.isFile }
 
     private suspend fun awaitSyncWork(timeoutMs: Long) {
         val deadline = System.currentTimeMillis() + timeoutMs

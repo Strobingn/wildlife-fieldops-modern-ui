@@ -49,6 +49,11 @@ sealed class AppUpdateFetchResult {
     data class Failed(val message: String) : AppUpdateFetchResult()
 }
 
+enum class AppUpdateInstallLaunch {
+    SessionCommitted,
+    ExternalInstallerOpened
+}
+
 sealed class GithubReleaseLookup {
     data class ManifestJsonUrl(val url: String) : GithubReleaseLookup()
     data class Manifest(val manifest: AppUpdateManifest) : GithubReleaseLookup()

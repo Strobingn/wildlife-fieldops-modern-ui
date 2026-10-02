@@ -97,6 +97,12 @@ class AppUpdatePolicyTest {
         )
     }
 
+    @Test
+    fun permissionReturnResumesDownloadUntilAnApkIsPending() {
+        assertTrue(AppUpdatePolicy.resumeDownloadAfterPermission(hasPendingApk = false))
+        assertFalse(AppUpdatePolicy.resumeDownloadAfterPermission(hasPendingApk = true))
+    }
+
     private fun sampleManifest() = AppUpdateManifest(
         channel = "main",
         tag = "debug-latest",

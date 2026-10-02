@@ -43,6 +43,9 @@ object AppUpdatePolicy {
         return nowMs - lastCheckAtMs >= CHECK_INTERVAL_MS
     }
 
+    /** After "Install unknown apps", download first unless an APK is already verified. */
+    fun resumeDownloadAfterPermission(hasPendingApk: Boolean): Boolean = !hasPendingApk
+
     fun accept(manifest: AppUpdateManifest): String? {
         if (!isMainChannel(manifest.channel)) {
             return "Ignoring non-main update channel '${manifest.channel}'."

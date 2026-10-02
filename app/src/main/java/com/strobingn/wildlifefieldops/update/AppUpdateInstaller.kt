@@ -29,12 +29,14 @@ class AppUpdateInstaller @javax.inject.Inject constructor() {
         }
     }
 
-    fun install(context: Context, apk: File, packageName: String) {
-        try {
+    fun install(context: Context, apk: File, packageName: String): AppUpdateInstallLaunch {
+        return try {
             installWithSession(context, apk, packageName)
+            AppUpdateInstallLaunch.SessionCommitted
         } catch (t: Throwable) {
             android.util.Log.w(TAG, "PackageInstaller session failed; falling back to ACTION_VIEW", t)
             installWithView(context, apk)
+            AppUpdateInstallLaunch.ExternalInstallerOpened
         }
     }
 
