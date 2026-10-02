@@ -28,7 +28,7 @@ Rule for every feature: real Room data, operator-editable fields (AI suggests, S
 14. **Daily / weekly earnings dashboard** — Paid vs invoiced vs estimated, today and this week, from real invoices/jobs.
 15. **Overdue invoice reminders** — Payment status list, mark sent/paid, and open SMS/email reminder drafts.
 
-## Batch 4 — Inventory, warranty, customers
+## Batch 4 — Inventory, warranty, customers (`2.5.3-ai-batch4`)
 
 16. **Job materials deducted from inventory** — Pick parts used on a job; decrement on-hand; low-stock alert.
 17. **Warranty tracking** — Start date, term, covered work on the job; expiry list and reminders.

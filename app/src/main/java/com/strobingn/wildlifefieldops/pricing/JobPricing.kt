@@ -56,7 +56,13 @@ data class JobPricing(
     val laborCostOverride: Double? = null,
     val paidAmount: Double = 0.0,
     val mileageLogs: List<com.strobingn.wildlifefieldops.ai.fieldops.MileageLogEntry> = emptyList(),
-    val invoiceRecords: List<SyncedInvoiceRecord> = emptyList()
+    val invoiceRecords: List<SyncedInvoiceRecord> = emptyList(),
+    val materialUsages: List<com.strobingn.wildlifefieldops.ai.fieldops.JobMaterialUsage> = emptyList(),
+    val warrantyStartAt: Long? = null,
+    val warrantyTermMonths: Int = 12,
+    val warrantyCovered: String = "",
+    val seasonalKind: String = "",
+    val seasonalDueAt: Long? = null
 ) {
     /**
      * Money worksheet only. Field-ops extras (species, next step) must not

@@ -47,6 +47,8 @@ fun DashboardScreen(
     onNavigateToTrapChecks: () -> Unit = {},
     onNavigateToInvoices: () -> Unit = {},
     onNavigateToMileage: () -> Unit = {},
+    onNavigateToWarranties: () -> Unit = {},
+    onNavigateToDuplicates: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
@@ -59,6 +61,9 @@ fun DashboardScreen(
     val moneyVm: com.strobingn.wildlifefieldops.ui.viewmodel.MoneyFieldOpsViewModel = hiltViewModel()
     val moneyInvoices by moneyVm.invoices.collectAsState()
     val moneyJobs by moneyVm.jobs.collectAsState()
+    val customerOpsVm: com.strobingn.wildlifefieldops.ui.viewmodel.CustomerFieldOpsViewModel = hiltViewModel()
+    val expiringWarranties by customerOpsVm.warranties.collectAsState()
+    val duplicateMatches by customerOpsVm.duplicates.collectAsState()
     val weatherVm: LiveWeatherViewModel = hiltViewModel()
     val weatherState by weatherVm.state.collectAsState()
     LaunchedEffect(Unit) { weatherVm.loadShopWeather() }
@@ -363,6 +368,14 @@ fun DashboardScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = onNavigateToInvoices) { Text("Invoices", color = PrimaryGreen) }
                             TextButton(onClick = onNavigateToMileage) { Text("Mileage", color = PrimaryGreen) }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = onNavigateToWarranties) {
+                                Text("Warranties (${expiringWarranties.size})", color = PrimaryGreen)
+                            }
+                            TextButton(onClick = onNavigateToDuplicates) {
+                                Text("Duplicates (${duplicateMatches.size})", color = PrimaryGreen)
+                            }
                         }
                     }
                 }

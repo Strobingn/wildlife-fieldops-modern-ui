@@ -192,6 +192,8 @@ private fun AppNavHost(
                 onNavigateToTrapChecks = { navController.navigate(Screen.TrapChecks.route) },
                 onNavigateToInvoices = { navController.navigate(Screen.InvoiceList.route) },
                 onNavigateToMileage = { navController.navigate(Screen.MileageLog.route) },
+                onNavigateToWarranties = { navController.navigate(Screen.WarrantyList.route) },
+                onNavigateToDuplicates = { navController.navigate(Screen.DuplicateCustomers.route) },
                 onOpenDrawer = onOpenDrawer
             )
         }
@@ -316,6 +318,15 @@ private fun AppNavHost(
                 onBack = { navController.popBackStack() },
                 onOpenJob = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) }
             )
+        }
+        composable(Screen.WarrantyList.route) {
+            WarrantyListScreen(
+                onBack = { navController.popBackStack() },
+                onOpenJob = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) }
+            )
+        }
+        composable(Screen.DuplicateCustomers.route) {
+            DuplicateCustomerScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.CountyReports.route) {
             CountyReportScreen(onBack = { navController.popBackStack() })
