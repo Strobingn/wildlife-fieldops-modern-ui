@@ -32,6 +32,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.ai.fieldops.AiRuntimeStatus
+import com.strobingn.wildlifefieldops.ai.fieldops.InspectionNarrativeDraft
+import com.strobingn.wildlifefieldops.ai.fieldops.InspectionNarrativeEngine
+import com.strobingn.wildlifefieldops.ai.fieldops.ManualField
+import com.strobingn.wildlifefieldops.ai.fieldops.NarrativeCleared
+import com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins
 import com.strobingn.wildlifefieldops.data.model.*
 import com.strobingn.wildlifefieldops.data.remote.InspectionReportContext
 import com.strobingn.wildlifefieldops.ui.components.AiRuntimeBadge
@@ -96,6 +101,9 @@ fun InspectionFormScreen(
     var replaceAiFields by remember { mutableStateOf(false) }
     var aiNarrativeDraft by remember { mutableStateOf("") }
     var aiDraftSource by remember { mutableStateOf("") }
+    var narrativeCleared by remember { mutableStateOf(emptySet<String>()) }
+    var findingsPreview by remember { mutableStateOf<String?>(null) }
+    var recommendationsPreview by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(existing) {
         val insp = existing ?: return@LaunchedEffect
@@ -114,7 +122,8 @@ fun InspectionFormScreen(
         scheduledAt = insp.inspectionDate
         if (insp.jobId.isNotBlank()) linkedJobId = insp.jobId
         aiNarrativeDraft = insp.aiNarrativeDraft
-        aiDraftSource = insp.aiDraftSource
+        aiDraftSource = NarrativeCleared.source(insp.aiDraftSource)
+        narrativeCleared = NarrativeCleared.cleared(insp.aiDraftSource)
     }
 
     LaunchedEffect(linkedJobId) {
@@ -325,19 +334,32 @@ fun InspectionFormScreen(
                 existingNotes = notes
             )
         ) { draft ->
-            if (draft.findings.isNotBlank()) findings = draft.findings
-            if (draft.recommendations.isNotBlank()) recommendations = draft.recommendations
-            if (draft.speciesIdentified.isNotBlank()) speciesIdentified = draft.speciesIdentified
-            if (draft.entryPoints.isNotBlank()) entryPoints = draft.entryPoints
-            if (draft.damageAssessment.isNotBlank()) damageAssessment = draft.damageAssessment
+            val merged = mergeInspectionAi(
+                replace = false,
+                cleared = narrativeCleared,
+                findings = findings,
+                recommendations = recommendations,
+                species = speciesIdentified,
+                entries = entryPoints,
+                damage = damageAssessment,
+                notes = notes,
+                suggestedFindings = draft.findings,
+                suggestedRecs = draft.recommendations,
+                suggestedSpecies = draft.speciesIdentified,
+                suggestedEntries = draft.entryPoints,
+                suggestedDamage = draft.damageAssessment,
+                suggestedNotes = listOf(draft.notes, draft.summary).filter { it.isNotBlank() }.joinToString("\n")
+            )
+            findingsPreview = OperatorWins.preview(findings, draft.findings, ManualField.NARRATIVE_FINDINGS in narrativeCleared)
+            recommendationsPreview = OperatorWins.preview(recommendations, draft.recommendations, ManualField.NARRATIVE_RECS in narrativeCleared)
+            findings = merged.findings
+            recommendations = merged.recommendations
+            speciesIdentified = merged.speciesIdentified
+            entryPoints = merged.entryPoints
+            damageAssessment = merged.damageAssessment
+            notes = merged.notes
             selectedSeverity = runCatching { FindingSeverity.valueOf(draft.severity.trim().uppercase()) }
                 .getOrDefault(FindingSeverity.MODERATE)
-            val summaryBits = listOf(draft.notes, draft.summary)
-                .filter { it.isNotBlank() }
-                .joinToString("\n")
-            if (summaryBits.isNotBlank()) {
-                notes = if (notes.isBlank()) summaryBits else notes.trimEnd() + "\n" + summaryBits
-            }
         }
     }
 
@@ -413,16 +435,31 @@ fun InspectionFormScreen(
                                         existingNotes = notes
                                     )
                                 ) { draft ->
-                                    if (draft.findings.isNotBlank()) findings = draft.findings
-                                    if (draft.recommendations.isNotBlank()) recommendations = draft.recommendations
-                                    if (draft.speciesIdentified.isNotBlank()) speciesIdentified = draft.speciesIdentified
-                                    if (draft.entryPoints.isNotBlank()) entryPoints = draft.entryPoints
-                                    if (draft.damageAssessment.isNotBlank()) damageAssessment = draft.damageAssessment
+                                    val merged = mergeInspectionAi(
+                                        replace = false,
+                                        cleared = narrativeCleared,
+                                        findings = findings,
+                                        recommendations = recommendations,
+                                        species = speciesIdentified,
+                                        entries = entryPoints,
+                                        damage = damageAssessment,
+                                        notes = notes,
+                                        suggestedFindings = draft.findings,
+                                        suggestedRecs = draft.recommendations,
+                                        suggestedSpecies = draft.speciesIdentified,
+                                        suggestedEntries = draft.entryPoints,
+                                        suggestedDamage = draft.damageAssessment,
+                                        suggestedNotes = listOf(draft.notes, draft.summary).filter { it.isNotBlank() }.joinToString("\n")
+                                    )
+                                    findingsPreview = OperatorWins.preview(findings, draft.findings, ManualField.NARRATIVE_FINDINGS in narrativeCleared)
+                                    recommendationsPreview = OperatorWins.preview(recommendations, draft.recommendations, ManualField.NARRATIVE_RECS in narrativeCleared)
+                                    findings = merged.findings
+                                    recommendations = merged.recommendations
+                                    speciesIdentified = merged.speciesIdentified
+                                    entryPoints = merged.entryPoints
+                                    damageAssessment = merged.damageAssessment
+                                    notes = merged.notes
                                     selectedSeverity = severityFromString(draft.severity)
-                                    val summaryBits = listOf(draft.notes, draft.summary)
-                                        .filter { it.isNotBlank() }
-                                        .joinToString("\n")
-                                    if (summaryBits.isNotBlank()) notes = summaryBits
                                 }
                             },
                             enabled = !reportLoading,
@@ -472,12 +509,30 @@ fun InspectionFormScreen(
                                     ),
                                     replace = replaceAiFields
                                 ) { draft ->
-                                    findings = draft.findings
-                                    recommendations = draft.recommendations
-                                    if (draft.speciesIdentified.isNotBlank()) speciesIdentified = draft.speciesIdentified
-                                    if (draft.entryPoints.isNotBlank()) entryPoints = draft.entryPoints
-                                    if (draft.damageAssessment.isNotBlank()) damageAssessment = draft.damageAssessment
-                                    if (draft.notes.isNotBlank() && notes.isBlank()) notes = draft.notes
+                                    val merged = mergeInspectionAi(
+                                        replace = replaceAiFields,
+                                        cleared = narrativeCleared,
+                                        findings = findings,
+                                        recommendations = recommendations,
+                                        species = speciesIdentified,
+                                        entries = entryPoints,
+                                        damage = damageAssessment,
+                                        notes = notes,
+                                        suggestedFindings = draft.findings,
+                                        suggestedRecs = draft.recommendations,
+                                        suggestedSpecies = draft.speciesIdentified,
+                                        suggestedEntries = draft.entryPoints,
+                                        suggestedDamage = draft.damageAssessment,
+                                        suggestedNotes = draft.notes
+                                    )
+                                    findingsPreview = OperatorWins.preview(findings, draft.findings, ManualField.NARRATIVE_FINDINGS in narrativeCleared)
+                                    recommendationsPreview = OperatorWins.preview(recommendations, draft.recommendations, ManualField.NARRATIVE_RECS in narrativeCleared)
+                                    findings = merged.findings
+                                    recommendations = merged.recommendations
+                                    speciesIdentified = merged.speciesIdentified
+                                    entryPoints = merged.entryPoints
+                                    damageAssessment = merged.damageAssessment
+                                    notes = merged.notes
                                     aiNarrativeDraft = draft.findings
                                     aiDraftSource = AiRuntimeStatus.wireName(draft.source)
                                 }
@@ -600,7 +655,7 @@ fun InspectionFormScreen(
                                             notes = notes,
                                             isSynced = false,
                                             aiNarrativeDraft = aiNarrativeDraft,
-                                            aiDraftSource = aiDraftSource
+                                            aiDraftSource = NarrativeCleared.pack(aiDraftSource, narrativeCleared)
                                         )
                                     )
                                 } else {
@@ -622,7 +677,7 @@ fun InspectionFormScreen(
                                         weatherConditions = weatherConditions,
                                         notes = notes,
                                         aiNarrativeDraft = aiNarrativeDraft,
-                                        aiDraftSource = aiDraftSource
+                                        aiDraftSource = NarrativeCleared.pack(aiDraftSource, narrativeCleared)
                                     )
                                 }
                                 onBack()
@@ -901,7 +956,10 @@ fun InspectionFormScreen(
 
             OutlinedTextField(
                 value = speciesIdentified,
-                onValueChange = { speciesIdentified = it },
+                onValueChange = {
+                    speciesIdentified = it
+                    narrativeCleared = OperatorWins.markCleared(narrativeCleared, ManualField.SPECIES, it)
+                },
                 label = { Text("Species Identified") },
                 leadingIcon = { Icon(Icons.Default.Pets, contentDescription = null, tint = TextSecondary) },
                 colors = fieldColors(),
@@ -912,7 +970,10 @@ fun InspectionFormScreen(
 
             OutlinedTextField(
                 value = findings,
-                onValueChange = { findings = it },
+                onValueChange = {
+                    findings = it
+                    narrativeCleared = OperatorWins.markCleared(narrativeCleared, ManualField.NARRATIVE_FINDINGS, it)
+                },
                 label = { Text("Findings") },
                 colors = fieldColors(),
                 modifier = Modifier.fillMaxWidth().height(120.dp),
@@ -920,10 +981,18 @@ fun InspectionFormScreen(
                 shape = RoundedCornerShape(12.dp),
                 maxLines = 5
             )
+            com.strobingn.wildlifefieldops.ui.components.ApplySuggestionChip(findingsPreview) {
+                findings = it
+                narrativeCleared = narrativeCleared - ManualField.NARRATIVE_FINDINGS
+                findingsPreview = null
+            }
 
             OutlinedTextField(
                 value = recommendations,
-                onValueChange = { recommendations = it },
+                onValueChange = {
+                    recommendations = it
+                    narrativeCleared = OperatorWins.markCleared(narrativeCleared, ManualField.NARRATIVE_RECS, it)
+                },
                 label = { Text("Recommendations") },
                 colors = fieldColors(),
                 modifier = Modifier.fillMaxWidth().height(100.dp),
@@ -931,6 +1000,11 @@ fun InspectionFormScreen(
                 shape = RoundedCornerShape(12.dp),
                 maxLines = 4
             )
+            com.strobingn.wildlifefieldops.ui.components.ApplySuggestionChip(recommendationsPreview) {
+                recommendations = it
+                narrativeCleared = narrativeCleared - ManualField.NARRATIVE_RECS
+                recommendationsPreview = null
+            }
 
             OutlinedTextField(
                 value = entryPoints,
@@ -965,7 +1039,10 @@ fun InspectionFormScreen(
 
             OutlinedTextField(
                 value = notes,
-                onValueChange = { notes = it },
+                onValueChange = {
+                    notes = it
+                    narrativeCleared = OperatorWins.markCleared(narrativeCleared, ManualField.NARRATIVE_NOTES, it)
+                },
                 label = { Text("Notes / Summary") },
                 colors = fieldColors(),
                 modifier = Modifier.fillMaxWidth().height(100.dp),
@@ -1010,6 +1087,42 @@ fun InspectionFormScreen(
         }
     }
 }
+
+private fun mergeInspectionAi(
+    replace: Boolean,
+    cleared: Set<String>,
+    findings: String,
+    recommendations: String,
+    species: String,
+    entries: String,
+    damage: String,
+    notes: String,
+    suggestedFindings: String,
+    suggestedRecs: String,
+    suggestedSpecies: String,
+    suggestedEntries: String,
+    suggestedDamage: String,
+    suggestedNotes: String
+): InspectionNarrativeDraft = InspectionNarrativeEngine.apply(
+    current = InspectionNarrativeDraft(
+        findings = findings,
+        recommendations = recommendations,
+        speciesIdentified = species,
+        entryPoints = entries,
+        damageAssessment = damage,
+        notes = notes
+    ),
+    suggested = InspectionNarrativeDraft(
+        findings = suggestedFindings,
+        recommendations = suggestedRecs,
+        speciesIdentified = suggestedSpecies,
+        entryPoints = suggestedEntries,
+        damageAssessment = suggestedDamage,
+        notes = suggestedNotes
+    ),
+    replace = replace,
+    cleared = cleared
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

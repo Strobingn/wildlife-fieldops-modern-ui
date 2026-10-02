@@ -434,3 +434,15 @@ fun OutlinedSurface(
         content = content
     )
 }
+
+@Composable
+fun ApplySuggestionChip(
+    preview: String?,
+    onApply: (String) -> Unit
+) {
+    val text = preview?.trim().orEmpty()
+    if (text.isBlank()) return
+    TextButton(onClick = { onApply(text) }) {
+        Text("Apply suggestion: ${text.take(80)}", color = PrimaryGreen)
+    }
+}

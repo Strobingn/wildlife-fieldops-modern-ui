@@ -12,7 +12,9 @@ import com.strobingn.wildlifefieldops.data.model.JobPriority
 import com.strobingn.wildlifefieldops.data.model.Visit
 import com.strobingn.wildlifefieldops.data.remote.GeoPoint
 import com.strobingn.wildlifefieldops.ai.fieldops.JobFieldOpsCodec
+import com.strobingn.wildlifefieldops.ai.fieldops.ManualField
 import com.strobingn.wildlifefieldops.pricing.PricingCalculator
+import com.strobingn.wildlifefieldops.pricing.markManual
 import java.util.UUID
 import javax.inject.Inject
 
@@ -85,7 +87,13 @@ class JobCustomerWorkspace @Inject constructor(
         val nextPricing = PricingCalculator.withTypedJobTotal(
             withLines,
             request.estimatedValue.takeIf { it > 0.0 }
-        )
+        ).let { pricing ->
+            var next = pricing
+            if (request.confirmedSpecies != null) next = next.markManual(ManualField.SPECIES)
+            if (request.legalNotes != null) next = next.markManual(ManualField.LEGAL_NOTES)
+            if (request.nextStep != null) next = next.markManual(ManualField.NEXT_STEP)
+            next
+        }
         val quote = PricingCalculator.compute(nextPricing)
         val serviceAddress = linked?.let { composeStoredAddress(it) }
             ?: request.customer.composedServiceAddress()

@@ -13,6 +13,7 @@ import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import com.strobingn.wildlifefieldops.ai.camera.CustomEvidenceModel
 import com.strobingn.wildlifefieldops.ai.camera.WildlifeEvidenceDetector
 import com.strobingn.wildlifefieldops.ai.camera.WildlifeEvidenceHit
+import com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins
 import com.strobingn.wildlifefieldops.data.remote.InspectionReportDraft
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -255,14 +256,14 @@ object WalkthroughVideoAnalyzer {
 
     private fun mergeDrafts(base: InspectionReportDraft, ai: InspectionReportDraft): InspectionReportDraft =
         InspectionReportDraft(
-            findings = ai.findings.ifBlank { base.findings },
-            recommendations = ai.recommendations.ifBlank { base.recommendations },
-            speciesIdentified = ai.speciesIdentified.ifBlank { base.speciesIdentified },
-            entryPoints = ai.entryPoints.ifBlank { base.entryPoints },
-            damageAssessment = ai.damageAssessment.ifBlank { base.damageAssessment },
-            severity = ai.severity.ifBlank { base.severity },
-            notes = listOf(ai.notes, base.notes).filter { it.isNotBlank() }.distinct().joinToString("\n"),
-            summary = ai.summary.ifBlank { base.summary }
+            findings = OperatorWins.text(base.findings, ai.findings, replace = false),
+            recommendations = OperatorWins.text(base.recommendations, ai.recommendations, replace = false),
+            speciesIdentified = OperatorWins.text(base.speciesIdentified, ai.speciesIdentified, replace = false),
+            entryPoints = OperatorWins.text(base.entryPoints, ai.entryPoints, replace = false),
+            damageAssessment = OperatorWins.text(base.damageAssessment, ai.damageAssessment, replace = false),
+            severity = OperatorWins.text(base.severity, ai.severity, replace = false),
+            notes = OperatorWins.text(base.notes, ai.notes, replace = false),
+            summary = OperatorWins.text(base.summary, ai.summary, replace = false)
         )
 }
 

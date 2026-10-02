@@ -34,7 +34,9 @@ data class EarningsPeriodOverride(
     val estimated: Double? = null,
     val taxCollected: Double? = null,
     val taxable: Double? = null,
-    val nontaxable: Double? = null
+    val nontaxable: Double? = null,
+    /** Fields locked by Lock, including 0.00. Empty lock is 0, not "use computed". */
+    val locked: Set<String> = emptySet()
 )
 
 data class CountyTaxRow(
@@ -88,16 +90,17 @@ object EarningsTaxEngine {
             it.grain == grain.name && it.startMs == start
         }
         val applied = override != null && (
-            override.paid != null || override.invoiced != null || override.estimated != null ||
+            override.locked.isNotEmpty() ||
+                override.paid != null || override.invoiced != null || override.estimated != null ||
                 override.taxCollected != null || override.taxable != null || override.nontaxable != null
             )
         return EarningsTaxSnapshot(
-            paid = override?.paid ?: paid,
-            invoiced = override?.invoiced ?: invoiced,
-            estimated = override?.estimated ?: estimated,
-            taxable = override?.taxable ?: taxable,
-            nontaxable = override?.nontaxable ?: nontaxable,
-            taxCollected = override?.taxCollected ?: taxCollected,
+            paid = pickOverride(override, ManualField.TAX_PAID, override?.paid, paid),
+            invoiced = pickOverride(override, ManualField.TAX_INVOICED, override?.invoiced, invoiced),
+            estimated = pickOverride(override, ManualField.TAX_ESTIMATED, override?.estimated, estimated),
+            taxable = pickOverride(override, ManualField.TAX_TAXABLE, override?.taxable, taxable),
+            nontaxable = pickOverride(override, ManualField.TAX_NONTAXABLE, override?.nontaxable, nontaxable),
+            taxCollected = pickOverride(override, ManualField.TAX_COLLECTED, override?.taxCollected, taxCollected),
             invoiceCount = window.invoiceCount,
             jobCount = window.jobCount,
             byCounty = byCounty,
@@ -209,6 +212,19 @@ object EarningsTaxEngine {
     private fun stamp(invoice: Invoice): Long = invoice.issueDate.takeIf { it > 0L } ?: invoice.createdAt
 
     private fun jobStamp(job: Job): Long = job.completedDate ?: job.scheduledDate ?: job.createdAt
+
+    private fun pickOverride(
+        override: EarningsPeriodOverride?,
+        key: String,
+        lockedValue: Double?,
+        computed: Double
+    ): Double {
+        if (override == null) return computed
+        if (key in override.locked) return lockedValue ?: 0.0
+        return lockedValue ?: computed
+    }
+
+    fun parseLock(raw: String): Double = raw.trim().toDoubleOrNull()?.let { Money.round(it) } ?: 0.0
 
     private fun money(value: Double): String = String.format(java.util.Locale.US, "%.2f", value)
 

@@ -54,7 +54,7 @@ class SearchFieldOpsViewModel @Inject constructor(
     fun suggestTags(text: String): SyncedPhotoTag = PhotoAutoTags.suggest(text)
 
     fun savePhotoTag(photo: Photo, tag: SyncedPhotoTag) = viewModelScope.launch {
-        store.savePhotoTag(photo, PhotoAutoTags.mergeOperatorWins(PhotoAutoTags.suggest(photo.description), tag))
+        store.savePhotoTag(photo, tag)
         _message.value = "Photo tags saved."
     }
 

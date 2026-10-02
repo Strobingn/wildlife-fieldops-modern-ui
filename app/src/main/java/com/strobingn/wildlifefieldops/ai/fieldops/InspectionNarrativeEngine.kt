@@ -90,16 +90,23 @@ object InspectionNarrativeEngine {
     fun apply(
         current: InspectionNarrativeDraft,
         suggested: InspectionNarrativeDraft,
-        replace: Boolean
-    ): InspectionNarrativeDraft = InspectionNarrativeDraft(
-        findings = OperatorWins.text(current.findings, suggested.findings, replace),
-        recommendations = OperatorWins.text(current.recommendations, suggested.recommendations, replace),
-        speciesIdentified = OperatorWins.text(current.speciesIdentified, suggested.speciesIdentified, replace),
-        entryPoints = OperatorWins.text(current.entryPoints, suggested.entryPoints, replace),
-        damageAssessment = OperatorWins.text(current.damageAssessment, suggested.damageAssessment, replace),
-        notes = OperatorWins.text(current.notes, suggested.notes, replace),
-        source = suggested.source
-    )
+        replace: Boolean,
+        cleared: Set<String> = emptySet()
+    ): InspectionNarrativeDraft {
+        fun cell(key: String, existing: String, suggestion: String): String {
+            if (replace) return OperatorWins.text(existing, suggestion, replace = true)
+            return OperatorWins.suggest(existing, suggestion, manual = key in cleared)
+        }
+        return InspectionNarrativeDraft(
+            findings = cell(ManualField.NARRATIVE_FINDINGS, current.findings, suggested.findings),
+            recommendations = cell(ManualField.NARRATIVE_RECS, current.recommendations, suggested.recommendations),
+            speciesIdentified = cell(ManualField.SPECIES, current.speciesIdentified, suggested.speciesIdentified),
+            entryPoints = cell(ManualField.PHOTO_ENTRY, current.entryPoints, suggested.entryPoints),
+            damageAssessment = cell(ManualField.PHOTO_DAMAGE, current.damageAssessment, suggested.damageAssessment),
+            notes = cell(ManualField.NARRATIVE_NOTES, current.notes, suggested.notes),
+            source = suggested.source
+        )
+    }
 
     private fun guessSpecies(evidence: InspectionEvidence): String {
         val blob = blob(evidence)
@@ -240,3 +247,23 @@ object InspectionNarrativeEngine {
         "stain" to "staining"
     )
 }
+
+/** Persist user-cleared narrative cells on [Inspection.aiDraftSource] without a Room migration. */
+object NarrativeCleared {
+    private const val MARKER = "|cleared="
+
+    fun pack(source: String, cleared: Set<String>): String {
+        val base = source.substringBefore(MARKER).trim()
+        if (cleared.isEmpty()) return base
+        return base + MARKER + cleared.sorted().joinToString(",")
+    }
+
+    fun source(raw: String): String = raw.substringBefore(MARKER)
+
+    fun cleared(raw: String): Set<String> {
+        val part = raw.substringAfter(MARKER, missingDelimiterValue = "")
+        if (part.isBlank()) return emptySet()
+        return part.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    }
+}
+

@@ -33,8 +33,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.strobingn.wildlifefieldops.ai.fieldops.FollowUpKind
 import com.strobingn.wildlifefieldops.ai.fieldops.FollowUpPlanner
+import com.strobingn.wildlifefieldops.ai.fieldops.ManualField
+import com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.TrapLog
+import com.strobingn.wildlifefieldops.pricing.isManual
+import com.strobingn.wildlifefieldops.ui.components.ApplySuggestionChip
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundCard
 import com.strobingn.wildlifefieldops.ui.theme.BorderDark
 import com.strobingn.wildlifefieldops.ui.theme.OnPrimary
@@ -67,6 +71,16 @@ fun JobBatch2Section(
     var followDueText by remember(job.followUpDueAt) {
         mutableStateOf(job.followUpDueAt?.let { dayStamp(it) }.orEmpty())
     }
+    var followKindManual by remember(job.id) {
+        mutableStateOf(job.pricing.isManual(ManualField.FOLLOW_KIND) && job.followUpKind.isNotBlank())
+    }
+    var followNotesManual by remember(job.id) {
+        mutableStateOf(job.pricing.isManual(ManualField.FOLLOW_NOTES) || job.followUpNotes.isNotBlank())
+    }
+    var followDueManual by remember(job.id) {
+        mutableStateOf(job.pricing.isManual(ManualField.FOLLOW_DUE) && job.followUpDueAt != null)
+    }
+    var followNotesPreview by remember(job.id) { mutableStateOf<String?>(null) }
     val lastAdvice by trapVm.lastAdvice.collectAsState()
 
     Card(
@@ -104,6 +118,7 @@ fun JobBatch2Section(
     WeatherAdviceCard(
         weatherState = weatherState,
         savedAdvice = job.weatherTrapAdvice,
+        adviceManual = job.pricing.isManual(ManualField.WEATHER),
         draft = lastAdvice,
         onSuggest = {
             val snap = (weatherState as? WeatherUiState.Ready)?.snap
@@ -151,17 +166,26 @@ fun JobBatch2Section(
                     val selected = followKind == kind
                     if (selected) {
                         Button(
-                            onClick = { followKind = kind },
+                            onClick = {
+                                followKind = kind
+                                followKindManual = true
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
                         ) { Text(FollowUpPlanner.label(kind)) }
                     } else {
-                        OutlinedButton(onClick = { followKind = kind }) { Text(FollowUpPlanner.label(kind)) }
+                        OutlinedButton(onClick = {
+                            followKind = kind
+                            followKindManual = true
+                        }) { Text(FollowUpPlanner.label(kind)) }
                     }
                 }
             }
             OutlinedTextField(
                 value = followNotes,
-                onValueChange = { followNotes = it },
+                onValueChange = {
+                    followNotes = it
+                    followNotesManual = true
+                },
                 label = { Text("Follow-up notes") },
                 minLines = 2,
                 modifier = Modifier.fillMaxWidth(),
@@ -174,7 +198,10 @@ fun JobBatch2Section(
             )
             OutlinedTextField(
                 value = followDueText,
-                onValueChange = { followDueText = it },
+                onValueChange = {
+                    followDueText = it
+                    followDueManual = true
+                },
                 label = { Text("Due date (yyyy-MM-dd)") },
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -194,9 +221,13 @@ fun JobBatch2Section(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
                     val draft = trapVm.suggestFollowUp(job)
-                    followKind = draft.kind
-                    followNotes = draft.notes
-                    followDueText = dayStamp(draft.dueAt)
+                    if (!followKindManual) followKind = draft.kind
+                    followNotes = OperatorWins.suggest(followNotes, draft.notes, followNotesManual)
+                    followNotesPreview = OperatorWins.preview(followNotes, draft.notes, followNotesManual)
+                    val dueStamp = dayStamp(draft.dueAt)
+                    if (!followDueManual && followDueText.isBlank()) {
+                        followDueText = dueStamp
+                    }
                 }) {
                     androidx.compose.material3.Icon(Icons.Default.Event, contentDescription = null)
                     Text(" Suggest")
@@ -208,6 +239,11 @@ fun JobBatch2Section(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
                 ) { Text("Save visit + reminder") }
+            }
+            ApplySuggestionChip(followNotesPreview) {
+                followNotes = it
+                followNotesManual = true
+                followNotesPreview = null
             }
         }
     }

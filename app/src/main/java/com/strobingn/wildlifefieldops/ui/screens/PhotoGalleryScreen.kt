@@ -27,6 +27,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import com.strobingn.wildlifefieldops.ai.fieldops.ManualField
+import com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins
+import com.strobingn.wildlifefieldops.ai.fieldops.PhotoAutoTags
 import com.strobingn.wildlifefieldops.data.model.Photo
 import com.strobingn.wildlifefieldops.data.model.PhotoCategory
 import com.strobingn.wildlifefieldops.ui.components.*
@@ -236,11 +239,27 @@ private fun PhotoTagDialog(
     onPair: (String, String) -> Unit,
     suggest: (String) -> com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag
 ) {
-    val seed = existing ?: suggest(photo.description)
+    val seed = existing ?: com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag(photoId = photo.id)
     var species by remember { mutableStateOf(seed.species) }
     var damage by remember { mutableStateOf(seed.damage) }
     var entry by remember { mutableStateOf(seed.entry) }
     var extra by remember { mutableStateOf(seed.extra) }
+    var speciesManual by remember {
+        mutableStateOf(ManualField.PHOTO_SPECIES in seed.clearedKeys || seed.species.isNotBlank())
+    }
+    var damageManual by remember {
+        mutableStateOf(ManualField.PHOTO_DAMAGE in seed.clearedKeys || seed.damage.isNotBlank())
+    }
+    var entryManual by remember {
+        mutableStateOf(ManualField.PHOTO_ENTRY in seed.clearedKeys || seed.entry.isNotBlank())
+    }
+    var extraManual by remember {
+        mutableStateOf(ManualField.PHOTO_EXTRA in seed.clearedKeys || seed.extra.isNotBlank())
+    }
+    var speciesPreview by remember { mutableStateOf<String?>(null) }
+    var damagePreview by remember { mutableStateOf<String?>(null) }
+    var entryPreview by remember { mutableStateOf<String?>(null) }
+    var extraPreview by remember { mutableStateOf<String?>(null) }
     var pairNotes by remember { mutableStateOf("") }
     var pairId by remember { mutableStateOf(jobPhotos.firstOrNull()?.id.orEmpty()) }
     AlertDialog(
@@ -250,15 +269,37 @@ private fun PhotoTagDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
                     val ai = suggest(listOf(photo.description, species, damage, entry).joinToString(" "))
-                    if (species.isBlank()) species = ai.species
-                    if (damage.isBlank()) damage = ai.damage
-                    if (entry.isBlank()) entry = ai.entry
-                    if (extra.isBlank()) extra = ai.extra
+                    val current = com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag(
+                        photoId = photo.id,
+                        species = species,
+                        damage = damage,
+                        entry = entry,
+                        extra = extra,
+                        clearedKeys = buildSet {
+                            if (speciesManual && species.isBlank()) add(ManualField.PHOTO_SPECIES)
+                            if (damageManual && damage.isBlank()) add(ManualField.PHOTO_DAMAGE)
+                            if (entryManual && entry.isBlank()) add(ManualField.PHOTO_ENTRY)
+                            if (extraManual && extra.isBlank()) add(ManualField.PHOTO_EXTRA)
+                        }
+                    )
+                    val merged = PhotoAutoTags.mergeOperatorWins(ai, current)
+                    speciesPreview = OperatorWins.preview(species, ai.species, speciesManual)
+                    damagePreview = OperatorWins.preview(damage, ai.damage, damageManual)
+                    entryPreview = OperatorWins.preview(entry, ai.entry, entryManual)
+                    extraPreview = OperatorWins.preview(extra, ai.extra, extraManual)
+                    species = merged.species
+                    damage = merged.damage
+                    entry = merged.entry
+                    extra = merged.extra
                 }) { Text("Suggest from photo notes") }
-                OutlinedTextField(value = species, onValueChange = { species = it }, label = { Text("Species") })
-                OutlinedTextField(value = damage, onValueChange = { damage = it }, label = { Text("Damage") })
-                OutlinedTextField(value = entry, onValueChange = { entry = it }, label = { Text("Entry") })
-                OutlinedTextField(value = extra, onValueChange = { extra = it }, label = { Text("Extra") })
+                ApplySuggestionChip(speciesPreview) { species = it; speciesManual = true; speciesPreview = null }
+                ApplySuggestionChip(damagePreview) { damage = it; damageManual = true; damagePreview = null }
+                ApplySuggestionChip(entryPreview) { entry = it; entryManual = true; entryPreview = null }
+                ApplySuggestionChip(extraPreview) { extra = it; extraManual = true; extraPreview = null }
+                OutlinedTextField(value = species, onValueChange = { species = it; speciesManual = true }, label = { Text("Species") })
+                OutlinedTextField(value = damage, onValueChange = { damage = it; damageManual = true }, label = { Text("Damage") })
+                OutlinedTextField(value = entry, onValueChange = { entry = it; entryManual = true }, label = { Text("Entry") })
+                OutlinedTextField(value = extra, onValueChange = { extra = it; extraManual = true }, label = { Text("Extra") })
                 if (jobPhotos.isNotEmpty()) {
                     Text("Pair as before → after", style = MaterialTheme.typography.labelMedium)
                     OutlinedTextField(value = pairId, onValueChange = { pairId = it }, label = { Text("After photo id") })
@@ -274,12 +315,13 @@ private fun PhotoTagDialog(
         confirmButton = {
             TextButton(onClick = {
                 onSaveTags(
-                    com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag(
+                    PhotoAutoTags.persistTyped(
                         photoId = photo.id,
                         species = species,
                         damage = damage,
                         entry = entry,
-                        extra = extra
+                        extra = extra,
+                        previous = existing
                     )
                 )
             }) { Text("Save tags") }

@@ -135,6 +135,10 @@ private fun InvoiceReminderCard(
     val seed = InvoiceReminder.draft(invoice)
     var subject by remember(invoice.id) { mutableStateOf(seed.subject) }
     var body by remember(invoice.id) { mutableStateOf(seed.body) }
+    var subjectManual by remember(invoice.id) { mutableStateOf(false) }
+    var bodyManual by remember(invoice.id) { mutableStateOf(false) }
+    var subjectPreview by remember(invoice.id) { mutableStateOf<String?>(null) }
+    var bodyPreview by remember(invoice.id) { mutableStateOf<String?>(null) }
     Card(
         colors = CardDefaults.cardColors(containerColor = BackgroundCard),
         shape = RoundedCornerShape(12.dp),
@@ -159,17 +163,25 @@ private fun InvoiceReminderCard(
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
                 ) { Text("Paid") }
             }
-            OutlinedTextField(value = subject, onValueChange = { subject = it }, label = { Text("Subject") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = body, onValueChange = { body = it }, label = { Text("Message") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
+            OutlinedTextField(value = subject, onValueChange = { subject = it; subjectManual = true }, label = { Text("Subject") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = body, onValueChange = { body = it; bodyManual = true }, label = { Text("Message") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
                     val draft = InvoiceReminder.draft(invoice)
-                    if (subject.isBlank()) subject = draft.subject
-                    if (body.isBlank()) body = draft.body
+                    subject = com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins.suggest(subject, draft.subject, subjectManual)
+                    body = com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins.suggest(body, draft.body, bodyManual)
+                    subjectPreview = com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins.preview(subject, draft.subject, subjectManual)
+                    bodyPreview = com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins.preview(body, draft.body, bodyManual)
                 }) { Text("Suggest") }
                 OutlinedButton(onClick = { onSms(subject, body) }) { Text("SMS") }
                 OutlinedButton(onClick = { onEmail(subject, body) }) { Text("Email") }
                 OutlinedButton(onClick = onOpenJob) { Text("Job") }
+            }
+            com.strobingn.wildlifefieldops.ui.components.ApplySuggestionChip(subjectPreview) {
+                subject = it; subjectManual = true; subjectPreview = null
+            }
+            com.strobingn.wildlifefieldops.ui.components.ApplySuggestionChip(bodyPreview) {
+                body = it; bodyManual = true; bodyPreview = null
             }
         }
     }
