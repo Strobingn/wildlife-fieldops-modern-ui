@@ -40,6 +40,11 @@ fun SettingsScreen(
     val defaultTaxRate by viewModel.defaultTaxRate.collectAsState(initial = 0f)
     val offlineMode by viewModel.offlineMode.collectAsState(initial = false)
     val highAccuracyGps by viewModel.highAccuracyGps.collectAsState(initial = true)
+    val nwcoName by viewModel.nwcoName.collectAsState(initial = "")
+    val nwcoLicense by viewModel.nwcoLicense.collectAsState(initial = "")
+    val nwcoRegion by viewModel.nwcoRegion.collectAsState(initial = "")
+    val nwcoCounty by viewModel.nwcoCounty.collectAsState(initial = "")
+    val nwcoPhone by viewModel.nwcoPhone.collectAsState(initial = "")
     val connectionStatus by viewModel.connectionStatus.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
@@ -185,6 +190,26 @@ fun SettingsScreen(
                     keyboardType = KeyboardType.Decimal,
                     onCommit = viewModel::setDefaultTaxRateText
                 )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            SettingsSectionTitle("NYS DEC NWCO license")
+            SettingsCard {
+                Text(
+                    "One-time licensee fields for the official Nuisance Wildlife Control Log. Name and license number print on every PDF/CSV.",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                SettingPlainField(storedValue = nwcoName, label = "Operator name (First Last)", onCommit = viewModel::setNwcoName)
+                Spacer(modifier = Modifier.height(8.dp))
+                SettingPlainField(storedValue = nwcoLicense, label = "NWCO license number", onCommit = viewModel::setNwcoLicense)
+                Spacer(modifier = Modifier.height(8.dp))
+                SettingPlainField(storedValue = nwcoRegion, label = "DEC region", onCommit = viewModel::setNwcoRegion)
+                Spacer(modifier = Modifier.height(8.dp))
+                SettingPlainField(storedValue = nwcoCounty, label = "County of residence", onCommit = viewModel::setNwcoCounty)
+                Spacer(modifier = Modifier.height(8.dp))
+                SettingPlainField(storedValue = nwcoPhone, label = "Licensee phone", keyboardType = KeyboardType.Phone, onCommit = viewModel::setNwcoPhone)
             }
 
             Spacer(modifier = Modifier.height(8.dp))

@@ -156,6 +156,45 @@ class MoneyFieldOpsStore @Inject constructor(
         }
     }
 
+    fun allAdjustments(jobs: List<Job>): List<EarningsAdjustment> =
+        jobs.flatMap { it.pricing.earningsAdjustments }.distinctBy { it.id }.sortedBy { it.date }
+
+    fun allOverrides(jobs: List<Job>): List<EarningsPeriodOverride> =
+        jobs.flatMap { it.pricing.earningsPeriodOverrides }.distinctBy { it.id }
+
+    suspend fun saveAdjustment(entry: EarningsAdjustment) {
+        val ledger = ensureLedger()
+        val id = entry.id.ifBlank { UUID.randomUUID().toString() }
+        val saved = entry.copy(id = id)
+        persistPricing(ledger) { pricing ->
+            pricing.copy(earningsAdjustments = pricing.earningsAdjustments.filterNot { it.id == id } + saved)
+        }
+    }
+
+    suspend fun deleteAdjustment(id: String) {
+        val ledger = ensureLedger()
+        persistPricing(ledger) { pricing ->
+            pricing.copy(earningsAdjustments = pricing.earningsAdjustments.filterNot { it.id == id })
+        }
+    }
+
+    suspend fun savePeriodOverride(override: EarningsPeriodOverride) {
+        val ledger = ensureLedger()
+        persistPricing(ledger) { pricing ->
+            val next = pricing.earningsPeriodOverrides
+                .filterNot { it.grain == override.grain && it.startMs == override.startMs } + override
+            pricing.copy(earningsPeriodOverrides = next)
+        }
+    }
+
+    private suspend fun ensureLedger(): Job {
+        val existing = jobDao.getById(OpsLedger.ID)
+        if (existing != null) return existing
+        val created = OpsLedger.newJob()
+        jobDao.insert(JobFieldOpsCodec.mergeForSave(created))
+        return jobDao.getById(OpsLedger.ID) ?: created
+    }
+
     private suspend fun persistPricing(job: Job, update: (JobPricing) -> JobPricing) {
         val now = System.currentTimeMillis()
         val next = job.copy(

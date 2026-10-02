@@ -68,7 +68,11 @@ data class JobPricing(
     val speciesChecklist: List<com.strobingn.wildlifefieldops.ai.fieldops.ChecklistItemRecord> = emptyList(),
     val shareReportToken: String = "",
     val shareReportPath: String = "",
-    val shareReportAt: Long? = null
+    val shareReportAt: Long? = null,
+    val earningsAdjustments: List<com.strobingn.wildlifefieldops.ai.fieldops.EarningsAdjustment> = emptyList(),
+    val earningsPeriodOverrides: List<com.strobingn.wildlifefieldops.ai.fieldops.EarningsPeriodOverride> = emptyList(),
+    val decNwcoRows: List<com.strobingn.wildlifefieldops.ai.fieldops.NwcoLogRecord> = emptyList(),
+    val decNwcoOperator: com.strobingn.wildlifefieldops.ai.fieldops.NwcoOperatorProfile? = null
 ) {
     /**
      * Money worksheet only. Field-ops extras (species, next step) must not
@@ -197,7 +201,11 @@ object PricingCalculator {
                 laborCostOverride = extras.laborCostOverride,
                 paidAmount = extras.paidAmount,
                 mileageLogs = extras.mileageLogs,
-                invoiceRecords = extras.invoiceRecords
+                invoiceRecords = extras.invoiceRecords,
+                earningsAdjustments = extras.earningsAdjustments,
+                earningsPeriodOverrides = extras.earningsPeriodOverrides,
+                decNwcoRows = extras.decNwcoRows,
+                decNwcoOperator = extras.decNwcoOperator
             )
         }
         return starterWorksheet().copy(
@@ -223,7 +231,11 @@ object PricingCalculator {
             laborCostOverride = extras.laborCostOverride,
             paidAmount = extras.paidAmount,
             mileageLogs = extras.mileageLogs,
-            invoiceRecords = extras.invoiceRecords
+            invoiceRecords = extras.invoiceRecords,
+            earningsAdjustments = extras.earningsAdjustments,
+            earningsPeriodOverrides = extras.earningsPeriodOverrides,
+            decNwcoRows = extras.decNwcoRows,
+            decNwcoOperator = extras.decNwcoOperator
         )
     }
 

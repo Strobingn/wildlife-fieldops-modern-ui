@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -140,7 +141,7 @@ class MapViewModel @Inject constructor(
         customerDao.getAll()
     ) { jobs, customers ->
         val customersById = customers.associateBy { it.id }
-        jobs.mapNotNull { job ->
+        jobs.filterNot { com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger.isLedger(it) }.mapNotNull { job ->
             val customer = customersById[job.customerId]
             val latitude = job.latitude ?: customer?.latitude
             val longitude = job.longitude ?: customer?.longitude
@@ -177,6 +178,7 @@ class MapViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val jobsForTrapPin: StateFlow<List<com.strobingn.wildlifefieldops.data.model.Job>> = jobDao.getAll()
+        .map { list -> list.filterNot { com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger.isLedger(it) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val unlocatedJobCount: StateFlow<Int> = combine(

@@ -51,7 +51,8 @@ class JobsViewModel @Inject constructor(
             status != null -> jobDao.getByStatus(status)
             else -> jobDao.getAll()
         }
-    }.onEach { _isLoading.value = false }
+    }.map { list -> list.filterNot { com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger.isLedger(it) } }
+    .onEach { _isLoading.value = false }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val pendingCount = jobDao.getByStatus(JobStatus.PENDING)
