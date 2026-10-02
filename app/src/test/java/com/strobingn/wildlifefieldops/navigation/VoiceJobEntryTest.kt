@@ -63,6 +63,12 @@ class VoiceJobEntryTest {
         assertTrue(dictate.contains("saveJobWithSchedule"))
         assertTrue(dictate.contains("VoiceJobEntry.TYPE_MANUALLY_LABEL"))
         assertTrue(dictate.contains("onTypeManually"))
+        assertTrue(dictate.contains("AI refining…"))
+        assertTrue(dictate.contains("Skip"))
+        assertTrue(dictate.contains("skipAiRefine"))
+        assertTrue(dictate.contains("JobIntakeParser.canSave"))
+        assertTrue(dictate.contains("warmupDictationEngine"))
+        assertFalse(dictate.contains("enabled = !isSaving && !aiFill"))
     }
 
     @Test

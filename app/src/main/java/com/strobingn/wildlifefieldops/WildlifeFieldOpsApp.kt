@@ -9,6 +9,8 @@ import com.strobingn.wildlifefieldops.data.backup.FieldOpsBackupManager
 import com.strobingn.wildlifefieldops.data.local.AppDatabase
 import com.strobingn.wildlifefieldops.sync.work.AutoSync
 import com.strobingn.wildlifefieldops.sync.work.WorkManagerConfigurationFactory
+import com.strobingn.wildlifefieldops.update.AppUpdateCoordinator
+import com.strobingn.wildlifefieldops.update.AppUpdateScheduler
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -16,6 +18,8 @@ import javax.inject.Inject
 class WildlifeFieldOpsApp : Application(), Configuration.Provider {
     @Inject lateinit var workManagerConfigurationFactory: WorkManagerConfigurationFactory
     @Inject lateinit var autoSync: AutoSync
+    @Inject lateinit var appUpdateCoordinator: AppUpdateCoordinator
+    @Inject lateinit var appUpdateScheduler: AppUpdateScheduler
 
     override fun onCreate() {
         // Restore a staged SAF backup before Hilt opens Room.
@@ -42,7 +46,14 @@ class WildlifeFieldOpsApp : Application(), Configuration.Provider {
         }
         runCatching { autoSync.start() }
             .onFailure { Log.e("WildlifeFieldOps", "Auto-sync failed to start", it) }
-        registerActivityLifecycleCallbacks(ForegroundAutoSyncCallbacks { autoSync.onForeground() })
+        runCatching { appUpdateScheduler.enqueuePeriodic() }
+            .onFailure { Log.e("WildlifeFieldOps", "App-update periodic check failed to enqueue", it) }
+        registerActivityLifecycleCallbacks(
+            ForegroundAutoSyncCallbacks {
+                autoSync.onForeground()
+                appUpdateCoordinator.onForeground()
+            }
+        )
     }
 
     /**

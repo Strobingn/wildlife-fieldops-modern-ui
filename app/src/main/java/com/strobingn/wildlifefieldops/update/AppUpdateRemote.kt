@@ -8,7 +8,8 @@ interface AppUpdateTransport {
 class AppUpdateRemote(
     private val transport: AppUpdateTransport,
     private val manifestUrl: String = AppUpdateManifestParser.defaultManifestUrl(),
-    private val releaseApiUrl: String = AppUpdateManifestParser.defaultReleaseApiUrl()
+    private val releaseApiUrl: String = AppUpdateManifestParser.defaultReleaseApiUrl(),
+    private val nowMs: () -> Long = { System.currentTimeMillis() }
 ) {
     @javax.inject.Inject
     constructor(transport: AppUpdateTransport) : this(
@@ -35,7 +36,7 @@ class AppUpdateRemote(
 
     private fun fetchFromReleaseApi(fallback: AppUpdateFetchResult): AppUpdateFetchResult {
         val api = try {
-            transport.getText(releaseApiUrl)
+            transport.getText(AppUpdatePolicy.cacheBustUrl(releaseApiUrl, nowMs()))
         } catch (t: Throwable) {
             return fallbackIfApiFails(fallback, AppUpdateManifestParser.networkErrorMessage(t))
         }
@@ -65,7 +66,7 @@ class AppUpdateRemote(
     }
 
     private fun getManifest(url: String): AppUpdateFetchResult {
-        val response = transport.getText(url)
+        val response = transport.getText(AppUpdatePolicy.cacheBustUrl(url, nowMs()))
         if (response.code !in 200..299) {
             return if (response.code == 404) {
                 AppUpdateFetchResult.Unavailable(

@@ -47,6 +47,7 @@ fun JobDetailScreen(
     onNavigateToLiveCapture: (String) -> Unit,
     onNavigateToVoiceLog: (String) -> Unit,
     onNavigateToTrapChecks: () -> Unit = {},
+    onNavigateToInspection: (String) -> Unit = {},
     onBack: () -> Unit,
     viewModel: JobsViewModel = hiltViewModel(),
     workspaceViewModel: JobWorkspaceViewModel = hiltViewModel(),
@@ -54,7 +55,8 @@ fun JobDetailScreen(
     trapCheckViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.TrapCheckViewModel = hiltViewModel(),
     moneyViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.MoneyFieldOpsViewModel = hiltViewModel(),
     customerFieldOpsViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.CustomerFieldOpsViewModel = hiltViewModel(),
-    searchFieldOpsViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.SearchFieldOpsViewModel = hiltViewModel()
+    searchFieldOpsViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.SearchFieldOpsViewModel = hiltViewModel(),
+    inspectionsViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.InspectionsViewModel = hiltViewModel()
 ) {
     val job by viewModel.getJobById(jobId).collectAsState(initial = null)
     val customerDraft by workspaceViewModel.draft.collectAsState()
@@ -69,6 +71,7 @@ fun JobDetailScreen(
     val weatherVm: LiveWeatherViewModel = hiltViewModel()
     val weatherState by weatherVm.state.collectAsState()
     val allTraps by trapCheckViewModel.traps.collectAsState()
+    val allInspections by inspectionsViewModel.inspections.collectAsState()
 
     var showStatusDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -545,6 +548,16 @@ fun JobDetailScreen(
                     weatherState = weatherState,
                     trapVm = trapCheckViewModel,
                     onOpenTrapChecks = onNavigateToTrapChecks
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                JobLinkedInspectionsCard(
+                    job = currentJob,
+                    inspections = allInspections,
+                    onOpen = onNavigateToInspection,
+                    onUnlink = { inspectionsViewModel.unlinkInspectionFromJob(it) },
+                    onLink = { inspectionsViewModel.linkInspectionToJob(it, currentJob.id) },
+                    onNew = { onNavigateToInspectionForm(currentJob.id) }
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 

@@ -226,6 +226,7 @@ private fun AppNavHost(
                 onNavigateToLiveCapture = { jid -> navController.navigate(Screen.LiveCapture.createRoute(jobId = jid)) },
                 onNavigateToVoiceLog = { jid -> navController.navigate(Screen.VoiceLog.createRoute(jobId = jid)) },
                 onNavigateToTrapChecks = { navController.navigate(Screen.TrapChecks.route) },
+                onNavigateToInspection = { iid -> navController.navigate(Screen.InspectionDetail.createRoute(iid)) },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -280,7 +281,8 @@ private fun AppNavHost(
                 onBack = { navController.popBackStack() },
                 onNavigateToEstimate = { jid ->
                     navController.navigate(Screen.Estimate.createRoute(jid, autoDraft = true))
-                }
+                },
+                onNavigateToJob = { jid -> navController.navigate(Screen.JobDetail.createRoute(jid)) }
             )
         }
         composable(
@@ -296,7 +298,8 @@ private fun AppNavHost(
                 onBack = { navController.popBackStack() },
                 onNavigateToEstimate = { jid ->
                     navController.navigate(Screen.Estimate.createRoute(jid, autoDraft = true))
-                }
+                },
+                onNavigateToJob = { jid -> navController.navigate(Screen.JobDetail.createRoute(jid)) }
             )
         }
         composable(Screen.Schedule.route) {

@@ -180,6 +180,9 @@ Do NOT invent mileage or taxRate. Use the provided measured miles and tax percen
         )
     }
 
+    fun heuristicJobFromDictation(transcript: String): JobIntakeDraft? =
+        JobIntakeParser.heuristicFill(transcript)
+
     suspend fun parseJobFromDictation(transcript: String): JobIntakeResult =
         JobIntakeParser.parse(
             transcript = transcript,
@@ -196,6 +199,38 @@ Do NOT invent mileage or taxRate. Use the provided measured miles and tax percen
             localDisplayName = modelManager.activeDisplayName,
             notConfiguredMessage = notConfiguredMessage()
         )
+
+    suspend fun refineJobFromDictation(transcript: String): JobIntakeResult =
+        JobIntakeParser.refine(
+            transcript = transcript,
+            localReady = localLlm.isReady,
+            generateLocal = { system, user -> generateLocal(system, user) },
+            cloudConfigured = isConfigured,
+            completeCloud = { system, user ->
+                when (val result = completeChat(system, user, maxTokens = 700, temperature = 0.2)) {
+                    is ChatResult.Ok -> result.text to null
+                    is ChatResult.Err -> null to result.message
+                }
+            },
+            providerLabel = providerLabel,
+            localDisplayName = modelManager.activeDisplayName,
+            skipLocalIfCloud = isConfigured
+        )
+
+    /**
+     * Load llama weights in the background when cloud is not configured.
+     * Skipped when a cloud key is present so Dictate fill does not wait on device load.
+     */
+    suspend fun warmupLocalLlmIfNoCloud() {
+        if (isConfigured) {
+            runCatching { android.util.Log.i("DictationFill", "skip local LLM warmup; cloud configured") }
+            return
+        }
+        if (!localLlm.isReady) return
+        val t0 = System.currentTimeMillis()
+        localLlm.ensureReady()
+        runCatching { android.util.Log.i("DictationFill", "local LLM warmup ${System.currentTimeMillis() - t0}ms") }
+    }
 
     suspend fun writeInspectionReportFromDictation(
         transcript: String,

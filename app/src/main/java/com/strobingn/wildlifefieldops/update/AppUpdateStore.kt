@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.strobingn.wildlifefieldops.ui.viewmodel.settingsDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -40,9 +41,20 @@ class AppUpdateStore @Inject constructor(
         }
     }
 
+    suspend fun lastManifest(): AppUpdateManifest? {
+        val raw = dataStore.data.first()[LAST_MANIFEST]?.takeIf { it.isNotBlank() } ?: return null
+        return runCatching { json.decodeFromString(AppUpdateManifest.serializer(), raw) }.getOrNull()
+    }
+
+    suspend fun saveManifest(manifest: AppUpdateManifest) {
+        dataStore.edit { it[LAST_MANIFEST] = json.encodeToString(AppUpdateManifest.serializer(), manifest) }
+    }
+
     companion object {
         val LAST_CHECK_AT = longPreferencesKey("app_update_last_check_at")
         val UNKNOWN_SOURCES_PROMPT = booleanPreferencesKey("app_update_unknown_sources_prompted")
         val PENDING_APK = stringPreferencesKey("app_update_pending_apk")
+        val LAST_MANIFEST = stringPreferencesKey("app_update_last_manifest")
+        private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     }
 }

@@ -27,7 +27,8 @@ data class AppUpdateUiState(
     val showDialog: Boolean = false,
     val showUnknownSourcesPrompt: Boolean = false,
     val pendingUnsynced: Int = 0,
-    val updateAvailable: Boolean = false
+    val updateAvailable: Boolean = false,
+    val lastCheckedAtMs: Long = 0L
 ) {
     val latestLabel: String
         get() {

@@ -125,6 +125,7 @@ fun DashboardScreen(
                     title = "Shop weather",
                     onRefresh = { weatherVm.loadShopWeather() }
                 )
+                AppUpdateHomeChip()
             }
 
             // ── Hero header ───────────────────────────────────────────────

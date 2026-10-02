@@ -52,15 +52,28 @@ class AppUpdateCoordinator @Inject constructor(
     @Volatile
     private var busy = false
 
+    /** Session-only. Null after process death so the banner returns on next start. */
+    @Volatile
+    private var dismissedVersionCode: Int? = null
+
     init {
         scope.launch {
+            hydrateFromStore()
             installResults.events.collect { event -> handleInstallStatus(event) }
         }
+    }
+
+    fun onForeground() {
+        scope.launch { runCatching { check(force = false) } }
     }
 
     suspend fun check(force: Boolean) {
         val now = System.currentTimeMillis()
         if (!force && !AppUpdatePolicy.shouldCheck(store.lastCheckAt(), now, force = false)) {
+            hydrateFromStore()
+            return
+        }
+        if (!force && _state.value.phase == AppUpdatePhase.Checking) {
             return
         }
         if (busy && _state.value.phase != AppUpdatePhase.Ready && _state.value.phase != AppUpdatePhase.Idle) {
@@ -79,14 +92,15 @@ class AppUpdateCoordinator @Inject constructor(
         }
         store.markChecked(now)
         when (result) {
-            is AppUpdateFetchResult.Success -> applyManifest(result.manifest)
+            is AppUpdateFetchResult.Success -> applyManifest(result.manifest, lastCheckedAtMs = now)
             is AppUpdateFetchResult.Unavailable -> _state.update {
                 it.copy(
                     phase = AppUpdatePhase.Ready,
                     lastError = null,
                     statusMessage = result.message,
                     updateAvailable = false,
-                    showBanner = false
+                    showBanner = false,
+                    lastCheckedAtMs = now
                 )
             }
             is AppUpdateFetchResult.Failed -> _state.update {
@@ -94,13 +108,36 @@ class AppUpdateCoordinator @Inject constructor(
                     phase = AppUpdatePhase.Ready,
                     lastError = result.message,
                     statusMessage = result.message,
-                    showBanner = false
+                    showBanner = false,
+                    lastCheckedAtMs = now
                 )
             }
         }
     }
 
-    private fun applyManifest(manifest: AppUpdateManifest) {
+    private suspend fun hydrateFromStore() {
+        val lastCheck = store.lastCheckAt()
+        val cached = store.lastManifest()
+        _state.update { it.copy(lastCheckedAtMs = lastCheck) }
+        val phase = _state.value.phase
+        val working = phase == AppUpdatePhase.Downloading ||
+            phase == AppUpdatePhase.Verifying ||
+            phase == AppUpdatePhase.Flushing ||
+            phase == AppUpdatePhase.Installing ||
+            phase == AppUpdatePhase.AwaitingUnsynced ||
+            phase == AppUpdatePhase.AwaitingPermission ||
+            phase == AppUpdatePhase.Checking
+        if (cached != null && !working) {
+            applyManifest(cached, lastCheckedAtMs = lastCheck, persist = false)
+        }
+    }
+
+    private suspend fun applyManifest(
+        manifest: AppUpdateManifest,
+        lastCheckedAtMs: Long,
+        persist: Boolean = true
+    ) {
+        if (persist) store.saveManifest(manifest)
         val installedCode = BuildConfig.VERSION_CODE
         val newer = AppUpdatePolicy.isNewerVersion(manifest.versionCode, installedCode)
         _state.update {
@@ -108,8 +145,13 @@ class AppUpdateCoordinator @Inject constructor(
                 phase = AppUpdatePhase.Ready,
                 latest = manifest,
                 lastError = null,
+                lastCheckedAtMs = lastCheckedAtMs,
                 updateAvailable = newer,
-                showBanner = newer,
+                showBanner = AppUpdatePolicy.shouldShowBanner(
+                    updateAvailable = newer,
+                    remoteVersionCode = manifest.versionCode,
+                    dismissedVersionCode = dismissedVersionCode
+                ),
                 statusMessage = if (newer) {
                     "A newer main build is available."
                 } else {
@@ -120,6 +162,7 @@ class AppUpdateCoordinator @Inject constructor(
     }
 
     fun dismissBanner() {
+        dismissedVersionCode = _state.value.latest?.versionCode
         _state.update { it.copy(showBanner = false) }
     }
 

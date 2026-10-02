@@ -54,6 +54,7 @@ class HomeDashboardNoEarningsTest {
         assertTrue(home.contains("Quick actions"))
         assertTrue(home.contains("ManualJobEntry.ACTION_LABEL"))
         assertTrue(home.contains("VoiceJobEntry.ACTION_LABEL"))
+        assertTrue(home.contains("AppUpdateHomeChip"))
     }
 
     @Test

@@ -11,6 +11,7 @@ import com.strobingn.wildlifefieldops.ai.fieldops.InspectionEvidence
 import com.strobingn.wildlifefieldops.ai.fieldops.InspectionNarrativeDraft
 import com.strobingn.wildlifefieldops.ai.fieldops.InspectionNarrativeEngine
 import com.strobingn.wildlifefieldops.ai.fieldops.PhotoEvidence
+import com.strobingn.wildlifefieldops.data.inspection.JobInspectionLink
 import com.strobingn.wildlifefieldops.data.local.DeletedRecordDao
 import com.strobingn.wildlifefieldops.data.local.InspectionDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
@@ -84,6 +85,9 @@ class InspectionsViewModel @Inject constructor(
     }.onEach { _isLoading.value = false }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allJobs = jobDao.getAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val inspectionCount = inspectionDao.getAll()
         .map { it.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
@@ -117,6 +121,22 @@ class InspectionsViewModel @Inject constructor(
         inspectionDao.insert(
             inspection.copy(isSynced = false, updatedAt = System.currentTimeMillis(), syncError = null)
         )
+    }
+
+    fun linkInspectionToJob(inspectionId: String, jobId: String) = viewModelScope.launch {
+        val inspection = inspectionDao.getById(inspectionId) ?: return@launch
+        val job = jobDao.getById(jobId)
+        inspectionDao.insert(
+            JobInspectionLink.applyLink(inspection, jobId).copy(
+                customerId = inspection.customerId.ifBlank { job?.customerId.orEmpty() },
+                customerName = inspection.customerName.ifBlank { job?.customerName.orEmpty() }
+            )
+        )
+    }
+
+    fun unlinkInspectionFromJob(inspectionId: String) = viewModelScope.launch {
+        val inspection = inspectionDao.getById(inspectionId) ?: return@launch
+        inspectionDao.insert(JobInspectionLink.applyUnlink(inspection))
     }
 
     fun updateInspection(inspection: Inspection) = viewModelScope.launch {
