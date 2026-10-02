@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.*
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -33,6 +34,7 @@ import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
 import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
 import com.strobingn.wildlifefieldops.navigation.Screen
+import com.strobingn.wildlifefieldops.navigation.VoiceJobEntry
 import com.strobingn.wildlifefieldops.ui.components.BrandMark
 import com.strobingn.wildlifefieldops.ui.screens.*
 import com.strobingn.wildlifefieldops.ui.theme.*
@@ -196,6 +198,7 @@ private fun AppNavHost(
                 onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                 onNavigateToAI = { navController.navigate(Screen.AIAssistant.route) },
                 onNavigateToTrapChecks = { navController.navigate(Screen.TrapChecks.route) },
+                onNavigateToDictate = { navController.navigate(VoiceJobEntry.createRoute()) },
                 onOpenDrawer = onOpenDrawer
             )
         }
@@ -203,6 +206,7 @@ private fun AppNavHost(
             JobListScreen(
                 onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) },
                 onNavigateToJobForm = { navController.navigate(ManualJobEntry.createRoute()) },
+                onNavigateToDictate = { navController.navigate(VoiceJobEntry.createRoute()) },
                 onBack = { navController.popBackStack() },
                 showBack = false
             )
@@ -234,12 +238,15 @@ private fun AppNavHost(
             JobDictateScreen(
                 onBack = { navController.popBackStack() },
                 onCreated = {
-                    navController.popBackStack()
-                    navController.navigate(Screen.JobList.route)
+                    navController.navigate(Screen.JobList.route) {
+                        popUpTo(Screen.JobDictate.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
                 },
                 onTypeManually = {
-                    navController.popBackStack()
-                    navController.navigate(ManualJobEntry.createRoute())
+                    navController.navigate(VoiceJobEntry.manualFallbackRoute()) {
+                        popUpTo(Screen.JobDictate.route) { inclusive = true }
+                    }
                 }
             )
         }
@@ -511,6 +518,22 @@ private fun AppDrawer(onNavigate: (String) -> Unit, onClose: () -> Unit) {
                 label = { Text(ManualJobEntry.ACTION_LABEL, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold) },
                 selected = false,
                 onClick = { onNavigate(ManualJobEntry.createRoute()) },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                shape = FieldShapes.button,
+                colors = NavigationDrawerItemDefaults.colors(
+                    unselectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                    unselectedTextColor = MaterialTheme.colorScheme.primary,
+                    unselectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    selectedIconColor = MaterialTheme.colorScheme.primary
+                )
+            )
+            NavigationDrawerItem(
+                icon = { Icon(Icons.Default.Mic, contentDescription = VoiceJobEntry.ACTION_LABEL) },
+                label = { Text(VoiceJobEntry.ACTION_LABEL, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold) },
+                selected = false,
+                onClick = { onNavigate(VoiceJobEntry.createRoute()) },
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
                 shape = FieldShapes.button,
                 colors = NavigationDrawerItemDefaults.colors(

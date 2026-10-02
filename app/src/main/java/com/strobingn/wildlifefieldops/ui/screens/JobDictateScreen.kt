@@ -14,6 +14,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.model.DefaultServiceTypes
 import com.strobingn.wildlifefieldops.data.model.JobPriority
 import com.strobingn.wildlifefieldops.data.remote.JobIntakeDraft
+import com.strobingn.wildlifefieldops.navigation.VoiceJobEntry
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
 
@@ -57,7 +58,7 @@ fun JobDictateScreen(
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGreen)
             ) {
-                Text("Type a New Job instead", fontWeight = FontWeight.SemiBold)
+                Text(VoiceJobEntry.TYPE_MANUALLY_LABEL, fontWeight = FontWeight.SemiBold)
             }
             JobVoiceIntakePanel(
                 aiFillLoading = aiFillLoading,

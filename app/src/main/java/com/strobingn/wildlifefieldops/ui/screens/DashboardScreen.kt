@@ -24,6 +24,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
+import com.strobingn.wildlifefieldops.navigation.VoiceJobEntry
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.DashboardViewModel
@@ -46,6 +47,7 @@ fun DashboardScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToAI: () -> Unit,
     onNavigateToTrapChecks: () -> Unit = {},
+    onNavigateToDictate: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
@@ -73,16 +75,31 @@ fun DashboardScreen(
 
     Scaffold(
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onNavigateToJobForm,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = FieldShapes.fab,
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = {
-                    Text(ManualJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold)
-                }
-            )
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                ExtendedFloatingActionButton(
+                    onClick = onNavigateToDictate,
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    shape = FieldShapes.fab,
+                    icon = { Icon(Icons.Default.Mic, contentDescription = null) },
+                    text = {
+                        Text(VoiceJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold)
+                    }
+                )
+                ExtendedFloatingActionButton(
+                    onClick = onNavigateToJobForm,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    shape = FieldShapes.fab,
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = {
+                        Text(ManualJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold)
+                    }
+                )
+            }
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
@@ -344,16 +361,24 @@ fun DashboardScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         QuickActionTile(ManualJobEntry.ACTION_LABEL, Icons.Default.AddBox, PrimaryGreen, Modifier.weight(1f), onNavigateToJobForm)
+                        QuickActionTile(VoiceJobEntry.ACTION_LABEL, Icons.Default.Mic, PrimaryGreen, Modifier.weight(1f), onNavigateToDictate)
                         QuickActionTile("Schedule", Icons.Default.CalendarMonth, AccentPurple, Modifier.weight(1f), onNavigateToSchedule)
-                        QuickActionTile("Map", Icons.Default.Map, AccentBlue, Modifier.weight(1f), onNavigateToMap)
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        QuickActionTile("Map", Icons.Default.Map, AccentBlue, Modifier.weight(1f), onNavigateToMap)
                         QuickActionTile("Inspect", Icons.Default.Search, AccentCyan, Modifier.weight(1f), onNavigateToInspections)
                         QuickActionTile("Routes", Icons.Default.Route, AccentBlue, Modifier.weight(1f), onNavigateToRoutes)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         QuickActionTile("Reports", Icons.Default.Assessment, AccentBlue, Modifier.weight(1f), onNavigateToCountyReports)
+                        Spacer(modifier = Modifier.weight(1f))
+                        Spacer(modifier = Modifier.weight(1f))
                     }
                 }
             }
@@ -466,7 +491,7 @@ fun DashboardScreen(
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(88.dp)) }
+            item { Spacer(modifier = Modifier.height(168.dp)) }
         }
     }
 }
