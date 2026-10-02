@@ -196,12 +196,6 @@ private fun AppNavHost(
                 onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                 onNavigateToAI = { navController.navigate(Screen.AIAssistant.route) },
                 onNavigateToTrapChecks = { navController.navigate(Screen.TrapChecks.route) },
-                onNavigateToSearch = { navController.navigate(Screen.SmartSearch.route) },
-                onNavigateToInvoices = { navController.navigate(Screen.InvoiceList.route) },
-                onNavigateToMileage = { navController.navigate(Screen.MileageLog.route) },
-                onNavigateToWarranties = { navController.navigate(Screen.WarrantyList.route) },
-                onNavigateToDuplicates = { navController.navigate(Screen.DuplicateCustomers.route) },
-                onNavigateToEarnings = { navController.navigate(Screen.EarningsTax.route) },
                 onOpenDrawer = onOpenDrawer
             )
         }
@@ -335,7 +329,12 @@ private fun AppNavHost(
             )
         }
         composable(Screen.EarningsTax.route) {
-            EarningsTaxScreen(onBack = { navController.popBackStack() }, showBack = false)
+            EarningsTaxScreen(
+                onBack = { navController.popBackStack() },
+                showBack = false,
+                onNavigateToInvoices = { navController.navigate(Screen.InvoiceList.route) },
+                onNavigateToMileage = { navController.navigate(Screen.MileageLog.route) }
+            )
         }
         composable(Screen.DecNwcoLog.route) {
             DecNwcoLogScreen(

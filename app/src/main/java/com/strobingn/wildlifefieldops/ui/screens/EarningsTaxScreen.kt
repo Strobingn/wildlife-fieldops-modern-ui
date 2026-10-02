@@ -70,6 +70,8 @@ import java.util.Locale
 fun EarningsTaxScreen(
     onBack: () -> Unit,
     showBack: Boolean = true,
+    onNavigateToInvoices: () -> Unit = {},
+    onNavigateToMileage: () -> Unit = {},
     viewModel: EarningsTaxViewModel = hiltViewModel()
 ) {
     val grain by viewModel.grain.collectAsState()
@@ -115,6 +117,18 @@ fun EarningsTaxScreen(
             item { Spacer(Modifier.height(4.dp)) }
             item {
                 Text("Paid, invoiced, and estimated from jobs and invoices. Type any total to lock it. Add adjustment for cash or extra tax.", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+            }
+            item {
+                Text("Invoices & mileage", fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Text("Invoice list and mileage log live on this tab.", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = onNavigateToInvoices,
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
+                    ) { Text("Invoices") }
+                    OutlinedButton(onClick = onNavigateToMileage) { Text("Mileage") }
+                }
             }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
