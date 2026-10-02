@@ -368,7 +368,6 @@ fun EstimateScreen(
                         }) {
                             Text("Remove line", color = TextSecondary)
                         }
-                    }
                 }
             }
             if (pricing.rationale.isNotBlank()) {
