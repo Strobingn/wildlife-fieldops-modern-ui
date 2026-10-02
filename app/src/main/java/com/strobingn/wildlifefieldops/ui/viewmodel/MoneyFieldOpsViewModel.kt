@@ -94,9 +94,9 @@ class MoneyFieldOpsViewModel @Inject constructor(
     }
 
     fun saveMileage(entry: MileageLogEntry) = viewModelScope.launch {
-        store.saveMileage(entry)
+        val ok = store.saveMileage(entry)
         refreshMileage()
-        _message.value = "Mileage logged."
+        _message.value = if (ok) "Mileage logged." else "That job is not on this phone."
     }
 
     fun deleteMileage(jobId: String, id: String) = viewModelScope.launch {

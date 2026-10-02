@@ -17,8 +17,12 @@ import com.strobingn.wildlifefieldops.pricing.isManual
  */
 object JobFieldOpsCodec {
 
+    /**
+     * Job columns are what Sir typed. Blank stays blank and is written into
+     * pricing so a later read cannot refill the field from the previous save.
+     */
     fun mergeForSave(job: Job): Job {
-        val fromPricing = extract(job.pricing)
+        val advice = job.weatherTrapAdvice
         val extras = JobFieldOps(
             confirmedSpecies = job.confirmedSpecies,
             legalNotes = job.legalNotes,
@@ -26,16 +30,16 @@ object JobFieldOpsCodec {
             nextStepDueAt = job.nextStepDueAt,
             nextStepSource = job.nextStepSource,
             aiRuntime = job.aiRuntime,
-            photoLineItems = job.pricing.photoLineItems.ifEmpty { fromPricing.photoLineItems },
-            trapRecords = job.pricing.trapRecords.ifEmpty { fromPricing.trapRecords },
-            weatherTrapAdvice = job.weatherTrapAdvice,
-            weatherTrapAdviceAt = job.pricing.weatherTrapAdviceAt ?: fromPricing.weatherTrapAdviceAt,
-            weatherTrapAdviceSource = job.pricing.weatherTrapAdviceSource.ifBlank { fromPricing.weatherTrapAdviceSource },
+            photoLineItems = job.pricing.photoLineItems,
+            trapRecords = job.pricing.trapRecords,
+            weatherTrapAdvice = advice,
+            weatherTrapAdviceAt = if (advice.isBlank()) null else job.pricing.weatherTrapAdviceAt,
+            weatherTrapAdviceSource = if (advice.isBlank()) "" else job.pricing.weatherTrapAdviceSource,
             followUpKind = job.followUpKind,
             followUpDueAt = job.followUpDueAt,
             followUpNotes = job.followUpNotes,
-            followUpVisitId = job.pricing.followUpVisitId.ifBlank { fromPricing.followUpVisitId },
-            followUpReminderId = job.pricing.followUpReminderId.ifBlank { fromPricing.followUpReminderId }
+            followUpVisitId = job.pricing.followUpVisitId,
+            followUpReminderId = job.pricing.followUpReminderId
         )
         return job.copy(
             confirmedSpecies = extras.confirmedSpecies,

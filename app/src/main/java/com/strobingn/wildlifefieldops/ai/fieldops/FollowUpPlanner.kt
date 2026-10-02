@@ -72,6 +72,18 @@ object FollowUpPlanner {
         FollowUpKind.TRAP_PULL -> "Trap pull"
     }
 
+    fun fillBlanks(
+        kind: FollowUpKind?,
+        notes: String,
+        dueText: String,
+        suggestion: FollowUpDraft,
+        dueTextFor: (Long) -> String
+    ): Triple<FollowUpKind?, String, String> = Triple(
+        kind ?: suggestion.kind,
+        if (notes.isBlank()) suggestion.notes else notes,
+        if (dueText.isBlank()) dueTextFor(suggestion.dueAt) else dueText
+    )
+
     fun parseKind(raw: String): FollowUpKind? = when (raw.trim().uppercase()) {
         "WARRANTY" -> FollowUpKind.WARRANTY
         "EXCLUSION" -> FollowUpKind.EXCLUSION

@@ -58,8 +58,9 @@ class ManualEntryRuleTest {
 
     @Test
     fun legalNotesBlankSurvivesSaveReloadAndSync() {
-        val catalog = SpeciesJobLegal.card("raccoon", savedNotes = "").displayNotes
+        val catalog = SpeciesJobLegal.catalogText("raccoon")
         assertTrue(catalog.isNotBlank())
+        assertEquals("", SpeciesJobLegal.card("raccoon", savedNotes = "").displayNotes)
         val saved = JobFieldOpsCodec.mergeForSave(
             Job(
                 legalNotes = "",
@@ -76,7 +77,7 @@ class ManualEntryRuleTest {
 
     @Test
     fun legalNotesSuggestDoesNotOverwriteTyped() {
-        val catalog = SpeciesJobLegal.card("raccoon", savedNotes = "").displayNotes
+        val catalog = SpeciesJobLegal.catalogText("raccoon")
         val typed = "Sir's rewrite"
         assertEquals(typed, OperatorWins.suggest(typed, catalog, manual = false))
         assertEquals("", OperatorWins.suggest("", catalog, manual = true))

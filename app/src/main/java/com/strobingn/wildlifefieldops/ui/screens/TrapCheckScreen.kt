@@ -7,8 +7,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,6 +47,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.ai.fieldops.DecLogExporter
+import com.strobingn.wildlifefieldops.ai.fieldops.FieldDate
 import com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckItem
 import com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckPlanner
 import com.strobingn.wildlifefieldops.ai.fieldops.TrapDueState
@@ -98,6 +103,12 @@ fun TrapCheckScreen(
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var showAdd by remember { mutableStateOf(false) }
+    var adviceJobId by remember { mutableStateOf("") }
+    LaunchedEffect(jobs.map { it.id }) {
+        if (adviceJobId.isBlank() || jobs.none { it.id == adviceJobId }) {
+            adviceJobId = jobs.firstOrNull()?.id.orEmpty()
+        }
+    }
     var editing by remember { mutableStateOf<TrapLog?>(null) }
     var showTodayOnly by remember { mutableStateOf(true) }
 
@@ -150,20 +161,29 @@ fun TrapCheckScreen(
         ) {
             item { Spacer(Modifier.height(4.dp)) }
             item {
-                WeatherAdviceCard(
-                    weatherState = weatherState,
-                    savedAdvice = jobs.firstOrNull { it.weatherTrapAdvice.isNotBlank() }?.weatherTrapAdvice.orEmpty(),
-                    onSuggest = {
-                        val job = jobs.firstOrNull()
-                        val snap = (weatherState as? WeatherUiState.Ready)?.snap
-                        viewModel.draftWeatherAdvice(job, snap)
-                    },
-                    draft = lastAdvice,
-                    onAccept = { text ->
-                        val job = jobs.firstOrNull() ?: return@WeatherAdviceCard
-                        viewModel.acceptWeatherAdvice(job.id, text, "heuristic")
-                    }
-                )
+                val adviceJob = jobs.firstOrNull { it.id == adviceJobId }
+                key(adviceJobId) {
+                    WeatherAdviceCard(
+                        weatherState = weatherState,
+                        savedAdvice = adviceJob?.weatherTrapAdvice.orEmpty(),
+                        onSuggest = {
+                            val snap = (weatherState as? WeatherUiState.Ready)?.snap
+                            viewModel.draftWeatherAdvice(adviceJob, snap).text
+                        },
+                        draft = lastAdvice,
+                        onAccept = { text ->
+                            viewModel.acceptWeatherAdvice(adviceJobId, text, "manual")
+                        },
+                        jobPicker = {
+                            SearchableJobPicker(
+                                jobs = jobs,
+                                selectedId = adviceJobId,
+                                onSelect = { adviceJobId = it },
+                                label = "Save advice on"
+                            )
+                        }
+                    )
+                }
             }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -233,20 +253,15 @@ fun WeatherAdviceCard(
     weatherState: WeatherUiState,
     savedAdvice: String,
     draft: com.strobingn.wildlifefieldops.ai.fieldops.WeatherAdviceDraft?,
-    onSuggest: () -> Unit,
+    onSuggest: () -> String,
     onAccept: (String) -> Unit,
-    adviceManual: Boolean = false
+    adviceManual: Boolean = false,
+    jobPicker: @Composable () -> Unit = {}
 ) {
     var edited by remember(savedAdvice) { mutableStateOf(savedAdvice) }
     var manual by remember(savedAdvice) { mutableStateOf(adviceManual || savedAdvice.isNotBlank()) }
     var preview by remember { mutableStateOf<String?>(null) }
-    androidx.compose.runtime.LaunchedEffect(draft?.text) {
-        val suggestion = draft?.text.orEmpty()
-        if (suggestion.isBlank()) return@LaunchedEffect
-        val applied = com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins.suggest(edited, suggestion, manual)
-        if (applied != edited) edited = applied
-        preview = com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins.preview(edited, suggestion, manual)
-    }
+    var pendingReplace by remember { mutableStateOf<String?>(null) }
     Card(
         colors = CardDefaults.cardColors(containerColor = BackgroundCard),
         shape = RoundedCornerShape(12.dp),
@@ -264,6 +279,7 @@ fun WeatherAdviceCard(
             if (draft?.skipUnsafe == true) {
                 Text("UNSAFE / skip until conditions clear", color = StatusUrgent, fontWeight = FontWeight.Bold)
             }
+            jobPicker()
             OutlinedTextField(
                 value = edited,
                 onValueChange = {
@@ -271,13 +287,26 @@ fun WeatherAdviceCard(
                     manual = true
                 },
                 label = { Text("Advice (yours win)") },
+                supportingText = { Text("Blank saves a blank. Suggest fills this only when it is empty.", color = TextTertiary) },
                 minLines = 3,
                 modifier = Modifier.fillMaxWidth(),
                 colors = fieldColors()
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
-                    onSuggest()
+                    val suggestion = onSuggest().trim()
+                    if (suggestion.isBlank()) return@OutlinedButton
+                    if (edited.isBlank()) {
+                        edited = suggestion
+                        preview = null
+                    } else {
+                        preview = com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins.preview(
+                            edited,
+                            suggestion,
+                            manual = manual
+                        )
+                        pendingReplace = suggestion
+                    }
                 }) { Text("Suggest") }
                 Button(
                     onClick = { onAccept(edited.trim()) },
@@ -288,8 +317,28 @@ fun WeatherAdviceCard(
                 edited = it
                 manual = true
                 preview = null
+                pendingReplace = null
             }
         }
+    }
+    pendingReplace?.let { suggestion ->
+        AlertDialog(
+            onDismissRequest = { pendingReplace = null },
+            containerColor = BackgroundCard,
+            title = { Text("Replace advice?", color = TextPrimary) },
+            text = { Text("This replaces the advice you typed.", color = TextSecondary) },
+            confirmButton = {
+                TextButton(onClick = {
+                    edited = suggestion
+                    manual = true
+                    preview = null
+                    pendingReplace = null
+                }) { Text("Replace", color = PrimaryGreen) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingReplace = null }) { Text("Keep mine", color = TextSecondary) }
+            }
+        )
     }
 }
 
@@ -364,14 +413,32 @@ fun TrapEditorDialog(
     var notes by remember { mutableStateOf(initial?.conditionNotes.orEmpty()) }
     var lat by remember { mutableStateOf(initial?.latitude?.toString().orEmpty()) }
     var lng by remember { mutableStateOf(initial?.longitude?.toString().orEmpty()) }
+    var checkDateText by remember {
+        mutableStateOf(
+            when {
+                initial == null -> FieldDate.formatDay(System.currentTimeMillis())
+                initial.checkDate > 0L -> FieldDate.formatDay(initial.checkDate)
+                else -> ""
+            }
+        )
+    }
+    var nextCheckText by remember {
+        mutableStateOf(initial?.nextCheckDate?.let { FieldDate.formatDay(it) }.orEmpty())
+    }
+    var dateError by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = BackgroundCard,
         title = { Text(if (initial == null) "Add trap" else "Log trap check", color = TextPrimary) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                JobPicker(jobs = jobs, selectedId = jobId, onSelect = { jobId = it })
+            Column(
+                Modifier
+                    .heightIn(max = 460.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SearchableJobPicker(jobs = jobs, selectedId = jobId, onSelect = { jobId = it }, allowNone = true)
                 OutlinedTextField(value = trapId, onValueChange = { trapId = it }, label = { Text("Trap ID / tag") }, modifier = Modifier.fillMaxWidth(), colors = fieldColors())
                 OutlinedTextField(value = location, onValueChange = { location = it }, label = { Text("Location on property") }, modifier = Modifier.fillMaxWidth(), colors = fieldColors())
                 EnumPicker("Status", TrapStatus.entries, status) { status = it }
@@ -381,6 +448,30 @@ fun TrapEditorDialog(
                 StringPicker("Disposition", DecLogExporter.DISPOSITIONS, disposition) { disposition = it }
                 StringPicker("Method", DecLogExporter.METHODS, method) { method = it }
                 OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") }, minLines = 2, modifier = Modifier.fillMaxWidth(), colors = fieldColors())
+                OutlinedTextField(
+                    value = checkDateText,
+                    onValueChange = { checkDateText = it; dateError = null },
+                    label = { Text("Check date (yyyy-MM-dd)") },
+                    supportingText = { Text("Blank leaves the check date unset. This is the DEC log date.", color = TextTertiary) },
+                    isError = dateError != null,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = fieldColors()
+                )
+                OutlinedTextField(
+                    value = nextCheckText,
+                    onValueChange = { nextCheckText = it; dateError = null },
+                    label = { Text("Next check (yyyy-MM-dd)") },
+                    supportingText = { Text("Blank means no next check.", color = TextTertiary) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = fieldColors()
+                )
+                TextButton(onClick = {
+                    if (nextCheckText.isNotBlank()) return@TextButton
+                    val base = FieldDate.parseDay(checkDateText).millis ?: System.currentTimeMillis()
+                    val suggested = TrapCheckPlanner.nextCheckAfter(status, base)
+                    nextCheckText = suggested?.let { FieldDate.formatDay(it) }.orEmpty()
+                }) { Text("Suggest next check") }
+                if (dateError != null) Text(dateError!!, color = StatusUrgent)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = lat, onValueChange = { lat = it }, label = { Text("Lat") }, modifier = Modifier.weight(1f), colors = fieldColors())
                     OutlinedTextField(value = lng, onValueChange = { lng = it }, label = { Text("Lng") }, modifier = Modifier.weight(1f), colors = fieldColors())
@@ -390,6 +481,12 @@ fun TrapEditorDialog(
         confirmButton = {
             Button(
                 onClick = {
+                    val check = FieldDate.parseDay(checkDateText)
+                    val nextCheck = FieldDate.parseDay(nextCheckText)
+                    if (!check.ok || !nextCheck.ok) {
+                        dateError = check.error ?: nextCheck.error
+                        return@Button
+                    }
                     val now = System.currentTimeMillis()
                     val next = (initial ?: TrapLog()).copy(
                         trapId = trapId.trim(),
@@ -404,8 +501,8 @@ fun TrapEditorDialog(
                         conditionNotes = notes.trim(),
                         latitude = lat.toDoubleOrNull(),
                         longitude = lng.toDoubleOrNull(),
-                        checkDate = now,
-                        nextCheckDate = TrapCheckPlanner.nextCheckAfter(status, now),
+                        checkDate = check.millis ?: 0L,
+                        nextCheckDate = nextCheck.millis,
                         updatedAt = now,
                         isSynced = false
                     )
@@ -423,37 +520,6 @@ fun TrapEditorDialog(
             }
         }
     )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun JobPicker(jobs: List<Job>, selectedId: String, onSelect: (String) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    val label = jobs.find { it.id == selectedId }?.let { it.title.ifBlank { it.customerName } } ?: "Select job"
-    ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
-        OutlinedTextField(
-            value = label,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("Job") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(open) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(),
-            colors = fieldColors()
-        )
-        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            jobs.forEach { job ->
-                DropdownMenuItem(
-                    text = { Text(job.title.ifBlank { job.customerName }.ifBlank { job.id }) },
-                    onClick = {
-                        onSelect(job.id)
-                        open = false
-                    }
-                )
-            }
-        }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -112,6 +112,7 @@ class FieldOpsEnginesTest {
     fun speciesLegalFlagsProtectedBats() {
         val card = SpeciesJobLegal.card("little brown bat")
         assertTrue(card.decNotes.any { it.contains("Protected") || it.contains("maternity") })
-        assertFalse(card.displayNotes.isBlank())
+        assertTrue(card.catalogNotes.isNotEmpty())
+        assertEquals("", card.displayNotes)
     }
 }

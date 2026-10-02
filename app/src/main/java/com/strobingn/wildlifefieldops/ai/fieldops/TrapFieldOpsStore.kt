@@ -21,8 +21,8 @@ import javax.inject.Singleton
 
 data class FollowUpSaveResult(
     val job: Job,
-    val visit: Visit,
-    val reminder: Reminder
+    val visit: Visit?,
+    val reminder: Reminder?
 )
 
 /**
@@ -109,58 +109,79 @@ class TrapFieldOpsStore @Inject constructor(
 
     suspend fun createFollowUp(
         job: Job,
-        kind: FollowUpKind,
-        dueAt: Long,
+        kind: FollowUpKind?,
+        dueAt: Long?,
         notes: String,
-        title: String = FollowUpPlanner.label(kind)
+        title: String = kind?.let { FollowUpPlanner.label(it) }.orEmpty()
     ): FollowUpSaveResult {
         val now = System.currentTimeMillis()
         val latest = jobDao.getById(job.id) ?: job
         val existingVisitId = latest.pricing.followUpVisitId
         val existingReminderId = latest.pricing.followUpReminderId
-        val visit = Visit(
-            id = existingVisitId.ifBlank { UUID.randomUUID().toString() },
-            jobId = latest.id,
-            customerId = latest.customerId,
-            customerName = latest.customerName,
-            technicianName = latest.assignedTo,
-            visitDate = dueAt,
-            startTime = dueAt,
-            notes = notes,
-            workPerformed = "${FollowUpPlanner.label(kind)} follow-up",
-            isCompleted = false,
-            createdAt = now,
-            updatedAt = now,
-            isSynced = false
-        )
-        val reminder = Reminder(
-            id = existingReminderId.ifBlank { UUID.randomUUID().toString() },
-            title = title.ifBlank { FollowUpPlanner.label(kind) + " — " + latest.title.ifBlank { latest.customerName } },
-            description = notes,
-            jobId = latest.id,
-            customerId = latest.customerId.takeIf { it.isNotBlank() },
-            customerName = latest.customerName,
-            reminderType = ReminderType.FOLLOW_UP,
-            priority = if (kind == FollowUpKind.TRAP_PULL) ReminderPriority.HIGH else ReminderPriority.MEDIUM,
-            status = ReminderStatus.PENDING,
-            dueDate = dueAt,
-            notes = notes,
-            createdAt = now,
-            updatedAt = now,
-            isSynced = false
-        )
-        visitDao.insert(visit)
-        reminderDao.insert(reminder)
+        val visit: Visit?
+        val reminder: Reminder?
+        val visitId: String
+        val reminderId: String
+        if (dueAt == null) {
+            if (existingVisitId.isNotBlank()) {
+                visitDao.getByJobOnce(latest.id).firstOrNull { it.id == existingVisitId }?.let { visitDao.delete(it) }
+            }
+            if (existingReminderId.isNotBlank()) {
+                reminderDao.getById(existingReminderId)?.let { reminderDao.delete(it) }
+            }
+            visit = null
+            reminder = null
+            visitId = ""
+            reminderId = ""
+        } else {
+            visit = Visit(
+                id = existingVisitId.ifBlank { UUID.randomUUID().toString() },
+                jobId = latest.id,
+                customerId = latest.customerId,
+                customerName = latest.customerName,
+                technicianName = latest.assignedTo,
+                visitDate = dueAt,
+                startTime = dueAt,
+                notes = notes,
+                workPerformed = "${kind?.let { FollowUpPlanner.label(it) } ?: "Follow-up"} follow-up",
+                isCompleted = false,
+                createdAt = now,
+                updatedAt = now,
+                isSynced = false
+            )
+            reminder = Reminder(
+                id = existingReminderId.ifBlank { UUID.randomUUID().toString() },
+                title = title.ifBlank {
+                    (kind?.let { FollowUpPlanner.label(it) } ?: "Follow-up") + " — " + latest.title.ifBlank { latest.customerName }
+                },
+                description = notes,
+                jobId = latest.id,
+                customerId = latest.customerId.takeIf { it.isNotBlank() },
+                customerName = latest.customerName,
+                reminderType = ReminderType.FOLLOW_UP,
+                priority = if (kind == FollowUpKind.TRAP_PULL) ReminderPriority.HIGH else ReminderPriority.MEDIUM,
+                status = ReminderStatus.PENDING,
+                dueDate = dueAt,
+                notes = notes,
+                createdAt = now,
+                updatedAt = now,
+                isSynced = false
+            )
+            visitDao.insert(visit)
+            reminderDao.insert(reminder)
+            visitId = visit.id
+            reminderId = reminder.id
+        }
         val extras = JobFieldOpsCodec.extract(latest.pricing).copy(
-            followUpKind = kind.name,
+            followUpKind = kind?.name.orEmpty(),
             followUpDueAt = dueAt,
             followUpNotes = notes,
-            followUpVisitId = visit.id,
-            followUpReminderId = reminder.id
+            followUpVisitId = visitId,
+            followUpReminderId = reminderId
         )
         val saved = JobFieldOpsCodec.mergeForSave(
             latest.copy(
-                followUpKind = kind.name,
+                followUpKind = kind?.name.orEmpty(),
                 followUpDueAt = dueAt,
                 followUpNotes = notes,
                 pricing = JobFieldOpsCodec.embed(

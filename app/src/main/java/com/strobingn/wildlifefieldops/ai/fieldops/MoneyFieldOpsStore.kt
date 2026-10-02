@@ -1,5 +1,6 @@
 package com.strobingn.wildlifefieldops.ai.fieldops
 
+import android.content.Context
 import com.strobingn.wildlifefieldops.data.local.ExpenseDao
 import com.strobingn.wildlifefieldops.data.local.InvoiceDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
@@ -9,19 +10,28 @@ import com.strobingn.wildlifefieldops.data.model.InvoiceStatus
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.Visit
 import com.strobingn.wildlifefieldops.pricing.JobPricing
+import com.strobingn.wildlifefieldops.pricing.PricingJson
 import com.strobingn.wildlifefieldops.pricing.SyncedInvoiceRecord
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.builtins.ListSerializer
 
 @Singleton
 class MoneyFieldOpsStore @Inject constructor(
     private val jobDao: JobDao,
     private val visitDao: VisitDao,
     private val invoiceDao: InvoiceDao,
-    private val expenseDao: ExpenseDao
+    private val expenseDao: ExpenseDao,
+    @ApplicationContext context: Context
 ) {
+    private val unassignedFile = File(context.filesDir, "unassigned-mileage.json")
+    private val mileageList = ListSerializer(MileageLogEntry.serializer())
 
     suspend fun timerState(job: Job): JobTimerState = JobTimerState(
         startedAt = job.pricing.timerStartedAt,
@@ -113,26 +123,50 @@ class MoneyFieldOpsStore @Inject constructor(
         )
     }
 
-    suspend fun saveMileage(entry: MileageLogEntry) {
-        val jobId = entry.jobId
-        if (jobId.isBlank()) return
-        val job = jobDao.getById(jobId) ?: return
+    suspend fun saveMileage(entry: MileageLogEntry): Boolean {
         val id = entry.id.ifBlank { UUID.randomUUID().toString() }
+        if (entry.jobId.isBlank()) {
+            val saved = entry.copy(id = id, jobId = "", jobTitle = entry.jobTitle.ifBlank { "No job" })
+            writeUnassigned(MileageTaxLog.upsert(readUnassigned(), saved))
+            return true
+        }
+        val job = jobDao.getById(entry.jobId) ?: return false
         val saved = entry.copy(id = id, jobTitle = entry.jobTitle.ifBlank { job.title.ifBlank { job.customerName } })
         val next = job.pricing.mileageLogs.filterNot { it.id == id } + saved
         persistPricing(job) { it.copy(mileageLogs = next.sortedBy { log -> log.date }) }
+        writeUnassigned(readUnassigned().filterNot { it.id == id })
+        return true
     }
 
     suspend fun deleteMileage(jobId: String, entryId: String) {
+        if (jobId.isBlank()) {
+            writeUnassigned(readUnassigned().filterNot { it.id == entryId })
+            return
+        }
         val job = jobDao.getById(jobId) ?: return
         persistPricing(job) { it.copy(mileageLogs = it.mileageLogs.filterNot { log -> log.id == entryId }) }
+        writeUnassigned(readUnassigned().filterNot { it.id == entryId })
     }
 
-    suspend fun allMileage(): List<MileageLogEntry> =
-        jobDao.getAllOnce().flatMap { it.pricing.mileageLogs.map { log ->
+    suspend fun allMileage(): List<MileageLogEntry> {
+        val onJobs = jobDao.getAllOnce().flatMap { it.pricing.mileageLogs.map { log ->
             if (log.jobTitle.isBlank()) log.copy(jobTitle = it.title.ifBlank { it.customerName }, jobId = log.jobId.ifBlank { it.id })
             else log
-        } }.sortedBy { it.date }
+        } }
+        return (onJobs + readUnassigned()).sortedBy { it.date }
+    }
+
+    private suspend fun readUnassigned(): List<MileageLogEntry> = withContext(Dispatchers.IO) {
+        if (!unassignedFile.exists()) return@withContext emptyList()
+        val raw = unassignedFile.readText()
+        if (raw.isBlank()) return@withContext emptyList()
+        runCatching { PricingJson.json.decodeFromString(mileageList, raw) }.getOrDefault(emptyList())
+    }
+
+    private suspend fun writeUnassigned(entries: List<MileageLogEntry>) = withContext(Dispatchers.IO) {
+        unassignedFile.parentFile?.mkdirs()
+        unassignedFile.writeText(PricingJson.json.encodeToString(mileageList, entries))
+    }
 
     suspend fun saveInvoice(invoice: Invoice) {
         invoiceDao.insert(invoice.copy(isSynced = false, updatedAt = System.currentTimeMillis()))

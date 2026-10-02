@@ -22,6 +22,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,7 +68,7 @@ fun JobBatch5Section(
             Text("Species checklist", color = TextPrimary, fontWeight = FontWeight.Medium)
             val items = job.pricing.speciesChecklist
             var newLabel by remember { mutableStateOf("") }
-            Text("Add lines by hand, or load a species template. Every label and note stays editable.", color = TextTertiary, style = MaterialTheme.typography.bodySmall)
+            Text("Add lines by hand, or load a template. Load adds missing lines and keeps checks and notes you already entered.", color = TextTertiary, style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { searchVm.applyChecklist(job) }) { Text("Load template") }
                 if (items.isNotEmpty()) {
@@ -154,10 +155,25 @@ fun JobBatch5Section(
                 Text("Pair photos from the gallery. ${jobPhotos.size} photos on this job.", color = TextTertiary, style = MaterialTheme.typography.bodySmall)
             }
             job.pricing.photoPairs.forEach { pair ->
+                key(pair.id) {
                 val before = jobPhotos.firstOrNull { it.id == pair.beforeId }?.description ?: pair.beforeId.take(8)
                 val after = jobPhotos.firstOrNull { it.id == pair.afterId }?.description ?: pair.afterId.take(8)
+                var pairNotes by remember(pair.notes) { mutableStateOf(pair.notes) }
                 Text("Before: $before  →  After: $after", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
-                if (pair.notes.isNotBlank()) Text(pair.notes, color = TextTertiary, style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(
+                    value = pairNotes,
+                    onValueChange = { pairNotes = it },
+                    label = { Text("Pair notes") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = batch5FieldColors()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = {
+                        searchVm.savePair(job.id, pair.copy(notes = pairNotes.trim()))
+                    }) { Text("Save pair") }
+                    TextButton(onClick = { searchVm.deletePair(job.id, pair.id) }) { Text("Remove pair") }
+                }
+                }
             }
         }
     }

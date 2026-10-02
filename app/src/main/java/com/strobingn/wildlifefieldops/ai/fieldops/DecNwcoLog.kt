@@ -310,7 +310,8 @@ object DecNwcoLog {
             .ifBlank { "Unknown" }
         val taken = takenOverride ?: traps.filter { it.catchCount > 0 || it.catchType != CatchType.NONE }
             .sumOf { it.catchCount.coerceAtLeast(1) }
-        val date = trap?.checkDate ?: job.completedDate ?: job.scheduledDate ?: job.createdAt
+        val trapDate = trap?.checkDate?.takeIf { it > 0L }
+        val date = trapDate ?: job.completedDate ?: job.scheduledDate ?: job.createdAt
         val county = job.county.orEmpty().ifBlank { countyFromAddress(job.address) }
         val town = townFromAddress(job.address)
         val source = if (trap != null) "job:${job.id}:trap:${trap.id}:$species" else "job:${job.id}"

@@ -127,13 +127,21 @@ class TrapCheckViewModel @Inject constructor(
     }
 
     fun acceptWeatherAdvice(jobId: String, advice: String, source: String) = viewModelScope.launch {
+        if (jobId.isBlank()) {
+            _message.value = "Pick a job before saving advice."
+            return@launch
+        }
         trapFieldOpsStore.saveWeatherAdvice(jobId, advice, source)
-        _message.value = "Weather advice saved on the job."
+        _message.value = if (advice.isBlank()) "Weather advice cleared." else "Weather advice saved on the job."
     }
 
-    fun createFollowUp(job: Job, kind: FollowUpKind, dueAt: Long, notes: String) = viewModelScope.launch {
+    fun createFollowUp(job: Job, kind: FollowUpKind?, dueAt: Long?, notes: String) = viewModelScope.launch {
         trapFieldOpsStore.createFollowUp(job, kind, dueAt, notes)
-        _message.value = "Follow-up visit and reminder created."
+        _message.value = if (kind == null && notes.isBlank() && dueAt == null) {
+            "Follow-up cleared."
+        } else {
+            "Follow-up saved."
+        }
     }
 
     fun suggestFollowUp(job: Job) = FollowUpPlanner.suggest(

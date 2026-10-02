@@ -81,6 +81,7 @@ class JobWorkspaceViewModel @Inject constructor(
         legalNotes: String? = null,
         nextStep: String? = null,
         nextStepDueAt: Long? = null,
+        nextStepDueAtSet: Boolean = false,
         priceLines: List<InvoiceLineItem>? = null,
         onSaved: (JobSaveResult) -> Unit
     ) {
@@ -104,6 +105,7 @@ class JobWorkspaceViewModel @Inject constructor(
                         legalNotes = legalNotes,
                         nextStep = nextStep,
                         nextStepDueAt = nextStepDueAt,
+                        nextStepDueAtSet = nextStepDueAtSet,
                         priceLines = priceLines
                     )
                 )

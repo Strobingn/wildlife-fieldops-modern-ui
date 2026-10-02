@@ -8,6 +8,19 @@ data class DuplicateMatch(
     val reasons: List<String>
 )
 
+data class JobCustomerLink(
+    val jobId: String,
+    val customerId: String,
+    val customerName: String,
+    val address: String
+)
+
+data class CustomerMergeUndo(
+    val keepBefore: Customer,
+    val dropBefore: Customer,
+    val movedJobs: List<JobCustomerLink>
+)
+
 object DuplicateCustomer {
     fun digits(phone: String): String = phone.filter { it.isDigit() }
 

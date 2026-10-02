@@ -105,25 +105,83 @@ fun InspectionFormScreen(
     var findingsPreview by remember { mutableStateOf<String?>(null) }
     var recommendationsPreview by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(existing) {
+    var hydratedInspectionId by remember { mutableStateOf<String?>(null) }
+    fun keepTyped(typed: String, loaded: String) = if (typed.isBlank()) loaded else typed
+    fun applyLiveNarrative(
+        findingsIn: String,
+        recommendationsIn: String,
+        speciesIn: String,
+        entryIn: String,
+        damageIn: String,
+        notesIn: String
+    ) {
+        findingsPreview = OperatorWins.preview(
+            findings,
+            findingsIn,
+            ManualField.NARRATIVE_FINDINGS in narrativeCleared || findings.isNotBlank()
+        )
+        recommendationsPreview = OperatorWins.preview(
+            recommendations,
+            recommendationsIn,
+            ManualField.NARRATIVE_RECS in narrativeCleared || recommendations.isNotBlank()
+        )
+        val merged = InspectionNarrativeEngine.apply(
+            InspectionNarrativeDraft(
+                findings = findings,
+                recommendations = recommendations,
+                speciesIdentified = speciesIdentified,
+                entryPoints = entryPoints,
+                damageAssessment = damageAssessment,
+                notes = notes
+            ),
+            InspectionNarrativeDraft(
+                findings = findingsIn,
+                recommendations = recommendationsIn,
+                speciesIdentified = speciesIn,
+                entryPoints = entryIn,
+                damageAssessment = damageIn,
+                notes = notesIn
+            ),
+            replace = replaceAiFields,
+            cleared = narrativeCleared
+        )
+        findings = merged.findings
+        recommendations = merged.recommendations
+        speciesIdentified = merged.speciesIdentified
+        entryPoints = merged.entryPoints
+        damageAssessment = merged.damageAssessment
+        notes = merged.notes
+        aiNarrativeDraft = merged.findings
+    }
+    LaunchedEffect(existing?.id) {
         val insp = existing ?: return@LaunchedEffect
-        customerName = insp.customerName
-        inspectorName = insp.inspectorName
-        selectedType = insp.inspectionType
-        findings = insp.findings
-        recommendations = insp.recommendations
-        selectedSeverity = insp.severity
-        speciesIdentified = insp.speciesIdentified
-        entryPoints = insp.entryPoints
-        damageAssessment = insp.damageAssessment
-        followUpRequired = insp.followUpRequired
-        weatherConditions = insp.weatherConditions
-        notes = insp.notes
-        scheduledAt = insp.inspectionDate
-        if (insp.jobId.isNotBlank()) linkedJobId = insp.jobId
-        aiNarrativeDraft = insp.aiNarrativeDraft
-        aiDraftSource = NarrativeCleared.source(insp.aiDraftSource)
-        narrativeCleared = NarrativeCleared.cleared(insp.aiDraftSource)
+        if (hydratedInspectionId == insp.id) return@LaunchedEffect
+        hydratedInspectionId = insp.id
+        val typedAlready = listOf(
+            customerName, inspectorName, findings, recommendations, speciesIdentified,
+            entryPoints, damageAssessment, notes, weatherConditions, aiNarrativeDraft
+        ).any { it.isNotBlank() }
+        customerName = keepTyped(customerName, insp.customerName)
+        inspectorName = keepTyped(inspectorName, insp.inspectorName)
+        findings = keepTyped(findings, insp.findings)
+        recommendations = keepTyped(recommendations, insp.recommendations)
+        speciesIdentified = keepTyped(speciesIdentified, insp.speciesIdentified)
+        entryPoints = keepTyped(entryPoints, insp.entryPoints)
+        damageAssessment = keepTyped(damageAssessment, insp.damageAssessment)
+        weatherConditions = keepTyped(weatherConditions, insp.weatherConditions)
+        notes = keepTyped(notes, insp.notes)
+        aiNarrativeDraft = keepTyped(aiNarrativeDraft, insp.aiNarrativeDraft)
+        if (aiDraftSource.isBlank()) {
+            aiDraftSource = NarrativeCleared.source(insp.aiDraftSource)
+            narrativeCleared = NarrativeCleared.cleared(insp.aiDraftSource)
+        }
+        if (!typedAlready) {
+            selectedType = insp.inspectionType
+            selectedSeverity = insp.severity
+            followUpRequired = insp.followUpRequired
+            scheduledAt = insp.inspectionDate
+        }
+        if (insp.jobId.isNotBlank() && linkedJobId.isBlank()) linkedJobId = insp.jobId
     }
 
     LaunchedEffect(linkedJobId) {
@@ -334,32 +392,19 @@ fun InspectionFormScreen(
                 existingNotes = notes
             )
         ) { draft ->
-            val merged = mergeInspectionAi(
-                replace = false,
-                cleared = narrativeCleared,
-                findings = findings,
-                recommendations = recommendations,
-                species = speciesIdentified,
-                entries = entryPoints,
-                damage = damageAssessment,
-                notes = notes,
-                suggestedFindings = draft.findings,
-                suggestedRecs = draft.recommendations,
-                suggestedSpecies = draft.speciesIdentified,
-                suggestedEntries = draft.entryPoints,
-                suggestedDamage = draft.damageAssessment,
-                suggestedNotes = listOf(draft.notes, draft.summary).filter { it.isNotBlank() }.joinToString("\n")
+            val summaryBits = listOf(draft.notes, draft.summary).filter { it.isNotBlank() }.joinToString("\n")
+            applyLiveNarrative(
+                draft.findings,
+                draft.recommendations,
+                draft.speciesIdentified,
+                draft.entryPoints,
+                draft.damageAssessment,
+                summaryBits
             )
-            findingsPreview = OperatorWins.preview(findings, draft.findings, ManualField.NARRATIVE_FINDINGS in narrativeCleared)
-            recommendationsPreview = OperatorWins.preview(recommendations, draft.recommendations, ManualField.NARRATIVE_RECS in narrativeCleared)
-            findings = merged.findings
-            recommendations = merged.recommendations
-            speciesIdentified = merged.speciesIdentified
-            entryPoints = merged.entryPoints
-            damageAssessment = merged.damageAssessment
-            notes = merged.notes
-            selectedSeverity = runCatching { FindingSeverity.valueOf(draft.severity.trim().uppercase()) }
-                .getOrDefault(FindingSeverity.MODERATE)
+            if (replaceAiFields) {
+                selectedSeverity = runCatching { FindingSeverity.valueOf(draft.severity.trim().uppercase()) }
+                    .getOrDefault(selectedSeverity)
+            }
         }
     }
 
@@ -435,31 +480,16 @@ fun InspectionFormScreen(
                                         existingNotes = notes
                                     )
                                 ) { draft ->
-                                    val merged = mergeInspectionAi(
-                                        replace = false,
-                                        cleared = narrativeCleared,
-                                        findings = findings,
-                                        recommendations = recommendations,
-                                        species = speciesIdentified,
-                                        entries = entryPoints,
-                                        damage = damageAssessment,
-                                        notes = notes,
-                                        suggestedFindings = draft.findings,
-                                        suggestedRecs = draft.recommendations,
-                                        suggestedSpecies = draft.speciesIdentified,
-                                        suggestedEntries = draft.entryPoints,
-                                        suggestedDamage = draft.damageAssessment,
-                                        suggestedNotes = listOf(draft.notes, draft.summary).filter { it.isNotBlank() }.joinToString("\n")
+                                    val summaryBits = listOf(draft.notes, draft.summary).filter { it.isNotBlank() }.joinToString("\n")
+                                    applyLiveNarrative(
+                                        draft.findings,
+                                        draft.recommendations,
+                                        draft.speciesIdentified,
+                                        draft.entryPoints,
+                                        draft.damageAssessment,
+                                        summaryBits
                                     )
-                                    findingsPreview = OperatorWins.preview(findings, draft.findings, ManualField.NARRATIVE_FINDINGS in narrativeCleared)
-                                    recommendationsPreview = OperatorWins.preview(recommendations, draft.recommendations, ManualField.NARRATIVE_RECS in narrativeCleared)
-                                    findings = merged.findings
-                                    recommendations = merged.recommendations
-                                    speciesIdentified = merged.speciesIdentified
-                                    entryPoints = merged.entryPoints
-                                    damageAssessment = merged.damageAssessment
-                                    notes = merged.notes
-                                    selectedSeverity = severityFromString(draft.severity)
+                                    if (replaceAiFields) selectedSeverity = severityFromString(draft.severity)
                                 }
                             },
                             enabled = !reportLoading,
@@ -509,31 +539,14 @@ fun InspectionFormScreen(
                                     ),
                                     replace = replaceAiFields
                                 ) { draft ->
-                                    val merged = mergeInspectionAi(
-                                        replace = replaceAiFields,
-                                        cleared = narrativeCleared,
-                                        findings = findings,
-                                        recommendations = recommendations,
-                                        species = speciesIdentified,
-                                        entries = entryPoints,
-                                        damage = damageAssessment,
-                                        notes = notes,
-                                        suggestedFindings = draft.findings,
-                                        suggestedRecs = draft.recommendations,
-                                        suggestedSpecies = draft.speciesIdentified,
-                                        suggestedEntries = draft.entryPoints,
-                                        suggestedDamage = draft.damageAssessment,
-                                        suggestedNotes = draft.notes
+                                    applyLiveNarrative(
+                                        draft.findings,
+                                        draft.recommendations,
+                                        draft.speciesIdentified,
+                                        draft.entryPoints,
+                                        draft.damageAssessment,
+                                        draft.notes
                                     )
-                                    findingsPreview = OperatorWins.preview(findings, draft.findings, ManualField.NARRATIVE_FINDINGS in narrativeCleared)
-                                    recommendationsPreview = OperatorWins.preview(recommendations, draft.recommendations, ManualField.NARRATIVE_RECS in narrativeCleared)
-                                    findings = merged.findings
-                                    recommendations = merged.recommendations
-                                    speciesIdentified = merged.speciesIdentified
-                                    entryPoints = merged.entryPoints
-                                    damageAssessment = merged.damageAssessment
-                                    notes = merged.notes
-                                    aiNarrativeDraft = draft.findings
                                     aiDraftSource = AiRuntimeStatus.wireName(draft.source)
                                 }
                             },
@@ -1087,42 +1100,6 @@ fun InspectionFormScreen(
         }
     }
 }
-
-private fun mergeInspectionAi(
-    replace: Boolean,
-    cleared: Set<String>,
-    findings: String,
-    recommendations: String,
-    species: String,
-    entries: String,
-    damage: String,
-    notes: String,
-    suggestedFindings: String,
-    suggestedRecs: String,
-    suggestedSpecies: String,
-    suggestedEntries: String,
-    suggestedDamage: String,
-    suggestedNotes: String
-): InspectionNarrativeDraft = InspectionNarrativeEngine.apply(
-    current = InspectionNarrativeDraft(
-        findings = findings,
-        recommendations = recommendations,
-        speciesIdentified = species,
-        entryPoints = entries,
-        damageAssessment = damage,
-        notes = notes
-    ),
-    suggested = InspectionNarrativeDraft(
-        findings = suggestedFindings,
-        recommendations = suggestedRecs,
-        speciesIdentified = suggestedSpecies,
-        entryPoints = suggestedEntries,
-        damageAssessment = suggestedDamage,
-        notes = suggestedNotes
-    ),
-    replace = replace,
-    cleared = cleared
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

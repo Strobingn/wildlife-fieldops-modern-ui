@@ -55,6 +55,11 @@ object MileageTaxLog {
         return if (body.isBlank()) header else "$header\n$body"
     }
 
+    fun upsert(entries: List<MileageLogEntry>, entry: MileageLogEntry): List<MileageLogEntry> {
+        val id = entry.id.ifBlank { java.util.UUID.randomUUID().toString() }
+        return (entries.filterNot { it.id == id } + entry.copy(id = id)).sortedBy { it.date }
+    }
+
     fun suggestFromEstimate(jobId: String, jobTitle: String, miles: Double, date: Long, purpose: String = "Job travel"): MileageLogEntry =
         MileageLogEntry(
             id = "",

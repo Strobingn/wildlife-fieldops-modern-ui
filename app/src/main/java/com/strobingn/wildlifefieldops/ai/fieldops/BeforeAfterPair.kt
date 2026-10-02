@@ -17,4 +17,10 @@ object BeforeAfterPair {
 
     fun forPhoto(pairs: List<PhotoPairRecord>, photoId: String): List<PhotoPairRecord> =
         pairs.filter { it.beforeId == photoId || it.afterId == photoId }
+
+    fun upsert(pairs: List<PhotoPairRecord>, pair: PhotoPairRecord): List<PhotoPairRecord> =
+        pairs.filterNot { it.id == pair.id } + pair
+
+    fun remove(pairs: List<PhotoPairRecord>, id: String): List<PhotoPairRecord> =
+        pairs.filterNot { it.id == id }
 }

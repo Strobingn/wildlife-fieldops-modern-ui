@@ -63,6 +63,9 @@ data class JobPricing(
     val warrantyCovered: String = "",
     val seasonalKind: String = "",
     val seasonalDueAt: Long? = null,
+    val seasonalTitle: String = "",
+    val seasonalNotes: String = "",
+    val seasonalReminderId: String = "",
     val photoAutoTags: List<com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag> = emptyList(),
     val photoPairs: List<com.strobingn.wildlifefieldops.ai.fieldops.PhotoPairRecord> = emptyList(),
     val speciesChecklist: List<com.strobingn.wildlifefieldops.ai.fieldops.ChecklistItemRecord> = emptyList(),
@@ -77,9 +80,7 @@ data class JobPricing(
      * Fields the operator typed or cleared. Suggest / codec merge / sync pull
      * must not refill these, including when the stored value is blank.
      */
-    val manualFields: Set<String> = emptySet(),
-    val seasonalTitle: String = "",
-    val seasonalNotes: String = ""
+    val manualFields: Set<String> = emptySet()
 ) {
     /**
      * Money worksheet only. Field-ops extras (species, next step) must not
@@ -202,6 +203,11 @@ object PricingCalculator {
                 followUpNotes = extras.followUpNotes,
                 followUpVisitId = extras.followUpVisitId,
                 followUpReminderId = extras.followUpReminderId,
+                seasonalKind = extras.seasonalKind,
+                seasonalDueAt = extras.seasonalDueAt,
+                seasonalTitle = extras.seasonalTitle,
+                seasonalNotes = extras.seasonalNotes,
+                seasonalReminderId = extras.seasonalReminderId,
                 timerStartedAt = extras.timerStartedAt,
                 timerElapsedMs = extras.timerElapsedMs,
                 materialsCostActual = extras.materialsCostActual,
@@ -213,9 +219,7 @@ object PricingCalculator {
                 earningsPeriodOverrides = extras.earningsPeriodOverrides,
                 decNwcoRows = extras.decNwcoRows,
                 decNwcoOperator = extras.decNwcoOperator,
-                manualFields = extras.manualFields,
-                seasonalTitle = extras.seasonalTitle,
-                seasonalNotes = extras.seasonalNotes
+                manualFields = extras.manualFields
             )
         }
         return starterWorksheet().copy(
@@ -235,6 +239,11 @@ object PricingCalculator {
             followUpNotes = extras.followUpNotes,
             followUpVisitId = extras.followUpVisitId,
             followUpReminderId = extras.followUpReminderId,
+            seasonalKind = extras.seasonalKind,
+            seasonalDueAt = extras.seasonalDueAt,
+            seasonalTitle = extras.seasonalTitle,
+            seasonalNotes = extras.seasonalNotes,
+            seasonalReminderId = extras.seasonalReminderId,
             timerStartedAt = extras.timerStartedAt,
             timerElapsedMs = extras.timerElapsedMs,
             materialsCostActual = extras.materialsCostActual,
@@ -246,9 +255,7 @@ object PricingCalculator {
             earningsPeriodOverrides = extras.earningsPeriodOverrides,
             decNwcoRows = extras.decNwcoRows,
             decNwcoOperator = extras.decNwcoOperator,
-            manualFields = extras.manualFields,
-            seasonalTitle = extras.seasonalTitle,
-            seasonalNotes = extras.seasonalNotes
+            manualFields = extras.manualFields
         )
     }
 

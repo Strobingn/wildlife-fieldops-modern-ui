@@ -19,6 +19,8 @@ class CustomerFieldOpsEnginesTest {
         assertFalse(InventoryDeduct.isLow(4.0, 3.0))
         assertFalse(InventoryDeduct.isLow(0.0, 0.0))
         assertEquals(28.0, JobMaterialUsage(name = "Cone", quantity = 2.0, unitCost = 14.0).amount, 0.0)
+        assertEquals(6.0, InventoryDeduct.restore(4.0, 2.0), 0.0)
+        assertEquals(3.0, InventoryDeduct.adjust(5.0, 4.0, 6.0), 0.0)
     }
 
     @Test

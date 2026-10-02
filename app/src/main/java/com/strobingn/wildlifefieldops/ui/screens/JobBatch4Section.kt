@@ -21,7 +21,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,14 +34,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.strobingn.wildlifefieldops.ai.fieldops.CustomerMessageKind
-import com.strobingn.wildlifefieldops.ai.fieldops.ManualField
+import com.strobingn.wildlifefieldops.ai.fieldops.FieldDate
 import com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins
 import com.strobingn.wildlifefieldops.ai.fieldops.SeasonalKind
 import com.strobingn.wildlifefieldops.ai.fieldops.SeasonalReminder
+import com.strobingn.wildlifefieldops.ai.fieldops.SeasonalSave
 import com.strobingn.wildlifefieldops.ai.fieldops.WarrantyTracker
 import com.strobingn.wildlifefieldops.data.model.InventoryItem
 import com.strobingn.wildlifefieldops.data.model.Job
-import com.strobingn.wildlifefieldops.pricing.isManual
 import com.strobingn.wildlifefieldops.ui.components.ApplySuggestionChip
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundCard
 import com.strobingn.wildlifefieldops.ui.theme.BorderDark
@@ -47,6 +49,7 @@ import com.strobingn.wildlifefieldops.ui.theme.OnPrimary
 import com.strobingn.wildlifefieldops.ui.theme.PrimaryGreen
 import com.strobingn.wildlifefieldops.ui.theme.TextPrimary
 import com.strobingn.wildlifefieldops.ui.theme.TextSecondary
+import com.strobingn.wildlifefieldops.ui.theme.StatusUrgent
 import com.strobingn.wildlifefieldops.ui.theme.TextTertiary
 import com.strobingn.wildlifefieldops.ui.viewmodel.CustomerFieldOpsViewModel
 import java.text.SimpleDateFormat
@@ -161,11 +164,32 @@ private fun MaterialsCard(
                 ) { Text("Deduct from inventory") }
             }
             job.pricing.materialUsages.forEach { usage ->
-                Text(
-                    "${usage.name} · ${usage.quantity} · $${"%.2f".format(usage.amount)}",
-                    color = TextSecondary,
-                    style = MaterialTheme.typography.bodySmall
-                )
+                key(usage.id) {
+                    var lineQty by remember(usage.id, usage.quantity) {
+                        mutableStateOf(usage.quantity.toString().trimEnd('0').trimEnd('.'))
+                    }
+                    Text(usage.name, color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = lineQty,
+                            onValueChange = { lineQty = it },
+                            label = { Text("Qty") },
+                            modifier = Modifier.weight(1f),
+                            colors = batch4FieldColors()
+                        )
+                        TextButton(onClick = {
+                            val qty = lineQty.toDoubleOrNull()
+                            if (qty == null) return@TextButton
+                            customerVm.updateMaterial(job.id, usage.id, qty)
+                        }) { Text("Save") }
+                        TextButton(onClick = { customerVm.removeMaterial(job.id, usage.id) }) { Text("Remove") }
+                    }
+                    Text(
+                        "$${"%.2f".format(usage.amount)} on this line. Removing puts the quantity back in stock.",
+                        color = TextTertiary,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
             }
         }
     }
@@ -231,35 +255,15 @@ private fun WarrantyCard(job: Job, customerVm: CustomerFieldOpsViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SeasonalCard(job: Job, customerVm: CustomerFieldOpsViewModel) {
-    val suggested = remember(job.id, job.confirmedSpecies, job.type) { customerVm.suggestSeasonal(job) }
-    val titleManualInit = job.pricing.isManual(ManualField.SEASONAL_TITLE) || job.pricing.seasonalTitle.isNotBlank()
-    val notesManualInit = job.pricing.isManual(ManualField.SEASONAL_NOTES) || job.pricing.seasonalNotes.isNotBlank()
-    val dueManualInit = job.pricing.isManual(ManualField.SEASONAL_DUE)
-    var kind by remember(job.pricing.seasonalKind) {
-        mutableStateOf(
-            runCatching { SeasonalKind.valueOf(job.pricing.seasonalKind) }.getOrDefault(suggested.kind)
-        )
+    var kind by remember(job.id, job.pricing.seasonalKind) {
+        mutableStateOf(runCatching { SeasonalKind.valueOf(job.pricing.seasonalKind) }.getOrNull())
     }
-    var title by remember(job.id) {
-        mutableStateOf(if (titleManualInit) job.pricing.seasonalTitle else suggested.title)
+    var title by remember(job.id, job.pricing.seasonalTitle) { mutableStateOf(job.pricing.seasonalTitle) }
+    var notes by remember(job.id, job.pricing.seasonalNotes) { mutableStateOf(job.pricing.seasonalNotes) }
+    var dueText by remember(job.id, job.pricing.seasonalDueAt) {
+        mutableStateOf(job.pricing.seasonalDueAt?.let { FieldDate.formatDay(it) }.orEmpty())
     }
-    var notes by remember(job.id) {
-        mutableStateOf(if (notesManualInit) job.pricing.seasonalNotes else suggested.notes)
-    }
-    var dueText by remember(job.id) {
-        mutableStateOf(
-            when {
-                dueManualInit && job.pricing.seasonalDueAt == null -> ""
-                job.pricing.seasonalDueAt != null -> dayStamp(job.pricing.seasonalDueAt!!)
-                else -> dayStamp(suggested.dueAt)
-            }
-        )
-    }
-    var titleManual by remember(job.id) { mutableStateOf(titleManualInit) }
-    var notesManual by remember(job.id) { mutableStateOf(notesManualInit) }
-    var dueManual by remember(job.id) { mutableStateOf(dueManualInit) }
-    var titlePreview by remember(job.id) { mutableStateOf<String?>(null) }
-    var notesPreview by remember(job.id) { mutableStateOf<String?>(null) }
+    var dateError by remember { mutableStateOf<String?>(null) }
     var open by remember { mutableStateOf(false) }
 
     Card(
@@ -271,7 +275,7 @@ private fun SeasonalCard(job: Job, customerVm: CustomerFieldOpsViewModel) {
             Text("Seasonal reminder", color = TextPrimary, fontWeight = FontWeight.Medium)
             ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
                 OutlinedTextField(
-                    value = SeasonalReminder.label(kind),
+                    value = kind?.let { SeasonalReminder.label(it) }.orEmpty(),
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Season") },
@@ -282,6 +286,13 @@ private fun SeasonalCard(job: Job, customerVm: CustomerFieldOpsViewModel) {
                     colors = batch4FieldColors()
                 )
                 ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                    DropdownMenuItem(
+                        text = { Text("None") },
+                        onClick = {
+                            kind = null
+                            open = false
+                        }
+                    )
                     SeasonalKind.entries.forEach { option ->
                         DropdownMenuItem(
                             text = { Text(SeasonalReminder.label(option)) },
@@ -293,40 +304,54 @@ private fun SeasonalCard(job: Job, customerVm: CustomerFieldOpsViewModel) {
                     }
                 }
             }
-            OutlinedTextField(value = title, onValueChange = { title = it; titleManual = true }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth(), colors = batch4FieldColors())
-            OutlinedTextField(value = notes, onValueChange = { notes = it; notesManual = true }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth(), colors = batch4FieldColors())
-            OutlinedTextField(value = dueText, onValueChange = { dueText = it; dueManual = true }, label = { Text("Due (yyyy-MM-dd)") }, modifier = Modifier.fillMaxWidth(), colors = batch4FieldColors())
-            OutlinedButton(onClick = {
-                val next = SeasonalReminder.suggest(
-                    when (kind) {
-                        SeasonalKind.SPRING_BATS -> "bat"
-                        SeasonalKind.SPRING_SQUIRRELS -> "squirrel"
-                        SeasonalKind.FALL_EXCLUSION -> "raccoon"
-                        SeasonalKind.FALL_RODENTS -> "rodent"
-                    }
-                )
-                title = OperatorWins.suggest(title, next.title, titleManual)
-                notes = OperatorWins.suggest(notes, next.notes, notesManual)
-                titlePreview = OperatorWins.preview(title, next.title, titleManual)
-                notesPreview = OperatorWins.preview(notes, next.notes, notesManual)
-                if (!dueManual && dueText.isBlank()) dueText = dayStamp(next.dueAt)
-            }) { Text("Suggest") }
-            ApplySuggestionChip(titlePreview) { title = it; titleManual = true; titlePreview = null }
-            ApplySuggestionChip(notesPreview) { notes = it; notesManual = true; notesPreview = null }
-            Button(
-                onClick = {
-                    customerVm.saveSeasonal(
-                        job,
-                        suggested.copy(
-                            kind = kind,
-                            title = title,
-                            notes = notes,
-                            dueAt = parseDayStamp(dueText) ?: suggested.dueAt
-                        )
-                    )
+            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth(), colors = batch4FieldColors())
+            OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth(), colors = batch4FieldColors())
+            OutlinedTextField(
+                value = dueText,
+                onValueChange = {
+                    dueText = it
+                    dateError = null
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
-            ) { Text("Save seasonal reminder") }
+                label = { Text("Due (yyyy-MM-dd)") },
+                supportingText = { Text(dateError ?: "Blank clears the due date.", color = if (dateError != null) StatusUrgent else TextTertiary) },
+                isError = dateError != null,
+                modifier = Modifier.fillMaxWidth(),
+                colors = batch4FieldColors()
+            )
+            OutlinedButton(onClick = {
+                val next = customerVm.suggestSeasonal(job)
+                val filled = SeasonalReminder.fillBlankFields(kind, title, notes, dueText, next, FieldDate::formatDay)
+                kind = filled.kind
+                title = filled.title
+                notes = filled.notes
+                dueText = filled.dueText
+                dateError = null
+            }) { Text("Suggest") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        val due = FieldDate.parseDay(dueText)
+                        if (!due.ok) {
+                            dateError = due.error
+                            return@Button
+                        }
+                        dateError = null
+                        customerVm.saveSeasonal(
+                            job,
+                            SeasonalSave(kind = kind, title = title.trim(), notes = notes.trim(), dueAt = due.millis)
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
+                ) { Text("Save seasonal reminder") }
+                TextButton(onClick = {
+                    kind = null
+                    title = ""
+                    notes = ""
+                    dueText = ""
+                    dateError = null
+                    customerVm.saveSeasonal(job, SeasonalSave(kind = null, title = "", notes = "", dueAt = null))
+                }) { Text("Clear") }
+            }
         }
     }
 }

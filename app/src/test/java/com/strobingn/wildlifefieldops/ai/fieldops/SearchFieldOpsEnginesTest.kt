@@ -41,9 +41,10 @@ class SearchFieldOpsEnginesTest {
         val ai = PhotoAutoTags.suggest("raccoon chew at the soffit one-way door")
         assertEquals("raccoon", ai.species)
         assertTrue(ai.entry.isNotBlank() || ai.damage.isNotBlank() || ai.extra.isNotBlank())
-        val typed = PhotoAutoTags.mergeOperatorWins(ai, SyncedPhotoTag(photoId = "p", species = "Sir said skunk"))
+        val typed = PhotoAutoTags.keepTyped(SyncedPhotoTag(photoId = "p", species = "Sir said skunk"))
         assertEquals("Sir said skunk", typed.species)
-        assertEquals(ai.damage, typed.damage)
+        assertEquals("", typed.damage)
+        assertEquals("", PhotoAutoTags.mergeOperatorWins(ai, typed).damage)
         assertTrue(PhotoAutoTags.matchesFilter(typed, "skunk"))
         assertFalse(PhotoAutoTags.matchesFilter(typed, "bat"))
     }
