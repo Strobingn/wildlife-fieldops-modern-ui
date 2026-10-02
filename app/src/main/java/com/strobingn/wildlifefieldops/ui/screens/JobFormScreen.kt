@@ -17,6 +17,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.model.*
+import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.components.ScheduleDateTimeField
 import com.strobingn.wildlifefieldops.ui.components.defaultAppointmentTime
@@ -50,6 +51,7 @@ fun JobFormScreen(
     var confirmedSpecies by remember { mutableStateOf("") }
     var legalNotes by remember { mutableStateOf("") }
     var nextStep by remember { mutableStateOf("") }
+    val priceLines = remember { mutableStateListOf(blankPriceLine()) }
     var showTypeDropdown by remember { mutableStateOf(false) }
     var showPriorityDropdown by remember { mutableStateOf(false) }
     var showAddServiceDialog by remember { mutableStateOf(false) }
@@ -80,6 +82,10 @@ fun JobFormScreen(
             confirmedSpecies = job.confirmedSpecies
             legalNotes = job.legalNotes
             nextStep = job.nextStep
+            priceLines.clear()
+            priceLines.addAll(
+                job.pricing.photoLineItems.ifEmpty { listOf(blankPriceLine()) }
+            )
             val visits = viewModel.loadScheduledVisits(job.id)
             appointmentTimes.clear()
             appointmentTimes.addAll(
@@ -100,7 +106,7 @@ fun JobFormScreen(
             TopAppBar(
                 title = {
                     Text(
-                        if (isEditing) "Edit Job" else "New Job",
+                        if (isEditing) "Edit Job" else ManualJobEntry.ACTION_LABEL,
                         color = TextPrimary
                     )
                 },
@@ -156,13 +162,15 @@ fun JobFormScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            if (isEditing) {
-                Text(
-                    "Update any field, then tap Save. Status, photos, and invoices are kept.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
-                )
-            }
+            Text(
+                if (isEditing) {
+                    "Update any field, then tap Save. Status, photos, and invoices are kept."
+                } else {
+                    "Type every field by hand. Existing-customer lookup is optional. AI is a helper — it is not required to save."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary
+            )
 
             OutlinedTextField(
                 value = title,
@@ -270,6 +278,13 @@ fun JobFormScreen(
                 }
             }
 
+            JobPriceLinesEditor(
+                lines = priceLines,
+                onChange = { index, line -> priceLines[index] = line },
+                onAdd = { priceLines.add(blankPriceLine()) },
+                onRemove = { index -> if (priceLines.size > 1) priceLines.removeAt(index) else priceLines[index] = blankPriceLine() }
+            )
+
             OutlinedTextField(
                 value = estimatedValue,
                 onValueChange = { estimatedValue = it.filter { c -> c.isDigit() || c == '.' } },
@@ -312,7 +327,8 @@ fun JobFormScreen(
             OutlinedTextField(
                 value = description,
                 onValueChange = { description = it },
-                label = { Text("Description") },
+                label = { Text("Problem") },
+                supportingText = { Text("What the customer called about. Type it — AI is optional.", color = TextTertiary) },
                 colors = fieldColors(),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -423,7 +439,10 @@ fun JobFormScreen(
                         actualCost = actualCost.toDoubleOrNull(),
                         confirmedSpecies = confirmedSpecies.trim(),
                         legalNotes = legalNotes.trim(),
-                        nextStep = nextStep.trim()
+                        nextStep = nextStep.trim(),
+                        priceLines = priceLines.map { line ->
+                            line.copy(total = line.quantity * line.unitPrice)
+                        }.filter { it.description.isNotBlank() || it.unitPrice != 0.0 }
                     ) {
                         onBack()
                     }
@@ -521,6 +540,82 @@ fun JobFormScreen(
             },
             containerColor = BackgroundCard
         )
+    }
+}
+
+private fun blankPriceLine() = InvoiceLineItem(
+    description = "",
+    quantity = 1.0,
+    unit = "ea",
+    unitPrice = 0.0,
+    total = 0.0
+)
+
+@Composable
+private fun JobPriceLinesEditor(
+    lines: List<InvoiceLineItem>,
+    onChange: (Int, InvoiceLineItem) -> Unit,
+    onAdd: () -> Unit,
+    onRemove: (Int) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            "Price lines",
+            style = MaterialTheme.typography.titleMedium,
+            color = TextPrimary,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            "Add labor, materials, or exclusion lines by hand. Totals stay editable.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSecondary
+        )
+        lines.forEachIndexed { index, item ->
+            OutlinedTextField(
+                value = item.description,
+                onValueChange = { onChange(index, item.copy(description = it)) },
+                label = { Text("Line ${index + 1}") },
+                colors = fieldColors(),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = if (item.quantity == 0.0) "" else item.quantity.toString().trimEnd('0').trimEnd('.'),
+                    onValueChange = { text ->
+                        val qty = text.filter { c -> c.isDigit() || c == '.' }.toDoubleOrNull() ?: 0.0
+                        onChange(index, item.copy(quantity = qty, total = qty * item.unitPrice))
+                    },
+                    label = { Text("Qty") },
+                    colors = fieldColors(),
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = if (item.unitPrice == 0.0) "" else item.unitPrice.toString().trimEnd('0').trimEnd('.'),
+                    onValueChange = { text ->
+                        val price = text.filter { c -> c.isDigit() || c == '.' }.toDoubleOrNull() ?: 0.0
+                        onChange(index, item.copy(unitPrice = price, total = item.quantity * price))
+                    },
+                    label = { Text("Unit $") },
+                    colors = fieldColors(),
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true
+                )
+            }
+            TextButton(onClick = { onRemove(index) }) {
+                Text("Remove line", color = TextSecondary)
+            }
+        }
+        OutlinedButton(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.Add, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Add line item")
+        }
     }
 }
 

@@ -5,6 +5,7 @@ import com.strobingn.wildlifefieldops.data.local.JobDao
 import com.strobingn.wildlifefieldops.data.local.VisitDao
 import com.strobingn.wildlifefieldops.data.model.Customer
 import com.strobingn.wildlifefieldops.data.model.DefaultServiceTypes
+import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobCustomerDraft
 import com.strobingn.wildlifefieldops.data.model.JobPriority
@@ -33,7 +34,9 @@ data class JobSaveRequest(
     val confirmedSpecies: String? = null,
     val legalNotes: String? = null,
     val nextStep: String? = null,
-    val nextStepDueAt: Long? = null
+    val nextStepDueAt: Long? = null,
+    /** Null keeps existing worksheet lines; empty list clears them. */
+    val priceLines: List<InvoiceLineItem>? = null
 )
 
 data class JobSaveResult(
@@ -74,8 +77,13 @@ class JobCustomerWorkspace @Inject constructor(
         val now = System.currentTimeMillis()
         val linked = upsertCustomer(request.customer, now)
         val base = request.existingJob ?: Job()
+        val withLines = if (request.priceLines != null) {
+            base.pricing.copy(photoLineItems = request.priceLines)
+        } else {
+            base.pricing
+        }
         val nextPricing = PricingCalculator.withTypedJobTotal(
-            base.pricing,
+            withLines,
             request.estimatedValue.takeIf { it > 0.0 }
         )
         val quote = PricingCalculator.compute(nextPricing)

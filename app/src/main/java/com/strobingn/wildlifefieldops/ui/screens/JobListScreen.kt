@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobStatus
+import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
@@ -44,7 +45,7 @@ fun JobListScreen(
                     IconButton(onClick = onNavigateToJobForm) {
                         Icon(
                             Icons.Default.Add,
-                            contentDescription = "Add job",
+                            contentDescription = ManualJobEntry.ACTION_LABEL,
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -52,14 +53,14 @@ fun JobListScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
+            ExtendedFloatingActionButton(
                 onClick = onNavigateToJobForm,
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = FieldShapes.fab
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Job")
-            }
+                shape = FieldShapes.fab,
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                text = { Text(ManualJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold) }
+            )
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->

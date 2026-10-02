@@ -23,6 +23,7 @@ import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
 fun JobDictateScreen(
     onBack: () -> Unit,
     onCreated: () -> Unit = onBack,
+    onTypeManually: () -> Unit = onBack,
     viewModel: JobsViewModel = hiltViewModel()
 ) {
     val aiFillLoading by viewModel.aiFillLoading.collectAsState()
@@ -51,6 +52,13 @@ fun JobDictateScreen(
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            OutlinedButton(
+                onClick = onTypeManually,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGreen)
+            ) {
+                Text("Type a New Job instead", fontWeight = FontWeight.SemiBold)
+            }
             JobVoiceIntakePanel(
                 aiFillLoading = aiFillLoading,
                 aiFillError = aiFillError,

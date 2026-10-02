@@ -298,15 +298,40 @@ fun EstimateScreen(
                     Text("Add ${suggestedLines.size} suggested lines (keeps yours)")
                 }
             }
-            if (pricing.photoLineItems.isNotEmpty()) {
-                EstimateSection("Photo / exclusion lines") {
-                    Text(
-                        "Every qty and price is yours. AI only adds suggestions.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextTertiary
+            OutlinedButton(
+                onClick = {
+                    applyPricing(
+                        pricing.copy(
+                            photoLineItems = pricing.photoLineItems + InvoiceLineItem(
+                                description = "",
+                                quantity = 1.0,
+                                unit = "ea",
+                                unitPrice = 0.0,
+                                total = 0.0
+                            )
+                        )
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    pricing.photoLineItems.forEachIndexed { index, item ->
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGreen)
+            ) {
+                Text("Add line by hand")
+            }
+            EstimateSection("Photo / exclusion lines") {
+                Text(
+                    "Every qty and price is yours. AI only adds suggestions — it never blocks save.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextTertiary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                if (pricing.photoLineItems.isEmpty()) {
+                    Text(
+                        "No lines yet. Tap Add line by hand or keep using the labor / materials boxes below.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
+                pricing.photoLineItems.forEachIndexed { index, item ->
                         OutlinedTextField(
                             value = item.description,
                             onValueChange = { text ->
@@ -343,7 +368,6 @@ fun EstimateScreen(
                         }) {
                             Text("Remove line", color = TextSecondary)
                         }
-                    }
                 }
             }
             if (pricing.rationale.isNotBlank()) {

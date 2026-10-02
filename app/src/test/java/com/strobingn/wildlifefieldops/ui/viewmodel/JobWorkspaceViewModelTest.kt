@@ -4,6 +4,7 @@ import com.strobingn.wildlifefieldops.data.local.CustomerDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
 import com.strobingn.wildlifefieldops.data.local.VisitDao
 import com.strobingn.wildlifefieldops.data.model.Customer
+import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobCustomerDraft
 import com.strobingn.wildlifefieldops.data.model.JobPriority
@@ -231,6 +232,60 @@ class JobWorkspaceViewModelTest {
         )
         val pricing = encoded.jsonObject.getValue("pricing").jsonObject
         assertEquals("raccoon", pricing.getValue("confirmedSpecies").jsonPrimitive.content)
+    }
+
+    @Test
+    fun typedCreateSavesCustomerJobAndPriceLinesWithoutAi() = runBlocking {
+        val result = workspace.save(
+            newJobRequest(
+                JobCustomerDraft(
+                    name = "Sir Owner",
+                    phone = "8455551212",
+                    email = "sir@example.com",
+                    address = "9 Ridge Rd",
+                    city = "Cornwall",
+                    state = "NY",
+                    zipCode = "12518",
+                    billingAddress = "PO Box 12",
+                    notes = "Gate on the left"
+                ),
+                title = "Attic raccoon"
+            ).copy(
+                description = "Scratching in the soffit",
+                notes = "Bring one-way door",
+                confirmedSpecies = "raccoon",
+                legalNotes = "Rabies PPE",
+                nextStep = "Set trap at dusk",
+                estimatedValue = 650.0,
+                priceLines = listOf(
+                    InvoiceLineItem(
+                        description = "Live trap set",
+                        quantity = 1.0,
+                        unit = "ea",
+                        unitPrice = 95.0,
+                        total = 95.0
+                    ),
+                    InvoiceLineItem(
+                        description = "Flashing patch",
+                        quantity = 4.0,
+                        unit = "lf",
+                        unitPrice = 28.0,
+                        total = 112.0
+                    )
+                )
+            )
+        )
+        assertEquals("Sir Owner", result.job.customerName)
+        assertEquals("Scratching in the soffit", result.job.description)
+        assertEquals("raccoon", result.job.confirmedSpecies)
+        assertEquals("Set trap at dusk", result.job.nextStep)
+        assertEquals(2, result.job.pricing.photoLineItems.size)
+        assertEquals("Live trap set", result.job.pricing.photoLineItems[0].description)
+        assertEquals(28.0, result.job.pricing.photoLineItems[1].unitPrice, 1e-4)
+        assertEquals("PO Box 12", result.customer!!.billingAddress)
+        assertFalse(result.job.isSynced)
+        assertFalse(result.customer!!.isSynced)
+        assertTrue(result.job.aiRuntime.isBlank() || result.job.aiRuntime == "manual")
     }
 
     @Test

@@ -294,7 +294,7 @@ fun VoiceFirstLogScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "Dictate while you work. Empty or untrusted transcripts are never filed. Audio stays on device for review.",
+                    "Dictate while you work. Empty or untrusted transcripts are never filed. Audio stays on device for review. To log without the mic, type Notes on the Job page — voice never blocks a save there.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
