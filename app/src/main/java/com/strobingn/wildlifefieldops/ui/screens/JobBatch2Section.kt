@@ -203,7 +203,7 @@ fun JobBatch2Section(
                 }
                 Button(
                     onClick = {
-                        val due = parseDayStamp(followDueText) ?: trapVm.suggestFollowUp(job).dueAt
+                        val due = parseDayStamp(followDueText) ?: (System.currentTimeMillis() + 7 * 86_400_000L)
                         trapVm.createFollowUp(job, followKind, due, followNotes.trim())
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)

@@ -72,6 +72,7 @@ fun MileageLogScreen(
     val yearRows = MileageTaxLog.forYear(entries, year)
     val context = LocalContext.current
     var showAdd by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<MileageLogEntry?>(null) }
     LaunchedEffect(Unit) { viewModel.refreshMileage() }
 
     Scaffold(
@@ -124,8 +125,11 @@ fun MileageLogScreen(
                             color = TextSecondary,
                             style = MaterialTheme.typography.labelSmall
                         )
-                        TextButton(onClick = { viewModel.deleteMileage(row.jobId, row.id) }) {
-                            Text("Delete", color = TextSecondary)
+                        Row {
+                            TextButton(onClick = { editing = row }) { Text("Edit", color = PrimaryGreen) }
+                            TextButton(onClick = { viewModel.deleteMileage(row.jobId, row.id) }) {
+                                Text("Delete", color = TextSecondary)
+                            }
                         }
                     }
                 }
@@ -133,13 +137,18 @@ fun MileageLogScreen(
             item { Spacer(Modifier.height(72.dp)) }
         }
     }
-    if (showAdd) {
+    if (showAdd || editing != null) {
         MileageEditorDialog(
             jobs = jobs,
-            onDismiss = { showAdd = false },
+            initial = editing,
+            onDismiss = {
+                showAdd = false
+                editing = null
+            },
             onSave = {
                 viewModel.saveMileage(it)
                 showAdd = false
+                editing = null
             }
         )
     }
@@ -148,17 +157,20 @@ fun MileageLogScreen(
 @Composable
 private fun MileageEditorDialog(
     jobs: List<Job>,
+    initial: MileageLogEntry? = null,
     onDismiss: () -> Unit,
     onSave: (MileageLogEntry) -> Unit
 ) {
-    var jobId by remember { mutableStateOf(jobs.firstOrNull()?.id.orEmpty()) }
-    var miles by remember { mutableStateOf("") }
-    var purpose by remember { mutableStateOf("Job travel") }
-    var dateText by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())) }
+    var jobId by remember { mutableStateOf(initial?.jobId ?: jobs.firstOrNull()?.id.orEmpty()) }
+    var miles by remember { mutableStateOf(initial?.miles?.takeIf { it > 0 }?.toString().orEmpty()) }
+    var purpose by remember { mutableStateOf(initial?.purpose?.ifBlank { "Job travel" } ?: "Job travel") }
+    var dateText by remember {
+        mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(initial?.date ?: System.currentTimeMillis())))
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = BackgroundCard,
-        title = { Text("Add mileage", color = TextPrimary) },
+        title = { Text(if (initial == null) "Add mileage" else "Edit mileage", color = TextPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = miles, onValueChange = { miles = it }, label = { Text("Miles") }, modifier = Modifier.fillMaxWidth(), colors = field())
@@ -184,10 +196,10 @@ private fun MileageEditorDialog(
                         MileageTaxLog.suggestFromEstimate(
                             jobId = job.id,
                             jobTitle = job.title.ifBlank { job.customerName },
-                            miles = miles.toDoubleOrNull() ?: job.pricing.mileage,
+                            miles = miles.toDoubleOrNull() ?: 0.0,
                             date = day,
                             purpose = purpose
-                        )
+                        ).copy(id = initial?.id ?: java.util.UUID.randomUUID().toString())
                     )
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)

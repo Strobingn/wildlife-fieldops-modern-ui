@@ -21,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -100,19 +101,17 @@ fun InvoiceListScreen(
                     onSent = { viewModel.markInvoice(invoice, InvoiceStatus.SENT) },
                     onPaid = { viewModel.markInvoice(invoice, InvoiceStatus.PAID) },
                     onOpenJob = { if (invoice.jobId.isNotBlank()) onOpenJob(invoice.jobId) },
-                    onSms = {
-                        val draft = InvoiceReminder.draft(invoice)
+                    onSms = { subject, body ->
                         val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:")).apply {
-                            putExtra("sms_body", draft.body)
+                            putExtra("sms_body", body)
                         }
                         runCatching { context.startActivity(intent) }
                     },
-                    onEmail = {
-                        val draft = InvoiceReminder.draft(invoice)
+                    onEmail = { subject, body ->
                         val mail = invoice.customerEmail.ifBlank { "" }
                         val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$mail")).apply {
-                            putExtra(Intent.EXTRA_SUBJECT, draft.subject)
-                            putExtra(Intent.EXTRA_TEXT, draft.body)
+                            putExtra(Intent.EXTRA_SUBJECT, subject)
+                            putExtra(Intent.EXTRA_TEXT, body)
                         }
                         runCatching { context.startActivity(intent) }
                         viewModel.markReminded(invoice)
@@ -129,10 +128,13 @@ private fun InvoiceReminderCard(
     onSent: () -> Unit,
     onPaid: () -> Unit,
     onOpenJob: () -> Unit,
-    onSms: () -> Unit,
-    onEmail: () -> Unit
+    onSms: (String, String) -> Unit,
+    onEmail: (String, String) -> Unit
 ) {
     val overdue = InvoiceReminder.isOverdue(invoice)
+    val seed = InvoiceReminder.draft(invoice)
+    var subject by remember(invoice.id) { mutableStateOf(seed.subject) }
+    var body by remember(invoice.id) { mutableStateOf(seed.body) }
     Card(
         colors = CardDefaults.cardColors(containerColor = BackgroundCard),
         shape = RoundedCornerShape(12.dp),
@@ -157,9 +159,16 @@ private fun InvoiceReminderCard(
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
                 ) { Text("Paid") }
             }
+            OutlinedTextField(value = subject, onValueChange = { subject = it }, label = { Text("Subject") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = body, onValueChange = { body = it }, label = { Text("Message") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onSms) { Text("SMS draft") }
-                OutlinedButton(onClick = onEmail) { Text("Email draft") }
+                OutlinedButton(onClick = {
+                    val draft = InvoiceReminder.draft(invoice)
+                    if (subject.isBlank()) subject = draft.subject
+                    if (body.isBlank()) body = draft.body
+                }) { Text("Suggest") }
+                OutlinedButton(onClick = { onSms(subject, body) }) { Text("SMS") }
+                OutlinedButton(onClick = { onEmail(subject, body) }) { Text("Email") }
                 OutlinedButton(onClick = onOpenJob) { Text("Job") }
             }
         }

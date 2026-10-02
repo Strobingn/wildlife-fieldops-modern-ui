@@ -265,17 +265,6 @@ private fun SeasonalCard(job: Job, customerVm: CustomerFieldOpsViewModel) {
                             text = { Text(SeasonalReminder.label(option)) },
                             onClick = {
                                 kind = option
-                                val next = SeasonalReminder.suggest(
-                                    when (option) {
-                                        SeasonalKind.SPRING_BATS -> "bat"
-                                        SeasonalKind.SPRING_SQUIRRELS -> "squirrel"
-                                        SeasonalKind.FALL_EXCLUSION -> "raccoon"
-                                        SeasonalKind.FALL_RODENTS -> "rodent"
-                                    }
-                                )
-                                title = next.title
-                                notes = next.notes
-                                dueText = dayStamp(next.dueAt)
                                 open = false
                             }
                         )
@@ -285,6 +274,19 @@ private fun SeasonalCard(job: Job, customerVm: CustomerFieldOpsViewModel) {
             OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth(), colors = batch4FieldColors())
             OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth(), colors = batch4FieldColors())
             OutlinedTextField(value = dueText, onValueChange = { dueText = it }, label = { Text("Due (yyyy-MM-dd)") }, modifier = Modifier.fillMaxWidth(), colors = batch4FieldColors())
+            OutlinedButton(onClick = {
+                val next = SeasonalReminder.suggest(
+                    when (kind) {
+                        SeasonalKind.SPRING_BATS -> "bat"
+                        SeasonalKind.SPRING_SQUIRRELS -> "squirrel"
+                        SeasonalKind.FALL_EXCLUSION -> "raccoon"
+                        SeasonalKind.FALL_RODENTS -> "rodent"
+                    }
+                )
+                if (title.isBlank()) title = next.title
+                if (notes.isBlank()) notes = next.notes
+                if (dueText.isBlank()) dueText = dayStamp(next.dueAt)
+            }) { Text("Suggest") }
             Button(
                 onClick = {
                     customerVm.saveSeasonal(
@@ -320,17 +322,24 @@ private fun MessageDraftCard(
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Customer message", color = TextPrimary, fontWeight = FontWeight.Medium)
-            Text("AI fills a draft. Anything you type is what the phone sends.", color = TextTertiary, style = MaterialTheme.typography.bodySmall)
+            Text("Type the message yourself, or tap Suggest. What you type is what the phone sends.", color = TextTertiary, style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CustomerMessageKind.entries.forEach { option ->
-                    OutlinedButton(onClick = {
-                        kind = option
-                        val draft = customerVm.draftMessage(job, option)
-                        subject = draft.subject
-                        body = draft.body
-                    }) { Text(option.name.lowercase().replace('_', ' ')) }
+                    if (kind == option) {
+                        Button(
+                            onClick = { kind = option },
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
+                        ) { Text(option.name.lowercase().replace('_', ' ')) }
+                    } else {
+                        OutlinedButton(onClick = { kind = option }) { Text(option.name.lowercase().replace('_', ' ')) }
+                    }
                 }
             }
+            OutlinedButton(onClick = {
+                val draft = customerVm.draftMessage(job, kind)
+                if (subject.isBlank()) subject = draft.subject
+                if (body.isBlank()) body = draft.body
+            }) { Text("Suggest draft") }
             OutlinedTextField(value = subject, onValueChange = { subject = it }, label = { Text("Subject") }, modifier = Modifier.fillMaxWidth(), colors = batch4FieldColors())
             OutlinedTextField(value = body, onValueChange = { body = it }, label = { Text("Message") }, modifier = Modifier.fillMaxWidth(), minLines = 4, colors = batch4FieldColors())
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

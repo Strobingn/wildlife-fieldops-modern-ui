@@ -59,6 +59,9 @@ class SearchFieldOpsEnginesTest {
         val (done, total) = SpeciesChecklist.completion(bat.mapIndexed { i, item -> item.copy(done = i == 0) })
         assertEquals(1, done)
         assertEquals(bat.size, total)
+        val hand = ChecklistItemRecord(species = "custom", label = "Walk the ridge by hand")
+        assertEquals("Walk the ridge by hand", hand.label)
+        assertFalse(hand.done)
     }
 
     @Test

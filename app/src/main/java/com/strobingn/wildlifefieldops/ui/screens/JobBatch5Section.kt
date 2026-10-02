@@ -16,6 +16,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -65,42 +66,80 @@ fun JobBatch5Section(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Species checklist", color = TextPrimary, fontWeight = FontWeight.Medium)
             val items = job.pricing.speciesChecklist
-            if (items.isEmpty()) {
-                Text("Load a raccoon, bat, squirrel, skunk, or rodent list. Check off as you go.", color = TextTertiary, style = MaterialTheme.typography.bodySmall)
-                Button(
-                    onClick = { searchVm.applyChecklist(job) },
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
-                ) { Text("Load checklist") }
-            } else {
-                val (done, total) = SpeciesChecklist.completion(items)
-                Text("$done / $total  ·  ${items.firstOrNull()?.species.orEmpty()}", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
-                items.forEach { item ->
-                    var notes by remember(item.id, item.notes) { mutableStateOf(item.notes) }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = item.done,
-                            onCheckedChange = { checked ->
-                                searchVm.saveChecklist(job.id, items.map { if (it.id == item.id) it.copy(done = checked) else it })
-                            }
+            var newLabel by remember { mutableStateOf("") }
+            Text("Add lines by hand, or load a species template. Every label and note stays editable.", color = TextTertiary, style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { searchVm.applyChecklist(job) }) { Text("Load template") }
+                if (items.isNotEmpty()) {
+                    val (done, total) = SpeciesChecklist.completion(items)
+                    Text("$done / $total", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            items.forEach { item ->
+                var label by remember(item.id, item.label) { mutableStateOf(item.label) }
+                var notes by remember(item.id, item.notes) { mutableStateOf(item.notes) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = item.done,
+                        onCheckedChange = { checked ->
+                            searchVm.saveChecklist(job.id, items.map { if (it.id == item.id) it.copy(done = checked) else it })
+                        }
+                    )
+                    Column(Modifier.weight(1f)) {
+                        OutlinedTextField(
+                            value = label,
+                            onValueChange = { label = it },
+                            label = { Text("Item") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = batch5FieldColors()
                         )
-                        Column(Modifier.weight(1f)) {
-                            Text(item.label, color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
-                            OutlinedTextField(
-                                value = notes,
-                                onValueChange = { notes = it },
-                                label = { Text("Notes") },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = batch5FieldColors()
-                            )
-                            if (notes != item.notes) {
+                        OutlinedTextField(
+                            value = notes,
+                            onValueChange = { notes = it },
+                            label = { Text("Notes") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = batch5FieldColors()
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (label != item.label || notes != item.notes) {
                                 OutlinedButton(onClick = {
-                                    searchVm.saveChecklist(job.id, items.map { if (it.id == item.id) it.copy(notes = notes) else it })
-                                }) { Text("Save note") }
+                                    searchVm.saveChecklist(
+                                        job.id,
+                                        items.map { if (it.id == item.id) it.copy(label = label, notes = notes) else it }
+                                    )
+                                }) { Text("Save") }
                             }
+                            TextButton(onClick = {
+                                searchVm.saveChecklist(job.id, items.filterNot { it.id == item.id })
+                            }) { Text("Remove") }
                         }
                     }
                 }
             }
+            OutlinedTextField(
+                value = newLabel,
+                onValueChange = { newLabel = it },
+                label = { Text("New item") },
+                modifier = Modifier.fillMaxWidth(),
+                colors = batch5FieldColors()
+            )
+            Button(
+                onClick = {
+                    val label = newLabel.trim()
+                    if (label.isBlank()) return@Button
+                    val species = items.firstOrNull()?.species.orEmpty().ifBlank { job.confirmedSpecies.ifBlank { job.type } }
+                    searchVm.saveChecklist(
+                        job.id,
+                        items + com.strobingn.wildlifefieldops.ai.fieldops.ChecklistItemRecord(
+                            species = species,
+                            label = label
+                        )
+                    )
+                    newLabel = ""
+                },
+                enabled = newLabel.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
+            ) { Text("Add item") }
         }
     }
 
