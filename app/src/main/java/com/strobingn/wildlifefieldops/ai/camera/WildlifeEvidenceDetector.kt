@@ -125,6 +125,35 @@ object WildlifeEvidenceDetector {
         "attic staging / light" to listOf("work light", "headlamp", "staging")
     )
 
+    fun detectFromText(text: String): WildlifeEvidenceResult {
+        val tokens = text.lowercase().split(',', ';', '\n', '/', '·', '|')
+            .flatMap { it.split(' ') }
+            .map { it.trim() }
+            .filter { it.length >= 3 }
+        return detectTokens(tokens + text.lowercase(), hint = text)
+    }
+
+    fun detectTokens(tokens: List<String>, hint: String? = null): WildlifeEvidenceResult {
+        val raw = mutableListOf<String>()
+        val scored = mutableListOf<WildlifeEvidenceHit>()
+        tokens.forEach { token ->
+            val t = token.lowercase().trim()
+            if (t.isEmpty()) return@forEach
+            raw += t
+            matchLexicon(speciesLexicon, t, 0.7f, "text", WildlifeEvidenceHit.Kind.SPECIES)?.let { scored += it }
+            matchLexicon(entryLexicon, t, 0.7f, "text", WildlifeEvidenceHit.Kind.ENTRY)?.let { scored += it }
+            matchLexicon(damageLexicon, t, 0.7f, "text", WildlifeEvidenceHit.Kind.DAMAGE)?.let { scored += it }
+            matchLexicon(activityLexicon, t, 0.7f, "text", WildlifeEvidenceHit.Kind.ACTIVITY)?.let { scored += it }
+            matchLexicon(equipmentLexicon, t, 0.7f, "source", WildlifeEvidenceHit.Kind.EQUIPMENT)?.let { scored += it }
+        }
+        val hintText = hint?.lowercase().orEmpty()
+        val adjusted = scored.map { hit ->
+            val boost = if (hintText.contains(hit.label.lowercase())) 0.08f else 0f
+            hit.copy(score = (hit.score + boost).coerceAtMost(1f))
+        }
+        return fromHits(adjusted, raw)
+    }
+
     fun detect(
         labels: List<ImageLabel>,
         objects: List<DetectedObject> = emptyList(),

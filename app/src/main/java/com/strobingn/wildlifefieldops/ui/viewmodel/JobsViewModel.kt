@@ -298,6 +298,10 @@ class JobsViewModel @Inject constructor(
             nextStepDueAt = pricing.nextStepDueAt ?: existing.nextStepDueAt,
             nextStepSource = pricing.nextStepSource.ifBlank { existing.nextStepSource },
             aiRuntime = pricing.aiRuntime.ifBlank { existing.aiRuntime },
+            weatherTrapAdvice = pricing.weatherTrapAdvice.ifBlank { existing.weatherTrapAdvice },
+            followUpKind = pricing.followUpKind.ifBlank { existing.followUpKind },
+            followUpDueAt = pricing.followUpDueAt ?: existing.followUpDueAt,
+            followUpNotes = pricing.followUpNotes.ifBlank { existing.followUpNotes },
             updatedAt = System.currentTimeMillis(),
             isSynced = false
         )

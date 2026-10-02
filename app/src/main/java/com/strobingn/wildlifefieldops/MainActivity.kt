@@ -30,6 +30,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
+import androidx.navigation.navDeepLink
 import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
 import com.strobingn.wildlifefieldops.navigation.Screen
 import com.strobingn.wildlifefieldops.ui.components.BrandMark
@@ -194,6 +195,12 @@ private fun AppNavHost(
                 onNavigateToCountyReports = { navController.navigate(Screen.CountyReports.route) },
                 onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                 onNavigateToAI = { navController.navigate(Screen.AIAssistant.route) },
+                onNavigateToTrapChecks = { navController.navigate(Screen.TrapChecks.route) },
+                onNavigateToSearch = { navController.navigate(Screen.SmartSearch.route) },
+                onNavigateToInvoices = { navController.navigate(Screen.InvoiceList.route) },
+                onNavigateToMileage = { navController.navigate(Screen.MileageLog.route) },
+                onNavigateToWarranties = { navController.navigate(Screen.WarrantyList.route) },
+                onNavigateToDuplicates = { navController.navigate(Screen.DuplicateCustomers.route) },
                 onOpenDrawer = onOpenDrawer
             )
         }
@@ -205,7 +212,11 @@ private fun AppNavHost(
                 showBack = false
             )
         }
-        composable(route = Screen.JobDetail.route, arguments = listOf(navArgument("jobId") { type = NavType.StringType })) { backStackEntry ->
+        composable(
+            route = Screen.JobDetail.route,
+            arguments = listOf(navArgument("jobId") { type = NavType.StringType }),
+            deepLinks = listOf(navDeepLink { uriPattern = "fieldops://report/{jobId}" })
+        ) { backStackEntry ->
             val jobId = backStackEntry.arguments?.getString("jobId") ?: ""
             JobDetailScreen(
                 jobId = jobId,
@@ -215,6 +226,7 @@ private fun AppNavHost(
                 onNavigateToInspectionForm = { jid -> navController.navigate(Screen.InspectionForm.createRoute(jobId = jid)) },
                 onNavigateToLiveCapture = { jid -> navController.navigate(Screen.LiveCapture.createRoute(jobId = jid)) },
                 onNavigateToVoiceLog = { jid -> navController.navigate(Screen.VoiceLog.createRoute(jobId = jid)) },
+                onNavigateToTrapChecks = { navController.navigate(Screen.TrapChecks.route) },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -306,6 +318,37 @@ private fun AppNavHost(
         }
         composable(Screen.Map.route) {
             MapScreen(onBack = { navController.popBackStack() }, onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) })
+        }
+        composable(Screen.SmartSearch.route) {
+            SmartSearchScreen(
+                onBack = { navController.popBackStack() },
+                onOpenJob = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) },
+                onOpenInspection = { id -> navController.navigate(Screen.InspectionDetail.createRoute(id)) }
+            )
+        }
+        composable(Screen.TrapChecks.route) {
+            TrapCheckScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) }
+            )
+        }
+        composable(Screen.MileageLog.route) {
+            MileageLogScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Screen.InvoiceList.route) {
+            InvoiceListScreen(
+                onBack = { navController.popBackStack() },
+                onOpenJob = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) }
+            )
+        }
+        composable(Screen.WarrantyList.route) {
+            WarrantyListScreen(
+                onBack = { navController.popBackStack() },
+                onOpenJob = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) }
+            )
+        }
+        composable(Screen.DuplicateCustomers.route) {
+            DuplicateCustomerScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.CountyReports.route) {
             CountyReportScreen(onBack = { navController.popBackStack() })

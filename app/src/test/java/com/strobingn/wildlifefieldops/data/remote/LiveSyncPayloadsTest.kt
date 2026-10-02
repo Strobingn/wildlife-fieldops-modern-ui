@@ -99,7 +99,36 @@ class LiveSyncPayloadsTest {
                             quantity = 1.0,
                             unitPrice = 95.0
                         )
-                    )
+                    ),
+                    trapRecords = listOf(
+                        com.strobingn.wildlifefieldops.pricing.SyncedTrapRecord(
+                            id = "t1",
+                            trapId = "Deck-1",
+                            status = "SET"
+                        )
+                    ),
+                    weatherTrapAdvice = "Check after the rain",
+                    followUpKind = "TRAP_PULL",
+                    timerElapsedMs = 1_800_000L,
+                    paidAmount = 100.0,
+                    materialUsages = listOf(
+                        com.strobingn.wildlifefieldops.ai.fieldops.JobMaterialUsage(
+                            id = "u1",
+                            name = "One-way door",
+                            quantity = 1.0,
+                            unitCost = 28.0
+                        )
+                    ),
+                    warrantyTermMonths = 12,
+                    warrantyCovered = "Exclusion",
+                    photoAutoTags = listOf(
+                        com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag(
+                            photoId = "p1",
+                            species = "raccoon",
+                            entry = "soffit"
+                        )
+                    ),
+                    shareReportToken = "fieldops://report/11111111-1111-1111-1111-111111111111"
                 )
             )
         )
@@ -113,6 +142,20 @@ class LiveSyncPayloadsTest {
         assertEquals("raccoon", pricing.getValue("confirmedSpecies").jsonPrimitive.content)
         assertEquals("Check the deck trap", pricing.getValue("nextStep").jsonPrimitive.content)
         assertTrue("photoLineItems" in pricing.keys)
+        assertTrue("trapRecords" in pricing.keys)
+        assertEquals("Check after the rain", pricing.getValue("weatherTrapAdvice").jsonPrimitive.content)
+        assertEquals(1_800_000L, pricing.getValue("timerElapsedMs").jsonPrimitive.content.toLong())
+        assertTrue("materialUsages" in pricing.keys)
+        assertEquals("Exclusion", pricing.getValue("warrantyCovered").jsonPrimitive.content)
+        assertFalse("weather_trap_advice" in encoded.keys)
+        assertFalse("trap_logs" in encoded.keys)
+        assertFalse("timer_elapsed_ms" in encoded.keys)
+        assertFalse("paid_amount" in encoded.keys)
+        assertFalse("warranty_covered" in encoded.keys)
+        assertFalse("material_usages" in encoded.keys)
+        assertTrue("photoAutoTags" in pricing.keys)
+        assertFalse("photo_auto_tags" in encoded.keys)
+        assertFalse("share_report_token" in encoded.keys)
     }
 
     @Test

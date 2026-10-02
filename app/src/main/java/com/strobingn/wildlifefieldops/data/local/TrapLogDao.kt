@@ -12,6 +12,15 @@ interface TrapLogDao {
     @Query("SELECT * FROM trap_logs WHERE jobId = :jobId ORDER BY checkDate DESC")
     fun getByJob(jobId: String): Flow<List<TrapLog>>
 
+    @Query("SELECT * FROM trap_logs ORDER BY checkDate DESC")
+    suspend fun getAllOnce(): List<TrapLog>
+
+    @Query("SELECT * FROM trap_logs WHERE jobId = :jobId ORDER BY checkDate DESC")
+    suspend fun getByJobOnce(jobId: String): List<TrapLog>
+
+    @Query("SELECT * FROM trap_logs WHERE id = :id")
+    suspend fun getById(id: String): TrapLog?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(trapLog: TrapLog)
 

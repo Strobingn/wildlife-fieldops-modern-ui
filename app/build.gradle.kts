@@ -22,7 +22,7 @@ android {
         // Local/dev installs keep this hand-set code. GitHub Actions overrides with
         // 1_000_000 + GITHUB_RUN_NUMBER so branch APKs never VERSION_DOWNGRADE (48/49/50+).
         versionCode = 50
-        versionName = "2.5.2-manual-entry"
+        versionName = "2.5.4-ai-batches2-5"
         buildConfigField("String", "UPDATE_RELEASE_TAG", "\"debug-latest\"")
         buildConfigField("String", "UPDATE_CHANNEL", "\"main\"")
         buildConfigField("String", "CI_SIGNER_SHA256", "\"EC:75:D0:BC:BC:62:30:6B:0C:38:91:76:9E:05:4C:EB:C7:7C:6A:84:4D:11:9B:40:18:B9:0C:7E:F7:57:0C:A6\"")
@@ -238,6 +238,7 @@ dependencies {
     implementation("io.ktor:ktor-client-android:2.3.12")
 
     implementation("com.google.code.gson:gson:2.10.1")
+    implementation("com.google.zxing:core:3.5.3")
 
     // On-device generative LLM (llama.cpp + abliterated Qwen2.5-3B/7B GGUF)
     implementation("dev.ffmpegkit-maintained:llama-android:0.1.1")

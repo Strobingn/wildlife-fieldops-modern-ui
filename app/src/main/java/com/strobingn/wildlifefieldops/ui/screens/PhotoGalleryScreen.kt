@@ -40,11 +40,15 @@ import java.util.*
 @Composable
 fun PhotoGalleryScreen(
     onBack: () -> Unit,
-    viewModel: PhotosViewModel = hiltViewModel()
+    viewModel: PhotosViewModel = hiltViewModel(),
+    searchVm: com.strobingn.wildlifefieldops.ui.viewmodel.SearchFieldOpsViewModel = hiltViewModel()
 ) {
     val photos by viewModel.photos.collectAsState()
+    val jobs by searchVm.jobs.collectAsState()
     val context = LocalContext.current
     var selectedTab by remember { mutableStateOf(0) }
+    var tagFilter by remember { mutableStateOf("") }
+    var editing by remember { mutableStateOf<Photo?>(null) }
     val tabs = listOf("All" to null, "Inspections" to PhotoCategory.INSPECTION, "Jobs" to PhotoCategory.JOB_SITE,
         "Evidence" to PhotoCategory.EVIDENCE, "Docs" to PhotoCategory.DOCUMENT)
 
@@ -67,11 +71,13 @@ fun PhotoGalleryScreen(
         }
     }
 
-    val filteredPhotos = if (selectedTab == 0) {
-        photos
-    } else {
-        val targetCategory = tabs[selectedTab].second
-        photos.filter { it.category == targetCategory }
+    val filteredPhotos = photos.filter { photo ->
+        val categoryOk = selectedTab == 0 || photo.category == tabs[selectedTab].second
+        val jobTags = jobs.firstOrNull { it.id == photo.jobId }?.pricing?.photoAutoTags.orEmpty()
+            .firstOrNull { it.photoId == photo.id }
+        val tagHay = listOf(photo.description, jobTags?.asDescription().orEmpty()).joinToString(" ")
+        val tagOk = tagFilter.isBlank() || tagHay.contains(tagFilter, ignoreCase = true)
+        categoryOk && tagOk
     }
 
     Scaffold(
@@ -131,6 +137,21 @@ fun PhotoGalleryScreen(
                 }
             }
 
+            OutlinedTextField(
+                value = tagFilter,
+                onValueChange = { tagFilter = it },
+                label = { Text("Filter tags (species, damage, entry)") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = PrimaryGreen,
+                    unfocusedBorderColor = BorderDark,
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary
+                )
+            )
+
             if (photos.isEmpty()) {
                 EmptyState(
                     icon = {
@@ -171,7 +192,8 @@ fun PhotoGalleryScreen(
                         FadeSlideIn {
                             PhotoGridItem(
                                 photo = photo,
-                                onDelete = { viewModel.deletePhoto(photo) }
+                                onDelete = { viewModel.deletePhoto(photo) },
+                                onClick = { editing = photo }
                             )
                         }
                     }
@@ -179,10 +201,102 @@ fun PhotoGalleryScreen(
             }
         }
     }
+    editing?.let { photo ->
+        PhotoTagDialog(
+            photo = photo,
+            jobPhotos = photos.filter { it.jobId == photo.jobId && it.id != photo.id },
+            existing = jobs.firstOrNull { it.id == photo.jobId }?.pricing?.photoAutoTags?.firstOrNull { it.photoId == photo.id },
+            onDismiss = { editing = null },
+            onSaveTags = { tag ->
+                searchVm.savePhotoTag(photo, tag)
+                editing = null
+            },
+            onPair = { otherId, notes ->
+                val jobId = photo.jobId.orEmpty()
+                if (jobId.isNotBlank()) {
+                    searchVm.savePair(
+                        jobId,
+                        com.strobingn.wildlifefieldops.ai.fieldops.BeforeAfterPair.pair(photo.id, otherId, notes)
+                    )
+                }
+                editing = null
+            },
+            suggest = { searchVm.suggestTags(it) }
+        )
+    }
 }
 
 @Composable
-private fun PhotoGridItem(photo: Photo, onDelete: () -> Unit) {
+private fun PhotoTagDialog(
+    photo: Photo,
+    jobPhotos: List<Photo>,
+    existing: com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag?,
+    onDismiss: () -> Unit,
+    onSaveTags: (com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag) -> Unit,
+    onPair: (String, String) -> Unit,
+    suggest: (String) -> com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag
+) {
+    val seed = existing ?: suggest(photo.description)
+    var species by remember { mutableStateOf(seed.species) }
+    var damage by remember { mutableStateOf(seed.damage) }
+    var entry by remember { mutableStateOf(seed.entry) }
+    var extra by remember { mutableStateOf(seed.extra) }
+    var pairNotes by remember { mutableStateOf("") }
+    var pairId by remember { mutableStateOf(jobPhotos.firstOrNull()?.id.orEmpty()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Photo tags") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    val ai = suggest(listOf(photo.description, species, damage, entry).joinToString(" "))
+                    if (species.isBlank()) species = ai.species
+                    if (damage.isBlank()) damage = ai.damage
+                    if (entry.isBlank()) entry = ai.entry
+                    if (extra.isBlank()) extra = ai.extra
+                }) { Text("Suggest from photo notes") }
+                OutlinedTextField(value = species, onValueChange = { species = it }, label = { Text("Species") })
+                OutlinedTextField(value = damage, onValueChange = { damage = it }, label = { Text("Damage") })
+                OutlinedTextField(value = entry, onValueChange = { entry = it }, label = { Text("Entry") })
+                OutlinedTextField(value = extra, onValueChange = { extra = it }, label = { Text("Extra") })
+                if (jobPhotos.isNotEmpty()) {
+                    Text("Pair as before → after", style = MaterialTheme.typography.labelMedium)
+                    OutlinedTextField(value = pairId, onValueChange = { pairId = it }, label = { Text("After photo id") })
+                    jobPhotos.take(6).forEach { other ->
+                        TextButton(onClick = { pairId = other.id }) {
+                            Text(other.description.ifBlank { other.id.take(8) })
+                        }
+                    }
+                    OutlinedTextField(value = pairNotes, onValueChange = { pairNotes = it }, label = { Text("Pair notes") })
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onSaveTags(
+                    com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag(
+                        photoId = photo.id,
+                        species = species,
+                        damage = damage,
+                        entry = entry,
+                        extra = extra
+                    )
+                )
+            }) { Text("Save tags") }
+        },
+        dismissButton = {
+            Row {
+                if (pairId.isNotBlank() && photo.jobId != null) {
+                    TextButton(onClick = { onPair(pairId, pairNotes) }) { Text("Pair") }
+                }
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
+        }
+    )
+}
+
+@Composable
+private fun PhotoGridItem(photo: Photo, onDelete: () -> Unit, onClick: () -> Unit = {}) {
     val categoryColor = when (photo.category) {
         PhotoCategory.INSPECTION -> AccentBlue
         PhotoCategory.JOB_SITE -> PrimaryGreen
@@ -199,7 +313,8 @@ private fun PhotoGridItem(photo: Photo, onDelete: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1f),
+            .aspectRatio(1f)
+            .clickable { onClick() },
         colors = CardDefaults.cardColors(containerColor = BackgroundCard),
         shape = RoundedCornerShape(12.dp)
     ) {

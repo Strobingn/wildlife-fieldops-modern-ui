@@ -45,6 +45,12 @@ fun DashboardScreen(
     onNavigateToCountyReports: () -> Unit = {},
     onNavigateToSettings: () -> Unit,
     onNavigateToAI: () -> Unit,
+    onNavigateToTrapChecks: () -> Unit = {},
+    onNavigateToSearch: () -> Unit = {},
+    onNavigateToInvoices: () -> Unit = {},
+    onNavigateToMileage: () -> Unit = {},
+    onNavigateToWarranties: () -> Unit = {},
+    onNavigateToDuplicates: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
@@ -52,7 +58,14 @@ fun DashboardScreen(
     val recentJobs by viewModel.recentJobs.collectAsState()
     val reminders by viewModel.pendingReminders.collectAsState()
     val dueNextSteps by viewModel.dueNextSteps.collectAsState()
+    val dueTrapChecks by viewModel.dueTrapChecks.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val moneyVm: com.strobingn.wildlifefieldops.ui.viewmodel.MoneyFieldOpsViewModel = hiltViewModel()
+    val moneyInvoices by moneyVm.invoices.collectAsState()
+    val moneyJobs by moneyVm.jobs.collectAsState()
+    val customerOpsVm: com.strobingn.wildlifefieldops.ui.viewmodel.CustomerFieldOpsViewModel = hiltViewModel()
+    val expiringWarranties by customerOpsVm.warranties.collectAsState()
+    val duplicateMatches by customerOpsVm.duplicates.collectAsState()
     val weatherVm: LiveWeatherViewModel = hiltViewModel()
     val weatherState by weatherVm.state.collectAsState()
     LaunchedEffect(Unit) { weatherVm.loadShopWeather() }
@@ -333,6 +346,44 @@ fun DashboardScreen(
                 }
             }
 
+            item {
+                val today = remember(moneyInvoices, moneyJobs) { moneyVm.earningsToday() }
+                val week = remember(moneyInvoices, moneyJobs) { moneyVm.earningsWeek() }
+                SectionHeader(title = "Earnings")
+                Spacer(modifier = Modifier.height(4.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = BackgroundCard),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "Today  paid $${"%.0f".format(today.paid)} · invoiced $${"%.0f".format(today.invoiced)} · estimated $${"%.0f".format(today.estimated)}",
+                            color = TextSecondary,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            "This week  paid $${"%.0f".format(week.paid)} · invoiced $${"%.0f".format(week.invoiced)} · estimated $${"%.0f".format(week.estimated)}",
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = onNavigateToInvoices) { Text("Invoices", color = PrimaryGreen) }
+                            TextButton(onClick = onNavigateToMileage) { Text("Mileage", color = PrimaryGreen) }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = onNavigateToWarranties) {
+                                Text("Warranties (${expiringWarranties.size})", color = PrimaryGreen)
+                            }
+                            TextButton(onClick = onNavigateToDuplicates) {
+                                Text("Duplicates (${duplicateMatches.size})", color = PrimaryGreen)
+                            }
+                            TextButton(onClick = onNavigateToSearch) { Text("Search", color = PrimaryGreen) }
+                        }
+                    }
+                }
+            }
+
             // ── Quick actions ─────────────────────────────────────────────
             item {
                 SectionHeader(title = "Quick actions")
@@ -389,6 +440,42 @@ fun DashboardScreen(
                             job = job,
                             onClick = { onNavigateToJobDetail(job.id) }
                         )
+                    }
+                }
+            }
+
+            if (dueTrapChecks.isNotEmpty()) {
+                item {
+                    SectionHeader(title = "Trap checks due")
+                }
+                items(dueTrapChecks) { item ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (item.trap.jobId.isNotBlank()) onNavigateToJobDetail(item.trap.jobId)
+                                else onNavigateToTrapChecks()
+                            },
+                        colors = CardDefaults.cardColors(containerColor = BackgroundCard),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                item.trap.trapId.ifBlank { "Trap" } + " · " + item.trap.status.name.replace('_', ' '),
+                                color = TextPrimary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            if (item.jobTitle.isNotBlank()) {
+                                Text(item.jobTitle, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                            } else if (item.trap.trapLocation.isNotBlank()) {
+                                Text(item.trap.trapLocation, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                            }
+                            Text(
+                                item.dueState.name.replace('_', ' '),
+                                color = TextTertiary,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
                     }
                 }
             }

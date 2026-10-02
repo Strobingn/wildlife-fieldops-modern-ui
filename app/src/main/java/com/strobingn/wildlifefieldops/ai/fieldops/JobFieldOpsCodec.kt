@@ -3,6 +3,7 @@ package com.strobingn.wildlifefieldops.ai.fieldops
 import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.pricing.JobPricing
+import com.strobingn.wildlifefieldops.pricing.SyncedTrapRecord
 
 /**
  * Field-ops extras live on [Job] columns (Room query/UI) and inside
@@ -20,7 +21,16 @@ object JobFieldOpsCodec {
             nextStepDueAt = job.nextStepDueAt ?: fromPricing.nextStepDueAt,
             nextStepSource = job.nextStepSource.ifBlank { fromPricing.nextStepSource },
             aiRuntime = job.aiRuntime.ifBlank { fromPricing.aiRuntime },
-            photoLineItems = job.pricing.photoLineItems.ifEmpty { fromPricing.photoLineItems }
+            photoLineItems = job.pricing.photoLineItems.ifEmpty { fromPricing.photoLineItems },
+            trapRecords = job.pricing.trapRecords.ifEmpty { fromPricing.trapRecords },
+            weatherTrapAdvice = job.weatherTrapAdvice.ifBlank { fromPricing.weatherTrapAdvice },
+            weatherTrapAdviceAt = job.pricing.weatherTrapAdviceAt ?: fromPricing.weatherTrapAdviceAt,
+            weatherTrapAdviceSource = job.pricing.weatherTrapAdviceSource.ifBlank { fromPricing.weatherTrapAdviceSource },
+            followUpKind = job.followUpKind.ifBlank { fromPricing.followUpKind },
+            followUpDueAt = job.followUpDueAt ?: fromPricing.followUpDueAt,
+            followUpNotes = job.followUpNotes.ifBlank { fromPricing.followUpNotes },
+            followUpVisitId = job.pricing.followUpVisitId.ifBlank { fromPricing.followUpVisitId },
+            followUpReminderId = job.pricing.followUpReminderId.ifBlank { fromPricing.followUpReminderId }
         )
         return job.copy(
             confirmedSpecies = extras.confirmedSpecies,
@@ -29,6 +39,10 @@ object JobFieldOpsCodec {
             nextStepDueAt = extras.nextStepDueAt,
             nextStepSource = extras.nextStepSource,
             aiRuntime = extras.aiRuntime,
+            weatherTrapAdvice = extras.weatherTrapAdvice,
+            followUpKind = extras.followUpKind,
+            followUpDueAt = extras.followUpDueAt,
+            followUpNotes = extras.followUpNotes,
             pricing = embed(job.pricing, extras)
         )
     }
@@ -41,7 +55,11 @@ object JobFieldOpsCodec {
             nextStep = job.nextStep.ifBlank { extras.nextStep },
             nextStepDueAt = job.nextStepDueAt ?: extras.nextStepDueAt,
             nextStepSource = job.nextStepSource.ifBlank { extras.nextStepSource },
-            aiRuntime = job.aiRuntime.ifBlank { extras.aiRuntime }
+            aiRuntime = job.aiRuntime.ifBlank { extras.aiRuntime },
+            weatherTrapAdvice = job.weatherTrapAdvice.ifBlank { extras.weatherTrapAdvice },
+            followUpKind = job.followUpKind.ifBlank { extras.followUpKind },
+            followUpDueAt = job.followUpDueAt ?: extras.followUpDueAt,
+            followUpNotes = job.followUpNotes.ifBlank { extras.followUpNotes }
         )
     }
 
@@ -52,7 +70,16 @@ object JobFieldOpsCodec {
         nextStepDueAt = extras.nextStepDueAt,
         nextStepSource = extras.nextStepSource,
         aiRuntime = extras.aiRuntime,
-        photoLineItems = extras.photoLineItems.ifEmpty { pricing.photoLineItems }
+        photoLineItems = extras.photoLineItems.ifEmpty { pricing.photoLineItems },
+        trapRecords = extras.trapRecords.ifEmpty { pricing.trapRecords },
+        weatherTrapAdvice = extras.weatherTrapAdvice,
+        weatherTrapAdviceAt = extras.weatherTrapAdviceAt,
+        weatherTrapAdviceSource = extras.weatherTrapAdviceSource,
+        followUpKind = extras.followUpKind,
+        followUpDueAt = extras.followUpDueAt,
+        followUpNotes = extras.followUpNotes,
+        followUpVisitId = extras.followUpVisitId,
+        followUpReminderId = extras.followUpReminderId
     )
 
     fun extract(pricing: JobPricing): JobFieldOps = JobFieldOps(
@@ -62,7 +89,16 @@ object JobFieldOpsCodec {
         nextStepDueAt = pricing.nextStepDueAt,
         nextStepSource = pricing.nextStepSource,
         aiRuntime = pricing.aiRuntime,
-        photoLineItems = pricing.photoLineItems
+        photoLineItems = pricing.photoLineItems,
+        trapRecords = pricing.trapRecords,
+        weatherTrapAdvice = pricing.weatherTrapAdvice,
+        weatherTrapAdviceAt = pricing.weatherTrapAdviceAt,
+        weatherTrapAdviceSource = pricing.weatherTrapAdviceSource,
+        followUpKind = pricing.followUpKind,
+        followUpDueAt = pricing.followUpDueAt,
+        followUpNotes = pricing.followUpNotes,
+        followUpVisitId = pricing.followUpVisitId,
+        followUpReminderId = pricing.followUpReminderId
     )
 }
 
@@ -73,5 +109,14 @@ data class JobFieldOps(
     val nextStepDueAt: Long? = null,
     val nextStepSource: String = "",
     val aiRuntime: String = "",
-    val photoLineItems: List<InvoiceLineItem> = emptyList()
+    val photoLineItems: List<InvoiceLineItem> = emptyList(),
+    val trapRecords: List<SyncedTrapRecord> = emptyList(),
+    val weatherTrapAdvice: String = "",
+    val weatherTrapAdviceAt: Long? = null,
+    val weatherTrapAdviceSource: String = "",
+    val followUpKind: String = "",
+    val followUpDueAt: Long? = null,
+    val followUpNotes: String = "",
+    val followUpVisitId: String = "",
+    val followUpReminderId: String = ""
 )

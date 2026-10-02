@@ -57,5 +57,11 @@ data class Job(
     val nextStepDueAt: Long? = null,
     val nextStepSource: String = "",
     /** Last AI runtime used on this job: cloud / on_device / heuristic. */
-    val aiRuntime: String = ""
+    val aiRuntime: String = "",
+    /** Weather-aware trap-check advice Sir accepted or rewrote. */
+    val weatherTrapAdvice: String = "",
+    /** Follow-up visit kind: WARRANTY / EXCLUSION / TRAP_PULL. */
+    val followUpKind: String = "",
+    val followUpDueAt: Long? = null,
+    val followUpNotes: String = ""
 )

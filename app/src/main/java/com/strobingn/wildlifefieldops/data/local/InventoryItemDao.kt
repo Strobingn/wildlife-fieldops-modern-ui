@@ -12,6 +12,9 @@ interface InventoryItemDao {
     @Query("SELECT * FROM inventory_items WHERE id = :id")
     suspend fun getById(id: String): InventoryItem?
 
+    @Query("SELECT * FROM inventory_items WHERE isActive = 1 ORDER BY name")
+    suspend fun getAllOnce(): List<InventoryItem>
+
     @Query("SELECT * FROM inventory_items WHERE category = :category ORDER BY name")
     fun getByCategory(category: String): Flow<List<InventoryItem>>
 
