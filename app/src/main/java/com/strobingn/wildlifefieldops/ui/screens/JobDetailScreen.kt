@@ -49,6 +49,8 @@ fun JobDetailScreen(
     onNavigateToVoiceLog: (String) -> Unit,
     onNavigateToTrapChecks: () -> Unit = {},
     onNavigateToInspection: (String) -> Unit = {},
+    onNavigateToJob: (String) -> Unit = {},
+    onNavigateToTodayRoute: () -> Unit = {},
     onBack: () -> Unit,
     viewModel: JobsViewModel = hiltViewModel(),
     workspaceViewModel: JobWorkspaceViewModel = hiltViewModel(),
@@ -73,6 +75,7 @@ fun JobDetailScreen(
     val weatherState by weatherVm.state.collectAsState()
     val allTraps by trapCheckViewModel.traps.collectAsState()
     val allInspections by inspectionsViewModel.inspections.collectAsState()
+    val allJobs by viewModel.jobs.collectAsState()
 
     var showStatusDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -296,7 +299,18 @@ fun JobDetailScreen(
                     onSearchQueryChange = workspaceViewModel::searchCustomers,
                     matches = customerMatches,
                     onPickCustomer = workspaceViewModel::applyCustomer,
-                    onNewCustomer = workspaceViewModel::startNewCustomer
+                    onNewCustomer = workspaceViewModel::startNewCustomer,
+                    trailing = {
+                        JobReachCustomerCard(
+                            name = customerDraft.name.ifBlank { currentJob.customerName },
+                            phone = customerDraft.phone
+                        )
+                        RepeatCustomerHistoryCard(
+                            current = currentJob,
+                            jobs = allJobs,
+                            onOpen = onNavigateToJob
+                        )
+                    }
                 )
                 Button(
                     onClick = { workspaceViewModel.saveCustomerOnJob(currentJob) },
@@ -324,6 +338,21 @@ fun JobDetailScreen(
                         fontWeight = FontWeight.Bold
                     )
                 }
+
+                JobStatusPipelineCard(
+                    job = currentJob,
+                    onSetStatus = { viewModel.updateJobStatus(currentJob.id, it) }
+                )
+                TextButton(onClick = onNavigateToTodayRoute) {
+                    Text("Today's route", color = PrimaryGreen)
+                }
+                JobPaymentsCard(job = currentJob, onSave = { viewModel.saveJobExtras(currentJob.id, it) })
+                JobExclusionCard(job = currentJob, onSave = { viewModel.saveJobExtras(currentJob.id, it) })
+                JobSignatureCard(
+                    job = currentJob,
+                    customerName = customerDraft.name.ifBlank { currentJob.customerName },
+                    onSave = { viewModel.saveJobExtras(currentJob.id, it) }
+                )
 
                 // Job Details
                 InfoCard(title = "Job Details") {
@@ -686,7 +715,7 @@ fun JobDetailScreen(
                 title = { Text("Change Status", color = TextPrimary) },
                 text = {
                     Column {
-                        JobStatus.entries.forEach { status ->
+                        com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.stages.forEach { status ->
                             TextButton(
                                 onClick = {
                                     viewModel.updateJobStatus(currentJob.id, status)
@@ -694,7 +723,10 @@ fun JobDetailScreen(
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text(status.name.replace("_", " "), color = TextPrimary)
+                                Text(
+                                    com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.label(status),
+                                    color = TextPrimary
+                                )
                             }
                         }
                     }
@@ -742,21 +774,18 @@ fun JobDetailScreen(
 
 @Composable
 private fun StatusBadge(status: JobStatus) {
-    val color = when (status) {
-        JobStatus.PENDING -> StatusPending
-        JobStatus.IN_PROGRESS -> AccentBlue
-        JobStatus.COMPLETED -> SuccessGreen
-        JobStatus.CANCELLED -> ErrorRed
-        JobStatus.INVOICED -> AccentPurple
-        JobStatus.PAID -> PrimaryGreen
-    }
+    val color = jobStatusColor(status)
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(16.dp))
             .background(color.copy(alpha = 0.15f))
             .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {
-        Text(status.name.replace("_", " "), style = MaterialTheme.typography.labelSmall, color = color)
+        Text(
+            com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.label(status),
+            style = MaterialTheme.typography.labelSmall,
+            color = color
+        )
     }
 }
 

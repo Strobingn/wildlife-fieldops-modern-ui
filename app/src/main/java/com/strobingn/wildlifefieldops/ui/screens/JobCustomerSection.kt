@@ -70,7 +70,8 @@ fun JobCustomerSection(
     matches: List<Customer>,
     onPickCustomer: (Customer) -> Unit,
     onNewCustomer: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    trailing: @Composable () -> Unit = {}
 ) {
     val context = LocalContext.current
     var showPreferred by remember { mutableStateOf(false) }
@@ -342,7 +343,7 @@ fun JobCustomerSection(
                 }
             }
 
-            Spacer(modifier = Modifier.size(0.dp))
+            trailing()
         }
     }
 }

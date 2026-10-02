@@ -421,6 +421,31 @@ fun InvoiceScreen(
                         },
                         emphasized = true
                     )
+                    val recorded = job?.pricing?.payments.orEmpty()
+                    val balance = com.strobingn.wildlifefieldops.ai.fieldops.PaymentLedger.balanceDue(
+                        priced.total.effective,
+                        recorded
+                    )
+                    Text(
+                        "Paid ${com.strobingn.wildlifefieldops.pricing.Money.formatUsd(com.strobingn.wildlifefieldops.ai.fieldops.PaymentLedger.totalPaid(recorded))} · Balance due ${com.strobingn.wildlifefieldops.pricing.Money.formatUsd(balance)}",
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Medium
+                    )
+                    job?.let { current ->
+                        OutlinedButton(
+                            onClick = {
+                                val path = com.strobingn.wildlifefieldops.util.WildlifeWhispererReceiptPdf.generate(
+                                    context,
+                                    current,
+                                    priced.total.effective,
+                                    recorded
+                                )
+                                WildlifeWhispererContractPdf.share(context, path, "Share receipt")
+                            },
+                            enabled = recorded.isNotEmpty(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Share receipt PDF") }
+                    }
                 }
             }
 
@@ -481,6 +506,10 @@ fun InvoiceScreen(
                 Button(
                     onClick = {
                         job?.let { currentJob ->
+                            val contractSig = com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules
+                                .find(currentJob.pricing, com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.CONTRACT)
+                                ?: com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules
+                                    .find(currentJob.pricing, com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.ESTIMATE)
                             pdfPath = generateInvoicePDF(
                                 context = context,
                                 job = currentJob,
@@ -494,6 +523,13 @@ fun InvoiceScreen(
                                 terms = terms,
                                 technicianSignature = technicianSignature,
                                 customerSignature = customerSignature
+                                    ?: com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(contractSig?.pngBase64.orEmpty()),
+                                customerSignerName = contractSig?.signerName.orEmpty(),
+                                customerSignedAtMillis = contractSig?.signedAt,
+                                balanceDue = com.strobingn.wildlifefieldops.ai.fieldops.PaymentLedger.balanceDue(
+                                    total,
+                                    currentJob.pricing.payments
+                                )
                             )
                             showPdfShare = true
                         }
@@ -791,7 +827,10 @@ private fun generateInvoicePDF(
     notes: String,
     terms: String,
     technicianSignature: Bitmap?,
-    customerSignature: Bitmap?
+    customerSignature: Bitmap?,
+    customerSignerName: String = "",
+    customerSignedAtMillis: Long? = null,
+    balanceDue: Double? = null
 ): String {
     // terms retained for call-site compatibility; acceptance blurb lives in shared contract PDF
     @Suppress("UNUSED_PARAMETER")
@@ -808,7 +847,10 @@ private fun generateInvoicePDF(
         total = total,
         notes = notes,
         technicianSignature = technicianSignature,
-        customerSignature = customerSignature
+        customerSignature = customerSignature,
+        customerSignerName = customerSignerName,
+        customerSignedAtMillis = customerSignedAtMillis,
+        balanceDue = balanceDue
     )
 }
 

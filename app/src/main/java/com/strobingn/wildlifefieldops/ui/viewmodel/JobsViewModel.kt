@@ -51,12 +51,12 @@ class JobsViewModel @Inject constructor(
     val jobs = combine(_searchQuery, _selectedStatus) { query, status ->
         Pair(query, status)
     }.flatMapLatest { (query, status) ->
-        when {
-            query.isNotBlank() -> jobDao.search(query)
-            status != null -> jobDao.getByStatus(status)
-            else -> jobDao.getAll()
+        val source = if (query.isNotBlank()) jobDao.search(query) else jobDao.getAll()
+        source.map { list ->
+            list.filterNot { com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger.isLedger(it) }
+                .filter { status == null || com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.matches(it.status, status) }
         }
-    }.map { list -> list.filterNot { com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger.isLedger(it) } }
+    }
     .onEach { _isLoading.value = false }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -212,18 +212,41 @@ class JobsViewModel @Inject constructor(
         job?.let {
             val now = System.currentTimeMillis()
             val completedDate = when {
-                status == JobStatus.COMPLETED && it.completedDate == null -> now
+                status.isWorkDone() && it.completedDate == null -> now
                 else -> it.completedDate
             }
             jobDao.update(
-                it.copy(
-                    status = status,
-                    completedDate = completedDate,
-                    updatedAt = now,
-                    isSynced = false
+                JobFieldOpsCodec.mergeForSave(
+                    it.copy(
+                        status = status,
+                        completedDate = completedDate,
+                        updatedAt = now,
+                        isSynced = false,
+                        pricing = com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.stamp(it.pricing, status)
+                    )
                 )
             )
         }
+    }
+
+    /**
+     * Persist pricing extras (signature, payments, exclusion, route) without
+     * wiping a typed estimate when the money worksheet total is still zero.
+     */
+    fun saveJobExtras(jobId: String, pricing: JobPricing) = viewModelScope.launch {
+        val existing = jobDao.getById(jobId) ?: return@launch
+        val quote = PricingCalculator.compute(pricing)
+        val estimate = quote.total.effective.takeIf { it > 0.0 } ?: existing.estimatedValue
+        jobDao.insert(
+            JobFieldOpsCodec.mergeForSave(
+                existing.copy(
+                    pricing = pricing,
+                    estimatedValue = estimate,
+                    updatedAt = System.currentTimeMillis(),
+                    isSynced = false
+                )
+            )
+        )
     }
 
     fun createJob(

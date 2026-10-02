@@ -115,14 +115,14 @@ fun JobListScreen(
                         )
                     )
                 }
-                items(JobStatus.entries) { status ->
+                items(com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.stages) { status ->
                     val selected = selectedStatus == status
                     FilterChip(
                         selected = selected,
                         onClick = {
                             viewModel.setStatusFilter(if (selected) null else status)
                         },
-                        label = { Text(status.name.replace("_", " ")) },
+                        label = { Text(com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.label(status)) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
                             selectedLabelColor = MaterialTheme.colorScheme.primary
@@ -181,14 +181,7 @@ fun JobListScreen(
 
 @Composable
 private fun JobListItem(job: Job, onClick: () -> Unit) {
-    val statusColor = when (job.status) {
-        JobStatus.PENDING -> StatusPending
-        JobStatus.IN_PROGRESS -> AccentBlue
-        JobStatus.COMPLETED -> SuccessGreen
-        JobStatus.CANCELLED -> ErrorRed
-        JobStatus.INVOICED -> AccentPurple
-        JobStatus.PAID -> PrimaryGreen
-    }
+    val statusColor = jobStatusColor(job.status)
 
     FieldCard(
         onClick = onClick,
@@ -217,7 +210,7 @@ private fun JobListItem(job: Job, onClick: () -> Unit) {
             }
             Column(horizontalAlignment = Alignment.End) {
                 StatusChip(
-                    text = job.status.name.replace("_", " "),
+                    text = com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.label(job.status),
                     color = statusColor
                 )
                 if (!job.syncError.isNullOrBlank()) {

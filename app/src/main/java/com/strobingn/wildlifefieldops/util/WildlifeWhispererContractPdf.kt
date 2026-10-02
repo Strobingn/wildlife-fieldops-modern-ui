@@ -61,7 +61,10 @@ object WildlifeWhispererContractPdf {
         technicianName: String = "",
         documentNumber: String = "",
         technicianSignature: Bitmap? = null,
-        customerSignature: Bitmap? = null
+        customerSignature: Bitmap? = null,
+        customerSignerName: String = "",
+        customerSignedAtMillis: Long? = null,
+        balanceDue: Double? = null
     ): String {
         val pdf = PdfDocument()
         val anti = Paint().apply { isAntiAlias = true }
@@ -274,6 +277,9 @@ object WildlifeWhispererContractPdf {
         c.drawLine(360f, y - 3f, CONTENT_RIGHT, y - 3f, hairline)
         y += 2f
         drawMoneyRow("Grand-Total:", total, bold = true)
+        if (balanceDue != null) {
+            drawMoneyRow("Balance Due:", balanceDue, bold = true)
+        }
         y += 10f
 
         // —— Signatures ——
@@ -285,6 +291,12 @@ object WildlifeWhispererContractPdf {
         if (customerSignature != null) {
             val scaled = Bitmap.createScaledBitmap(customerSignature, 160, 42, true)
             c.drawBitmap(scaled, MARGIN + 100f, y - 44f, null)
+        } else if (customerSignerName.isNotBlank()) {
+            val script = Paint(labelPaint).apply {
+                typeface = Typeface.create(Typeface.SERIF, Typeface.ITALIC)
+                textSize = 14f
+            }
+            c.drawText(customerSignerName, MARGIN + 110f, y - 8f, script)
         }
         c.drawText("Owner Signature:", MARGIN, y, labelPaint)
         val ownerLineStart = MARGIN + labelPaint.measureText("Owner Signature:") + 6f
@@ -292,6 +304,12 @@ object WildlifeWhispererContractPdf {
         c.drawText("Date:", ownerLineStart + sigLineW + 12f, y, labelPaint)
         val ownerDateStart = ownerLineStart + sigLineW + 12f + labelPaint.measureText("Date:") + 4f
         c.drawLine(ownerDateStart, y + 1f, ownerDateStart + dateLineW, y + 1f, lightHairline)
+        if (customerSignedAtMillis != null && customerSignedAtMillis > 0L) {
+            c.drawText(dateFormat.format(Date(customerSignedAtMillis)), ownerDateStart, y - 3f, smallPaint)
+        }
+        if (customerSignerName.isNotBlank()) {
+            c.drawText(customerSignerName, ownerLineStart, y + 12f, smallPaint)
+        }
         y += 28f
 
         if (technicianSignature != null) {

@@ -102,7 +102,7 @@ object AIOperationsEngine {
                 .map(::pricingInsight)
                 .sortedByDescending { kotlin.math.abs(it.variance) }
                 .take(20),
-            routePriorities = jobs.filter { it.status != JobStatus.COMPLETED && it.status != JobStatus.PAID }
+            routePriorities = jobs.filter { it.status.isWorkOpen() || it.status == JobStatus.INVOICED }
                 .map(::routePriority)
                 .sortedByDescending { it.score }
                 .take(20),
@@ -119,8 +119,8 @@ object AIOperationsEngine {
      */
     private fun advancedInsights(jobs: List<Job>): List<AdvancedInsight> {
         val now = System.currentTimeMillis()
-        val open = jobs.filter { it.status != JobStatus.COMPLETED && it.status != JobStatus.PAID && it.status != JobStatus.CANCELLED }
-        val completed = jobs.filter { it.status == JobStatus.COMPLETED || it.status == JobStatus.PAID }
+        val open = jobs.filter { it.status.isWorkOpen() }
+        val completed = jobs.filter { it.status.isWorkDone() }
         val overdue = open.count { it.scheduledDate?.let { date -> date < now } == true }
         val unscheduled = open.count { it.scheduledDate == null }
         val missingPhotos = completed.count { it.photos.isEmpty() }
@@ -318,7 +318,7 @@ object AIOperationsEngine {
     }
 
     private fun businessInsight(jobs: List<Job>): BusinessInsight {
-        val completed = jobs.count { it.status == JobStatus.COMPLETED || it.status == JobStatus.PAID }
+        val completed = jobs.count { it.status.isWorkDone() }
         val quoted = jobs.sumOf { it.estimatedValue }
         val actual = jobs.sumOf { it.actualCost }
         val averageTicket = if (jobs.isEmpty()) 0.0 else quoted / jobs.size
@@ -378,8 +378,8 @@ object AIOperationsEngine {
             if (job.customerName.isBlank()) add("customer")
             if (job.description.isBlank()) add("description")
             if (job.estimatedValue <= 0.0) add("estimate")
-            if ((job.status == JobStatus.COMPLETED || job.status == JobStatus.PAID) && job.actualCost <= 0.0) add("actual cost")
-            if ((job.status == JobStatus.COMPLETED || job.status == JobStatus.PAID) && job.photos.isEmpty()) add("completion photos")
+            if (job.status.isWorkDone() && job.actualCost <= 0.0) add("actual cost")
+            if (job.status.isWorkDone() && job.photos.isEmpty()) add("completion photos")
             if (job.type.isBlank()) add("service type")
         }
         return QualityCheck(

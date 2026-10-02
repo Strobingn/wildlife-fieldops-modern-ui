@@ -227,6 +227,8 @@ private fun AppNavHost(
                 onNavigateToVoiceLog = { jid -> navController.navigate(Screen.VoiceLog.createRoute(jobId = jid)) },
                 onNavigateToTrapChecks = { navController.navigate(Screen.TrapChecks.route) },
                 onNavigateToInspection = { iid -> navController.navigate(Screen.InspectionDetail.createRoute(iid)) },
+                onNavigateToJob = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) },
+                onNavigateToTodayRoute = { navController.navigate(Screen.TodayRoute.route) },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -413,6 +415,9 @@ private fun AppNavHost(
         }
         composable(Screen.RouteOptimizer.route) {
             RouteOptimizerScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Screen.TodayRoute.route) {
+            TodayRouteScreen(onBack = { navController.popBackStack() })
         }
         composable(
             route = Screen.Estimate.route,

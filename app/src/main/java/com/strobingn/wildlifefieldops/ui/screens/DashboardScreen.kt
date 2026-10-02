@@ -506,14 +506,7 @@ private data class OverviewItem(
 
 @Composable
 fun JobCard(job: Job, onClick: () -> Unit) {
-    val statusColor = when (job.status) {
-        JobStatus.PENDING -> StatusPending
-        JobStatus.IN_PROGRESS -> AccentBlue
-        JobStatus.COMPLETED -> SuccessGreen
-        JobStatus.CANCELLED -> ErrorRed
-        JobStatus.INVOICED -> AccentPurple
-        JobStatus.PAID -> PrimaryGreen
-    }
+    val statusColor = jobStatusColor(job.status)
 
     FieldCard(
         onClick = onClick,

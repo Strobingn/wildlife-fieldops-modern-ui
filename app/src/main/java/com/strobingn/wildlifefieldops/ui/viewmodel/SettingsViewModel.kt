@@ -6,7 +6,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.datastore.preferences.core.*
 import com.strobingn.wildlifefieldops.BuildConfig
+import android.content.Intent
+import androidx.core.content.FileProvider
+import com.strobingn.wildlifefieldops.data.backup.FieldDataCodec
+import com.strobingn.wildlifefieldops.data.backup.FieldDataStore
 import com.strobingn.wildlifefieldops.data.backup.FieldOpsBackupManager
+import java.io.File
 import com.strobingn.wildlifefieldops.data.local.AppDatabase
 import com.strobingn.wildlifefieldops.data.remote.AiService
 import com.strobingn.wildlifefieldops.data.remote.SupabaseService
@@ -340,7 +345,117 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun importData() = viewModelScope.launch {
-        _syncMessage.value = "Use Restore from backup to pick a Wildlife Whisperer zip from Downloads."
+        _syncMessage.value = "Use Import field data to pick a Wildlife Whisperer JSON zip."
+    }
+
+    fun shareFieldData() = viewModelScope.launch {
+        if (_isBackingUp.value) return@launch
+        _isBackingUp.value = true
+        try {
+            val file = withContext(Dispatchers.IO) { writeFieldDataFile() }
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "application/zip"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "Wildlife Whisperer field data")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(Intent.createChooser(send, "Share field data").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            _syncMessage.value = "Field data ready to share."
+        } catch (t: Throwable) {
+            _syncMessage.value = "Export failed: ${t.message ?: t.javaClass.simpleName}"
+        } finally {
+            _isBackingUp.value = false
+        }
+    }
+
+    fun writeFieldDataTo(uri: Uri) = viewModelScope.launch {
+        if (_isBackingUp.value) return@launch
+        _isBackingUp.value = true
+        try {
+            val bytes = withContext(Dispatchers.IO) {
+                FieldDataCodec.zipBytes(FieldDataStore.exportBundle(database, settingsSnapshot()))
+            }
+            withContext(Dispatchers.IO) {
+                context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                    ?: error("Could not write the selected file")
+            }
+            _syncMessage.value = "Field data saved."
+        } catch (t: Throwable) {
+            _syncMessage.value = "Export failed: ${t.message ?: t.javaClass.simpleName}"
+        } finally {
+            _isBackingUp.value = false
+        }
+    }
+
+    fun importFieldData(uri: Uri) = viewModelScope.launch {
+        if (_isBackingUp.value) return@launch
+        _isBackingUp.value = true
+        try {
+            val message = withContext(Dispatchers.IO) {
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: error("Could not read the selected file")
+                val bundle = FieldDataCodec.readBytes(bytes)
+                applySettings(bundle.settings)
+                FieldDataStore.importBundle(database, bundle)
+            }
+            _syncMessage.value = message
+        } catch (t: Throwable) {
+            _syncMessage.value = "Import failed: ${t.message ?: t.javaClass.simpleName}"
+        } finally {
+            _isBackingUp.value = false
+        }
+    }
+
+    private suspend fun writeFieldDataFile(): File {
+        val bytes = FieldDataCodec.zipBytes(FieldDataStore.exportBundle(database, settingsSnapshot()))
+        val file = File(context.cacheDir, "WildlifeWhisperer-field-data.zip")
+        file.writeBytes(bytes)
+        return file
+    }
+
+    private suspend fun settingsSnapshot(): Map<String, String> {
+        val prefs = dataStore.data.first()
+        return mapOf(
+            "theme_mode" to (prefs[THEME_MODE] ?: ""),
+            "dark_theme" to (prefs[DARK_THEME] ?: true).toString(),
+            "notifications_enabled" to (prefs[NOTIFICATIONS_ENABLED] ?: true).toString(),
+            "auto_sync" to (prefs[AUTO_SYNC] ?: true).toString(),
+            "sync_interval" to (prefs[SYNC_INTERVAL] ?: 15).toString(),
+            "company_name" to (prefs[COMPANY_NAME] ?: ""),
+            "technician_name" to (prefs[TECHNICIAN_NAME] ?: ""),
+            "company_address" to (prefs[COMPANY_ADDRESS] ?: ""),
+            "default_tax_rate" to (prefs[DEFAULT_TAX_RATE] ?: DEFAULT_TAX_PERCENT).toString(),
+            "offline_mode" to (prefs[OFFLINE_MODE] ?: false).toString(),
+            "high_accuracy_gps" to (prefs[HIGH_ACCURACY_GPS] ?: true).toString(),
+            "nwco_operator_name" to (prefs[NWCO_NAME] ?: ""),
+            "nwco_license" to (prefs[NWCO_LICENSE] ?: ""),
+            "nwco_region" to (prefs[NWCO_REGION] ?: ""),
+            "nwco_county" to (prefs[NWCO_COUNTY] ?: ""),
+            "nwco_phone" to (prefs[NWCO_PHONE] ?: "")
+        )
+    }
+
+    private suspend fun applySettings(settings: Map<String, String>) {
+        if (settings.isEmpty()) return
+        dataStore.edit { prefs ->
+            settings["theme_mode"]?.let { prefs[THEME_MODE] = it }
+            settings["dark_theme"]?.toBooleanStrictOrNull()?.let { prefs[DARK_THEME] = it }
+            settings["notifications_enabled"]?.toBooleanStrictOrNull()?.let { prefs[NOTIFICATIONS_ENABLED] = it }
+            settings["auto_sync"]?.toBooleanStrictOrNull()?.let { prefs[AUTO_SYNC] = it }
+            settings["sync_interval"]?.toIntOrNull()?.let { prefs[SYNC_INTERVAL] = it }
+            settings["company_name"]?.let { prefs[COMPANY_NAME] = it }
+            settings["technician_name"]?.let { prefs[TECHNICIAN_NAME] = it }
+            settings["company_address"]?.let { prefs[COMPANY_ADDRESS] = it }
+            settings["default_tax_rate"]?.toFloatOrNull()?.let { prefs[DEFAULT_TAX_RATE] = it }
+            settings["offline_mode"]?.toBooleanStrictOrNull()?.let { prefs[OFFLINE_MODE] = it }
+            settings["high_accuracy_gps"]?.toBooleanStrictOrNull()?.let { prefs[HIGH_ACCURACY_GPS] = it }
+            settings["nwco_operator_name"]?.let { prefs[NWCO_NAME] = it }
+            settings["nwco_license"]?.let { prefs[NWCO_LICENSE] = it }
+            settings["nwco_region"]?.let { prefs[NWCO_REGION] = it }
+            settings["nwco_county"]?.let { prefs[NWCO_COUNTY] = it }
+            settings["nwco_phone"]?.let { prefs[NWCO_PHONE] = it }
+        }
     }
 
     fun clearAllData() = viewModelScope.launch {

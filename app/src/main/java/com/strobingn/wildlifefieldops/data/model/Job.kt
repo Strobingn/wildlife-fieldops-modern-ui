@@ -6,7 +6,24 @@ import com.strobingn.wildlifefieldops.pricing.JobPricing
 import java.util.UUID
 
 enum class JobStatus {
-    PENDING, IN_PROGRESS, COMPLETED, CANCELLED, INVOICED, PAID
+    PENDING,
+    LEAD,
+    ESTIMATE_SENT,
+    SCHEDULED,
+    IN_PROGRESS,
+    TRAPPING,
+    EXCLUSION,
+    COMPLETED,
+    CANCELLED,
+    INVOICED,
+    PAID,
+    CLOSED;
+
+    /** Finished for dashboards and route filters. Cancelled stays separate. */
+    fun isWorkDone(): Boolean =
+        this == COMPLETED || this == CLOSED || this == PAID
+
+    fun isWorkOpen(): Boolean = !isWorkDone() && this != CANCELLED
 }
 
 enum class JobPriority {
