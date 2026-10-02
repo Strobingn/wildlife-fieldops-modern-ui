@@ -10,7 +10,10 @@ object AppUpdatePolicy {
     const val EXPECTED_PACKAGE = "com.strobingn.wildlifefieldops"
     const val CI_SIGNER_SHA256 =
         "EC:75:D0:BC:BC:62:30:6B:0C:38:91:76:9E:05:4C:EB:C7:7C:6A:84:4D:11:9B:40:18:B9:0C:7E:F7:57:0C:A6"
-    const val CHECK_INTERVAL_MS = 4L * 60L * 60L * 1000L
+    /** Foreground / resume / worker checks. Forced Settings checks ignore this. */
+    const val CHECK_INTERVAL_MS = 10L * 60L * 1000L
+    /** WorkManager minimum for periodic work is 15 minutes. */
+    const val PERIODIC_CHECK_INTERVAL_MS = 15L * 60L * 1000L
 
     fun isMainReleaseTag(tag: String?): Boolean =
         !tag.isNullOrBlank() && tag.trim().equals(MAIN_RELEASE_TAG, ignoreCase = true)
@@ -41,6 +44,28 @@ object AppUpdatePolicy {
         if (force) return true
         if (lastCheckAtMs <= 0L) return true
         return nowMs - lastCheckAtMs >= CHECK_INTERVAL_MS
+    }
+
+    /**
+     * Dismiss hides this [remoteVersionCode] for the current process only.
+     * A newer remote code shows the banner again. Next process start has
+     * [dismissedVersionCode] null, so the banner returns even for the same code.
+     */
+    fun shouldShowBanner(
+        updateAvailable: Boolean,
+        remoteVersionCode: Int,
+        dismissedVersionCode: Int?
+    ): Boolean {
+        if (!updateAvailable) return false
+        val dismissed = dismissedVersionCode ?: return true
+        return remoteVersionCode > dismissed
+    }
+
+    fun cacheBustUrl(url: String, nowMs: Long): String {
+        val base = url.trim()
+        if (base.isEmpty()) return base
+        val sep = if (base.contains('?')) '&' else '?'
+        return "${base}${sep}t=$nowMs"
     }
 
     /** After "Install unknown apps", download first unless an APK is already verified. */

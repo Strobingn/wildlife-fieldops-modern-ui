@@ -106,11 +106,35 @@ class AppUpdateRemoteTest {
         assertTrue((result as AppUpdateFetchResult.Failed).message.contains("Can't reach GitHub"))
     }
 
+    @Test
+    fun cacheBustsManifestUrlWithTimestamp() {
+        val now = 1_700_000_000_000L
+        var requested: String? = null
+        val remote = AppUpdateRemote(
+            transport = object : AppUpdateTransport {
+                override fun getText(url: String): AppUpdateHttpResponse {
+                    requested = url
+                    return AppUpdateHttpResponse(200, mainJson)
+                }
+                override fun download(url: String, dest: File, onProgress: (Long, Long) -> Unit) = Unit
+            },
+            nowMs = { now }
+        )
+        val result = remote.fetchLatestMain()
+        assertTrue(result is AppUpdateFetchResult.Success)
+        assertEquals(
+            "${AppUpdateManifestParser.defaultManifestUrl()}?t=$now",
+            requested
+        )
+    }
+
     private class MapTransport(
         private val responses: Map<String, AppUpdateHttpResponse>
     ) : AppUpdateTransport {
-        override fun getText(url: String): AppUpdateHttpResponse =
-            responses[url] ?: AppUpdateHttpResponse(404, "not found")
+        override fun getText(url: String): AppUpdateHttpResponse {
+            val key = url.substringBefore('?')
+            return responses[key] ?: AppUpdateHttpResponse(404, "not found")
+        }
 
         override fun download(url: String, dest: File, onProgress: (Long, Long) -> Unit) = Unit
     }

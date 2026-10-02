@@ -2,6 +2,7 @@ package com.strobingn.wildlifefieldops.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +30,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -38,6 +40,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundCard
 import com.strobingn.wildlifefieldops.ui.theme.ErrorRed
 import com.strobingn.wildlifefieldops.ui.theme.OnPrimary
@@ -52,7 +57,16 @@ import com.strobingn.wildlifefieldops.update.AppUpdateViewModel
 @Composable
 fun AppUpdateHost(viewModel: AppUpdateViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsState()
-    LaunchedEffect(Unit) { viewModel.checkOnStart() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) {
+                viewModel.checkOnStart()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     AppUpdateDialogs(state = state, viewModel = viewModel)
 }
 
@@ -77,6 +91,46 @@ fun AppUpdateBannerBar(viewModel: AppUpdateViewModel = hiltViewModel()) {
             }
             TextButton(onClick = viewModel::showDialog) { Text("View", color = PrimaryGreen) }
             TextButton(onClick = viewModel::dismissBanner) { Text("Later", color = TextSecondary) }
+        }
+    }
+}
+
+@Composable
+fun AppUpdateHomeChip(viewModel: AppUpdateViewModel = hiltViewModel()) {
+    val state by viewModel.state.collectAsState()
+    if (!state.updateAvailable || state.latest == null) return
+    Card(
+        colors = CardDefaults.cardColors(containerColor = BackgroundCard),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp)
+            .clickable(onClick = viewModel::showDialog)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.SystemUpdate,
+                contentDescription = null,
+                tint = TextPrimary,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Update available",
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    state.latestLabel,
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     }
 }
@@ -108,6 +162,12 @@ fun AppUpdateSettingsCard(
     Text(
         "Latest main: ${if (state.latest != null) state.latestLabel else "Not checked yet"}",
         color = TextSecondary,
+        style = MaterialTheme.typography.bodySmall
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+    Text(
+        lastCheckedCaption(state.lastCheckedAtMs),
+        color = TextTertiary,
         style = MaterialTheme.typography.bodySmall
     )
     state.statusMessage?.takeIf { it.isNotBlank() }?.let { message ->
@@ -296,6 +356,13 @@ fun AppUpdateDialogBody(state: AppUpdateUiState) {
             }
         }
     }
+}
+
+private fun lastCheckedCaption(lastCheckedAtMs: Long): String {
+    if (lastCheckedAtMs <= 0L) return "Last checked never"
+    val time = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
+        .format(java.util.Date(lastCheckedAtMs))
+    return "Last checked $time"
 }
 
 private fun downloadLabel(read: Long, total: Long): String {

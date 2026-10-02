@@ -10,7 +10,7 @@ class UrlConnectionTransport @javax.inject.Inject constructor() : AppUpdateTrans
     private val userAgent: String = "WildlifeFieldOps-Android/${BuildConfig.VERSION_NAME}"
 
     override fun getText(url: String): AppUpdateHttpResponse {
-        val connection = open(url, accept = "application/json,text/plain,*/*")
+        val connection = open(url, accept = "application/json,text/plain,*/*", noCache = true)
         try {
             connection.connect()
             val code = connection.responseCode
@@ -69,7 +69,7 @@ class UrlConnectionTransport @javax.inject.Inject constructor() : AppUpdateTrans
         }
     }
 
-    private fun open(url: String, accept: String): HttpURLConnection {
+    private fun open(url: String, accept: String, noCache: Boolean = false): HttpURLConnection {
         return (URL(url).openConnection() as HttpURLConnection).apply {
             instanceFollowRedirects = true
             requestMethod = "GET"
@@ -77,6 +77,11 @@ class UrlConnectionTransport @javax.inject.Inject constructor() : AppUpdateTrans
             readTimeout = 60_000
             setRequestProperty("User-Agent", userAgent)
             setRequestProperty("Accept", accept)
+            if (noCache) {
+                useCaches = false
+                setRequestProperty("Cache-Control", "no-cache")
+                setRequestProperty("Pragma", "no-cache")
+            }
         }
     }
 }

@@ -73,10 +73,18 @@ class AppUpdatePolicyTest {
     @Test
     fun startCheckIsThrottledUnlessForced() {
         val now = 10_000_000L
+        assertEquals(10L * 60L * 1000L, AppUpdatePolicy.CHECK_INTERVAL_MS)
         assertTrue(AppUpdatePolicy.shouldCheck(lastCheckAtMs = 0L, nowMs = now, force = false))
         assertFalse(
             AppUpdatePolicy.shouldCheck(
                 lastCheckAtMs = now - 60_000L,
+                nowMs = now,
+                force = false
+            )
+        )
+        assertFalse(
+            AppUpdatePolicy.shouldCheck(
+                lastCheckAtMs = now - AppUpdatePolicy.CHECK_INTERVAL_MS + 1L,
                 nowMs = now,
                 force = false
             )
@@ -93,6 +101,65 @@ class AppUpdatePolicyTest {
                 lastCheckAtMs = now - 1L,
                 nowMs = now,
                 force = true
+            )
+        )
+    }
+
+    @Test
+    fun dismissedBannerReturnsForNewerVersionAndOnFreshStart() {
+        assertTrue(
+            AppUpdatePolicy.shouldShowBanner(
+                updateAvailable = true,
+                remoteVersionCode = 1_000_702,
+                dismissedVersionCode = null
+            )
+        )
+        assertFalse(
+            AppUpdatePolicy.shouldShowBanner(
+                updateAvailable = true,
+                remoteVersionCode = 1_000_702,
+                dismissedVersionCode = 1_000_702
+            )
+        )
+        assertTrue(
+            AppUpdatePolicy.shouldShowBanner(
+                updateAvailable = true,
+                remoteVersionCode = 1_000_703,
+                dismissedVersionCode = 1_000_702
+            )
+        )
+        assertFalse(
+            AppUpdatePolicy.shouldShowBanner(
+                updateAvailable = false,
+                remoteVersionCode = 1_000_703,
+                dismissedVersionCode = null
+            )
+        )
+        assertFalse(
+            AppUpdatePolicy.shouldShowBanner(
+                updateAvailable = true,
+                remoteVersionCode = 1_000_701,
+                dismissedVersionCode = 1_000_702
+            )
+        )
+    }
+
+    @Test
+    fun cacheBustAppendsTimestampQuery() {
+        assertEquals(
+            "https://example.com/update.json?t=42",
+            AppUpdatePolicy.cacheBustUrl("https://example.com/update.json", 42L)
+        )
+        assertEquals(
+            "https://example.com/update.json?foo=1&t=42",
+            AppUpdatePolicy.cacheBustUrl("https://example.com/update.json?foo=1", 42L)
+        )
+        assertEquals("", AppUpdatePolicy.cacheBustUrl("  ", 42L))
+        assertEquals(
+            "https://github.com/Strobingn/wildlife-fieldops-modern-ui/releases/download/debug-latest/update.json?t=1700000000000",
+            AppUpdatePolicy.cacheBustUrl(
+                "https://github.com/Strobingn/wildlife-fieldops-modern-ui/releases/download/debug-latest/update.json",
+                1_700_000_000_000L
             )
         )
     }
