@@ -13,6 +13,7 @@ import com.strobingn.wildlifefieldops.pricing.EstimateInvoiceCarry
 import com.strobingn.wildlifefieldops.pricing.JobPricing
 import com.strobingn.wildlifefieldops.pricing.PricingJson
 import com.strobingn.wildlifefieldops.pricing.SyncedInvoiceRecord
+import com.strobingn.wildlifefieldops.pricing.markManual
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.util.UUID
@@ -94,7 +95,7 @@ class MoneyFieldOpsStore @Inject constructor(
                 materialsCostActual = materialsCost,
                 laborCostOverride = laborCostOverride,
                 paidAmount = paidAmount
-            )
+            ).markManual(ManualField.PAID_AMOUNT)
         }
     }
 

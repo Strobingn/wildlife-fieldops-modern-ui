@@ -45,25 +45,26 @@ class DashboardViewModel @Inject constructor(
 
         DashboardStats(
             totalJobs = jobs.size,
-            pendingJobs = jobs.count { it.status == JobStatus.PENDING },
-            inProgressJobs = jobs.count { it.status == JobStatus.IN_PROGRESS },
-            completedJobs = jobs.count { it.status == JobStatus.COMPLETED || it.status == JobStatus.PAID },
+            pendingJobs = jobs.count {
+                it.status == JobStatus.PENDING || it.status == JobStatus.LEAD || it.status == JobStatus.ESTIMATE_SENT
+            },
+            inProgressJobs = jobs.count {
+                it.status == JobStatus.IN_PROGRESS || it.status == JobStatus.SCHEDULED ||
+                    it.status == JobStatus.TRAPPING || it.status == JobStatus.EXCLUSION
+            },
+            completedJobs = jobs.count { it.status.isWorkDone() || it.status == JobStatus.INVOICED },
             totalCustomers = customers.size,
             totalInspections = inspections.size,
             followUpRequired = inspections.count { it.followUpRequired },
             todayJobs = jobs.count {
                 it.scheduledDate != null &&
                 it.scheduledDate in dayStart..dayEnd &&
-                it.status != JobStatus.COMPLETED &&
-                it.status != JobStatus.CANCELLED &&
-                it.status != JobStatus.PAID
+                it.status.isWorkOpen()
             },
             overdueJobs = jobs.count {
                 it.scheduledDate != null &&
                 it.scheduledDate < now &&
-                it.status != JobStatus.COMPLETED &&
-                it.status != JobStatus.CANCELLED &&
-                it.status != JobStatus.PAID
+                it.status.isWorkOpen()
             }
         )
     }.onEach { _isLoading.value = false }

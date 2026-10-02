@@ -62,6 +62,16 @@ fun SettingsScreen(
     ) { uri ->
         if (uri != null) viewModel.restoreFromBackup(context, uri)
     }
+    val fieldDataSaveLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) viewModel.writeFieldDataTo(uri)
+    }
+    val fieldDataOpenLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) viewModel.importFieldData(uri)
+    }
 
     if (showAiOperations) {
         AIOperationsScreen(onBack = { showAiOperations = false })
@@ -372,6 +382,34 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Restore from backup")
                 }
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    "Field data JSON: jobs, customers, inspections, photo metadata, and settings in one zip. Import merges by id so a restore cannot duplicate a job. Share it or save it with the system file picker.",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { viewModel.shareFieldData() },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isBackingUp && !isSyncing,
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("Share field data", fontWeight = FontWeight.Bold) }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { fieldDataSaveLauncher.launch("WildlifeWhisperer-field-data.zip") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isBackingUp && !isSyncing,
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("Save field data (Files)") }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { fieldDataOpenLauncher.launch(arrayOf("application/zip", "application/json", "*/*")) },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isBackingUp && !isSyncing,
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("Import field data") }
             }
 
             Spacer(modifier = Modifier.height(8.dp))

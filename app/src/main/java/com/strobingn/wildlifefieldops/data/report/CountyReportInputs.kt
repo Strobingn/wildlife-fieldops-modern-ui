@@ -16,6 +16,7 @@ object CountyReportInputs {
 
     private val COMPLETED_STATUSES = setOf(
         JobStatus.COMPLETED,
+        JobStatus.CLOSED,
         JobStatus.INVOICED,
         JobStatus.PAID,
     )

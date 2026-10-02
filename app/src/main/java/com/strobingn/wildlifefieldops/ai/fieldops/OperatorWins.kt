@@ -72,4 +72,8 @@ object ManualField {
     const val TAX_COLLECTED = "taxCollected"
     const val TAX_TAXABLE = "taxable"
     const val TAX_NONTAXABLE = "nontaxable"
+    const val PIPELINE_STATUS = "pipelineStatus"
+    const val SIGNER_ESTIMATE = "signerName.estimate"
+    const val SIGNER_CONTRACT = "signerName.contract"
+    const val PAID_AMOUNT = "paidAmount"
 }

@@ -48,9 +48,7 @@ fun RouteOptimizerScreen(
 
     val candidateJobs = remember(jobs) {
         jobs.filter {
-            it.status != JobStatus.COMPLETED &&
-                it.status != JobStatus.CANCELLED &&
-                isTodayOrOpen(it)
+            it.status.isWorkOpen() && isTodayOrOpen(it)
         }
     }
 
@@ -328,7 +326,7 @@ private fun isTodayOrOpen(job: Job): Boolean {
     val end = start + 24L * 60 * 60 * 1000
     val scheduled = job.scheduledDate
     return if (scheduled != null) scheduled in start until end
-    else job.status == JobStatus.PENDING || job.status == JobStatus.IN_PROGRESS
+    else job.status.isWorkOpen()
 }
 
 private fun priorityRankLabel(priorityLabel: String): Int = when (priorityLabel) {

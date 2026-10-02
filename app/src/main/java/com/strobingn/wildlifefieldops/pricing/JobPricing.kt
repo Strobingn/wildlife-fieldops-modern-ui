@@ -76,6 +76,21 @@ data class JobPricing(
     val earningsPeriodOverrides: List<com.strobingn.wildlifefieldops.ai.fieldops.EarningsPeriodOverride> = emptyList(),
     val decNwcoRows: List<com.strobingn.wildlifefieldops.ai.fieldops.NwcoLogRecord> = emptyList(),
     val decNwcoOperator: com.strobingn.wildlifefieldops.ai.fieldops.NwcoOperatorProfile? = null,
+    /** Customer ink or typed-name signatures for the estimate and service contract. */
+    val customerSignatures: List<CustomerSignatureRecord> = emptyList(),
+    /** Manual payments. Balance due is invoice total minus the sum of these amounts. */
+    val payments: List<JobPaymentRecord> = emptyList(),
+    /** Exclusion / repair openings. Seal-up lines are copied into [photoLineItems]. */
+    val exclusionPoints: List<ExclusionPointRecord> = emptyList(),
+    /**
+     * Fine pipeline status (Lead, Trapping, …). The live `jobs.status` column
+     * only accepts a coarse set, so this rides in pricing jsonb and wins on pull.
+     */
+    val pipelineStatus: String = "",
+    /** Manual stop order for [routeDay] (`yyyy-MM-dd`). Null index means distance order. */
+    val routeDay: String = "",
+    val routeIndex: Int? = null,
+    val trapRoute: List<TrapRouteSlot> = emptyList(),
     /**
      * Fields the operator typed or cleared. Suggest / codec merge / sync pull
      * must not refill these, including when the stored value is blank.
@@ -180,82 +195,16 @@ object PricingCalculator {
      */
     fun pricingForEditor(saved: JobPricing, estimatedValue: Double): JobPricing {
         if (!saved.isEmptyWorksheet()) return saved
-        val extras = saved
         if (estimatedValue > 0.0) {
-            return JobPricing(
-                laborRate = 85.0,
-                mileageRate = 0.65,
-                taxRatePercent = 8.125,
-                totalOverride = Money.round(estimatedValue),
-                confirmedSpecies = extras.confirmedSpecies,
-                legalNotes = extras.legalNotes,
-                nextStep = extras.nextStep,
-                nextStepDueAt = extras.nextStepDueAt,
-                nextStepSource = extras.nextStepSource,
-                aiRuntime = extras.aiRuntime,
-                photoLineItems = extras.photoLineItems,
-                trapRecords = extras.trapRecords,
-                weatherTrapAdvice = extras.weatherTrapAdvice,
-                weatherTrapAdviceAt = extras.weatherTrapAdviceAt,
-                weatherTrapAdviceSource = extras.weatherTrapAdviceSource,
-                followUpKind = extras.followUpKind,
-                followUpDueAt = extras.followUpDueAt,
-                followUpNotes = extras.followUpNotes,
-                followUpVisitId = extras.followUpVisitId,
-                followUpReminderId = extras.followUpReminderId,
-                seasonalKind = extras.seasonalKind,
-                seasonalDueAt = extras.seasonalDueAt,
-                seasonalTitle = extras.seasonalTitle,
-                seasonalNotes = extras.seasonalNotes,
-                seasonalReminderId = extras.seasonalReminderId,
-                timerStartedAt = extras.timerStartedAt,
-                timerElapsedMs = extras.timerElapsedMs,
-                materialsCostActual = extras.materialsCostActual,
-                laborCostOverride = extras.laborCostOverride,
-                paidAmount = extras.paidAmount,
-                mileageLogs = extras.mileageLogs,
-                invoiceRecords = extras.invoiceRecords,
-                earningsAdjustments = extras.earningsAdjustments,
-                earningsPeriodOverrides = extras.earningsPeriodOverrides,
-                decNwcoRows = extras.decNwcoRows,
-                decNwcoOperator = extras.decNwcoOperator,
-                manualFields = extras.manualFields
-            )
+            return saved.copy(totalOverride = Money.round(estimatedValue))
         }
-        return starterWorksheet().copy(
-            confirmedSpecies = extras.confirmedSpecies,
-            legalNotes = extras.legalNotes,
-            nextStep = extras.nextStep,
-            nextStepDueAt = extras.nextStepDueAt,
-            nextStepSource = extras.nextStepSource,
-            aiRuntime = extras.aiRuntime,
-            photoLineItems = extras.photoLineItems,
-            trapRecords = extras.trapRecords,
-            weatherTrapAdvice = extras.weatherTrapAdvice,
-            weatherTrapAdviceAt = extras.weatherTrapAdviceAt,
-            weatherTrapAdviceSource = extras.weatherTrapAdviceSource,
-            followUpKind = extras.followUpKind,
-            followUpDueAt = extras.followUpDueAt,
-            followUpNotes = extras.followUpNotes,
-            followUpVisitId = extras.followUpVisitId,
-            followUpReminderId = extras.followUpReminderId,
-            seasonalKind = extras.seasonalKind,
-            seasonalDueAt = extras.seasonalDueAt,
-            seasonalTitle = extras.seasonalTitle,
-            seasonalNotes = extras.seasonalNotes,
-            seasonalReminderId = extras.seasonalReminderId,
-            timerStartedAt = extras.timerStartedAt,
-            timerElapsedMs = extras.timerElapsedMs,
-            materialsCostActual = extras.materialsCostActual,
-            laborCostOverride = extras.laborCostOverride,
-            paidAmount = extras.paidAmount,
-            mileageLogs = extras.mileageLogs,
-            invoiceRecords = extras.invoiceRecords,
-            earningsAdjustments = extras.earningsAdjustments,
-            earningsPeriodOverrides = extras.earningsPeriodOverrides,
-            decNwcoRows = extras.decNwcoRows,
-            decNwcoOperator = extras.decNwcoOperator,
-            manualFields = extras.manualFields
+        val starter = starterWorksheet()
+        return saved.copy(
+            laborHours = starter.laborHours,
+            laborRate = starter.laborRate,
+            materialsQty = starter.materialsQty,
+            mileageRate = starter.mileageRate,
+            taxRatePercent = if (saved.taxRateManual) saved.taxRatePercent else starter.taxRatePercent
         )
     }
 

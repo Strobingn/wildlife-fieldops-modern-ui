@@ -213,7 +213,10 @@ fun Job.toRemoteDto(): RemoteJobDto {
 fun RemoteJobDto.toLocal(existing: Job? = null): Job {
     val displayCustomer = customerName.ifBlank { customer.orEmpty() }.ifBlank { existing?.customerName.orEmpty() }
     val mappedStatus = status.fromRemoteStatus()
+    val pulledPricing = if (pricing.hasSyncPayload()) pricing else existing?.pricing ?: JobPricing()
+    val fineStatus = com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.fromPipeline(pulledPricing.pipelineStatus)
     val status = when {
+        fineStatus != null -> fineStatus
         existing == null -> mappedStatus
         existing.status == JobStatus.INVOICED || existing.status == JobStatus.PAID -> existing.status
         else -> mappedStatus
@@ -221,7 +224,6 @@ fun RemoteJobDto.toLocal(existing: Job? = null): Job {
     val mappedType = species.takeIf { it.isNotBlank() && !it.equals("Wildlife", ignoreCase = true) }
         ?: existing?.type
         ?: "Inspection"
-    val pulledPricing = if (pricing.hasSyncPayload()) pricing else existing?.pricing ?: JobPricing()
     val pulledEstimate = (estimate ?: 0.0).takeIf { it > 0 } ?: (existing?.estimatedValue ?: 0.0)
     val resolvedPricing = when {
         !pulledPricing.isEmptyWorksheet() -> pulledPricing
@@ -309,12 +311,12 @@ fun Inspection.toRemoteDtoOrNull(): RemoteInspectionDto {
 }
 
 internal fun JobStatus.toRemoteStatus(): String = when (this) {
-    JobStatus.PENDING -> "Active"
-    JobStatus.IN_PROGRESS -> "In Progress"
-    JobStatus.COMPLETED -> "Closed"
+    JobStatus.PENDING, JobStatus.LEAD -> "Active"
+    JobStatus.ESTIMATE_SENT -> "Needs Follow-up"
+    JobStatus.SCHEDULED -> "Scheduled"
+    JobStatus.IN_PROGRESS, JobStatus.TRAPPING, JobStatus.EXCLUSION -> "In Progress"
+    JobStatus.COMPLETED, JobStatus.CLOSED, JobStatus.INVOICED, JobStatus.PAID -> "Closed"
     JobStatus.CANCELLED -> "Cancelled"
-    JobStatus.INVOICED -> "Closed"
-    JobStatus.PAID -> "Closed"
 }
 
 private fun String?.fromRemoteStatus(): JobStatus = when (this?.lowercase()) {

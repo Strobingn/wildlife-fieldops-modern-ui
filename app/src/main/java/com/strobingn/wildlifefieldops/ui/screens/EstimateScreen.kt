@@ -526,6 +526,14 @@ fun EstimateScreen(
                 }
             }
             job?.let { j ->
+                JobSignatureCard(
+                    job = j.copy(pricing = pricing),
+                    customerName = j.customerName,
+                    onSave = { next ->
+                        applyPricing(next)
+                        jobsViewModel.saveJobPricing(j.id, next)
+                    }
+                )
                 OutlinedButton(
                     onClick = {
                         dirty = true
@@ -542,6 +550,8 @@ fun EstimateScreen(
                     onClick = {
                         jobsViewModel.saveJobPricing(j.id, pricing)
                         val items = buildEstimateLineItems(pricing, result)
+                        val signature = com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules
+                            .find(pricing, com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.ESTIMATE)
                         pdfPath = WildlifeWhispererContractPdf.generate(
                             context = context,
                             documentType = ContractDocumentType.ESTIMATE,
@@ -552,7 +562,10 @@ fun EstimateScreen(
                             taxAmount = result.taxAmount.effective,
                             discountAmount = result.discountAmount.effective,
                             total = result.total.effective,
-                            notes = listOf(pricing.notes, pricing.rationale).filter { it.isNotBlank() }.joinToString("\n")
+                            notes = listOf(pricing.notes, pricing.rationale).filter { it.isNotBlank() }.joinToString("\n"),
+                            customerSignature = com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(signature?.pngBase64.orEmpty()),
+                            customerSignerName = signature?.signerName.orEmpty(),
+                            customerSignedAtMillis = signature?.signedAt
                         )
                         showPdfShare = true
                     },
