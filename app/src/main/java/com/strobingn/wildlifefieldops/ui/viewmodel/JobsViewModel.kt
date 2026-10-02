@@ -12,6 +12,7 @@ import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.data.remote.AiService
 import com.strobingn.wildlifefieldops.data.remote.GeocodingService
 import com.strobingn.wildlifefieldops.data.remote.JobIntakeDraft
+import com.strobingn.wildlifefieldops.data.remote.JobIntakeParser
 import com.strobingn.wildlifefieldops.data.repository.SyncRepository
 import com.strobingn.wildlifefieldops.data.workspace.JobCustomerWorkspace
 import com.strobingn.wildlifefieldops.data.workspace.JobSaveRequest
@@ -21,8 +22,10 @@ import com.strobingn.wildlifefieldops.pricing.JobPricing
 import com.strobingn.wildlifefieldops.pricing.PricingCalculator
 import com.strobingn.wildlifefieldops.pricing.markManual
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 @HiltViewModel
@@ -347,37 +350,105 @@ class JobsViewModel @Inject constructor(
     private val _aiFillLoading = MutableStateFlow(false)
     val aiFillLoading = _aiFillLoading.asStateFlow()
 
+    private val _aiFillRefining = MutableStateFlow(false)
+    val aiFillRefining = _aiFillRefining.asStateFlow()
+
     private val _aiFillError = MutableStateFlow<String?>(null)
     val aiFillError = _aiFillError.asStateFlow()
 
     private val _aiFillSource = MutableStateFlow<String?>(null)
     val aiFillSource = _aiFillSource.asStateFlow()
 
+    private var dictationFillGeneration = 0
+    private var dictationRefineWork: kotlinx.coroutines.Job? = null
+
     fun clearAiFillError() {
         _aiFillError.value = null
     }
 
+    fun warmupDictationEngine() {
+        viewModelScope.launch {
+            runCatching { aiService.warmupLocalLlmIfNoCloud() }
+        }
+    }
+
+    fun skipAiRefine() {
+        dictationFillGeneration++
+        dictationRefineWork?.cancel()
+        _aiFillLoading.value = false
+        _aiFillRefining.value = false
+        if (_aiFillSource.value.isNullOrBlank() || _aiFillSource.value?.contains("refin", ignoreCase = true) == true) {
+            _aiFillSource.value = "⚙️ Heuristic (AI skipped)"
+        }
+        runCatching { android.util.Log.i("DictationFill", "refine skipped by operator") }
+    }
+
+    /**
+     * Instant heuristic fill, then optional cloud/local refine. Save is never
+     * gated on [aiFillRefining]. Late AI only fills empty, non-edited fields.
+     */
     fun fillJobFromDictation(
         transcript: String,
+        current: () -> JobIntakeDraft? = { null },
+        editedFields: () -> Set<String> = { emptySet() },
         onFilled: (JobIntakeDraft) -> Unit
     ) {
-        if (_aiFillLoading.value) return
         val text = transcript.trim()
         if (text.isBlank()) {
             _aiFillError.value = "Dictate job details first, then tap AI Fill Job."
             return
         }
-        _aiFillLoading.value = true
+        val generation = ++dictationFillGeneration
+        dictationRefineWork?.cancel()
         _aiFillError.value = null
-        _aiFillSource.value = null
-        viewModelScope.launch {
-            val result = aiService.parseJobFromDictation(text)
-            _aiFillLoading.value = false
-            if (result.draft != null) {
-                _aiFillSource.value = result.sourceLabel
-                onFilled(result.draft)
+        val t0 = System.currentTimeMillis()
+        val heuristic = aiService.heuristicJobFromDictation(text)
+        val heuristicMs = System.currentTimeMillis() - t0
+        runCatching { android.util.Log.i("DictationFill", "heuristic ${heuristicMs}ms") }
+        if (heuristic != null) {
+            val merged = JobIntakeParser.merge(
+                current = current() ?: JobIntakeDraft(),
+                incoming = heuristic,
+                editedFields = editedFields()
+            )
+            _aiFillSource.value = "⚙️ Instant heuristic"
+            onFilled(merged)
+        }
+        _aiFillLoading.value = false
+        _aiFillRefining.value = true
+        dictationRefineWork = viewModelScope.launch {
+            val t1 = System.currentTimeMillis()
+            val result = try {
+                withTimeoutOrNull(JobIntakeParser.REFINE_TIMEOUT_MS) {
+                    aiService.refineJobFromDictation(text)
+                }
+            } catch (e: CancellationException) {
+                runCatching { android.util.Log.i("DictationFill", "refine cancelled") }
+                throw e
+            } catch (t: Throwable) {
+                runCatching { android.util.Log.w("DictationFill", "refine failed: ${t.message}") }
+                null
+            }
+            val refineMs = System.currentTimeMillis() - t1
+            if (generation != dictationFillGeneration) return@launch
+            _aiFillRefining.value = false
+            val draft = result?.draft
+            if (draft != null) {
+                runCatching { android.util.Log.i("DictationFill", "refine ${refineMs}ms source=${result.sourceLabel}") }
+                val merged = JobIntakeParser.merge(
+                    current = current() ?: heuristic ?: JobIntakeDraft(),
+                    incoming = draft,
+                    editedFields = editedFields()
+                )
+                _aiFillSource.value = result.sourceLabel.ifBlank { "⚙️ Instant heuristic" }
+                onFilled(merged)
             } else {
-                _aiFillError.value = result.error ?: "AI job fill failed."
+                runCatching { android.util.Log.i("DictationFill", "refine ${refineMs}ms no draft (timeout or skip)") }
+                if (heuristic == null && current() == null) {
+                    _aiFillError.value = result?.error ?: "AI job fill failed."
+                } else if (_aiFillSource.value.isNullOrBlank()) {
+                    _aiFillSource.value = "⚙️ Instant heuristic"
+                }
             }
         }
     }

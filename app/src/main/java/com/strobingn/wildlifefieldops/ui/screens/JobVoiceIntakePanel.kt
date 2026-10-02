@@ -160,7 +160,8 @@ fun JobVoiceIntakePanel(
                 Button(
                     onClick = { toggleDictate() },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isListening) ErrorRed else AccentBlue
+                        containerColor = if (isListening) ErrorRed else PrimaryGreen,
+                        contentColor = OnPrimary
                     )
                 ) {
                     Icon(
@@ -171,7 +172,7 @@ fun JobVoiceIntakePanel(
                     Text(if (isListening) "Listening… tap to stop" else "Dictate")
                 }
                 if (isListening) {
-                    CircularProgressIndicator(Modifier.size(22.dp), color = AccentBlue, strokeWidth = 2.dp)
+                    CircularProgressIndicator(Modifier.size(22.dp), color = PrimaryGreen, strokeWidth = 2.dp)
                 }
             }
             if (speechPartial.isNotBlank()) {
@@ -184,30 +185,30 @@ fun JobVoiceIntakePanel(
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 3,
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = AccentBlue,
+                    focusedBorderColor = PrimaryGreen,
                     unfocusedBorderColor = BorderDark,
                     focusedTextColor = TextPrimary,
                     unfocusedTextColor = TextPrimary
                 )
             )
-            Button(
-                onClick = {
-                    onClearAiFeedback()
-                    onFillFromDictation(dictationNotes) { draft -> onApplyDraft(draft) }
-                },
-                enabled = !aiFillLoading && dictationNotes.isNotBlank(),
-                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (aiFillLoading) {
-                    CircularProgressIndicator(Modifier.size(18.dp), color = OnPrimary, strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                } else {
-                    Icon(Icons.Default.AutoAwesome, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = {
+                        onClearAiFeedback()
+                        onFillFromDictation(dictationNotes) { draft -> onApplyDraft(draft) }
+                    },
+                    enabled = dictationNotes.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (aiFillLoading) {
+                        CircularProgressIndicator(Modifier.size(18.dp), color = OnPrimary, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                    } else {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text("AI Fill Job", fontWeight = FontWeight.Bold)
                 }
-                Text("AI Fill Job", fontWeight = FontWeight.Bold)
-            }
             aiFillSource?.let {
                 Text(it, color = PrimaryGreen, style = MaterialTheme.typography.labelSmall)
             }
