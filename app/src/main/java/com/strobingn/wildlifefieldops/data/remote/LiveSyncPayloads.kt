@@ -138,6 +138,10 @@ object LiveSyncPayloads {
             put("damage", inspection.damageAssessment)
             put("ai_narrative", inspection.aiNarrativeDraft)
             put("ai_narrative_source", inspection.aiDraftSource)
+            val contact = com.strobingn.wildlifefieldops.data.inspection.InspectionContact.read(inspection.aiDraftSource)
+            if (contact.phone.isNotBlank()) put("phone", contact.phone)
+            if (contact.address.isNotBlank()) put("address", contact.address)
+            if (contact.serviceType.isNotBlank()) put("service_type", contact.serviceType)
             val cleared = com.strobingn.wildlifefieldops.ai.fieldops.NarrativeCleared.cleared(inspection.aiDraftSource)
             if (cleared.isNotEmpty()) {
                 put("manual_fields", cleared.sorted().joinToString(","))

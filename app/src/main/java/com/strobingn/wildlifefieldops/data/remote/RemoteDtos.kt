@@ -290,6 +290,10 @@ fun Inspection.toRemoteDtoOrNull(): RemoteInspectionDto {
         put("damage", damageAssessment)
         put("ai_narrative", aiNarrativeDraft)
         put("ai_narrative_source", aiDraftSource)
+        val contact = com.strobingn.wildlifefieldops.data.inspection.InspectionContact.read(aiDraftSource)
+        if (contact.phone.isNotBlank()) put("phone", contact.phone)
+        if (contact.address.isNotBlank()) put("address", contact.address)
+        if (contact.serviceType.isNotBlank()) put("service_type", contact.serviceType)
     }
     return RemoteInspectionDto(
         id = id.ifBlank { UUID.randomUUID().toString() },

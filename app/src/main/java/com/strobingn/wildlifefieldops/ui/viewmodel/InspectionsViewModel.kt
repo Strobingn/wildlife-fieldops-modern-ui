@@ -11,7 +11,9 @@ import com.strobingn.wildlifefieldops.ai.fieldops.InspectionEvidence
 import com.strobingn.wildlifefieldops.ai.fieldops.InspectionNarrativeDraft
 import com.strobingn.wildlifefieldops.ai.fieldops.InspectionNarrativeEngine
 import com.strobingn.wildlifefieldops.ai.fieldops.PhotoEvidence
+import com.strobingn.wildlifefieldops.ai.fieldops.NarrativeCleared
 import com.strobingn.wildlifefieldops.data.inspection.JobInspectionLink
+import com.strobingn.wildlifefieldops.data.local.CustomerDao
 import com.strobingn.wildlifefieldops.data.local.DeletedRecordDao
 import com.strobingn.wildlifefieldops.data.local.InspectionDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
@@ -34,6 +36,7 @@ import javax.inject.Inject
 class InspectionsViewModel @Inject constructor(
     private val inspectionDao: InspectionDao,
     private val jobDao: JobDao,
+    private val customerDao: CustomerDao,
     private val photoDao: PhotoDao,
     private val deletedRecordDao: DeletedRecordDao,
     private val syncRepository: SyncRepository,
@@ -117,6 +120,11 @@ class InspectionsViewModel @Inject constructor(
         return jobDao.getById(jobId)
     }
 
+    suspend fun customerPhone(customerId: String): String {
+        if (customerId.isBlank()) return ""
+        return customerDao.getById(customerId)?.phone?.trim().orEmpty()
+    }
+
     fun saveInspection(inspection: Inspection) = viewModelScope.launch {
         inspectionDao.insert(
             inspection.copy(isSynced = false, updatedAt = System.currentTimeMillis(), syncError = null)
@@ -125,13 +133,15 @@ class InspectionsViewModel @Inject constructor(
 
     fun linkInspectionToJob(inspectionId: String, jobId: String) = viewModelScope.launch {
         val inspection = inspectionDao.getById(inspectionId) ?: return@launch
-        val job = jobDao.getById(jobId)
-        inspectionDao.insert(
-            JobInspectionLink.applyLink(inspection, jobId).copy(
-                customerId = inspection.customerId.ifBlank { job?.customerId.orEmpty() },
-                customerName = inspection.customerName.ifBlank { job?.customerName.orEmpty() }
-            )
+        val job = jobDao.getById(jobId) ?: return@launch
+        val seeded = JobInspectionLink.inspectionForRoute(
+            job = job,
+            phone = customerPhone(job.customerId),
+            current = inspection,
+            manual = NarrativeCleared.cleared(inspection.aiDraftSource),
+            typeUntouched = false
         )
+        inspectionDao.insert(JobInspectionLink.applyLink(seeded, jobId))
     }
 
     fun unlinkInspectionFromJob(inspectionId: String) = viewModelScope.launch {

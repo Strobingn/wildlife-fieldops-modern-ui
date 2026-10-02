@@ -41,6 +41,11 @@ object OperatorWins {
 
 object ManualField {
     const val SPECIES = "confirmedSpecies"
+    const val CUSTOMER_NAME = "customerName"
+    const val PHONE = "phone"
+    const val ADDRESS = "address"
+    const val SERVICE_TYPE = "serviceType"
+    const val INSPECTION_TYPE = "inspectionType"
     const val LEGAL_NOTES = "legalNotes"
     const val NEXT_STEP = "nextStep"
     const val NEXT_STEP_DUE = "nextStepDueAt"
