@@ -40,6 +40,7 @@ import com.strobingn.wildlifefieldops.util.ContractDocumentType
 import com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.model.*
+import com.strobingn.wildlifefieldops.pricing.EstimateInvoiceCarry
 import com.strobingn.wildlifefieldops.pricing.InvoicePricingInputs
 import com.strobingn.wildlifefieldops.pricing.Money
 import com.strobingn.wildlifefieldops.pricing.MoneyField
@@ -68,24 +69,23 @@ fun InvoiceScreen(
     val job by jobsViewModel.getJobById(jobId).collectAsState(initial = null)
     val context = LocalContext.current
     val countyTaxState by invoiceViewModel.countyTaxState.collectAsState()
-    val existingInvoices by invoiceViewModel.getInvoicesByJob(jobId).collectAsState(initial = emptyList())
+    val existingInvoices by invoiceViewModel.getInvoicesByJob(jobId).collectAsState(initial = null)
 
     // Trigger county lookup once the job is loaded.
-    LaunchedEffect(job) {
+    LaunchedEffect(job?.id) {
         job?.let { invoiceViewModel.resolveCountyTax(it) }
     }
 
-    var lineItems by remember { mutableStateOf(listOf(
-        InvoiceLineItem(description = "Wildlife Inspection", quantity = 1.0, unit = "ea", unitPrice = 150.0),
-        InvoiceLineItem(description = "Live Trapping & Removal", quantity = 1.0, unit = "ea", unitPrice = 350.0),
-        InvoiceLineItem(description = "Entry Point Sealing", quantity = 3.0, unit = "ea", unitPrice = 85.0)
-    )) }
+    var lineItems by remember { mutableStateOf<List<InvoiceLineItem>>(emptyList()) }
     var taxRate by remember { mutableStateOf("8.0") }
     var taxRateManual by remember { mutableStateOf(false) }
-    var invoiceHydrated by remember { mutableStateOf(false) }
+    var seededFromEstimate by remember { mutableStateOf(false) }
+    var sessionDirty by remember { mutableStateOf(false) }
+    var appliedKey by remember { mutableStateOf<String?>(null) }
+    var boundInvoiceId by remember { mutableStateOf<String?>(null) }
     var discountPercent by remember { mutableStateOf("0") }
     var notes by remember { mutableStateOf("") }
-    var terms by remember { mutableStateOf("Payment due within 30 days. Late payments subject to 1.5% monthly service charge.") }
+    var terms by remember { mutableStateOf(EstimateInvoiceCarry.DEFAULT_TERMS) }
     var subtotalOverride by remember { mutableStateOf<Double?>(null) }
     var taxAmountOverride by remember { mutableStateOf<Double?>(null) }
     var discountAmountOverride by remember { mutableStateOf<Double?>(null) }
@@ -93,35 +93,92 @@ fun InvoiceScreen(
     var pdfPath by remember { mutableStateOf("") }
     var showPdfShare by remember { mutableStateOf(false) }
     var showSignaturePad by remember { mutableStateOf(false) }
+    var showCopyDialog by remember { mutableStateOf(false) }
+    var showNoEstimate by remember { mutableStateOf(false) }
     var technicianSignature by remember { mutableStateOf<Bitmap?>(null) }
     var customerSignature by remember { mutableStateOf<Bitmap?>(null) }
 
-    LaunchedEffect(existingInvoices, invoiceHydrated) {
-        if (invoiceHydrated) return@LaunchedEffect
-        val latest = existingInvoices.maxByOrNull { it.updatedAt } ?: return@LaunchedEffect
-        lineItems = latest.lineItems.ifEmpty { lineItems }
-        taxRate = if (latest.taxRate > 0) latest.taxRate.toBigDecimal().stripTrailingZeros().toPlainString() else taxRate
-        discountPercent = latest.discountPercent.takeIf { it > 0 }?.toString()
-            ?: if (latest.discountAmount > 0 && latest.subtotal > 0) {
-                ((latest.discountAmount / latest.subtotal) * 100.0).toBigDecimal().stripTrailingZeros().toPlainString()
-            } else discountPercent
-        notes = latest.notes
-        terms = latest.terms.ifBlank { terms }
-        subtotalOverride = latest.subtotalOverride
-        taxAmountOverride = latest.taxAmountOverride
-        discountAmountOverride = latest.discountAmountOverride
-        totalOverride = latest.totalOverride
-        taxRateManual = latest.taxRateManual
-        invoiceHydrated = true
+    fun touch() {
+        sessionDirty = true
     }
 
-    // Auto-fill tax rate when county resolves unless the operator locked Tax %.
-    LaunchedEffect(countyTaxState) {
-        if (taxRateManual) return@LaunchedEffect
+    fun applyForm(form: EstimateInvoiceCarry.InvoiceFormState, fromEstimate: Boolean) {
+        lineItems = form.lineItems
+        taxRate = EstimateInvoiceCarry.formatNumber(form.taxRate)
+        taxRateManual = form.taxRateManual
+        discountPercent = EstimateInvoiceCarry.formatNumber(form.discountPercent)
+        notes = form.notes
+        terms = form.terms
+        subtotalOverride = form.subtotalOverride
+        taxAmountOverride = form.taxAmountOverride
+        discountAmountOverride = form.discountAmountOverride
+        totalOverride = form.totalOverride
+        seededFromEstimate = fromEstimate
+    }
+
+    fun currentForm(): EstimateInvoiceCarry.InvoiceFormState = EstimateInvoiceCarry.InvoiceFormState(
+        lineItems = lineItems,
+        taxRate = taxRate.toDoubleOrNull() ?: 0.0,
+        taxRateManual = taxRateManual,
+        discountPercent = discountPercent.toDoubleOrNull() ?: 0.0,
+        notes = notes,
+        terms = terms,
+        subtotalOverride = subtotalOverride,
+        taxAmountOverride = taxAmountOverride,
+        discountAmountOverride = discountAmountOverride,
+        totalOverride = totalOverride,
+        manuallyEdited = sessionDirty
+    )
+
+    LaunchedEffect(jobId) {
+        sessionDirty = false
+        appliedKey = null
+        boundInvoiceId = null
+        seededFromEstimate = false
+    }
+
+    LaunchedEffect(job, existingInvoices, sessionDirty) {
+        if (sessionDirty) return@LaunchedEffect
+        val current = job ?: return@LaunchedEffect
+        val invoices = existingInvoices ?: return@LaunchedEffect
+        val saved = boundInvoiceId?.let { id -> invoices.find { it.id == id } }
+            ?: invoices.maxByOrNull { it.updatedAt }
+        val plan = EstimateInvoiceCarry.resolveOpen(current.pricing, current.estimatedValue, saved)
+        if (plan.existingId != null) boundInvoiceId = plan.existingId
+        if (plan.contentKey == appliedKey) return@LaunchedEffect
+        applyForm(plan.form, fromEstimate = plan.kind == EstimateInvoiceCarry.OpenKind.ESTIMATE)
+        appliedKey = plan.contentKey
+        if (plan.kind == EstimateInvoiceCarry.OpenKind.ESTIMATE && plan.existingId != null) {
+            invoiceViewModel.refreshUntouchedFromEstimate(current.id, plan.existingId)
+        }
+    }
+
+    // County fills tax only before an estimate or a typed rate is on the form.
+    LaunchedEffect(countyTaxState, seededFromEstimate, taxRateManual) {
+        if (taxRateManual || seededFromEstimate || sessionDirty) return@LaunchedEffect
         if (countyTaxState is CountyTaxState.Resolved) {
             val rate = (countyTaxState as CountyTaxState.Resolved).ratePercent
-            taxRate = rate.toBigDecimal().stripTrailingZeros().toPlainString()
+            taxRate = EstimateInvoiceCarry.formatNumber(rate)
         }
+    }
+
+    fun estimateWorksheet(): com.strobingn.wildlifefieldops.pricing.JobPricing? {
+        val current = job ?: return null
+        return EstimateInvoiceCarry.worksheetForCarry(current.pricing, current.estimatedValue)
+    }
+
+    fun applyEstimateCopy(choice: EstimateInvoiceCarry.CopyChoice) {
+        val worksheet = estimateWorksheet() ?: return
+        val incoming = EstimateInvoiceCarry.lineItems(worksheet)
+        lineItems = EstimateInvoiceCarry.applyCopy(lineItems, incoming, choice)
+        touch()
+        invoiceViewModel.saveEditorInvoice(
+            jobId = jobId,
+            existingId = boundInvoiceId,
+            form = currentForm(),
+            manuallyEdited = true,
+            markJobInvoiced = false
+        )
     }
 
     val priced = PricingCalculator.computeInvoice(
@@ -189,6 +246,23 @@ fun InvoiceScreen(
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("Line Items", style = MaterialTheme.typography.titleSmall, color = TextPrimary, fontWeight = FontWeight.Medium)
                     Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            val worksheet = estimateWorksheet()
+                            if (worksheet == null) {
+                                showNoEstimate = true
+                            } else if (EstimateInvoiceCarry.needsCopyConfirm(lineItems)) {
+                                showCopyDialog = true
+                            } else {
+                                applyEstimateCopy(EstimateInvoiceCarry.CopyChoice.REPLACE)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary)
+                    ) {
+                        Text("Copy from estimate")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     // Headers
                     Row(modifier = Modifier.fillMaxWidth()) {
@@ -204,9 +278,11 @@ fun InvoiceScreen(
                         InvoiceLineItemRow(
                             item = item,
                             onUpdate = { updated ->
+                                touch()
                                 lineItems = lineItems.toMutableList().apply { set(index, updated) }
                             },
                             onRemove = {
+                                touch()
                                 lineItems = lineItems.toMutableList().apply { removeAt(index) }
                             }
                         )
@@ -215,6 +291,7 @@ fun InvoiceScreen(
                     // Add line item button
                     TextButton(
                         onClick = {
+                            touch()
                             lineItems = lineItems + InvoiceLineItem(description = "", quantity = 1.0, unit = "ea", unitPrice = 0.0)
                         },
                         modifier = Modifier.padding(top = 4.dp)
@@ -235,10 +312,14 @@ fun InvoiceScreen(
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         InvoiceField("Tax %", taxRate, {
+                            touch()
                             taxRate = it.filter { c -> c.isDigit() || c == '.' }
                             taxRateManual = true
                         }, Modifier.weight(1f))
-                        InvoiceField("Discount %", discountPercent, { discountPercent = it.filter { c -> c.isDigit() || c == '.' } }, Modifier.weight(1f))
+                        InvoiceField("Discount %", discountPercent, {
+                            touch()
+                            discountPercent = it.filter { c -> c.isDigit() || c == '.' }
+                        }, Modifier.weight(1f))
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     CountyTaxLabel(
@@ -257,7 +338,10 @@ fun InvoiceScreen(
                 Column(modifier = Modifier.padding(16.dp)) {
                     OutlinedTextField(
                         value = notes,
-                        onValueChange = { notes = it },
+                        onValueChange = {
+                            touch()
+                            notes = it
+                        },
                         label = { Text("Invoice Notes") },
                         colors = invoiceFieldColors(),
                         modifier = Modifier.fillMaxWidth(),
@@ -267,7 +351,10 @@ fun InvoiceScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = terms,
-                        onValueChange = { terms = it },
+                        onValueChange = {
+                            touch()
+                            terms = it
+                        },
                         label = { Text("Payment Terms") },
                         colors = invoiceFieldColors(),
                         modifier = Modifier.fillMaxWidth(),
@@ -287,27 +374,51 @@ fun InvoiceScreen(
                     OverridableAmountField(
                         label = "Subtotal",
                         field = priced.subtotal,
-                        onOverride = { subtotalOverride = Money.round(it) },
-                        onReset = { subtotalOverride = null }
+                        onOverride = {
+                            touch()
+                            subtotalOverride = Money.round(it)
+                        },
+                        onReset = {
+                            touch()
+                            subtotalOverride = null
+                        }
                     )
                     OverridableAmountField(
                         label = "Discount $",
                         field = priced.discountAmount,
-                        onOverride = { discountAmountOverride = Money.round(it) },
-                        onReset = { discountAmountOverride = null }
+                        onOverride = {
+                            touch()
+                            discountAmountOverride = Money.round(it)
+                        },
+                        onReset = {
+                            touch()
+                            discountAmountOverride = null
+                        }
                     )
                     OverridableAmountField(
                         label = "Tax $",
                         field = priced.taxAmount,
-                        onOverride = { taxAmountOverride = Money.round(it) },
-                        onReset = { taxAmountOverride = null }
+                        onOverride = {
+                            touch()
+                            taxAmountOverride = Money.round(it)
+                        },
+                        onReset = {
+                            touch()
+                            taxAmountOverride = null
+                        }
                     )
                     Divider(modifier = Modifier.padding(vertical = 4.dp), color = BorderDark)
                     OverridableAmountField(
                         label = "TOTAL",
                         field = priced.total,
-                        onOverride = { totalOverride = Money.round(it) },
-                        onReset = { totalOverride = null },
+                        onOverride = {
+                            touch()
+                            totalOverride = Money.round(it)
+                        },
+                        onReset = {
+                            touch()
+                            totalOverride = null
+                        },
                         emphasized = true
                     )
                 }
@@ -400,18 +511,13 @@ fun InvoiceScreen(
             // Save to database
             Button(
                 onClick = {
-                    invoiceViewModel.generateInvoiceFromJob(
+                    touch()
+                    invoiceViewModel.saveEditorInvoice(
                         jobId = jobId,
-                        lineItems = lineItems,
-                        taxRate = taxRate.toDoubleOrNull() ?: 0.0,
-                        discountPercent = discountPercent.toDoubleOrNull() ?: 0.0,
-                        notes = notes,
-                        terms = terms,
-                        subtotalOverride = subtotalOverride,
-                        taxAmountOverride = taxAmountOverride,
-                        discountAmountOverride = discountAmountOverride,
-                        totalOverride = totalOverride,
-                        taxRateManual = taxRateManual
+                        existingId = boundInvoiceId,
+                        form = currentForm(),
+                        manuallyEdited = true,
+                        markJobInvoiced = true
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -449,6 +555,51 @@ fun InvoiceScreen(
             onDismiss = { showPdfShare = false },
             onShare = { sharePDF(context, pdfPath) },
             onView = { viewPDF(context, pdfPath) }
+        )
+    }
+
+    if (showCopyDialog) {
+        AlertDialog(
+            onDismissRequest = { showCopyDialog = false },
+            title = { Text("Copy from estimate", color = TextPrimary) },
+            text = {
+                Text(
+                    "This invoice already has line items. Replace them, or add estimate lines that are not already here.",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                Row {
+                    TextButton(onClick = {
+                        showCopyDialog = false
+                        applyEstimateCopy(EstimateInvoiceCarry.CopyChoice.REPLACE)
+                    }) { Text("Replace", color = TextPrimary) }
+                    TextButton(onClick = {
+                        showCopyDialog = false
+                        applyEstimateCopy(EstimateInvoiceCarry.CopyChoice.ADD)
+                    }) { Text("Add", color = TextPrimary) }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCopyDialog = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            },
+            containerColor = BackgroundCard
+        )
+    }
+
+    if (showNoEstimate) {
+        AlertDialog(
+            onDismissRequest = { showNoEstimate = false },
+            title = { Text("Copy from estimate", color = TextPrimary) },
+            text = { Text("This job has no estimate yet.", color = TextSecondary) },
+            confirmButton = {
+                TextButton(onClick = { showNoEstimate = false }) {
+                    Text("OK", color = TextPrimary)
+                }
+            },
+            containerColor = BackgroundCard
         )
     }
 }

@@ -35,6 +35,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * MIGRATION_12_13 adds DEC fields on trap_logs and weather/follow-up columns
  * on jobs. Values also ride in `jobs.pricing` jsonb (trapRecords, advice,
  * follow-up) so live PostgREST does not need dedicated columns.
+ *
+ * MIGRATION_13_14 marks existing invoices as operator-owned (`manuallyEdited = 1`)
+ * so estimate carry never refills a saved invoice. New untouched carries may set 0.
  */
 object Migrations {
 
@@ -201,7 +204,13 @@ object Migrations {
         }
     }
 
-    /** Ordered 3→13. Restored backups may be older than VERSION 13; Room must migrate, never wipe. */
+    val MIGRATION_13_14 = object : Migration(13, 14) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE invoices ADD COLUMN manuallyEdited INTEGER NOT NULL DEFAULT 1")
+        }
+    }
+
+    /** Ordered 3→14. Restored backups may be older than VERSION 14; Room must migrate, never wipe. */
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_3_4,
         MIGRATION_4_5,
@@ -213,5 +222,6 @@ object Migrations {
         MIGRATION_10_11,
         MIGRATION_11_12,
         MIGRATION_12_13,
+        MIGRATION_13_14,
     )
 }

@@ -461,5 +461,22 @@ data class SyncedInvoiceRecord(
     val issueDate: Long = 0L,
     val customerName: String = "",
     val customerEmail: String = "",
-    val lastRemindedAt: Long? = null
+    val lastRemindedAt: Long? = null,
+    /** Full invoice body rides in jobs.pricing jsonb — no new Supabase columns. */
+    val subtotal: Double = 0.0,
+    val taxRate: Double = 0.0,
+    val taxAmount: Double = 0.0,
+    val discountPercent: Double = 0.0,
+    val discountAmount: Double = 0.0,
+    val notes: String = "",
+    val terms: String = "",
+    val lineItems: List<InvoiceLineItem> = emptyList(),
+    val subtotalOverride: Double? = null,
+    val taxAmountOverride: Double? = null,
+    val discountAmountOverride: Double? = null,
+    val totalOverride: Double? = null,
+    val taxRateManual: Boolean = false,
+    val manuallyEdited: Boolean = false,
+    val updatedAt: Long = 0L,
+    val customerAddress: String = ""
 )
