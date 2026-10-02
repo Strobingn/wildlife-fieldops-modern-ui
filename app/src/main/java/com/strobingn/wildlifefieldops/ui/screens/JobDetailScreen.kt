@@ -299,7 +299,18 @@ fun JobDetailScreen(
                     onSearchQueryChange = workspaceViewModel::searchCustomers,
                     matches = customerMatches,
                     onPickCustomer = workspaceViewModel::applyCustomer,
-                    onNewCustomer = workspaceViewModel::startNewCustomer
+                    onNewCustomer = workspaceViewModel::startNewCustomer,
+                    trailing = {
+                        JobReachCustomerCard(
+                            name = customerDraft.name.ifBlank { currentJob.customerName },
+                            phone = customerDraft.phone
+                        )
+                        RepeatCustomerHistoryCard(
+                            current = currentJob,
+                            jobs = allJobs,
+                            onOpen = onNavigateToJob
+                        )
+                    }
                 )
                 Button(
                     onClick = { workspaceViewModel.saveCustomerOnJob(currentJob) },
@@ -331,15 +342,6 @@ fun JobDetailScreen(
                 JobStatusPipelineCard(
                     job = currentJob,
                     onSetStatus = { viewModel.updateJobStatus(currentJob.id, it) }
-                )
-                JobReachCustomerCard(
-                    name = customerDraft.name.ifBlank { currentJob.customerName },
-                    phone = customerDraft.phone
-                )
-                RepeatCustomerHistoryCard(
-                    current = currentJob,
-                    jobs = allJobs,
-                    onOpen = onNavigateToJob
                 )
                 TextButton(onClick = onNavigateToTodayRoute) {
                     Text("Today's route", color = PrimaryGreen)
