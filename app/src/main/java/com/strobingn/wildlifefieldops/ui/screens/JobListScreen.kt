@@ -172,7 +172,7 @@ fun JobListScreen(
                             }
                         }
                     }
-                    item { Spacer(modifier = Modifier.height(88.dp)) }
+                    item { Spacer(modifier = Modifier.height(168.dp)) }
                 }
             }
         }

@@ -39,6 +39,8 @@ class VoiceJobEntryTest {
         assertTrue(activity.contains("VoiceJobEntry.ACTION_LABEL"))
         assertTrue(activity.contains("VoiceJobEntry.manualFallbackRoute()"))
         assertTrue(activity.contains("Icons.Default.Mic"))
+        assertTrue(activity.contains("launchSingleTop = true"))
+        assertTrue(activity.contains("popUpTo(Screen.JobDictate.route)"))
     }
 
     @Test

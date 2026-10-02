@@ -238,12 +238,15 @@ private fun AppNavHost(
             JobDictateScreen(
                 onBack = { navController.popBackStack() },
                 onCreated = {
-                    navController.popBackStack()
-                    navController.navigate(Screen.JobList.route)
+                    navController.navigate(Screen.JobList.route) {
+                        popUpTo(Screen.JobDictate.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
                 },
                 onTypeManually = {
-                    navController.popBackStack()
-                    navController.navigate(VoiceJobEntry.manualFallbackRoute())
+                    navController.navigate(VoiceJobEntry.manualFallbackRoute()) {
+                        popUpTo(Screen.JobDictate.route) { inclusive = true }
+                    }
                 }
             )
         }
