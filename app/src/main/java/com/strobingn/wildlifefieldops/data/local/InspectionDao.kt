@@ -9,6 +9,9 @@ interface InspectionDao {
     @Query("SELECT * FROM inspections ORDER BY inspectionDate DESC")
     fun getAll(): Flow<List<Inspection>>
 
+    @Query("SELECT * FROM inspections ORDER BY inspectionDate DESC")
+    suspend fun getAllOnce(): List<Inspection>
+
     @Query("SELECT * FROM inspections WHERE id = :id")
     suspend fun getById(id: String): Inspection?
 

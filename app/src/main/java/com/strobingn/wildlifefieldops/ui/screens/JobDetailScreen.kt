@@ -49,7 +49,8 @@ fun JobDetailScreen(
     jobAiViewModel: JobAiViewModel = hiltViewModel(),
     trapCheckViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.TrapCheckViewModel = hiltViewModel(),
     moneyViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.MoneyFieldOpsViewModel = hiltViewModel(),
-    customerFieldOpsViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.CustomerFieldOpsViewModel = hiltViewModel()
+    customerFieldOpsViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.CustomerFieldOpsViewModel = hiltViewModel(),
+    searchFieldOpsViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.SearchFieldOpsViewModel = hiltViewModel()
 ) {
     val job by viewModel.getJobById(jobId).collectAsState(initial = null)
     val customerDraft by workspaceViewModel.draft.collectAsState()
@@ -439,6 +440,8 @@ fun JobDetailScreen(
                 JobMoneySection(job = currentJob, moneyVm = moneyViewModel)
 
                 JobBatch4Section(job = currentJob, customerVm = customerFieldOpsViewModel)
+
+                JobBatch5Section(job = currentJob, searchVm = searchFieldOpsViewModel)
 
                 JobBatch2Section(
                     job = currentJob,

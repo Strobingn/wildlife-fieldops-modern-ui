@@ -60,6 +60,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     // Other Screens
     object Map : Screen("map", "Property Map", Icons.Default.Map)
     object TrapChecks : Screen("trap_checks", "Trap checks", Icons.Default.PestControl)
+    object SmartSearch : Screen("smart_search", "Search", Icons.Default.ManageSearch)
     object MileageLog : Screen("mileage_log", "Mileage log", Icons.Default.DirectionsCar)
     object InvoiceList : Screen("invoice_list", "Invoices", Icons.Default.ReceiptLong)
     object WarrantyList : Screen("warranty_list", "Warranties", Icons.Default.Verified)
@@ -95,6 +96,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
         val bottomNavItems = listOf(Dashboard, JobList, InspectionList, Schedule, GPS)
         val drawerItems = listOf(
             Map,
+            SmartSearch,
             TrapChecks,
             InvoiceList,
             WarrantyList,

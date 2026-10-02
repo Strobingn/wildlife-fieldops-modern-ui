@@ -30,6 +30,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
+import androidx.navigation.navDeepLink
 import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
 import com.strobingn.wildlifefieldops.navigation.Screen
 import com.strobingn.wildlifefieldops.ui.components.BrandMark
@@ -195,6 +196,7 @@ private fun AppNavHost(
                 onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                 onNavigateToAI = { navController.navigate(Screen.AIAssistant.route) },
                 onNavigateToTrapChecks = { navController.navigate(Screen.TrapChecks.route) },
+                onNavigateToSearch = { navController.navigate(Screen.SmartSearch.route) },
                 onNavigateToInvoices = { navController.navigate(Screen.InvoiceList.route) },
                 onNavigateToMileage = { navController.navigate(Screen.MileageLog.route) },
                 onNavigateToWarranties = { navController.navigate(Screen.WarrantyList.route) },
@@ -210,7 +212,11 @@ private fun AppNavHost(
                 showBack = false
             )
         }
-        composable(route = Screen.JobDetail.route, arguments = listOf(navArgument("jobId") { type = NavType.StringType })) { backStackEntry ->
+        composable(
+            route = Screen.JobDetail.route,
+            arguments = listOf(navArgument("jobId") { type = NavType.StringType }),
+            deepLinks = listOf(navDeepLink { uriPattern = "fieldops://report/{jobId}" })
+        ) { backStackEntry ->
             val jobId = backStackEntry.arguments?.getString("jobId") ?: ""
             JobDetailScreen(
                 jobId = jobId,
@@ -312,6 +318,13 @@ private fun AppNavHost(
         }
         composable(Screen.Map.route) {
             MapScreen(onBack = { navController.popBackStack() }, onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) })
+        }
+        composable(Screen.SmartSearch.route) {
+            SmartSearchScreen(
+                onBack = { navController.popBackStack() },
+                onOpenJob = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) },
+                onOpenInspection = { id -> navController.navigate(Screen.InspectionDetail.createRoute(id)) }
+            )
         }
         composable(Screen.TrapChecks.route) {
             TrapCheckScreen(

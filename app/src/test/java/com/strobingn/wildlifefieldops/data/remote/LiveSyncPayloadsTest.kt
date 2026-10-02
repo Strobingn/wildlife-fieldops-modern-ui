@@ -120,7 +120,15 @@ class LiveSyncPayloadsTest {
                         )
                     ),
                     warrantyTermMonths = 12,
-                    warrantyCovered = "Exclusion"
+                    warrantyCovered = "Exclusion",
+                    photoAutoTags = listOf(
+                        com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag(
+                            photoId = "p1",
+                            species = "raccoon",
+                            entry = "soffit"
+                        )
+                    ),
+                    shareReportToken = "fieldops://report/11111111-1111-1111-1111-111111111111"
                 )
             )
         )
@@ -145,6 +153,9 @@ class LiveSyncPayloadsTest {
         assertFalse("paid_amount" in encoded.keys)
         assertFalse("warranty_covered" in encoded.keys)
         assertFalse("material_usages" in encoded.keys)
+        assertTrue("photoAutoTags" in pricing.keys)
+        assertFalse("photo_auto_tags" in encoded.keys)
+        assertFalse("share_report_token" in encoded.keys)
     }
 
     @Test

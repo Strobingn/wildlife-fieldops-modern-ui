@@ -2,9 +2,11 @@ package com.strobingn.wildlifefieldops.util
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.os.Environment
@@ -49,7 +51,7 @@ object WildlifeWhispererInspectionReportPdf {
         val followUpRequired: Boolean = false
     )
 
-    fun generate(context: Context, fields: ReportFields): String {
+    fun generate(context: Context, fields: ReportFields, qr: Bitmap? = null): String {
         val pdf = PdfDocument()
         val anti = Paint().apply { isAntiAlias = true }
 
@@ -210,6 +212,18 @@ object WildlifeWhispererInspectionReportPdf {
             c.drawText("Date:", sigStart + 214f, y, labelPaint)
             val dateStart = sigStart + 214f + labelPaint.measureText("Date:") + 4f
             c.drawLine(dateStart, y + 1f, dateStart + 90f, y + 1f, lightHairline)
+        }
+
+        qr?.let { bitmap ->
+            val qrSize = 72
+            val dest = Rect(
+                (CONTENT_RIGHT - qrSize).toInt(),
+                PAGE_H - 36 - qrSize - 8,
+                CONTENT_RIGHT.toInt(),
+                PAGE_H - 36 - 8
+            )
+            c.drawBitmap(bitmap, null, dest, anti)
+            c.drawText("Scan in FieldOps", dest.left.toFloat(), dest.top - 4f, smallPaint)
         }
 
         drawFooter(c)
