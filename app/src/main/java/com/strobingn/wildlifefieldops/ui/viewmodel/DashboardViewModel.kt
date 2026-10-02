@@ -16,7 +16,6 @@ data class DashboardStats(
     val totalCustomers: Int = 0,
     val totalInspections: Int = 0,
     val followUpRequired: Int = 0,
-    val totalRevenue: Double = 0.0,
     val todayJobs: Int = 0,
     val overdueJobs: Int = 0
 )
@@ -52,7 +51,6 @@ class DashboardViewModel @Inject constructor(
             totalCustomers = customers.size,
             totalInspections = inspections.size,
             followUpRequired = inspections.count { it.followUpRequired },
-            totalRevenue = jobs.filter { it.status == JobStatus.PAID }.sumOf { it.actualCost },
             todayJobs = jobs.count {
                 it.scheduledDate != null &&
                 it.scheduledDate in dayStart..dayEnd &&
