@@ -56,6 +56,7 @@ fun InspectionFormScreen(
     prefilledJobId: String = "",
     onBack: () -> Unit,
     onNavigateToEstimate: ((String) -> Unit)? = null,
+    onNavigateToJob: ((String) -> Unit)? = null,
     viewModel: InspectionsViewModel = hiltViewModel(),
     searchVm: com.strobingn.wildlifefieldops.ui.viewmodel.SearchFieldOpsViewModel = hiltViewModel()
 ) {
@@ -94,6 +95,7 @@ fun InspectionFormScreen(
     val walkthroughHint by viewModel.walkthroughHint.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val allJobs by viewModel.allJobs.collectAsState()
 
     var linkedJobTitle by remember { mutableStateOf("") }
     var linkedJobAddress by remember { mutableStateOf("") }
@@ -727,43 +729,34 @@ fun InspectionFormScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = if (linkedJobId.isNotBlank()) AccentBlue.copy(alpha = 0.12f) else BackgroundCard
+            InspectionJobLinkCard(
+                linkedJobId = linkedJobId,
+                linkedJobTitle = linkedJobTitle,
+                linkedJobAddress = linkedJobAddress,
+                jobs = allJobs,
+                suggestedJob = com.strobingn.wildlifefieldops.data.inspection.JobInspectionLink.suggestedJob(
+                    Inspection(
+                        jobId = linkedJobId,
+                        customerId = existing?.customerId.orEmpty(),
+                        customerName = customerName,
+                        findings = findings,
+                        notes = notes,
+                        entryPoints = entryPoints
+                    ),
+                    allJobs
                 ),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        if (linkedJobId.isNotBlank()) "Linked job" else "No job linked",
-                        color = if (linkedJobId.isNotBlank()) AccentBlue else TextSecondary,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    if (linkedJobId.isNotBlank()) {
-                        Text(
-                            (linkedJobTitle.ifBlank { "Job" }) + " · ID " + linkedJobId.take(8) + "…",
-                            color = TextPrimary,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        if (linkedJobAddress.isNotBlank()) {
-                            Text(linkedJobAddress, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
-                        }
-                        Text(
-                            "AI Estimate uses this linked job. Open Inspect from Job detail to attach.",
-                            color = TextTertiary,
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    } else {
-                        Text(
-                            "Open Inspect from a Job to link jobId for AI Estimate and richer context.",
-                            color = TextSecondary,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-            }
+                onLink = { jobId ->
+                    linkedJobId = jobId
+                    existing?.id?.let { viewModel.linkInspectionToJob(it, jobId) }
+                },
+                onUnlink = {
+                    linkedJobId = ""
+                    linkedJobTitle = ""
+                    linkedJobAddress = ""
+                    existing?.id?.let { viewModel.unlinkInspectionFromJob(it) }
+                },
+                onOpenJob = { jobId -> onNavigateToJob?.invoke(jobId) }
+            )
 
             Card(
                 colors = CardDefaults.cardColors(containerColor = BackgroundCard),

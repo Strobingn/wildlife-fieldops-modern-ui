@@ -24,6 +24,9 @@ interface PhotoDao {
     @Query("SELECT * FROM photos WHERE inspectionId = :inspectionId ORDER BY takenAt DESC")
     fun getByInspection(inspectionId: String): Flow<List<Photo>>
 
+    @Query("SELECT * FROM photos WHERE inspectionId = :inspectionId ORDER BY takenAt DESC")
+    suspend fun getByInspectionOnce(inspectionId: String): List<Photo>
+
     @Query("SELECT * FROM photos WHERE isUploaded = 0")
     suspend fun getUnuploaded(): List<Photo>
 
