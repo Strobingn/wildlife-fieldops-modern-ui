@@ -9,6 +9,9 @@ interface PhotoDao {
     @Query("SELECT * FROM photos ORDER BY takenAt DESC")
     fun getAll(): Flow<List<Photo>>
 
+    @Query("SELECT * FROM photos ORDER BY takenAt DESC")
+    suspend fun getAllOnce(): List<Photo>
+
     @Query("SELECT * FROM photos WHERE id = :id")
     suspend fun getById(id: String): Photo?
 

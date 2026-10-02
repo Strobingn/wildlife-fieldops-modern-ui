@@ -45,6 +45,7 @@ fun DashboardScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToAI: () -> Unit,
     onNavigateToTrapChecks: () -> Unit = {},
+    onNavigateToSearch: () -> Unit = {},
     onNavigateToInvoices: () -> Unit = {},
     onNavigateToMileage: () -> Unit = {},
     onNavigateToWarranties: () -> Unit = {},
@@ -376,6 +377,7 @@ fun DashboardScreen(
                             TextButton(onClick = onNavigateToDuplicates) {
                                 Text("Duplicates (${duplicateMatches.size})", color = PrimaryGreen)
                             }
+                            TextButton(onClick = onNavigateToSearch) { Text("Search", color = PrimaryGreen) }
                         }
                     }
                 }

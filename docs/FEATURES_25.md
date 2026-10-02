@@ -36,7 +36,7 @@ Rule for every feature: real Room data, operator-editable fields (AI suggests, S
 19. **AI customer message drafts** — Estimate / reminder / warranty / on-the-way text and email; opens the phone SMS/email app with Sir’s edited copy.
 20. **Duplicate customer detect + merge** — Warn on same phone/address/name and merge into one customer used by jobs.
 
-## Batch 5 — Search, photos, checklists, share
+## Batch 5 — Search, photos, checklists, share (`2.5.4-ai-batch5`)
 
 21. **Smart search** — One search across jobs, customers, notes, species, photo tags, and inspection findings.
 22. **Photo auto-tags (searchable)** — Persist species / damage / entry-point tags from vision+LLM; filter the gallery.

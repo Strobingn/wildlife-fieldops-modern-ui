@@ -51,7 +51,8 @@ fun InspectionFormScreen(
     prefilledJobId: String = "",
     onBack: () -> Unit,
     onNavigateToEstimate: ((String) -> Unit)? = null,
-    viewModel: InspectionsViewModel = hiltViewModel()
+    viewModel: InspectionsViewModel = hiltViewModel(),
+    searchVm: com.strobingn.wildlifefieldops.ui.viewmodel.SearchFieldOpsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val weatherVm: LiveWeatherViewModel = hiltViewModel()
@@ -528,6 +529,12 @@ fun InspectionFormScreen(
                         OutlinedButton(
                             onClick = {
                                 try {
+                                    val qrJobId = linkedJobId.ifBlank { existing?.jobId.orEmpty() }
+                                    val qr = qrJobId.takeIf { it.isNotBlank() }?.let {
+                                        com.strobingn.wildlifefieldops.util.QrBitmap.encode(
+                                            com.strobingn.wildlifefieldops.ai.fieldops.ShareableReport.payload(it)
+                                        )
+                                    }
                                     val path = WildlifeWhispererInspectionReportPdf.generate(
                                         context = context,
                                         fields = WildlifeWhispererInspectionReportPdf.ReportFields(
@@ -546,8 +553,10 @@ fun InspectionFormScreen(
                                             notes = notes,
                                             weather = weatherConditions,
                                             followUpRequired = followUpRequired
-                                        )
+                                        ),
+                                        qr = qr
                                     )
+                                    if (qrJobId.isNotBlank()) searchVm.saveShareReport(qrJobId, path)
                                     WildlifeWhispererInspectionReportPdf.share(context, path)
                                 } catch (e: Exception) {
                                     scope.launch {

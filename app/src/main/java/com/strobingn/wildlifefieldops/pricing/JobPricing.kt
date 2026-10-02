@@ -62,7 +62,13 @@ data class JobPricing(
     val warrantyTermMonths: Int = 12,
     val warrantyCovered: String = "",
     val seasonalKind: String = "",
-    val seasonalDueAt: Long? = null
+    val seasonalDueAt: Long? = null,
+    val photoAutoTags: List<com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag> = emptyList(),
+    val photoPairs: List<com.strobingn.wildlifefieldops.ai.fieldops.PhotoPairRecord> = emptyList(),
+    val speciesChecklist: List<com.strobingn.wildlifefieldops.ai.fieldops.ChecklistItemRecord> = emptyList(),
+    val shareReportToken: String = "",
+    val shareReportPath: String = "",
+    val shareReportAt: Long? = null
 ) {
     /**
      * Money worksheet only. Field-ops extras (species, next step) must not
