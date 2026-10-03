@@ -7,8 +7,8 @@ package com.strobingn.wildlifefieldops.ui.theme
  *
  * Dark: greyscale chrome + light-gray primary.
  * Light: paper surfaces, dark-gray primary, AA-safe body/status text.
- * Semantic red / green / amber stay chromatic. Primary and accent fills are
- * neutral gray (no blue).
+ * Semantic red and green stay chromatic. Urgent is a strong red, never yellow,
+ * amber, gold, orange, or lime. Primary and accent fills are neutral gray (no blue).
  */
 object FieldSwatch {
     object Dark {
@@ -37,7 +37,10 @@ object FieldSwatch {
         const val StatusInProgress: Long = 0xFFC4C4C4
         const val StatusCompleted: Long = 0xFFA5D6A7
         const val StatusCancelled: Long = 0xFFEF9A9A
-        const val StatusUrgent: Long = 0xFFFFCC80
+        /** Light red for urgent text on dark cards. Not yellow. */
+        const val StatusUrgent: Long = 0xFFFF8A80
+        /** Dark red for urgent text on the light Today hero. Not for dark cards. */
+        const val OnHeroWarning: Long = 0xFF4A0C0C
         const val AccentBlue: Long = 0xFFD0D0D0
         const val AccentPurple: Long = 0xFFC0C0C0
         const val AccentOrange: Long = 0xFFB8B8B8
@@ -69,15 +72,21 @@ object FieldSwatch {
         const val OnSurfaceMuted: Long = 0xFF575B63
         const val Outline: Long = 0xFF74777F
         const val OutlineVariant: Long = 0xFFC4C4C4
-        const val Error: Long = 0xFFBA1A1A
+        const val Error: Long = 0xFF9B1B1B
         const val OnError: Long = 0xFFFFFFFF
         const val ErrorContainer: Long = 0xFFFFDAD6
         const val OnErrorContainer: Long = 0xFF410002
-        const val StatusPending: Long = 0xFF5F6368
+        /** Dark enough that pending chips clear 4.5:1 on the light card wash. */
+        const val StatusPending: Long = 0xFF585C61
         const val StatusInProgress: Long = 0xFF3A3A3A
         const val StatusCompleted: Long = 0xFF1B5E20
-        const val StatusCancelled: Long = 0xFFBA1A1A
-        const val StatusUrgent: Long = 0xFF9A3412
+        const val StatusCancelled: Long = 0xFF9B1B1B
+        /** Dark red for urgent text on light cards. Not yellow or orange. */
+        const val StatusUrgent: Long = 0xFF93000A
+        /** Light red for urgent text on the dark Today hero. Not for light cards. */
+        const val OnHeroWarning: Long = 0xFFFFCDD2
+        /** Dictate FAB fill. Distinct from PrimaryContainer so the label stays AA. */
+        const val SecondaryContainer: Long = 0xFFE0E0E0
         const val AccentBlue: Long = 0xFF3A3A3A
         const val AccentPurple: Long = 0xFF4A4A4A
         const val AccentOrange: Long = 0xFF5A5A5A

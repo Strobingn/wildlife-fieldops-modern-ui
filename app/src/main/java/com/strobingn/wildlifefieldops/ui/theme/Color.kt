@@ -41,6 +41,11 @@ val StatusInProgress: Color get() = pick(FieldSwatch.Dark.StatusInProgress, Fiel
 val StatusCompleted: Color get() = pick(FieldSwatch.Dark.StatusCompleted, FieldSwatch.Light.StatusCompleted)
 val StatusCancelled: Color get() = pick(FieldSwatch.Dark.StatusCancelled, FieldSwatch.Light.StatusCancelled)
 val StatusUrgent: Color get() = pick(FieldSwatch.Dark.StatusUrgent, FieldSwatch.Light.StatusUrgent)
+/**
+ * Urgent label on the Today hero. The hero is light in dark theme and dark in
+ * light theme, so this is the inverse luminance of [StatusUrgent].
+ */
+val OnHeroWarning: Color get() = pick(FieldSwatch.Dark.OnHeroWarning, FieldSwatch.Light.OnHeroWarning)
 
 val AccentBlue: Color get() = pick(FieldSwatch.Dark.AccentBlue, FieldSwatch.Light.AccentBlue)
 val AccentPurple: Color get() = pick(FieldSwatch.Dark.AccentPurple, FieldSwatch.Light.AccentPurple)
@@ -56,6 +61,7 @@ val ScrimDark: Color get() = pick(FieldSwatch.Dark.Scrim, FieldSwatch.Light.Scri
 val ErrorRed: Color get() = pick(FieldSwatch.Dark.Error, FieldSwatch.Light.Error)
 val ErrorRedDark: Color get() = pick(FieldSwatch.Dark.ErrorContainer, FieldSwatch.Light.Error)
 val SuccessGreen: Color get() = pick(FieldSwatch.Dark.Success, FieldSwatch.Light.Success)
+/** Legacy name. Value is the strong red [StatusUrgent], never a yellow. */
 val WarningYellow: Color get() = pick(FieldSwatch.Dark.StatusUrgent, FieldSwatch.Light.StatusUrgent)
 val InfoBlue: Color get() = pick(FieldSwatch.Dark.AccentBlue, FieldSwatch.Light.AccentBlue)
 
