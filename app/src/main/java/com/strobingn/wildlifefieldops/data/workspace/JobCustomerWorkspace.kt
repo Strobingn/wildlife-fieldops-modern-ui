@@ -8,7 +8,9 @@ import com.strobingn.wildlifefieldops.data.model.DefaultServiceTypes
 import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobCustomerDraft
+import com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline
 import com.strobingn.wildlifefieldops.data.model.JobPriority
+import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.data.model.Visit
 import com.strobingn.wildlifefieldops.data.remote.GeoPoint
 import com.strobingn.wildlifefieldops.ai.fieldops.JobFieldOpsCodec
@@ -40,7 +42,12 @@ data class JobSaveRequest(
     /** When true, [nextStepDueAt] is stored even if it is null (Sir cleared the date). */
     val nextStepDueAtSet: Boolean = false,
     /** Null keeps existing worksheet lines; empty list clears them. */
-    val priceLines: List<InvoiceLineItem>? = null
+    val priceLines: List<InvoiceLineItem>? = null,
+    /**
+     * Null keeps the stored enum. A tap on the form passes the canonical
+     * Scheduled / In progress / Completed value.
+     */
+    val status: JobStatus? = null
 )
 
 data class JobSaveResult(
@@ -94,6 +101,7 @@ class JobCustomerWorkspace @Inject constructor(
             if (request.confirmedSpecies != null) next = next.markManual(ManualField.SPECIES)
             if (request.legalNotes != null) next = next.markManual(ManualField.LEGAL_NOTES)
             if (request.nextStep != null) next = next.markManual(ManualField.NEXT_STEP)
+            if (request.status != null) next = JobStatusPipeline.stamp(next, request.status)
             next
         }
         val quote = PricingCalculator.compute(nextPricing)
@@ -110,6 +118,7 @@ class JobCustomerWorkspace @Inject constructor(
             address = serviceAddress,
             type = DefaultServiceTypes.display(request.type),
             priority = request.priority,
+            status = request.status ?: base.status,
             estimatedValue = quote.total.effective,
             actualCost = request.actualCost ?: base.actualCost,
             notes = request.notes,

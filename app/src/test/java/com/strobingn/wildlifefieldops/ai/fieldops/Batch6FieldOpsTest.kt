@@ -190,7 +190,7 @@ class Batch6FieldOpsTest {
         val rows = RepeatCustomerHistory.rows(current, listOf(current, byCustomer, byAddress, byCustomer))
         assertEquals(listOf("addr", "old"), rows.map { it.jobId })
         assertEquals("Raccoon", rows.first { it.jobId == "old" }.species)
-        assertEquals("Paid", rows.first { it.jobId == "old" }.statusLabel)
+        assertEquals("Completed", rows.first { it.jobId == "old" }.statusLabel)
         assertEquals(80.0, rows.first { it.jobId == "old" }.amount, 0.0)
         assertTrue(RepeatCustomerHistory.rows(Job(id = "x"), listOf(Job(id = "y"))).isEmpty())
     }
@@ -212,8 +212,8 @@ class Batch6FieldOpsTest {
         assertEquals(JobStatus.TRAPPING, pulled.status)
         assertEquals("TRAPPING", pulled.pricing.pipelineStatus)
         assertTrue(JobStatusPipeline.matches(JobStatus.PENDING, JobStatus.LEAD))
-        assertEquals("Lead", JobStatusPipeline.label(JobStatus.PENDING))
-        assertEquals("Closed", JobStatusPipeline.label(JobStatus.COMPLETED))
+        assertEquals("Scheduled", JobStatusPipeline.label(JobStatus.PENDING))
+        assertEquals("Completed", JobStatusPipeline.label(JobStatus.COMPLETED))
     }
 
     @Test

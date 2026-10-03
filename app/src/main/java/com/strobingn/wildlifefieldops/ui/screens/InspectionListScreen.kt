@@ -32,6 +32,7 @@ fun InspectionListScreen(
     onNavigateToInspectionDetail: (String) -> Unit,
     onNavigateToInspectionForm: () -> Unit,
     onBack: () -> Unit,
+    showBack: Boolean = true,
     viewModel: InspectionsViewModel = hiltViewModel()
 ) {
     val inspections by viewModel.inspections.collectAsState()
@@ -43,8 +44,10 @@ fun InspectionListScreen(
             TopAppBar(
                 title = { Text("Inspections", color = TextPrimary) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                    if (showBack) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = BackgroundDark)

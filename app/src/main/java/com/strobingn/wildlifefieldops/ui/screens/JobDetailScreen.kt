@@ -51,6 +51,7 @@ fun JobDetailScreen(
     onNavigateToInspection: (String) -> Unit = {},
     onNavigateToJob: (String) -> Unit = {},
     onNavigateToTodayRoute: () -> Unit = {},
+    onNavigateToPhotos: () -> Unit = {},
     onBack: () -> Unit,
     viewModel: JobsViewModel = hiltViewModel(),
     workspaceViewModel: JobWorkspaceViewModel = hiltViewModel(),
@@ -200,98 +201,10 @@ fun JobDetailScreen(
                     }
                 }
 
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = { openLinkedJobInspection() },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = PrimaryGreen,
-                                contentColor = OnPrimary
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Default.Link, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                "Link job to inspection",
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 2
-                            )
-                        }
-                        if (linkedInspections.isNotEmpty()) {
-                            OutlinedButton(
-                                onClick = { onNavigateToInspection(linkedInspections.first().id) },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text(
-                                    "Open linked inspection",
-                                    color = PrimaryGreen,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 2
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Text("Actions", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ActionButton(
-                        label = "Invoice",
-                        icon = Icons.Default.Receipt,
-                        color = AccentPurple,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onNavigateToInvoice(currentJob.id) }
-                    )
-                    ActionButton(
-                        label = "Estimate",
-                        icon = Icons.Default.Calculate,
-                        color = AccentBlue,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onNavigateToEstimate(currentJob.id) }
-                    )
-                    ActionButton(
-                        label = "Inspect",
-                        icon = Icons.Default.Search,
-                        color = AccentCyan,
-                        modifier = Modifier.weight(1f),
-                        onClick = { openLinkedJobInspection() }
-                    )
-                }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ActionButton(
-                        label = "Live AI",
-                        icon = Icons.Default.Videocam,
-                        color = PrimaryGreen,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onNavigateToLiveCapture(currentJob.id) }
-                    )
-                    ActionButton(
-                        label = "Voice log",
-                        icon = Icons.Default.Mic,
-                        color = AccentBlue,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onNavigateToVoiceLog(currentJob.id) }
-                    )
-                }
-
-                JobLinkedInspectionsCard(
-                    job = currentJob,
-                    inspections = allInspections,
-                    onOpen = onNavigateToInspection,
-                    onUnlink = { inspectionsViewModel.unlinkInspectionFromJob(it) },
-                    onLink = { inspectionsViewModel.linkInspectionToJob(it, currentJob.id) },
-                    onNew = { onNavigateToInspectionForm(currentJob.id) }
+                JobReachCustomerCard(
+                    name = customerDraft.name.ifBlank { currentJob.customerName },
+                    phone = customerDraft.phone
                 )
-
                 JobCustomerSection(
                     draft = customerDraft,
                     onDraftChange = workspaceViewModel::updateDraft,
@@ -299,22 +212,11 @@ fun JobDetailScreen(
                     onSearchQueryChange = workspaceViewModel::searchCustomers,
                     matches = customerMatches,
                     onPickCustomer = workspaceViewModel::applyCustomer,
-                    onNewCustomer = workspaceViewModel::startNewCustomer,
-                    trailing = {
-                        JobReachCustomerCard(
-                            name = customerDraft.name.ifBlank { currentJob.customerName },
-                            phone = customerDraft.phone
-                        )
-                        RepeatCustomerHistoryCard(
-                            current = currentJob,
-                            jobs = allJobs,
-                            onOpen = onNavigateToJob
-                        )
-                    }
+                    onNewCustomer = workspaceViewModel::startNewCustomer
                 )
                 Button(
                     onClick = { workspaceViewModel.saveCustomerOnJob(currentJob) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = AccentBlue,
                         contentColor = OnPrimary
@@ -339,6 +241,96 @@ fun JobDetailScreen(
                     )
                 }
 
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { openLinkedJobInspection() },
+                            modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = PrimaryGreen,
+                                contentColor = OnPrimary
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Link, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Link job to inspection",
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 2
+                            )
+                        }
+                        if (linkedInspections.isNotEmpty()) {
+                            OutlinedButton(
+                                onClick = { onNavigateToInspection(linkedInspections.first().id) },
+                                modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    "Open linked inspection",
+                                    color = PrimaryGreen,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 2
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Text("Actions", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionButton(
+                        label = "Estimate",
+                        icon = Icons.Default.Calculate,
+                        color = AccentBlue,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onNavigateToEstimate(currentJob.id) }
+                    )
+                    ActionButton(
+                        label = "Invoice",
+                        icon = Icons.Default.Receipt,
+                        color = AccentPurple,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onNavigateToInvoice(currentJob.id) }
+                    )
+                    ActionButton(
+                        label = "Inspect",
+                        icon = Icons.Default.Search,
+                        color = AccentCyan,
+                        modifier = Modifier.weight(1f),
+                        onClick = { openLinkedJobInspection() }
+                    )
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionButton(
+                        label = "Photos",
+                        icon = Icons.Default.PhotoCamera,
+                        color = AccentBlue,
+                        modifier = Modifier.weight(1f),
+                        onClick = onNavigateToPhotos
+                    )
+                    ActionButton(
+                        label = "Live AI",
+                        icon = Icons.Default.Videocam,
+                        color = PrimaryGreen,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onNavigateToLiveCapture(currentJob.id) }
+                    )
+                    ActionButton(
+                        label = "Voice log",
+                        icon = Icons.Default.Mic,
+                        color = AccentBlue,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onNavigateToVoiceLog(currentJob.id) }
+                    )
+                }
+
                 JobStatusPipelineCard(
                     job = currentJob,
                     onSetStatus = { viewModel.updateJobStatus(currentJob.id, it) }
@@ -347,12 +339,25 @@ fun JobDetailScreen(
                     Text("Today's route", color = PrimaryGreen)
                 }
                 JobPaymentsCard(job = currentJob, onSave = { viewModel.saveJobExtras(currentJob.id, it) })
-                JobExclusionCard(job = currentJob, onSave = { viewModel.saveJobExtras(currentJob.id, it) })
                 JobSignatureCard(
                     job = currentJob,
                     customerName = customerDraft.name.ifBlank { currentJob.customerName },
                     onSave = { viewModel.saveJobExtras(currentJob.id, it) }
                 )
+                RepeatCustomerHistoryCard(
+                    current = currentJob,
+                    jobs = allJobs,
+                    onOpen = onNavigateToJob
+                )
+                JobLinkedInspectionsCard(
+                    job = currentJob,
+                    inspections = allInspections,
+                    onOpen = onNavigateToInspection,
+                    onUnlink = { inspectionsViewModel.unlinkInspectionFromJob(it) },
+                    onLink = { inspectionsViewModel.linkInspectionToJob(it, currentJob.id) },
+                    onNew = { onNavigateToInspectionForm(currentJob.id) }
+                )
+                JobExclusionCard(job = currentJob, onSave = { viewModel.saveJobExtras(currentJob.id, it) })
 
                 // Job Details
                 InfoCard(title = "Job Details") {

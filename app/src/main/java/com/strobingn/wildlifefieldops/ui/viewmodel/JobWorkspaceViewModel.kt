@@ -83,6 +83,7 @@ class JobWorkspaceViewModel @Inject constructor(
         nextStepDueAt: Long? = null,
         nextStepDueAtSet: Boolean = false,
         priceLines: List<InvoiceLineItem>? = null,
+        status: com.strobingn.wildlifefieldops.data.model.JobStatus? = null,
         onSaved: (JobSaveResult) -> Unit
     ) {
         if (_isSaving.value) return
@@ -106,7 +107,8 @@ class JobWorkspaceViewModel @Inject constructor(
                         nextStep = nextStep,
                         nextStepDueAt = nextStepDueAt,
                         nextStepDueAtSet = nextStepDueAtSet,
-                        priceLines = priceLines
+                        priceLines = priceLines,
+                        status = status
                     )
                 )
                 onSaved(result)

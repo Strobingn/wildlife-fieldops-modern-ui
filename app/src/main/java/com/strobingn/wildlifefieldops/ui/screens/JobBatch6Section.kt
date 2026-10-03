@@ -105,16 +105,14 @@ fun JobStatusPipelineCard(
         ) {
             JobStatusPipeline.stages.forEach { status ->
                 FilterChip(
-                    selected = job.status == status ||
-                        (status == JobStatus.LEAD && job.status == JobStatus.PENDING) ||
-                        (status == JobStatus.CLOSED && job.status == JobStatus.COMPLETED),
+                    selected = JobStatusPipeline.flag(job.status) == status,
                     onClick = { onSetStatus(status) },
                     label = { Text(JobStatusPipeline.label(status)) }
                 )
             }
         }
         if (hint != null) {
-            TextButton(onClick = { onSetStatus(hint) }) {
+            TextButton(onClick = { onSetStatus(JobStatusPipeline.flag(hint)) }) {
                 Text(
                     "Suggested: ${JobStatusPipeline.label(hint)}. Tap to set it.",
                     color = PrimaryGreen

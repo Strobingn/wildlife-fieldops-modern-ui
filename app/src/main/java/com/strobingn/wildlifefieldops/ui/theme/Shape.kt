@@ -16,7 +16,7 @@ val AppShapes = Shapes(
 )
 
 object FieldShapes {
-    val card = RoundedCornerShape(16.dp)
+    val card = RoundedCornerShape(20.dp)
     val cardLarge = RoundedCornerShape(20.dp)
     val chip = RoundedCornerShape(100.dp)
     val button = RoundedCornerShape(14.dp)

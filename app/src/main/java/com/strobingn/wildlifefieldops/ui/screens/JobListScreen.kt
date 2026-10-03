@@ -97,6 +97,35 @@ fun JobListScreen(
                 placeholder = "Search jobs, customers, addresses…",
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onNavigateToDictate,
+                    modifier = Modifier.weight(1f).height(56.dp),
+                    shape = FieldShapes.button
+                ) {
+                    Icon(Icons.Default.Mic, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(VoiceJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+                Button(
+                    onClick = onNavigateToJobForm,
+                    modifier = Modifier.weight(1f).height(56.dp),
+                    shape = FieldShapes.button,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(ManualJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+            }
 
             // Status filter chips
             LazyRow(

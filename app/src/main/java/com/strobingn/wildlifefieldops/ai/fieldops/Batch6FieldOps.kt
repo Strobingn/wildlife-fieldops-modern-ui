@@ -259,7 +259,9 @@ data class RouteStop(
     val longitude: Double?,
     val whenMillis: Long,
     val parentJobId: String,
-    val routeIndex: Int? = null
+    val routeIndex: Int? = null,
+    /** Three-status flag for a job stop. Blank on trap checks. */
+    val statusLabel: String = ""
 )
 
 data class RouteTrap(
@@ -298,7 +300,8 @@ object TodayRouteEngine {
                 longitude = job.longitude,
                 whenMillis = job.scheduledDate ?: 0L,
                 parentJobId = job.id,
-                routeIndex = index
+                routeIndex = index,
+                statusLabel = JobStatusPipeline.label(job.status)
             )
         }
         val trapStops = traps.mapNotNull { trap ->
@@ -477,37 +480,48 @@ object RepeatCustomerHistory {
 }
 
 object JobStatusPipeline {
+    /**
+     * The only flags the operator sees and can tap.
+     * Tapping writes this canonical value. Older stored values stay until then
+     * and still match the same flag in filters.
+     */
     val stages: List<JobStatus> = listOf(
-        JobStatus.LEAD,
-        JobStatus.ESTIMATE_SENT,
         JobStatus.SCHEDULED,
         JobStatus.IN_PROGRESS,
-        JobStatus.TRAPPING,
-        JobStatus.EXCLUSION,
-        JobStatus.INVOICED,
-        JobStatus.PAID,
-        JobStatus.CLOSED
+        JobStatus.COMPLETED
     )
 
-    fun label(status: JobStatus): String = when (status) {
-        JobStatus.LEAD, JobStatus.PENDING -> "Lead"
-        JobStatus.ESTIMATE_SENT -> "Estimate sent"
-        JobStatus.SCHEDULED -> "Scheduled"
-        JobStatus.IN_PROGRESS -> "In progress"
-        JobStatus.TRAPPING -> "Trapping"
-        JobStatus.EXCLUSION -> "Exclusion"
-        JobStatus.INVOICED -> "Invoiced"
-        JobStatus.PAID -> "Paid"
-        JobStatus.CLOSED, JobStatus.COMPLETED -> "Closed"
-        JobStatus.CANCELLED -> "Cancelled"
+    val flagLabels: List<String> = listOf("Scheduled", "In progress", "Completed")
+
+    /**
+     * Display bucket. Does not rewrite the row.
+     * PENDING, LEAD, ESTIMATE_SENT, SCHEDULED, and a brand-new job → Scheduled.
+     * IN_PROGRESS, TRAPPING, EXCLUSION → In progress (active field work).
+     * COMPLETED, INVOICED, PAID, CANCELLED, CLOSED → Completed.
+     * Paid versus unpaid stays on the invoice, not on this flag.
+     */
+    fun flag(status: JobStatus): JobStatus = when (status) {
+        JobStatus.PENDING,
+        JobStatus.LEAD,
+        JobStatus.ESTIMATE_SENT,
+        JobStatus.SCHEDULED -> JobStatus.SCHEDULED
+        JobStatus.IN_PROGRESS,
+        JobStatus.TRAPPING,
+        JobStatus.EXCLUSION -> JobStatus.IN_PROGRESS
+        JobStatus.COMPLETED,
+        JobStatus.INVOICED,
+        JobStatus.PAID,
+        JobStatus.CANCELLED,
+        JobStatus.CLOSED -> JobStatus.COMPLETED
     }
 
-    fun matches(jobStatus: JobStatus, filter: JobStatus): Boolean = when (filter) {
-        JobStatus.LEAD, JobStatus.PENDING -> jobStatus == JobStatus.LEAD || jobStatus == JobStatus.PENDING
-        JobStatus.CLOSED, JobStatus.COMPLETED ->
-            jobStatus == JobStatus.CLOSED || jobStatus == JobStatus.COMPLETED
-        else -> jobStatus == filter
+    fun label(status: JobStatus): String = when (flag(status)) {
+        JobStatus.IN_PROGRESS -> "In progress"
+        JobStatus.COMPLETED -> "Completed"
+        else -> "Scheduled"
     }
+
+    fun matches(jobStatus: JobStatus, filter: JobStatus): Boolean = flag(jobStatus) == flag(filter)
 
     fun fromPipeline(raw: String?): JobStatus? {
         val value = raw?.trim().orEmpty()

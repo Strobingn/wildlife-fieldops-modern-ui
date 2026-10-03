@@ -1,5 +1,6 @@
 package com.strobingn.wildlifefieldops.ai.operations
 
+import com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import java.util.Calendar
@@ -230,7 +231,7 @@ object AIOperationsEngine {
 
         return listOf(
             insight("Seasonal demand forecast", min(100, jobs.size * 5), "$topService leads recorded demand", "Pre-stage labor and materials for the highest-volume service."),
-            insight("Schedule conflict detector", risk(overdue, open.size), "$overdue overdue appointments", "Reschedule overdue work before accepting lower-priority stops."),
+            insight("Schedule conflict detector", risk(overdue, open.size), "$overdue scheduled jobs are past their appointment", "Reschedule those appointments before accepting lower-priority stops."),
             insight("Revenue forecast", min(100, open.size * 8), "${money(open.sumOf { it.estimatedValue })} open pipeline", "Prioritize approved, high-value jobs with complete addresses."),
             insight("Cash collection risk", risk(completed.count { it.status != JobStatus.PAID }, completed.size), "${money((quoted - paid).coerceAtLeast(0.0))} not marked paid", "Review completed and invoiced jobs for payment follow-up."),
             insight("Customer follow-up priority", risk(oldOpen, open.size), "$oldOpen open jobs older than 7 days", "Contact the oldest open estimates and record the outcome."),
@@ -271,7 +272,7 @@ object AIOperationsEngine {
             insight("Difficult-access planner", min(100, accessTerms * 10), "$accessTerms jobs mention roofs, attics, chimneys, or confined access", "Pre-plan ladders, fall protection, lighting, PPE, and a second technician where required."),
             insight("Dependent-young safeguard", min(100, youngTerms * 20), "$youngTerms jobs mention nests or dependent young", "Verify species, life stage, season, and legal method before exclusion."),
             insight("Sanitation opportunity detector", min(100, sanitationTerms * 12), "$sanitationTerms jobs mention contamination, odor, carcasses, or cleanup", "Document contamination and quote only justified remediation with proper PPE."),
-            insight("Appointment data quality", risk(unscheduled + overdue, open.size), "${unscheduled + overdue} open jobs are unscheduled or overdue", "Give every accepted job a current appointment or explicit follow-up date."),
+            insight("Appointment data quality", risk(unscheduled + overdue, open.size), "${unscheduled + overdue} open jobs are unscheduled or past their appointment", "Give every accepted job a current appointment or explicit follow-up date."),
             insight("High-value pipeline guard", risk(highValueOpen, open.size), "$highValueOpen open jobs exceed the adaptive high-value threshold", "Review high-value estimates daily for next action, schedule, and customer response."),
             insight("Actual-cost capture coach", risk(missingActual, completed.size), "$missingActual completed jobs lack actual cost", "Record labor and material cost at closeout to improve future estimates."),
             insight("Property prevention planner", min(100, repeatProperties * 16), "$repeatProperties properties have repeat work history", "Build a property-specific exclusion checklist from every prior visit and repair."),
@@ -422,7 +423,7 @@ object AIOperationsEngine {
         if (job.address.isBlank()) score -= 20
         if (job.estimatedValue >= 1000.0) score += 10
         val reason = when {
-            scheduled != null && scheduled < now -> "Overdue appointment"
+            scheduled != null && scheduled < now -> "Past appointment · ${JobStatusPipeline.label(job.status)}"
             job.priority.name == "URGENT" -> "Urgent priority"
             job.estimatedValue >= 1000.0 -> "High-value open job"
             else -> "Priority and schedule score"

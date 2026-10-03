@@ -29,6 +29,7 @@ import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.DashboardViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.LiveWeatherViewModel
+import com.strobingn.wildlifefieldops.ui.viewmodel.SettingsViewModel
 import com.strobingn.wildlifefieldops.ui.components.WeatherBanner
 import java.text.SimpleDateFormat
 import java.util.*
@@ -48,6 +49,7 @@ fun DashboardScreen(
     onNavigateToAI: () -> Unit,
     onNavigateToTrapChecks: () -> Unit = {},
     onNavigateToDictate: () -> Unit = {},
+    onNavigateToTodayRoute: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
@@ -56,7 +58,26 @@ fun DashboardScreen(
     val reminders by viewModel.pendingReminders.collectAsState()
     val dueNextSteps by viewModel.dueNextSteps.collectAsState()
     val dueTrapChecks by viewModel.dueTrapChecks.collectAsState()
+    val todayOnSchedule by viewModel.todayOnSchedule.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val syncVm: SettingsViewModel = hiltViewModel()
+    val backlog by syncVm.backlog.collectAsState()
+    val lastOk by syncVm.lastSyncOk.collectAsState()
+    val isSyncing by syncVm.isSyncing.collectAsState()
+    LaunchedEffect(Unit) { syncVm.refreshBacklog() }
+    val pendingSync = backlog?.pendingTotal ?: 0
+    val syncFailed = backlog?.hasFailures == true || lastOk == false
+    val syncLabel = when {
+        isSyncing -> "Syncing…"
+        syncFailed -> "Sync failed"
+        pendingSync > 0 -> "Pending sync · $pendingSync"
+        else -> "Synced"
+    }
+    val syncColor = when {
+        syncFailed -> ErrorRed
+        pendingSync > 0 -> TextTertiary
+        else -> TextSecondary
+    }
     val weatherVm: LiveWeatherViewModel = hiltViewModel()
     val weatherState by weatherVm.state.collectAsState()
     LaunchedEffect(Unit) { weatherVm.loadShopWeather() }
@@ -112,10 +133,18 @@ fun DashboardScreen(
             return@Scaffold
         }
 
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+        ) {
+        HomeCreateBar(
+            onDictate = onNavigateToDictate,
+            onNewJob = onNavigateToJobForm
+        )
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
@@ -143,7 +172,7 @@ fun DashboardScreen(
                         IconButton(onClick = onOpenDrawer) {
                             Icon(
                                 Icons.Default.Menu,
-                                contentDescription = "Open menu",
+                                contentDescription = "More",
                                 tint = MaterialTheme.colorScheme.onBackground
                             )
                         }
@@ -230,16 +259,11 @@ fun DashboardScreen(
                                     color = OnPrimary,
                                     fontWeight = FontWeight.Bold
                                 )
-                                if (stats.overdueJobs > 0) {
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    StatusChip(
-                                        text = "${stats.overdueJobs} overdue",
-                                        color = OnHeroWarning
-                                    )
-                                }
                             }
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilledTonalButton(
                                 onClick = onNavigateToSchedule,
+                                modifier = Modifier.height(48.dp),
                                 colors = ButtonDefaults.filledTonalButtonColors(
                                     containerColor = OnPrimary.copy(alpha = 0.18f),
                                     contentColor = OnPrimary
@@ -247,6 +271,18 @@ fun DashboardScreen(
                                 shape = FieldShapes.button
                             ) {
                                 Text("Schedule")
+                            }
+                            FilledTonalButton(
+                                onClick = onNavigateToTodayRoute,
+                                modifier = Modifier.height(48.dp),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = OnPrimary.copy(alpha = 0.18f),
+                                    contentColor = OnPrimary
+                                ),
+                                shape = FieldShapes.button
+                            ) {
+                                Text("Today's route")
+                            }
                             }
                         }
                     }
@@ -261,7 +297,7 @@ fun DashboardScreen(
                 ) {
                     ScaleIn(delayMillis = 0) {
                         StatPillCard(
-                            title = "Active",
+                            title = "In progress",
                             value = stats.inProgressJobs,
                             icon = Icons.Default.PlayCircle,
                             color = AccentBlue,
@@ -271,8 +307,8 @@ fun DashboardScreen(
                     }
                     ScaleIn(delayMillis = 80) {
                         StatPillCard(
-                            title = "Pending",
-                            value = stats.pendingJobs,
+                            title = "Scheduled",
+                            value = stats.scheduledJobs,
                             icon = Icons.Default.Schedule,
                             color = StatusPending,
                             modifier = Modifier.weight(1f),
@@ -289,7 +325,7 @@ fun DashboardScreen(
                 ) {
                     ScaleIn(delayMillis = 160) {
                         StatPillCard(
-                            title = "Done",
+                            title = "Completed",
                             value = stats.completedJobs,
                             icon = Icons.Default.CheckCircle,
                             color = SuccessGreen,
@@ -324,13 +360,19 @@ fun DashboardScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.SemiBold
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            syncLabel,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = syncColor,
+                            fontWeight = FontWeight.Medium
+                        )
                         Spacer(modifier = Modifier.height(14.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                             listOf(
                                 OverviewItem("Customers", stats.totalCustomers.toString(), Icons.Default.People, AccentPurple),
                                 OverviewItem("Inspections", stats.totalInspections.toString(), Icons.Default.Search, AccentCyan),
-                                OverviewItem("Follow-ups", stats.followUpRequired.toString(), Icons.Default.FollowTheSigns, AccentOrange),
-                                OverviewItem("Overdue", stats.overdueJobs.toString(), Icons.Default.Warning, StatusUrgent)
+                                OverviewItem("Follow-ups", stats.followUpRequired.toString(), Icons.Default.FollowTheSigns, AccentOrange)
                             ).chunked(2).forEach { row ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -345,6 +387,7 @@ fun DashboardScreen(
                                             modifier = Modifier.weight(1f)
                                         )
                                     }
+                                    if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
                                 }
                             }
                         }
@@ -381,6 +424,27 @@ fun DashboardScreen(
                         Spacer(modifier = Modifier.weight(1f))
                         Spacer(modifier = Modifier.weight(1f))
                     }
+                }
+            }
+
+            item {
+                SectionHeader(
+                    title = "Today's jobs",
+                    actionLabel = "Schedule",
+                    onAction = onNavigateToSchedule
+                )
+            }
+            if (todayOnSchedule.isEmpty()) {
+                item {
+                    Text(
+                        "Nothing scheduled today.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            } else {
+                items(todayOnSchedule, key = { "today-${it.id}" }) { job ->
+                    JobCard(job = job, onClick = { onNavigateToJobDetail(job.id) })
                 }
             }
 
@@ -447,7 +511,7 @@ fun DashboardScreen(
                                 Text(item.trap.trapLocation, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
                             }
                             Text(
-                                item.dueState.name.replace('_', ' '),
+                                com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckPlanner.dueLabel(item.dueState),
                                 color = TextTertiary,
                                 style = MaterialTheme.typography.labelSmall
                             )
@@ -493,6 +557,44 @@ fun DashboardScreen(
             }
 
             item { Spacer(modifier = Modifier.height(168.dp)) }
+        }
+        }
+    }
+}
+
+@Composable
+private fun HomeCreateBar(onDictate: () -> Unit, onNewJob: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Button(
+            onClick = onDictate,
+            modifier = Modifier.weight(1f).height(56.dp),
+            shape = FieldShapes.button,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+        ) {
+            Icon(Icons.Default.Mic, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(VoiceJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        }
+        Button(
+            onClick = onNewJob,
+            modifier = Modifier.weight(1f).height(56.dp),
+            shape = FieldShapes.button,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            )
+        ) {
+            Icon(Icons.Default.Add, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(ManualJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
     }
 }
@@ -552,7 +654,7 @@ fun JobCard(job: Job, onClick: () -> Unit) {
                 }
             }
             StatusChip(
-                text = job.status.name.replace("_", " "),
+                text = com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.label(job.status),
                 color = statusColor
             )
         }

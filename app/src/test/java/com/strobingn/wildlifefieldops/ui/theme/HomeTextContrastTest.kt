@@ -66,7 +66,8 @@ class HomeTextContrastTest {
         val update = readSource("ui/screens/AppUpdateUi.kt")
         assertTrue(dash.contains("listOf(GradientStart, GradientMid, GradientEnd)"))
         assertFalse(dash.contains("PrimaryContainer"))
-        assertTrue(dash.contains("color = OnHeroWarning"))
+        assertFalse(dash.contains("OnHeroWarning"))
+        assertFalse(dash.contains("overdue", ignoreCase = true))
         assertFalse(dash.contains("color = StatusUrgent"))
         assertTrue(dash.contains("OnPrimary.copy(alpha = 0.8f)"))
         assertTrue(dash.contains("OnPrimary.copy(alpha = 0.18f)"))
@@ -241,7 +242,7 @@ class HomeTextContrastTest {
             faded("Today label on $where", chrome.onPrimary, under, 0.8)
             solid("jobs scheduled on $where", chrome.onPrimary, under)
             wash("Schedule button on $where", chrome.onPrimary, under, 0.18)
-            wash("overdue chip on $where", chrome.heroWarning, under, 0.14)
+            solid("route button on $where", chrome.onPrimary, under)
         }
         samples.forEach { t ->
             val under = Contrast.blend(chrome.hero.first(), chrome.hero.last(), t)

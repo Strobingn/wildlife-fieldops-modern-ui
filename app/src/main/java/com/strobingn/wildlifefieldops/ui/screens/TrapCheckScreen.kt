@@ -204,7 +204,7 @@ fun TrapCheckScreen(
             if (list.isEmpty()) {
                 item {
                     Text(
-                        if (showTodayOnly) "No traps due or overdue today. Add a set trap or open All traps."
+                        if (showTodayOnly) "No traps due today. Add a set trap or open All traps."
                         else "No trap logs yet. Add a cage from here or drop a pin on the Property Map.",
                         color = TextSecondary,
                         style = MaterialTheme.typography.bodyMedium
@@ -371,7 +371,11 @@ private fun TrapCheckCard(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
-                Text(item.dueState.name.replace('_', ' '), color = dueColor, style = MaterialTheme.typography.labelSmall)
+                Text(
+                    com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckPlanner.dueLabel(item.dueState),
+                    color = dueColor,
+                    style = MaterialTheme.typography.labelSmall
+                )
             }
             if (item.jobTitle.isNotBlank()) Text(item.jobTitle, color = TextSecondary)
             if (item.trap.trapLocation.isNotBlank()) Text(item.trap.trapLocation, color = TextTertiary, style = MaterialTheme.typography.bodySmall)

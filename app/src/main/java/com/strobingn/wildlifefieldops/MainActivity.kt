@@ -3,14 +3,11 @@ package com.strobingn.wildlifefieldops
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Mic
@@ -32,7 +29,9 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
+import com.strobingn.wildlifefieldops.BuildConfig
 import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
+import com.strobingn.wildlifefieldops.navigation.MoreDestination
 import com.strobingn.wildlifefieldops.navigation.Screen
 import com.strobingn.wildlifefieldops.navigation.VoiceJobEntry
 import com.strobingn.wildlifefieldops.ui.components.BrandMark
@@ -40,8 +39,6 @@ import com.strobingn.wildlifefieldops.ui.screens.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.SettingsViewModel
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
-
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
 
@@ -108,73 +105,47 @@ fun WildlifeFieldOpsNavHost() {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-    val showBottomNav = currentRoute in Screen.bottomNavItems.map { it.route }
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
-    val drawerOpen = drawerState.currentValue == DrawerValue.Open ||
-        drawerState.targetValue == DrawerValue.Open
+    val tabRoutes = Screen.bottomNavItems.map { it.route }
+    val showBottomNav = currentRoute in tabRoutes
 
-    LaunchedEffect(showBottomNav) {
-        if (!showBottomNav && drawerState.isOpen) drawerState.close()
+    fun navigateTab(route: String) {
+        navController.navigate(route) {
+            popUpTo(Screen.Dashboard.route) { inclusive = false; saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
     }
-    BackHandler(enabled = drawerOpen) { scope.launch { drawerState.close() } }
 
-    fun navigateFromDrawer(route: String) {
-        scope.launch {
-            drawerState.close()
-            navController.navigate(route) {
-                popUpTo(Screen.Dashboard.route) { inclusive = false }
-                launchSingleTop = true
+    fun openTool(dest: MoreDestination) {
+        navController.navigate(dest.route) { launchSingleTop = true }
+        if (dest.screen == Screen.Settings) {
+            navController.getBackStackEntry(Screen.Settings.route)
+                .savedStateHandle["settingsFocus"] = dest.settingsFocus
+        }
+    }
+
+    Scaffold(
+        topBar = {},
+        bottomBar = {
+            if (showBottomNav) {
+                Column {
+                    AppUpdateBannerBar()
+                    AutoSyncStatusBar()
+                    ModernBottomBar(
+                        currentRoute = currentRoute ?: Screen.Dashboard.route,
+                        onNavigate = { route -> navigateTab(route) }
+                    )
+                }
             }
-        }
-    }
-
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        gesturesEnabled = showBottomNav,
-        scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f),
-        drawerContent = {
-            AppDrawer(
-                onNavigate = { route -> navigateFromDrawer(route) },
-                onClose = { scope.launch { drawerState.close() } }
-            )
-        }
-    ) {
-        Scaffold(
-            topBar = {},
-            bottomBar = {
-                if (showBottomNav) {
-                    Column {
-                        AppUpdateBannerBar()
-                        AutoSyncStatusBar()
-                        ModernBottomBar(
-                            currentRoute = currentRoute ?: Screen.Dashboard.route,
-                            onNavigate = { route ->
-                                scope.launch {
-                                    if (drawerState.isOpen) drawerState.close()
-                                    navController.navigate(route) {
-                                        popUpTo(Screen.Dashboard.route) { inclusive = false }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
-                            }
-                        )
-                    }
-                }
-            },
-            containerColor = MaterialTheme.colorScheme.background
-        ) { padding ->
-            AppNavHost(
-                navController = navController,
-                modifier = Modifier.padding(padding),
-                onOpenDrawer = {
-                    scope.launch {
-                        if (drawerState.isClosed) drawerState.open() else drawerState.close()
-                    }
-                }
-            )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { padding ->
+        AppNavHost(
+            navController = navController,
+            modifier = Modifier.padding(padding),
+            onOpenMore = { navigateTab(Screen.More.route) },
+            onOpenTool = { dest -> openTool(dest) }
+        )
     }
 }
 
@@ -182,7 +153,8 @@ fun WildlifeFieldOpsNavHost() {
 private fun AppNavHost(
     navController: NavHostController,
     modifier: Modifier = Modifier,
-    onOpenDrawer: () -> Unit = {}
+    onOpenMore: () -> Unit = {},
+    onOpenTool: (MoreDestination) -> Unit = {}
 ) {
     NavHost(navController = navController, startDestination = Screen.Dashboard.route, modifier = modifier) {
         composable(Screen.Dashboard.route) {
@@ -199,7 +171,8 @@ private fun AppNavHost(
                 onNavigateToAI = { navController.navigate(Screen.AIAssistant.route) },
                 onNavigateToTrapChecks = { navController.navigate(Screen.TrapChecks.route) },
                 onNavigateToDictate = { navController.navigate(VoiceJobEntry.createRoute()) },
-                onOpenDrawer = onOpenDrawer
+                onNavigateToTodayRoute = { navController.navigate(Screen.TodayRoute.route) },
+                onOpenDrawer = onOpenMore
             )
         }
         composable(Screen.JobList.route) {
@@ -229,6 +202,7 @@ private fun AppNavHost(
                 onNavigateToInspection = { iid -> navController.navigate(Screen.InspectionDetail.createRoute(iid)) },
                 onNavigateToJob = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) },
                 onNavigateToTodayRoute = { navController.navigate(Screen.TodayRoute.route) },
+                onNavigateToPhotos = { navController.navigate(Screen.PhotoGallery.route) },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -274,7 +248,8 @@ private fun AppNavHost(
             InspectionListScreen(
                 onNavigateToInspectionDetail = { id -> navController.navigate(Screen.InspectionDetail.createRoute(id)) },
                 onNavigateToInspectionForm = { navController.navigate(Screen.InspectionForm.createRoute()) },
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                showBack = false
             )
         }
         composable(route = Screen.InspectionDetail.route, arguments = listOf(navArgument("inspectionId") { type = NavType.StringType })) { backStackEntry ->
@@ -317,7 +292,8 @@ private fun AppNavHost(
         composable(Screen.CustomerList.route) {
             CustomerListScreen(
                 onNavigateToCustomerForm = { id -> navController.navigate(Screen.CustomerForm.createRoute(id)) },
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                showBack = false
             )
         }
         composable(route = Screen.CustomerForm.route, arguments = listOf(navArgument("customerId") { type = NavType.StringType; nullable = true; defaultValue = null })) { backStackEntry ->
@@ -343,7 +319,7 @@ private fun AppNavHost(
         composable(Screen.EarningsTax.route) {
             EarningsTaxScreen(
                 onBack = { navController.popBackStack() },
-                showBack = false,
+                showBack = true,
                 onNavigateToInvoices = { navController.navigate(Screen.InvoiceList.route) },
                 onNavigateToMileage = { navController.navigate(Screen.MileageLog.route) }
             )
@@ -398,8 +374,24 @@ private fun AppNavHost(
                 inspectionId = inspectionId
             )
         }
-        composable(Screen.Settings.route) {
-            SettingsScreen(onBack = { navController.popBackStack() })
+        composable(Screen.More.route) {
+            MoreScreen(
+                onOpen = onOpenTool,
+                header = { MoreShellHeader() },
+                primaryActions = {
+                    MoreShellActions(
+                        onNewJob = { navController.navigate(ManualJobEntry.createRoute()) },
+                        onDictate = { navController.navigate(VoiceJobEntry.createRoute()) }
+                    )
+                }
+            )
+        }
+        composable(Screen.Settings.route) { entry ->
+            val focus by entry.savedStateHandle.getStateFlow("settingsFocus", "").collectAsState()
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                focusBackup = focus == "backup"
+            )
         }
         composable(Screen.AIAssistant.route) {
             AIAssistantScreen(onBack = { navController.popBackStack() })
@@ -496,96 +488,73 @@ private fun ModernBottomBar(currentRoute: String, onNavigate: (String) -> Unit) 
 }
 
 @Composable
-private fun AppDrawer(onNavigate: (String) -> Unit, onClose: () -> Unit) {
-    ModalDrawerSheet(
-        drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        drawerContentColor = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.fillMaxHeight().width(300.dp)
+private fun MoreShellHeader() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .background(
+                Brush.verticalGradient(listOf(GradientStart, GradientEnd)),
+                FieldShapes.hero
+            )
+            .padding(horizontal = 20.dp, vertical = 20.dp)
     ) {
-        Column(modifier = Modifier.fillMaxHeight().verticalScroll(rememberScrollState())) {
-            Box(
-                modifier = Modifier.fillMaxWidth().background(
-                    Brush.verticalGradient(listOf(GradientStart, GradientEnd))
-                ).padding(horizontal = 20.dp, vertical = 28.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    BrandMark(size = 48)
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Wildlife Whisperer", style = MaterialTheme.typography.titleLarge, color = OnPrimary, fontWeight = FontWeight.Bold)
-                        Text("FieldOps · Cornwall, NY", style = MaterialTheme.typography.bodySmall, color = OnPrimary.copy(alpha = 0.75f))
-                    }
-                    IconButton(onClick = onClose) {
-                        Text("✕", color = OnPrimary.copy(alpha = 0.9f), style = MaterialTheme.typography.titleMedium)
-                    }
-                }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BrandMark(size = 48)
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Wildlife Whisperer",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = OnPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "FieldOps · Cornwall, NY",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OnPrimary.copy(alpha = 0.75f)
+                )
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            NavigationDrawerItem(
-                icon = { Icon(Icons.Default.Add, contentDescription = ManualJobEntry.ACTION_LABEL) },
-                label = { Text(ManualJobEntry.ACTION_LABEL, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold) },
-                selected = false,
-                onClick = { onNavigate(ManualJobEntry.createRoute()) },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                shape = FieldShapes.button,
-                colors = NavigationDrawerItemDefaults.colors(
-                    unselectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                    unselectedTextColor = MaterialTheme.colorScheme.primary,
-                    unselectedIconColor = MaterialTheme.colorScheme.primary,
-                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                    selectedIconColor = MaterialTheme.colorScheme.primary
-                )
-            )
-            NavigationDrawerItem(
-                icon = { Icon(Icons.Default.Mic, contentDescription = VoiceJobEntry.ACTION_LABEL) },
-                label = { Text(VoiceJobEntry.ACTION_LABEL, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold) },
-                selected = false,
-                onClick = { onNavigate(VoiceJobEntry.createRoute()) },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                shape = FieldShapes.button,
-                colors = NavigationDrawerItemDefaults.colors(
-                    unselectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                    unselectedTextColor = MaterialTheme.colorScheme.primary,
-                    unselectedIconColor = MaterialTheme.colorScheme.primary,
-                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                    selectedIconColor = MaterialTheme.colorScheme.primary
-                )
-            )
             Text(
-                "TOOLS",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                "v${BuildConfig.VERSION_NAME}",
+                color = OnPrimary.copy(alpha = 0.9f),
+                style = MaterialTheme.typography.labelMedium
             )
-            Screen.drawerItems.forEach { screen ->
-                val dest = when (screen) {
-                    is Screen.LiveCapture -> Screen.LiveCapture.createRoute()
-                    is Screen.VoiceLog -> Screen.VoiceLog.createRoute()
-                    else -> screen.route
-                }
-                NavigationDrawerItem(
-                    icon = { screen.icon?.let { Icon(it, contentDescription = screen.title) } },
-                    label = { Text(screen.title, style = MaterialTheme.typography.bodyLarge) },
-                    selected = false,
-                    onClick = { onNavigate(dest) },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                    shape = FieldShapes.button,
-                    colors = NavigationDrawerItemDefaults.colors(
-                        unselectedContainerColor = Color.Transparent,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                        selectedIconColor = MaterialTheme.colorScheme.primary
-                    )
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
-            Text("v2.0.1 · Modern UI", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun MoreShellActions(onNewJob: () -> Unit, onDictate: () -> Unit) {
+    Column(
+        modifier = Modifier.padding(top = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Button(
+            onClick = onNewJob,
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            shape = FieldShapes.button,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                contentColor = MaterialTheme.colorScheme.primary
+            )
+        ) {
+            Icon(Icons.Default.Add, contentDescription = ManualJobEntry.ACTION_LABEL)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(ManualJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold)
+        }
+        Button(
+            onClick = onDictate,
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            shape = FieldShapes.button,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                contentColor = MaterialTheme.colorScheme.primary
+            )
+        ) {
+            Icon(Icons.Default.Mic, contentDescription = VoiceJobEntry.ACTION_LABEL)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(VoiceJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold)
         }
     }
 }

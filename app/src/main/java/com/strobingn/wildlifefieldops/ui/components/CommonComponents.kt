@@ -5,6 +5,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import com.strobingn.wildlifefieldops.R
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -123,7 +124,8 @@ fun FieldCard(
         shape = shape,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         tonalElevation = 0.dp,
-        shadowElevation = 0.dp
+        shadowElevation = 0.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
             if (accentColor != null) {

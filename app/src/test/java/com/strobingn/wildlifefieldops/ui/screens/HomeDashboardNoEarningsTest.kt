@@ -21,7 +21,12 @@ class HomeDashboardNoEarningsTest {
         assertEquals(1, drawer.count { it == Screen.DuplicateCustomers })
         assertEquals(1, drawer.count { it == Screen.InvoiceList })
         assertEquals(1, drawer.count { it == Screen.MileageLog })
-        assertTrue(Screen.bottomNavItems.contains(Screen.EarningsTax))
+        assertEquals(1, drawer.count { it == Screen.EarningsTax })
+        assertFalse(Screen.bottomNavItems.contains(Screen.EarningsTax))
+        assertEquals(
+            listOf(Screen.Dashboard, Screen.JobList, Screen.InspectionList, Screen.CustomerList, Screen.More),
+            Screen.bottomNavItems
+        )
     }
 
     @Test

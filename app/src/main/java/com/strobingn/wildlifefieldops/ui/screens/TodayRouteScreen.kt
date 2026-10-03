@@ -195,9 +195,10 @@ private fun RouteStopRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text("${index + 1}. ${stop.title}", color = TextPrimary, fontWeight = FontWeight.Medium)
                 Text(
-                    listOf(if (stop.kind == TodayRouteEngine.KIND_TRAP) "Trap check" else "Job", stop.address)
-                        .filter { it.isNotBlank() }
-                        .joinToString(" · "),
+                    listOf(
+                        if (stop.kind == TodayRouteEngine.KIND_TRAP) "Trap check" else stop.statusLabel.ifBlank { "Job" },
+                        stop.address
+                    ).filter { it.isNotBlank() }.joinToString(" · "),
                     color = TextSecondary
                 )
             }
