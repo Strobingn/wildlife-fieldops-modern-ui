@@ -1,9 +1,5 @@
 package com.strobingn.wildlifefieldops.ui.screens
 
-import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.Typeface
-import android.graphics.pdf.PdfDocument
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -59,8 +55,6 @@ import com.strobingn.wildlifefieldops.ui.theme.TextPrimary
 import com.strobingn.wildlifefieldops.ui.theme.TextSecondary
 import com.strobingn.wildlifefieldops.ui.viewmodel.EarningsTaxViewModel
 import com.strobingn.wildlifefieldops.util.DecLogShare
-import java.io.File
-import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -203,7 +197,7 @@ fun EarningsTaxScreen(
                         DecLogShare.shareCsv(context, viewModel.exportCsv(), "ny-sales-tax-earnings.csv")
                     }) { Text("CSV") }
                     OutlinedButton(onClick = {
-                        val file = writeTaxPdf(context.cacheDir, viewModel.exportCsv())
+                        val file = com.strobingn.wildlifefieldops.util.EarningsTaxPdf.generate(context, viewModel.exportCsv())
                         DecLogShare.sharePdf(context, file, "NY earnings and sales tax")
                     }) { Text("PDF") }
                 }
@@ -294,30 +288,3 @@ private fun AdjustmentDialog(
     )
 }
 
-private fun writeTaxPdf(cacheDir: File, csv: String): File {
-    val pdf = PdfDocument()
-    val page = pdf.startPage(PdfDocument.PageInfo.Builder(612, 792, 1).create())
-    val paint = Paint().apply {
-        isAntiAlias = true
-        textSize = 10f
-        color = Color.rgb(20, 20, 22)
-        typeface = Typeface.MONOSPACE
-    }
-    val title = Paint(paint).apply {
-        textSize = 14f
-        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-    }
-    var y = 48f
-    page.canvas.drawText("Wildlife Whisperer  ·  Earnings & NY sales tax", 48f, y, title)
-    y += 20f
-    csv.lineSequence().forEach { line ->
-        if (y > 760f) return@forEach
-        page.canvas.drawText(line.take(90), 48f, y, paint)
-        y += 14f
-    }
-    pdf.finishPage(page)
-    val file = File(cacheDir, "ny-earnings-sales-tax.pdf")
-    FileOutputStream(file).use { pdf.writeTo(it) }
-    pdf.close()
-    return file
-}

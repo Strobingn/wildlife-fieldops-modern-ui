@@ -13,12 +13,12 @@ import android.util.Base64
  * never the FieldOps neon squirrel mark.
  */
 object WildlifeWhispererBrand {
-    const val COMPANY = "Wildlife Whisperer LLC"
-    const val COMPANY_UPPER = "WILDLIFE WHISPERER LLC"
-    const val ADDRESS = "210 Willow Avenue, Cornwall, New York 12518"
-    const val PHONE = "(845) 751-8448"
-    const val EMAIL = "austin@wildlifewhispererllc.com"
-    const val TAGLINE = "Nuisance Wildlife Control · Cornwall, NY"
+    const val COMPANY = WildlifeWhispererIdentity.COMPANY
+    const val COMPANY_UPPER = WildlifeWhispererIdentity.COMPANY_UPPER
+    const val ADDRESS = WildlifeWhispererIdentity.ADDRESS
+    const val PHONE = WildlifeWhispererIdentity.PHONE
+    const val EMAIL = WildlifeWhispererIdentity.EMAIL
+    const val TAGLINE = WildlifeWhispererIdentity.TAGLINE
 
     private val logoPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 

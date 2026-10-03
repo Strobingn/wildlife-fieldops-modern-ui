@@ -87,6 +87,7 @@ fun WarrantyListScreen(
 @Composable
 private fun WarrantyCard(job: Job, plan: WarrantyPlan, onOpen: () -> Unit) {
     val now = System.currentTimeMillis()
+    val context = androidx.compose.ui.platform.LocalContext.current
     Card(
         colors = CardDefaults.cardColors(containerColor = BackgroundCard),
         shape = RoundedCornerShape(12.dp),
@@ -109,6 +110,19 @@ private fun WarrantyCard(job: Job, plan: WarrantyPlan, onOpen: () -> Unit) {
             )
             if (plan.covered.isNotBlank()) {
                 Text(plan.covered, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+            }
+            androidx.compose.material3.OutlinedButton(onClick = {
+                val path = com.strobingn.wildlifefieldops.util.WildlifeWhispererWarrantyPdf.generate(
+                    context,
+                    job
+                )
+                com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf.share(
+                    context,
+                    path,
+                    "Share warranty"
+                )
+            }) {
+                Text("Share warranty PDF", color = TextPrimary)
             }
         }
     }

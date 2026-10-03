@@ -33,8 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import android.content.Intent
-import android.net.Uri
+import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -42,6 +41,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.ai.fieldops.InvoiceReminder
 import com.strobingn.wildlifefieldops.data.model.Invoice
 import com.strobingn.wildlifefieldops.data.model.InvoiceStatus
+import com.strobingn.wildlifefieldops.data.model.Job
+import com.strobingn.wildlifefieldops.util.ContractDocumentType
+import com.strobingn.wildlifefieldops.util.SignatureInk
+import com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundCard
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundDark
 import com.strobingn.wildlifefieldops.ui.theme.OnPrimary
@@ -101,18 +104,26 @@ fun InvoiceListScreen(
                     onPaid = { viewModel.markInvoice(invoice, InvoiceStatus.PAID) },
                     onOpenJob = { if (invoice.jobId.isNotBlank()) onOpenJob(invoice.jobId) },
                     onSms = { subject, body ->
-                        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:")).apply {
-                            putExtra("sms_body", body)
-                        }
-                        runCatching { context.startActivity(intent) }
+                        val job = jobs.find { it.id == invoice.jobId }
+                        val path = invoiceDocumentPath(context, invoice, job)
+                        com.strobingn.wildlifefieldops.util.StandardDocumentPdf.textWithPdf(
+                            context,
+                            path,
+                            body,
+                            "Text invoice"
+                        )
                     },
                     onEmail = { subject, body ->
-                        val mail = invoice.customerEmail.ifBlank { "" }
-                        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$mail")).apply {
-                            putExtra(Intent.EXTRA_SUBJECT, subject)
-                            putExtra(Intent.EXTRA_TEXT, body)
-                        }
-                        runCatching { context.startActivity(intent) }
+                        val job = jobs.find { it.id == invoice.jobId }
+                        val path = invoiceDocumentPath(context, invoice, job)
+                        com.strobingn.wildlifefieldops.util.StandardDocumentPdf.emailWithPdf(
+                            context,
+                            path,
+                            invoice.customerEmail,
+                            subject,
+                            body,
+                            "Email invoice"
+                        )
                         viewModel.markReminded(invoice)
                     }
                 )
@@ -185,4 +196,35 @@ private fun InvoiceReminderCard(
             }
         }
     }
+}
+
+private fun invoiceDocumentPath(context: Context, invoice: Invoice, job: Job?): String {
+    val source = job ?: Job(
+        id = invoice.jobId,
+        customerName = invoice.customerName,
+        address = invoice.customerAddress,
+        title = invoice.invoiceNumber
+    )
+    return WildlifeWhispererContractPdf.generate(
+        context = context,
+        documentType = ContractDocumentType.INVOICE,
+        job = source,
+        lineItems = invoice.lineItems,
+        subtotal = invoice.subtotalOverride ?: invoice.subtotal,
+        taxRate = invoice.taxRate,
+        taxAmount = invoice.taxAmountOverride ?: invoice.taxAmount,
+        discountAmount = invoice.discountAmountOverride ?: invoice.discountAmount,
+        total = invoice.totalOverride ?: invoice.totalAmount,
+        notes = invoice.notes,
+        terms = invoice.terms,
+        documentNumber = invoice.invoiceNumber,
+        invoiceDateMillis = invoice.issueDate.takeIf { it > 0L },
+        dueDateMillis = invoice.dueDate.takeIf { it > 0L },
+        amountPaid = invoice.amountPaid,
+        balanceDue = invoice.balanceDue,
+        payments = job?.pricing?.payments.orEmpty(),
+        customerEmail = invoice.customerEmail,
+        customerSignature = SignatureInk.decodePng(invoice.customerSignature),
+        technicianSignature = SignatureInk.decodePng(invoice.technicianSignature)
+    )
 }

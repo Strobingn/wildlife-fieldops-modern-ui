@@ -317,6 +317,7 @@ fun JobPaymentsCard(job: Job, onSave: (JobPricing) -> Unit) {
 
 @Composable
 fun JobExclusionCard(job: Job, onSave: (JobPricing) -> Unit) {
+    val context = LocalContext.current
     var location by remember(job.id) { mutableStateOf("") }
     var size by remember(job.id) { mutableStateOf("") }
     var material by remember(job.id) { mutableStateOf("") }
@@ -367,6 +368,20 @@ fun JobExclusionCard(job: Job, onSave: (JobPricing) -> Unit) {
             colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
             modifier = Modifier.fillMaxWidth()
         ) { Text("Add opening") }
+        OutlinedButton(
+            onClick = {
+                val path = com.strobingn.wildlifefieldops.util.WildlifeWhispererExclusionPdf.generate(
+                    context,
+                    job
+                )
+                com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf.share(
+                    context,
+                    path,
+                    "Share exclusion"
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Share exclusion / repair PDF") }
     }
 }
 
@@ -419,6 +434,7 @@ private fun ExclusionEditor(point: ExclusionPointRecord, job: Job, onSave: (JobP
 
 @Composable
 fun JobSignatureCard(job: Job, customerName: String, onSave: (JobPricing) -> Unit) {
+    val context = LocalContext.current
     var document by remember(job.id) { mutableStateOf(SignatureRules.ESTIMATE) }
     val record = SignatureRules.find(job.pricing, document)
     val manual = job.pricing.isManual(SignatureRules.manualKey(document))
@@ -479,6 +495,34 @@ fun JobSignatureCard(job: Job, customerName: String, onSave: (JobPricing) -> Uni
                 )
                 onSave(saved)
             }) { Text("Save signature", color = PrimaryGreen) }
+            TextButton(onClick = {
+                val pricing = job.pricing
+                val result = com.strobingn.wildlifefieldops.pricing.PricingCalculator.compute(pricing)
+                val items = com.strobingn.wildlifefieldops.pricing.EstimateInvoiceCarry.lineItems(pricing, result)
+                val saved = com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.find(pricing, document)
+                val path = com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf.generate(
+                    context = context,
+                    documentType = com.strobingn.wildlifefieldops.util.ContractDocumentType.CONTRACT,
+                    job = job,
+                    lineItems = items,
+                    subtotal = result.subtotal.effective,
+                    taxRate = pricing.taxRatePercent,
+                    taxAmount = result.taxAmount.effective,
+                    discountAmount = result.discountAmount.effective,
+                    total = result.total.effective,
+                    notes = listOf(pricing.notes, pricing.rationale).filter { it.isNotBlank() }.joinToString("\n"),
+                    customerSignature = com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(
+                        saved?.pngBase64?.ifBlank { ink }.orEmpty()
+                    ),
+                    customerSignerName = name.ifBlank { saved?.signerName.orEmpty() },
+                    customerSignedAtMillis = saved?.signedAt
+                )
+                com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf.share(
+                    context,
+                    path,
+                    "Share contract"
+                )
+            }) { Text("Share contract PDF", color = TextPrimary) }
         }
         val caption = SignatureRules.embedCaption(SignatureRules.find(job.pricing, document))
         if (caption.isNotBlank()) {
