@@ -32,22 +32,105 @@ class ColorContrastTest {
 
     @Test
     fun darkBodyTextMeetsAaOnChrome() {
-        val bg = FieldSwatch.Dark.Background
+        val surfaces = listOf(
+            FieldSwatch.Dark.Background,
+            FieldSwatch.Dark.Surface,
+            FieldSwatch.Dark.Elevated,
+            FieldSwatch.Dark.NavBar,
+            FieldSwatch.Dark.Card,
+            FieldSwatch.Dark.SurfaceVariant,
+            FieldSwatch.Dark.SurfaceBright,
+            FieldSwatch.Dark.PrimaryContainer
+        )
+        val inks = listOf(
+            FieldSwatch.Dark.OnSurface,
+            FieldSwatch.Dark.OnSurfaceVariant,
+            FieldSwatch.Dark.OnSurfaceMuted,
+            FieldSwatch.Dark.Primary,
+            FieldSwatch.Dark.Error,
+            FieldSwatch.Dark.StatusUrgent,
+            FieldSwatch.Dark.StatusCancelled,
+            FieldSwatch.Dark.AccentAmber,
+            FieldSwatch.Dark.StatusPending,
+            FieldSwatch.Dark.StatusInProgress,
+            FieldSwatch.Dark.Success
+        )
+        surfaces.forEach { bg ->
+            inks.forEach { fg ->
+                val ratio = Contrast.ratio(fg, bg)
+                assertTrue(
+                    "AA ${fg.toString(16)} on ${bg.toString(16)} was $ratio",
+                    Contrast.passesAa(fg, bg)
+                )
+            }
+        }
         val card = FieldSwatch.Dark.Card
-        assertTrue(Contrast.passesAa(FieldSwatch.Dark.OnSurface, bg))
-        assertTrue(Contrast.passesAa(FieldSwatch.Dark.OnSurface, card))
-        assertTrue(Contrast.passesAa(FieldSwatch.Dark.OnSurfaceVariant, bg))
-        assertTrue(Contrast.passesAa(FieldSwatch.Dark.OnSurfaceVariant, card))
-        assertTrue(Contrast.passesAa(FieldSwatch.Dark.OnSurfaceMuted, card))
-        assertTrue(Contrast.passesAa(FieldSwatch.Dark.Error, card))
-        assertTrue(Contrast.passesAa(FieldSwatch.Dark.StatusUrgent, card))
         assertTrue(Contrast.passesAa(FieldSwatch.Dark.OnPrimary, FieldSwatch.Dark.Error))
-        assertTrue(Contrast.passesAa(FieldSwatch.Dark.AccentAmber, card))
-        assertTrue(Contrast.passesAa(FieldSwatch.Dark.StatusPending, card))
-        assertTrue(Contrast.passesAa(FieldSwatch.Dark.StatusInProgress, card))
-        assertTrue(Contrast.passesAa(FieldSwatch.Dark.Primary, card))
         assertTrue(Contrast.passesAa(FieldSwatch.Dark.OnPrimary, FieldSwatch.Dark.Primary))
+        assertTrue(Contrast.passesAa(FieldSwatch.Dark.OnPrimary, FieldSwatch.Dark.PrimaryDark))
         assertTrue(Contrast.passesAa(FieldSwatch.Dark.OnPrimaryContainer, FieldSwatch.Dark.PrimaryContainer))
+        assertTrue(Contrast.passesAa(FieldSwatch.Dark.Primary, FieldSwatch.Dark.NavIndicator))
+        assertTrue(Contrast.passesAa(FieldSwatch.Dark.OnSurface, FieldSwatch.Dark.NavIndicator))
+        assertTrue(Contrast.passesAa(FieldSwatch.Dark.OnSurfaceVariant, FieldSwatch.Dark.NavBar))
+        // Priority and status badges draw the ink at 15% over the card.
+        assertTrue(Contrast.passesAa(FieldSwatch.Dark.Error, Contrast.composite(FieldSwatch.Dark.Error, card, 0.15)))
+        assertTrue(
+            Contrast.passesAa(
+                FieldSwatch.Dark.StatusUrgent,
+                Contrast.composite(FieldSwatch.Dark.StatusUrgent, card, 0.15)
+            )
+        )
+        assertTrue(
+            Contrast.passesAa(
+                FieldSwatch.Dark.Success,
+                Contrast.composite(FieldSwatch.Dark.Success, card, 0.16)
+            )
+        )
+    }
+
+    @Test
+    fun darkSurfacesStepOffTheBackground() {
+        assertEquals(0xFF121212, FieldSwatch.Dark.Background)
+        assertEquals(0xFF2A2A2A, FieldSwatch.Dark.NavBar)
+        assertEquals(0xFF2C2C2C, FieldSwatch.Dark.Surface)
+        assertEquals(0xFF2C2C2C, FieldSwatch.Dark.Elevated)
+        assertEquals(0xFF333333, FieldSwatch.Dark.Card)
+        assertEquals(0xFF333333, FieldSwatch.Dark.SurfaceVariant)
+        assertEquals(0xFF333333, FieldSwatch.Dark.PrimaryContainer)
+        assertEquals(0xFF404040, FieldSwatch.Dark.SurfaceBright)
+        assertEquals(0xFF4A4A4A, FieldSwatch.Dark.NavIndicator)
+        assertEquals(0xFF5A5A5A, FieldSwatch.Dark.Outline)
+        assertEquals(0xFF5A5A5A, FieldSwatch.Dark.OutlineVariant)
+        assertEquals(0xFFD0D0D0, FieldSwatch.Dark.Primary)
+        val background = (FieldSwatch.Dark.Background and 0xFF).toInt()
+        listOf(
+            FieldSwatch.Dark.NavBar,
+            FieldSwatch.Dark.Surface,
+            FieldSwatch.Dark.Card,
+            FieldSwatch.Dark.SurfaceBright,
+            FieldSwatch.Dark.NavIndicator,
+            FieldSwatch.Dark.Outline
+        ).forEach { argb ->
+            val channel = (argb and 0xFF).toInt()
+            assertTrue("${argb.toString(16)} should be lighter than the page", channel > background)
+        }
+    }
+
+    @Test
+    fun lightChromeTokensAreUnchanged() {
+        assertEquals(0xFFF5F5F5, FieldSwatch.Light.Background)
+        assertEquals(0xFFFFFFFF, FieldSwatch.Light.Card)
+        assertEquals(0xFFEEEEEE, FieldSwatch.Light.Elevated)
+        assertEquals(0xFFE6E6E6, FieldSwatch.Light.SurfaceVariant)
+        assertEquals(0xFFFFFFFF, FieldSwatch.Light.SurfaceBright)
+        assertEquals(0xFF3A3A3A, FieldSwatch.Light.Primary)
+        assertEquals(0xFF2A2A2A, FieldSwatch.Light.PrimaryDark)
+        assertEquals(0xFFE6E6E6, FieldSwatch.Light.PrimaryContainer)
+        assertEquals(0xFFE0E0E0, FieldSwatch.Light.SecondaryContainer)
+        assertEquals(0xFF74777F, FieldSwatch.Light.Outline)
+        assertEquals(0xFFC4C4C4, FieldSwatch.Light.OutlineVariant)
+        assertEquals(0xFF9B1B1B, FieldSwatch.Light.Error)
+        assertEquals(0xFF93000A, FieldSwatch.Light.StatusUrgent)
     }
 
     @Test

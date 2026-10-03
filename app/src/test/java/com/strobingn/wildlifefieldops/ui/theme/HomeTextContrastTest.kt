@@ -12,7 +12,8 @@ import java.io.File
  * including translucent chip, button, and label washes. WCAG AA normal text is 4.5:1.
  *
  * Alphas match the composables: StatusChip 0.14, Today label 0.80, Schedule button
- * 0.18, nav indicator and drawer actions 0.14/0.16, drawer subtitle 0.75, close 0.90.
+ * 0.18, light-theme nav indicator and More actions 0.14/0.16, drawer subtitle 0.75,
+ * close 0.90. Dark nav uses a solid pill; dark More actions use the card surface.
  */
 class HomeTextContrastTest {
 
@@ -79,6 +80,9 @@ class HomeTextContrastTest {
         assertTrue(main.contains("OnPrimary.copy(alpha = 0.9f)"))
         assertTrue(main.contains("primary.copy(alpha = 0.16f)"))
         assertTrue(main.contains("primary.copy(alpha = 0.14f)"))
+        assertTrue(main.contains("surfaceDim"))
+        assertTrue(main.contains("NavIndicator"))
+        assertTrue(main.contains("surfaceContainerHigh"))
         assertTrue(weather.contains("color = TextPrimary") || weather.contains("color = TextSecondary"))
         assertTrue(update.contains("fun AppUpdateHomeChip"))
         assertTrue(update.contains("color = TextPrimary"))
@@ -108,7 +112,9 @@ class HomeTextContrastTest {
         val accentOrange: Long,
         val accentBlue: Long,
         val accentCyan: Long,
-        val hero: List<Long>
+        val hero: List<Long>,
+        val navBar: Long,
+        val navIndicator: Long
     )
 
     private data class Pair(val name: String, val foreground: Long, val background: Long)
@@ -142,7 +148,9 @@ class HomeTextContrastTest {
             FieldSwatch.Light.GradientStart,
             FieldSwatch.Light.GradientMid,
             FieldSwatch.Light.GradientEnd
-        )
+        ),
+        navBar = FieldSwatch.Light.Elevated,
+        navIndicator = FieldSwatch.Light.Elevated
     )
 
     private fun darkChrome() = Chrome(
@@ -173,7 +181,9 @@ class HomeTextContrastTest {
             FieldSwatch.Dark.GradientStart,
             FieldSwatch.Dark.GradientMid,
             FieldSwatch.Dark.GradientEnd
-        )
+        ),
+        navBar = FieldSwatch.Dark.NavBar,
+        navIndicator = FieldSwatch.Dark.NavIndicator
     )
 
     private fun homeTextPairs(chrome: Chrome): List<Pair> {
@@ -218,15 +228,23 @@ class HomeTextContrastTest {
         solid("sync Pending on tile", chrome.onMuted, chrome.tile)
         solid("sync failed on tile", chrome.error, chrome.tile)
 
-        solid("bottom nav unselected on tile", chrome.onVariant, chrome.tile)
-        wash("bottom nav selected on indicator", chrome.primary, chrome.tile, 0.16)
+        solid("bottom nav unselected on nav bar", chrome.onVariant, chrome.navBar)
+        if (chrome.name == "DARK") {
+            solid("bottom nav selected on pill", chrome.primary, chrome.navIndicator)
+        } else {
+            wash("bottom nav selected on indicator", chrome.primary, chrome.navBar, 0.16)
+        }
 
         solid("New Job FAB label on primary", chrome.onPrimary, chrome.primary)
         solid("Dictate FAB label on secondary fill", chrome.dictateLabel, chrome.dictateFill)
 
         solid("drawer tool label on sheet", chrome.onSurface, chrome.tile)
         solid("drawer TOOLS caption on sheet", chrome.onVariant, chrome.tile)
-        wash("drawer New Job / Dictate label on action wash", chrome.primary, chrome.tile, 0.14)
+        if (chrome.name == "DARK") {
+            solid("More New Job / Dictate label on button", chrome.primary, chrome.card)
+        } else {
+            wash("drawer New Job / Dictate label on action wash", chrome.primary, chrome.tile, 0.14)
+        }
 
         wash("job chip PENDING/LEAD/ESTIMATE on tile", chrome.pending, chrome.tile, 0.14)
         wash("job chip SCHEDULED/IN PROGRESS/TRAPPING/EXCLUSION on tile", chrome.inProgress, chrome.tile, 0.14)
