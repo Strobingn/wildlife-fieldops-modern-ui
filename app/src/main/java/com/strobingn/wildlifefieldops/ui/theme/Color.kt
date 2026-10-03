@@ -28,6 +28,13 @@ val OnPrimary: Color get() = pick(FieldSwatch.Dark.OnPrimary, FieldSwatch.Light.
 val BackgroundDark: Color get() = pick(FieldSwatch.Dark.Background, FieldSwatch.Light.Background)
 val BackgroundCard: Color get() = pick(FieldSwatch.Dark.Card, FieldSwatch.Light.Card)
 val BackgroundElevated: Color get() = pick(FieldSwatch.Dark.Elevated, FieldSwatch.Light.Elevated)
+/**
+ * Bottom bar fill. Dark is [FieldSwatch.Dark.NavBar]. Light matches
+ * surfaceContainerLow so the light bar does not shift.
+ */
+val NavBar: Color get() = pick(FieldSwatch.Dark.NavBar, FieldSwatch.Light.Elevated)
+/** Solid selected-tab pill for the dark bar. Light theme keeps its translucent wash. */
+val NavIndicator: Color get() = swatch(FieldSwatch.Dark.NavIndicator)
 val SurfaceDark: Color get() = pick(FieldSwatch.Dark.Card, FieldSwatch.Light.Card)
 val SurfaceVariant: Color get() = pick(FieldSwatch.Dark.SurfaceVariant, FieldSwatch.Light.SurfaceVariant)
 val SurfaceBright: Color get() = pick(FieldSwatch.Dark.SurfaceBright, FieldSwatch.Light.SurfaceBright)

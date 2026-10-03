@@ -462,7 +462,11 @@ private fun AutoSyncStatusBar(viewModel: SettingsViewModel = hiltViewModel()) {
 @Composable
 private fun ModernBottomBar(currentRoute: String, onNavigate: (String) -> Unit) {
     NavigationBar(
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        containerColor = if (ThemeMode.isDark) {
+            MaterialTheme.colorScheme.surfaceDim
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
         contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 0.dp
     ) {
@@ -478,7 +482,11 @@ private fun ModernBottomBar(currentRoute: String, onNavigate: (String) -> Unit) 
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor = MaterialTheme.colorScheme.primary,
                     selectedTextColor = MaterialTheme.colorScheme.primary,
-                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                    indicatorColor = if (ThemeMode.isDark) {
+                        NavIndicator
+                    } else {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                    },
                     unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -525,6 +533,13 @@ private fun MoreShellHeader() {
 }
 
 @Composable
+private fun moreActionContainer(): Color = if (ThemeMode.isDark) {
+    MaterialTheme.colorScheme.surfaceContainerHigh
+} else {
+    MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+}
+
+@Composable
 private fun MoreShellActions(onNewJob: () -> Unit, onDictate: () -> Unit) {
     Column(
         modifier = Modifier.padding(top = 12.dp),
@@ -535,7 +550,7 @@ private fun MoreShellActions(onNewJob: () -> Unit, onDictate: () -> Unit) {
             modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = FieldShapes.button,
             colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                containerColor = moreActionContainer(),
                 contentColor = MaterialTheme.colorScheme.primary
             )
         ) {
@@ -548,7 +563,7 @@ private fun MoreShellActions(onNewJob: () -> Unit, onDictate: () -> Unit) {
             modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = FieldShapes.button,
             colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                containerColor = moreActionContainer(),
                 contentColor = MaterialTheme.colorScheme.primary
             )
         ) {
