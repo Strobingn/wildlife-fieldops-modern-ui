@@ -137,9 +137,7 @@ object StandardDocuments {
             totals += TotalLine("Balance Due:", Money.formatUsd(balance), bold = true)
         }
         return base(kind, packet).copy(
-            showChoiceBoxes = true,
-            estimateChecked = kind == DocumentKind.ESTIMATE,
-            invoiceChecked = kind == DocumentKind.INVOICE,
+            stamp = moneyStamp(kind, packet),
             meta = metaLines(kind, packet, invoiceFields),
             blocks = blocks,
             totals = totals,
@@ -158,6 +156,7 @@ object StandardDocuments {
             }
         }
         return base(packet = packet, kind = DocumentKind.RECEIPT).copy(
+            stamp = receiptStamp(paid, balance),
             meta = listOf("Date: ${day(packet.invoiceDateMillis ?: packet.nowMillis)}"),
             blocks = listOf(BodyBlock(title = "PAYMENTS", table = paymentTable(packet.payments))),
             totals = listOf(
@@ -206,7 +205,12 @@ object StandardDocuments {
         if (fields.inspectorName.isNotBlank() && inspector.none { it.name == fields.inspectorName }) {
             inspector += SignatureSlot("Inspector Signature", name = fields.inspectorName, dateText = day(whenMillis))
         }
+        val stampLines = mutableListOf<String>()
+        if (fields.severity.isNotBlank()) stampLines += fields.severity.trim().uppercase(Locale.US)
+        else stampLines += "INSPECTION"
+        if (fields.followUpRequired) stampLines += "FOLLOW-UP" else stampLines += day(whenMillis)
         return base(DocumentKind.INSPECTION, packet).copy(
+            stamp = StatusStamp(stampLines),
             meta = meta,
             customerRows = customerRows(
                 packet.copy(
@@ -243,7 +247,9 @@ object StandardDocuments {
                 .filter { it.isNotBlank() }
                 .joinToString(" · ")
         }
+        val openingLabel = if (points.size == 1) "1 OPENING" else "${points.size} OPENINGS"
         return base(DocumentKind.EXCLUSION, packet).copy(
+            stamp = StatusStamp(listOf(openingLabel, Money.formatUsd(sum))),
             meta = listOf("Date: ${day(packet.nowMillis)}"),
             blocks = listOf(
                 BodyBlock(
@@ -272,7 +278,14 @@ object StandardDocuments {
             "Expires: " + (plan.expiresAt?.let { day(it) } ?: ""),
             "Covered: ${pricing.warrantyCovered}"
         )
+        val expiresAt = plan.expiresAt
+        val warrantyStamp = when {
+            expiresAt == null -> StatusStamp(listOf("WARRANTY"))
+            expiresAt < packet.nowMillis -> StatusStamp(listOf("EXPIRED", day(expiresAt)))
+            else -> StatusStamp(listOf("EXPIRES", day(expiresAt)))
+        }
         return base(DocumentKind.WARRANTY, packet).copy(
+            stamp = warrantyStamp,
             meta = listOf("Date: ${day(packet.nowMillis)}"),
             blocks = listOf(BodyBlock(title = "WARRANTY", lines = lines, minRuledLines = 4)),
             notes = listOf(pricing.warrantyCovered.trim(), packet.notes.trim()).filter { it.isNotBlank() }.distinct()
@@ -311,7 +324,13 @@ object StandardDocuments {
             "Licensee phone:" to operator.phone,
             "Licensee address:" to operator.address
         )
+        val logStamp = if (year > 0) {
+            StatusStamp(listOf("NWCO LOG", "$year-${year + 1}"))
+        } else {
+            StatusStamp(listOf("NWCO LOG"))
+        }
         return base(DocumentKind.NWCO_LOG, packet).copy(
+            stamp = logStamp,
             landscape = true,
             meta = listOfNotNull(
                 duration.takeIf { it.isNotBlank() },
@@ -353,12 +372,53 @@ object StandardDocuments {
     private fun earnings(packet: StandardJobPacket): StandardDocument {
         val lines = packet.earningsCsv.replace("\r", "").lineSequence().toList()
         return base(DocumentKind.EARNINGS_TAX, packet).copy(
+            stamp = StatusStamp(listOf("NY SALES TAX", day(packet.nowMillis))),
             meta = listOf("Date: ${day(packet.nowMillis)}"),
             blocks = listOf(BodyBlock(title = "EARNINGS AND NY SALES TAX", lines = lines, minRuledLines = 1)),
             notes = packet.notes,
             terms = packet.terms,
             signatures = signatureSlots(packet)
         )
+    }
+
+    private fun moneyStamp(kind: DocumentKind, packet: StandardJobPacket): StatusStamp {
+        val paid = packet.amountPaid ?: packet.payments.sumOf { it.amount }
+        val balance = packet.balanceDue ?: (packet.total - paid)
+        return when (kind) {
+            DocumentKind.INVOICE -> balanceStamp(balance)
+            DocumentKind.ESTIMATE -> {
+                val until = packet.dueDateMillis?.takeIf { it > 0L }
+                    ?: ((packet.invoiceDateMillis ?: packet.nowMillis) + 30L * 86_400_000L)
+                StatusStamp(listOf("ESTIMATE", "VALID UNTIL", day(until)))
+            }
+            DocumentKind.CONTRACT -> {
+                val signed = packet.signerName.isNotBlank() || (packet.signedAtMillis ?: 0L) > 0L
+                if (signed) {
+                    val whenSigned = packet.signedAtMillis?.takeIf { it > 0L } ?: packet.nowMillis
+                    StatusStamp(listOf("SIGNED", day(whenSigned)))
+                } else {
+                    StatusStamp(listOf("CONTRACT", documentNumber(kind, packet)))
+                }
+            }
+            else -> StatusStamp(listOf(kind.title))
+        }
+    }
+
+    private fun receiptStamp(paid: Double, balance: Double): StatusStamp {
+        return if (balance <= 0.009) {
+            StatusStamp(listOf("PAID"), fill = DocumentPalette.PAID)
+        } else {
+            StatusStamp(listOf("RECEIPT", "PAID " + Money.formatUsd(paid), "DUE " + Money.formatUsd(balance)))
+        }
+    }
+
+    /** Typed [balance] wins. Zero (and overpayment) reads as paid. */
+    private fun balanceStamp(balance: Double): StatusStamp {
+        return if (balance <= 0.009) {
+            StatusStamp(listOf("PAID"), fill = DocumentPalette.PAID)
+        } else {
+            StatusStamp(listOf("BALANCE DUE", Money.formatUsd(balance)))
+        }
     }
 
     private fun base(kind: DocumentKind, packet: StandardJobPacket): StandardDocument {

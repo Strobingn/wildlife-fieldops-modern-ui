@@ -38,10 +38,15 @@ class render_standard_document_pages {
         for (Page page : pages) {
             BufferedImage image = render(page, logo);
             ImageIO.write(image, "png", new File(outDir, page.name + ".png"));
-            images.add(image);
-            titles.add(page.title);
+            ImageIO.write(grayscale(image), "png", new File(outDir, page.name + "-grayscale.png"));
+            if (!page.name.contains("-p")) {
+                images.add(image);
+                titles.add(page.title);
+            }
         }
-        ImageIO.write(contact(titles, images), "png", new File(outDir, "all-documents.png"));
+        BufferedImage sheet = contact(titles, images);
+        ImageIO.write(sheet, "png", new File(outDir, "all-documents.png"));
+        ImageIO.write(grayscale(sheet), "png", new File(outDir, "all-documents-grayscale.png"));
     }
 
     static List<Page> parse(File dump) throws Exception {
@@ -143,11 +148,31 @@ class render_standard_document_pages {
     }
 
     static Color color(String token) {
+        if (token.startsWith("#") && token.length() == 7) {
+            return new Color(Integer.parseInt(token.substring(1), 16));
+        }
         return switch (token) {
             case "muted", "rule" -> new Color(0x3A, 0x3A, 0x3A);
             case "light" -> new Color(0xBE, 0xBE, 0xBE);
+            case "white" -> Color.WHITE;
+            case "paid" -> new Color(0x0E, 0x6B, 0x38);
             default -> new Color(0x14, 0x14, 0x16);
         };
+    }
+
+    static BufferedImage grayscale(BufferedImage src) {
+        BufferedImage gray = new BufferedImage(src.getWidth(), src.getHeight(), BufferedImage.TYPE_INT_RGB);
+        for (int y = 0; y < src.getHeight(); y++) {
+            for (int x = 0; x < src.getWidth(); x++) {
+                int pixel = src.getRGB(x, y);
+                int red = (pixel >> 16) & 0xff;
+                int green = (pixel >> 8) & 0xff;
+                int blue = pixel & 0xff;
+                int luma = (int) Math.round(0.2126 * red + 0.7152 * green + 0.0722 * blue);
+                gray.setRGB(x, y, (luma << 16) | (luma << 8) | luma);
+            }
+        }
+        return gray;
     }
 
     static String unescape(String value) {
