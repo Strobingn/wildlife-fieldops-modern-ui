@@ -6,9 +6,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color as AndroidColor
 import android.graphics.Paint
-import android.graphics.pdf.PdfDocument
-import android.net.Uri
-import android.os.Environment
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -35,7 +32,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
 import com.strobingn.wildlifefieldops.util.ContractDocumentType
 import com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -53,9 +49,6 @@ import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.CountyTaxState
 import com.strobingn.wildlifefieldops.ui.viewmodel.InvoiceViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
-import java.io.File
-import java.io.FileOutputStream
-import java.text.SimpleDateFormat
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -510,6 +503,10 @@ fun InvoiceScreen(
                                 .find(currentJob.pricing, com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.CONTRACT)
                                 ?: com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules
                                     .find(currentJob.pricing, com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.ESTIMATE)
+                            val saved = existingInvoices?.let { list ->
+                                boundInvoiceId?.let { id -> list.find { it.id == id } }
+                                    ?: list.maxByOrNull { it.updatedAt }
+                            }
                             pdfPath = generateInvoicePDF(
                                 context = context,
                                 job = currentJob,
@@ -529,7 +526,15 @@ fun InvoiceScreen(
                                 balanceDue = com.strobingn.wildlifefieldops.ai.fieldops.PaymentLedger.balanceDue(
                                     total,
                                     currentJob.pricing.payments
-                                )
+                                ),
+                                documentNumber = saved?.invoiceNumber.orEmpty(),
+                                dueDateMillis = saved?.dueDate?.takeIf { it > 0L },
+                                invoiceDateMillis = saved?.issueDate?.takeIf { it > 0L },
+                                amountPaid = com.strobingn.wildlifefieldops.ai.fieldops.PaymentLedger.totalPaid(
+                                    currentJob.pricing.payments
+                                ),
+                                payments = currentJob.pricing.payments,
+                                customerEmail = saved?.customerEmail.orEmpty()
                             )
                             showPdfShare = true
                         }
@@ -590,7 +595,18 @@ fun InvoiceScreen(
             pdfPath = pdfPath,
             onDismiss = { showPdfShare = false },
             onShare = { sharePDF(context, pdfPath) },
-            onView = { viewPDF(context, pdfPath) }
+            onView = { viewPDF(context, pdfPath) },
+            onPrint = { WildlifeWhispererContractPdf.print(context, pdfPath, "Invoice") },
+            onEmail = {
+                com.strobingn.wildlifefieldops.util.StandardDocumentPdf.emailWithPdf(
+                    context,
+                    pdfPath,
+                    "",
+                    "Invoice",
+                    "Invoice attached.",
+                    "Email invoice"
+                )
+            }
         )
     }
 
@@ -830,11 +846,14 @@ private fun generateInvoicePDF(
     customerSignature: Bitmap?,
     customerSignerName: String = "",
     customerSignedAtMillis: Long? = null,
-    balanceDue: Double? = null
+    balanceDue: Double? = null,
+    documentNumber: String = "",
+    dueDateMillis: Long? = null,
+    invoiceDateMillis: Long? = null,
+    amountPaid: Double? = null,
+    payments: List<com.strobingn.wildlifefieldops.pricing.JobPaymentRecord> = emptyList(),
+    customerEmail: String = ""
 ): String {
-    // terms retained for call-site compatibility; acceptance blurb lives in shared contract PDF
-    @Suppress("UNUSED_PARAMETER")
-    val _terms = terms
     return WildlifeWhispererContractPdf.generate(
         context = context,
         documentType = ContractDocumentType.INVOICE,
@@ -846,11 +865,18 @@ private fun generateInvoicePDF(
         discountAmount = discountAmount,
         total = total,
         notes = notes,
+        terms = terms,
         technicianSignature = technicianSignature,
         customerSignature = customerSignature,
         customerSignerName = customerSignerName,
         customerSignedAtMillis = customerSignedAtMillis,
-        balanceDue = balanceDue
+        balanceDue = balanceDue,
+        documentNumber = documentNumber,
+        dueDateMillis = dueDateMillis,
+        invoiceDateMillis = invoiceDateMillis,
+        amountPaid = amountPaid,
+        payments = payments,
+        customerEmail = customerEmail
     )
 }
 
@@ -975,12 +1001,22 @@ private fun SignaturePadDialog(onDismiss: () -> Unit, onSave: (Bitmap) -> Unit) 
 }
 
 @Composable
-private fun PdfShareDialog(pdfPath: String, onDismiss: () -> Unit, onShare: () -> Unit, onView: () -> Unit) {
+private fun PdfShareDialog(
+    pdfPath: String,
+    onDismiss: () -> Unit,
+    onShare: () -> Unit,
+    onView: () -> Unit,
+    onPrint: () -> Unit,
+    onEmail: () -> Unit
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Invoice Generated", color = TextPrimary) },
         text = {
-            Text("PDF saved successfully. What would you like to do?", color = TextSecondary)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PdfPagePreview(pdfPath)
+                Text("PDF saved. Share, print, or email this invoice.", color = TextSecondary)
+            }
         },
         confirmButton = {
             Button(
@@ -993,8 +1029,10 @@ private fun PdfShareDialog(pdfPath: String, onDismiss: () -> Unit, onShare: () -
             }
         },
         dismissButton = {
-            TextButton(onClick = onView) {
-                Text("View PDF", color = AccentBlue)
+            Row {
+                TextButton(onClick = onEmail) { Text("Email", color = TextPrimary) }
+                TextButton(onClick = onPrint) { Text("Print", color = TextPrimary) }
+                TextButton(onClick = onView) { Text("View PDF", color = TextPrimary) }
             }
         },
         containerColor = BackgroundCard

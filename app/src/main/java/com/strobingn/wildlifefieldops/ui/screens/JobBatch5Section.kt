@@ -193,7 +193,7 @@ fun JobBatch5Section(
                     onClick = {
                         val path = WildlifeWhispererInspectionReportPdf.generate(
                             context = context,
-                            fields = WildlifeWhispererInspectionReportPdf.ReportFields(
+                            fields = com.strobingn.wildlifefieldops.util.InspectionReportFields(
                                 customerName = job.customerName,
                                 jobTitle = job.title,
                                 jobAddress = job.address,

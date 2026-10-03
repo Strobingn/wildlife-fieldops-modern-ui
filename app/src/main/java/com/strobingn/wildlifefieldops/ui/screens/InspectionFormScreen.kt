@@ -679,7 +679,7 @@ fun InspectionFormScreen(
                                     }
                                     val path = WildlifeWhispererInspectionReportPdf.generate(
                                         context = context,
-                                        fields = WildlifeWhispererInspectionReportPdf.ReportFields(
+                                        fields = com.strobingn.wildlifefieldops.util.InspectionReportFields(
                                             customerName = customerName,
                                             inspectorName = inspectorName,
                                             inspectionType = selectedType.name,

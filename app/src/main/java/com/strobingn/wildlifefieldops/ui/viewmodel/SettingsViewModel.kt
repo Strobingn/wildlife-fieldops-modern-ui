@@ -24,6 +24,8 @@ import com.strobingn.wildlifefieldops.ai.fieldops.NwcoOperatorProfile
 import com.strobingn.wildlifefieldops.sync.work.FieldOpsSyncScheduler
 import com.strobingn.wildlifefieldops.sync.work.WorkManagerSyncCanaryFlag
 import com.strobingn.wildlifefieldops.ui.theme.ThemePreference
+import com.strobingn.wildlifefieldops.util.BusinessProfile
+import com.strobingn.wildlifefieldops.util.BusinessProfileStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +55,9 @@ class SettingsViewModel @Inject constructor(
     private var techJob: Job? = null
     private var addressJob: Job? = null
     private var taxJob: Job? = null
+    private var phoneJob: Job? = null
+    private var emailJob: Job? = null
+    private var websiteJob: Job? = null
 
     companion object {
         const val DEFAULT_TAX_PERCENT = 8.125f
@@ -75,6 +80,10 @@ class SettingsViewModel @Inject constructor(
         val NWCO_REGION = stringPreferencesKey("nwco_region")
         val NWCO_COUNTY = stringPreferencesKey("nwco_county")
         val NWCO_PHONE = stringPreferencesKey("nwco_phone")
+        val BUSINESS_PHONE = stringPreferencesKey("business_phone")
+        val BUSINESS_EMAIL = stringPreferencesKey("business_email")
+        val BUSINESS_WEBSITE = stringPreferencesKey("business_website")
+        val BUSINESS_LOGO = stringPreferencesKey("business_logo_path")
     }
 
     private val _syncMessage = MutableStateFlow<String?>(null)
@@ -121,6 +130,8 @@ class SettingsViewModel @Inject constructor(
     val nwcoRegion = settings.map { it[NWCO_REGION] ?: "" }
     val nwcoCounty = settings.map { it[NWCO_COUNTY] ?: "" }
     val nwcoPhone = settings.map { it[NWCO_PHONE] ?: "" }
+    val businessProfile = settings.map { BusinessProfileStore.read(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BusinessProfile.defaults())
 
     init {
         refreshBacklog()
@@ -247,6 +258,40 @@ class SettingsViewModel @Inject constructor(
     fun setNwcoPhone(value: String) = viewModelScope.launch {
         dataStore.edit { it[NWCO_PHONE] = value }
         persistNwcoProfile()
+    }
+
+    fun setBusinessPhone(value: String) {
+        phoneJob?.cancel()
+        phoneJob = viewModelScope.launch {
+            delay(350)
+            dataStore.edit { it[BUSINESS_PHONE] = value }
+        }
+    }
+
+    fun setBusinessEmail(value: String) {
+        emailJob?.cancel()
+        emailJob = viewModelScope.launch {
+            delay(350)
+            dataStore.edit { it[BUSINESS_EMAIL] = value }
+        }
+    }
+
+    fun setBusinessWebsite(value: String) {
+        websiteJob?.cancel()
+        websiteJob = viewModelScope.launch {
+            delay(350)
+            dataStore.edit { it[BUSINESS_WEBSITE] = value }
+        }
+    }
+
+    fun setBusinessLogo(uri: Uri) = viewModelScope.launch {
+        val path = withContext(Dispatchers.IO) { BusinessProfileStore.importLogo(context, uri) }
+        dataStore.edit { it[BUSINESS_LOGO] = path }
+    }
+
+    fun resetBusinessLogo() = viewModelScope.launch {
+        withContext(Dispatchers.IO) { BusinessProfileStore.logoFile(context).delete() }
+        dataStore.edit { it.remove(BUSINESS_LOGO) }
     }
 
     private suspend fun persistNwcoProfile() {
@@ -416,24 +461,28 @@ class SettingsViewModel @Inject constructor(
 
     private suspend fun settingsSnapshot(): Map<String, String> {
         val prefs = dataStore.data.first()
-        return mapOf(
-            "theme_mode" to (prefs[THEME_MODE] ?: ""),
-            "dark_theme" to (prefs[DARK_THEME] ?: true).toString(),
-            "notifications_enabled" to (prefs[NOTIFICATIONS_ENABLED] ?: true).toString(),
-            "auto_sync" to (prefs[AUTO_SYNC] ?: true).toString(),
-            "sync_interval" to (prefs[SYNC_INTERVAL] ?: 15).toString(),
-            "company_name" to (prefs[COMPANY_NAME] ?: ""),
-            "technician_name" to (prefs[TECHNICIAN_NAME] ?: ""),
-            "company_address" to (prefs[COMPANY_ADDRESS] ?: ""),
-            "default_tax_rate" to (prefs[DEFAULT_TAX_RATE] ?: DEFAULT_TAX_PERCENT).toString(),
-            "offline_mode" to (prefs[OFFLINE_MODE] ?: false).toString(),
-            "high_accuracy_gps" to (prefs[HIGH_ACCURACY_GPS] ?: true).toString(),
-            "nwco_operator_name" to (prefs[NWCO_NAME] ?: ""),
-            "nwco_license" to (prefs[NWCO_LICENSE] ?: ""),
-            "nwco_region" to (prefs[NWCO_REGION] ?: ""),
-            "nwco_county" to (prefs[NWCO_COUNTY] ?: ""),
-            "nwco_phone" to (prefs[NWCO_PHONE] ?: "")
-        )
+        return buildMap {
+            put("theme_mode", prefs[THEME_MODE] ?: "")
+            put("dark_theme", (prefs[DARK_THEME] ?: true).toString())
+            put("notifications_enabled", (prefs[NOTIFICATIONS_ENABLED] ?: true).toString())
+            put("auto_sync", (prefs[AUTO_SYNC] ?: true).toString())
+            put("sync_interval", (prefs[SYNC_INTERVAL] ?: 15).toString())
+            put("company_name", prefs[COMPANY_NAME] ?: "")
+            put("technician_name", prefs[TECHNICIAN_NAME] ?: "")
+            put("company_address", prefs[COMPANY_ADDRESS] ?: "")
+            put("default_tax_rate", (prefs[DEFAULT_TAX_RATE] ?: DEFAULT_TAX_PERCENT).toString())
+            put("offline_mode", (prefs[OFFLINE_MODE] ?: false).toString())
+            put("high_accuracy_gps", (prefs[HIGH_ACCURACY_GPS] ?: true).toString())
+            put("nwco_operator_name", prefs[NWCO_NAME] ?: "")
+            put("nwco_license", prefs[NWCO_LICENSE] ?: "")
+            put("nwco_region", prefs[NWCO_REGION] ?: "")
+            put("nwco_county", prefs[NWCO_COUNTY] ?: "")
+            put("nwco_phone", prefs[NWCO_PHONE] ?: "")
+            if (prefs.contains(BUSINESS_PHONE)) put("business_phone", prefs[BUSINESS_PHONE].orEmpty())
+            if (prefs.contains(BUSINESS_EMAIL)) put("business_email", prefs[BUSINESS_EMAIL].orEmpty())
+            if (prefs.contains(BUSINESS_WEBSITE)) put("business_website", prefs[BUSINESS_WEBSITE].orEmpty())
+            if (prefs.contains(BUSINESS_LOGO)) put("business_logo_path", prefs[BUSINESS_LOGO].orEmpty())
+        }
     }
 
     private suspend fun applySettings(settings: Map<String, String>) {
@@ -455,6 +504,10 @@ class SettingsViewModel @Inject constructor(
             settings["nwco_region"]?.let { prefs[NWCO_REGION] = it }
             settings["nwco_county"]?.let { prefs[NWCO_COUNTY] = it }
             settings["nwco_phone"]?.let { prefs[NWCO_PHONE] = it }
+            settings["business_phone"]?.let { prefs[BUSINESS_PHONE] = it }
+            settings["business_email"]?.let { prefs[BUSINESS_EMAIL] = it }
+            settings["business_website"]?.let { prefs[BUSINESS_WEBSITE] = it }
+            settings["business_logo_path"]?.let { prefs[BUSINESS_LOGO] = it }
         }
     }
 

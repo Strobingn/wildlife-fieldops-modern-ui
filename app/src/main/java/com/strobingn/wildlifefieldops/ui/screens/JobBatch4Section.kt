@@ -209,6 +209,7 @@ private fun WarrantyCard(job: Job, customerVm: CustomerFieldOpsViewModel) {
         mutableStateOf(job.pricing.warrantyTermMonths.toString())
     }
     var covered by remember(job.pricing.warrantyCovered) { mutableStateOf(job.pricing.warrantyCovered) }
+    val context = LocalContext.current
 
     Card(
         colors = CardDefaults.cardColors(containerColor = BackgroundCard),
@@ -248,6 +249,28 @@ private fun WarrantyCard(job: Job, customerVm: CustomerFieldOpsViewModel) {
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
             ) { Text("Save warranty + reminder") }
+            OutlinedButton(
+                onClick = {
+                    val start = parseDayStamp(startText) ?: job.pricing.warrantyStartAt ?: System.currentTimeMillis()
+                    val next = job.copy(
+                        pricing = job.pricing.copy(
+                            warrantyStartAt = start,
+                            warrantyTermMonths = monthsText.toIntOrNull() ?: job.pricing.warrantyTermMonths,
+                            warrantyCovered = covered
+                        )
+                    )
+                    val path = com.strobingn.wildlifefieldops.util.WildlifeWhispererWarrantyPdf.generate(
+                        context,
+                        next
+                    )
+                    com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf.share(
+                        context,
+                        path,
+                        "Share warranty"
+                    )
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Share warranty PDF") }
         }
     }
 }

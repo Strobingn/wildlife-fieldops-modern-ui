@@ -585,18 +585,31 @@ fun EstimateScreen(
         AlertDialog(
             onDismissRequest = { showPdfShare = false },
             title = { Text("Estimate PDF ready", color = TextPrimary) },
-            text = { Text("PDF saved. Share or view the Wildlife Whisperer service contract.", color = TextSecondary) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PdfPagePreview(pdfPath)
+                    Text("PDF saved. Share, print, or view the Wildlife Whisperer estimate.", color = TextSecondary)
+                }
+            },
             confirmButton = {
                 TextButton(onClick = { WildlifeWhispererContractPdf.share(context, pdfPath, "Share Estimate") }) {
                     Text("Share", color = PrimaryGreen)
                 }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    WildlifeWhispererContractPdf.view(context, pdfPath)
-                    showPdfShare = false
-                }) {
-                    Text("View PDF", color = AccentBlue)
+                Row {
+                    TextButton(onClick = {
+                        com.strobingn.wildlifefieldops.util.StandardDocumentPdf.emailWithPdf(
+                            context, pdfPath, "", "Estimate", "Estimate attached.", "Email estimate"
+                        )
+                    }) { Text("Email", color = TextPrimary) }
+                    TextButton(onClick = { WildlifeWhispererContractPdf.print(context, pdfPath, "Estimate") }) {
+                        Text("Print", color = TextPrimary)
+                    }
+                    TextButton(onClick = {
+                        WildlifeWhispererContractPdf.view(context, pdfPath)
+                        showPdfShare = false
+                    }) { Text("View PDF", color = TextPrimary) }
                 }
             },
             containerColor = BackgroundCard
