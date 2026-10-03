@@ -338,9 +338,9 @@ object StandardDocumentLayout {
             wrap(text, size, false, contentWidth).forEach { line ->
                 ensure(size + 3f)
                 ops += DrawOp("text", line, margin, y, size = size, color = color)
-                y += size + 2.5f
+                y += size + 3.5f
             }
-            y += 6f
+            y += 14f
         }
 
         private fun signatures(slots: List<SignatureSlot>) {
@@ -348,7 +348,8 @@ object StandardDocumentLayout {
                 listOf(SignatureSlot("Owner Signature"), SignatureSlot("Company Signature"))
             }
             drawn.forEach { slot ->
-                ensure(36f)
+                ensure(48f)
+                y += 16f
                 if (slot.imageTag.isNotBlank()) {
                     ops += DrawOp("image", x = margin + 110f, y = y - 36f, x2 = 160f, y2 = 36f, tag = slot.imageTag)
                 }
@@ -357,7 +358,7 @@ object StandardDocumentLayout {
                 val start = margin + measure(label, 9.5f, false) + 6f
                 rule(start, y + 1f, start + 200f, y + 1f, "light", 0.65f)
                 if (slot.name.isNotBlank()) {
-                    ops += DrawOp("text", slot.name, start + 4f, y - 10f, size = 12f, italic = true)
+                    ops += DrawOp("text", slot.name, start + 4f, y - 14f, size = 12f, italic = true)
                 }
                 val dateLabelX = start + 214f
                 ops += DrawOp("text", "Date:", dateLabelX, y, size = 9.5f)

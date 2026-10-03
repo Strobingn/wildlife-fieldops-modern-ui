@@ -12,16 +12,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.awt.BasicStroke
-import java.awt.Color
-import java.awt.Font
-import java.awt.Graphics2D
-import java.awt.RenderingHints
-import java.awt.image.BufferedImage
-import java.io.ByteArrayInputStream
 import java.io.File
-import java.util.Base64
-import javax.imageio.ImageIO
 
 class StandardDocumentTemplateTest {
     @Test
@@ -127,16 +118,75 @@ class StandardDocumentTemplateTest {
     private fun writePngArtifacts(documents: List<StandardDocument>) {
         val dir = File("/opt/cursor/artifacts/standard-documents")
         dir.mkdirs()
-        val logo = loadLogo()
-        val pages = documents.map { document ->
-            val image = renderPage(document.layout().pages.first(), logo)
-            val file = File(dir, "${document.kind.filePrefix}.png")
-            ImageIO.write(image, "png", file)
-            document.kind.title to image
+        val dump = File(dir, "layout.txt")
+        dump.writeText(documents.joinToString("\n") { document ->
+            val page = document.layout().pages.first()
+            buildString {
+                append("PAGE\t")
+                append(document.kind.filePrefix)
+                append('\t')
+                append(escape(document.title))
+                append('\t')
+                append(page.width)
+                append('\t')
+                append(page.height)
+                append('\n')
+                page.ops.forEach { op ->
+                    when (op.kind) {
+                        "text" -> append(
+                            "text\t${escape(op.text)}\t${op.x}\t${op.y}\t${op.size}\t${if (op.bold) 1 else 0}\t${if (op.italic) 1 else 0}\t${op.align}\t${op.color}\n"
+                        )
+                        "line" -> append("line\t${op.x}\t${op.y}\t${op.x2}\t${op.y2}\t${op.size}\t${op.color}\n")
+                        "rect", "fillrect" -> append("${op.kind}\t${op.x}\t${op.y}\t${op.x2}\t${op.y2}\t${op.color}\n")
+                        "logo" -> append("logo\t${op.x}\t${op.y}\t${op.x2}\n")
+                    }
+                }
+            }
+        })
+        val renderer = locate("tools/render-standard-document-pages.java")
+        val logo = locate("app/src/main/assets/wildlife_whisperer_logo.png.b64")
+        val classDir = File(dir, "classes")
+        classDir.mkdirs()
+        val javac = File(System.getProperty("java.home"), "bin/javac")
+        val java = File(System.getProperty("java.home"), "bin/java")
+        check(run(javac.absolutePath, "-d", classDir.absolutePath, renderer.absolutePath) == 0) {
+            "javac failed for the document PNG renderer"
         }
-        val sheet = contactSheet(pages)
-        ImageIO.write(sheet, "png", File(dir, "all-documents.png"))
+        check(
+            run(
+                java.absolutePath,
+                "-cp",
+                classDir.absolutePath,
+                "render_standard_document_pages",
+                dump.absolutePath,
+                logo.absolutePath,
+                dir.absolutePath
+            ) == 0
+        ) { "PNG renderer failed" }
         assertTrue(File(dir, "all-documents.png").length() > 1000)
+        documents.forEach { document ->
+            assertTrue(File(dir, "${document.kind.filePrefix}.png").exists())
+        }
+    }
+
+    private fun locate(relative: String): File {
+        val candidates = listOf(
+            File(relative),
+            File("../$relative"),
+            File("/workspace/$relative")
+        )
+        return candidates.firstOrNull { it.exists() } ?: candidates.last()
+    }
+
+    private fun escape(value: String): String =
+        value.replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n").replace("\r", "")
+
+    private fun run(vararg command: String): Int {
+        val process = ProcessBuilder(*command).redirectErrorStream(true).start()
+        val output = process.inputStream.bufferedReader().readText()
+        val code = process.waitFor()
+        if (code != 0) error(output.ifBlank { "command failed: ${command.joinToString(" ")}" })
+        return code
     }
 
     private fun samplePacket(): StandardJobPacket {
@@ -246,95 +296,4 @@ class StandardDocumentTemplateTest {
         )
     }
 
-    private fun loadLogo(): BufferedImage? {
-        val file = File("src/main/assets/wildlife_whisperer_logo.png.b64")
-        if (!file.exists()) return null
-        val bytes = Base64.getMimeDecoder().decode(file.readText().trim())
-        return ImageIO.read(ByteArrayInputStream(bytes))
-    }
-
-    private fun renderPage(page: PageLayout, logo: BufferedImage?): BufferedImage {
-        val image = BufferedImage(page.width, page.height, BufferedImage.TYPE_INT_ARGB)
-        val g = image.createGraphics()
-        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
-        g.color = Color.WHITE
-        g.fillRect(0, 0, page.width, page.height)
-        page.ops.forEach { op -> paintOp(g, op, logo) }
-        g.dispose()
-        return image
-    }
-
-    private fun paintOp(g: Graphics2D, op: DrawOp, logo: BufferedImage?) {
-        when (op.kind) {
-            "text" -> {
-                val style = when {
-                    op.italic -> Font.ITALIC
-                    op.bold -> Font.BOLD
-                    else -> Font.PLAIN
-                }
-                g.font = Font(Font.SANS_SERIF, style, op.size.toInt().coerceAtLeast(6))
-                g.color = awt(op.color)
-                val width = g.fontMetrics.stringWidth(op.text)
-                val x = when (op.align) {
-                    "center" -> op.x - width / 2f
-                    "right" -> op.x - width
-                    else -> op.x
-                }
-                g.drawString(op.text, x, op.y)
-            }
-            "line" -> {
-                g.color = awt(op.color)
-                g.stroke = BasicStroke(op.size.coerceAtLeast(0.6f))
-                g.drawLine(op.x.toInt(), op.y.toInt(), op.x2.toInt(), op.y2.toInt())
-            }
-            "rect" -> {
-                g.color = awt(op.color)
-                g.drawRect(op.x.toInt(), op.y.toInt(), (op.x2 - op.x).toInt(), (op.y2 - op.y).toInt())
-            }
-            "fillrect" -> {
-                g.color = awt(op.color)
-                g.fillRect(op.x.toInt(), op.y.toInt(), (op.x2 - op.x).toInt(), (op.y2 - op.y).toInt())
-            }
-            "logo" -> {
-                val size = op.x2.toInt().coerceAtLeast(1)
-                if (logo != null) {
-                    g.drawImage(logo, op.x.toInt(), op.y.toInt(), size, size, null)
-                } else {
-                    g.color = Color(0x3A, 0x3A, 0x3A)
-                    g.drawOval(op.x.toInt(), op.y.toInt(), size, size)
-                }
-            }
-        }
-    }
-
-    private fun contactSheet(pages: List<Pair<String, BufferedImage>>): BufferedImage {
-        val columns = 3
-        val cellW = 320
-        val cellH = 440
-        val rows = (pages.size + columns - 1) / columns
-        val sheet = BufferedImage(columns * cellW, rows * cellH, BufferedImage.TYPE_INT_RGB)
-        val g = sheet.createGraphics()
-        g.color = Color(0xF4, 0xF4, 0xF4)
-        g.fillRect(0, 0, sheet.width, sheet.height)
-        g.font = Font(Font.SANS_SERIF, Font.BOLD, 14)
-        pages.forEachIndexed { index, (title, image) ->
-            val col = index % columns
-            val row = index / columns
-            val x = col * cellW
-            val y = row * cellH
-            g.color = Color(0x14, 0x14, 0x16)
-            g.drawString(title, x + 12, y + 22)
-            val targetW = cellW - 24
-            val targetH = cellH - 40
-            g.drawImage(image, x + 12, y + 30, targetW, targetH, null)
-        }
-        g.dispose()
-        return sheet
-    }
-
-    private fun awt(token: String): Color = when (token) {
-        "muted", "rule" -> Color(0x3A, 0x3A, 0x3A)
-        "light" -> Color(0xBE, 0xBE, 0xBE)
-        else -> Color(0x14, 0x14, 0x16)
-    }
 }
