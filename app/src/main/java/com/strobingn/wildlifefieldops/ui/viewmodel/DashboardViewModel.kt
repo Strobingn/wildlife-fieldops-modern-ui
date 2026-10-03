@@ -10,14 +10,13 @@ import javax.inject.Inject
 
 data class DashboardStats(
     val totalJobs: Int = 0,
-    val pendingJobs: Int = 0,
+    val scheduledJobs: Int = 0,
     val inProgressJobs: Int = 0,
     val completedJobs: Int = 0,
     val totalCustomers: Int = 0,
     val totalInspections: Int = 0,
     val followUpRequired: Int = 0,
-    val todayJobs: Int = 0,
-    val overdueJobs: Int = 0
+    val todayJobs: Int = 0
 )
 
 @HiltViewModel
@@ -45,30 +44,36 @@ class DashboardViewModel @Inject constructor(
 
         DashboardStats(
             totalJobs = jobs.size,
-            pendingJobs = jobs.count {
-                it.status == JobStatus.PENDING || it.status == JobStatus.LEAD || it.status == JobStatus.ESTIMATE_SENT
+            scheduledJobs = jobs.count {
+                com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.flag(it.status) == JobStatus.SCHEDULED
             },
             inProgressJobs = jobs.count {
-                it.status == JobStatus.IN_PROGRESS || it.status == JobStatus.SCHEDULED ||
-                    it.status == JobStatus.TRAPPING || it.status == JobStatus.EXCLUSION
+                com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.flag(it.status) == JobStatus.IN_PROGRESS
             },
-            completedJobs = jobs.count { it.status.isWorkDone() || it.status == JobStatus.INVOICED },
+            completedJobs = jobs.count {
+                com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.flag(it.status) == JobStatus.COMPLETED
+            },
             totalCustomers = customers.size,
             totalInspections = inspections.size,
             followUpRequired = inspections.count { it.followUpRequired },
             todayJobs = jobs.count {
-                it.scheduledDate != null &&
-                it.scheduledDate in dayStart..dayEnd &&
-                it.status.isWorkOpen()
-            },
-            overdueJobs = jobs.count {
-                it.scheduledDate != null &&
-                it.scheduledDate < now &&
-                it.status.isWorkOpen()
+                it.scheduledDate != null && it.scheduledDate in dayStart..dayEnd
             }
         )
     }.onEach { _isLoading.value = false }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardStats())
+
+    val todayOnSchedule = jobDao.getAll()
+        .map { list ->
+            val jobs = list.filterNot { com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger.isLedger(it) }
+            val now = System.currentTimeMillis()
+            val dayStart = now - (now % 86400000L)
+            val dayEnd = dayStart + 86400000L
+            jobs.filter {
+                it.scheduledDate != null && it.scheduledDate in dayStart..dayEnd
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val recentJobs = jobDao.getAll()
         .map { list -> list.filterNot { com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger.isLedger(it) }.take(5) }

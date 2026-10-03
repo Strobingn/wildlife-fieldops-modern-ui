@@ -87,13 +87,13 @@ private fun DashboardThemePreview() {
                     Text("Today", color = OnPrimary.copy(alpha = 0.8f), style = MaterialTheme.typography.labelLarge)
                     Text("3 jobs scheduled", color = OnPrimary, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(6.dp))
-                    StatusChip(text = "1 overdue", color = OnHeroWarning)
+                    StatusChip(text = "Scheduled", color = OnPrimary)
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatPillCard("Active", 2, icon = Icons.Default.PlayCircle, color = AccentBlue, modifier = Modifier.weight(1f), onClick = {})
-                StatPillCard("Pending", 4, icon = Icons.Default.Schedule, color = StatusPending, modifier = Modifier.weight(1f), onClick = {})
-                StatPillCard("Done", 8, icon = Icons.Default.CheckCircle, color = SuccessGreen, modifier = Modifier.weight(1f), onClick = {})
+                StatPillCard("In progress", 2, icon = Icons.Default.PlayCircle, color = AccentBlue, modifier = Modifier.weight(1f), onClick = {})
+                StatPillCard("Scheduled", 4, icon = Icons.Default.Schedule, color = StatusPending, modifier = Modifier.weight(1f), onClick = {})
+                StatPillCard("Completed", 8, icon = Icons.Default.CheckCircle, color = SuccessGreen, modifier = Modifier.weight(1f), onClick = {})
             }
             Surface(shape = FieldShapes.button, color = PrimaryGreen, modifier = Modifier.fillMaxWidth()) {
                 Text(

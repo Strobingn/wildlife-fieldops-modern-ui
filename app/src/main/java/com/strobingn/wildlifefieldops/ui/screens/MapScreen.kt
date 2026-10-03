@@ -124,7 +124,8 @@ fun MapScreen(
 
     val visibleProperties by remember(properties, selectedStatus) {
         derivedStateOf {
-            properties.filter { selectedStatus == null || it.status == selectedStatus }
+            val chosen = selectedStatus
+            properties.filter { chosen == null || com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.matches(it.status, chosen) }
         }
     }
 
@@ -328,7 +329,7 @@ fun MapScreen(
                     key(property.id) {
                         Marker(
                             state = MarkerState(position = LatLng(property.latitude, property.longitude)),
-                            title = "${property.name} · ${property.status.name.replace('_', ' ')}",
+                            title = "${property.name} · ${com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.label(property.status)}",
                             snippet = "${property.address} (${property.type})",
                             icon = remember(property.id, property.status) {
                                 createMonochromeMarkerIcon(property.status)
@@ -512,11 +513,11 @@ fun MapScreen(
                                 onClick = { selectedStatus = null },
                                 label = { Text("All") }
                             )
-                            JobStatus.entries.forEach { status ->
+                            com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.stages.forEach { status ->
                                 FilterChip(
                                     selected = selectedStatus == status,
                                     onClick = { selectedStatus = if (selectedStatus == status) null else status },
-                                    label = { Text(status.name.replace('_', ' ')) }
+                                    label = { Text(com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.label(status)) }
                                 )
                             }
                         }
@@ -610,10 +611,9 @@ fun MapScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
-                            LegendDot("Pending", StatusPending)
-                            LegendDot("Active", AccentBlue)
-                            LegendDot("Done", SuccessGreen)
-                            LegendDot("Cancelled", ErrorRed)
+                            LegendDot("Scheduled", StatusPending)
+                            LegendDot("In progress", StatusInProgress)
+                            LegendDot("Completed", SuccessGreen)
                             LegendDot("Observe", AccentAmber)
                         }
                     }

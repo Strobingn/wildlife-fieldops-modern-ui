@@ -12,6 +12,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalContext
@@ -29,6 +31,7 @@ import com.strobingn.wildlifefieldops.util.WildlifeWhispererBrand
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    focusBackup: Boolean = false,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val themePreference by viewModel.themePreference.collectAsState(initial = ThemePreference.SYSTEM)
@@ -82,6 +85,14 @@ fun SettingsScreen(
         return
     }
 
+    val scrollState = rememberScrollState()
+    var backupTop by remember { mutableIntStateOf(0) }
+    LaunchedEffect(focusBackup, backupTop) {
+        if (focusBackup && backupTop > 0) {
+            scrollState.scrollTo(backupTop.coerceAtMost(scrollState.maxValue))
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -100,7 +111,7 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -351,7 +362,12 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-            SettingsSectionTitle("Backup & restore")
+            SettingsSectionTitle(
+                "Backup & restore",
+                modifier = Modifier.onGloballyPositioned {
+                    backupTop = it.positionInParent().y.toInt()
+                }
+            )
             SettingsCard {
                 Text(
                     "${WildlifeWhispererBrand.COMPANY} one-tap backup: checkpoints the field database, then zips it with photos and settings into Downloads. Restore from a zip before installing a new APK if you still have unsynced jobs.",
@@ -474,8 +490,14 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SettingsSectionTitle(title: String) {
-    Text(title, style = MaterialTheme.typography.titleSmall, color = PrimaryGreen, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp))
+private fun SettingsSectionTitle(title: String, modifier: Modifier = Modifier) {
+    Text(
+        title,
+        style = MaterialTheme.typography.titleSmall,
+        color = PrimaryGreen,
+        fontWeight = FontWeight.Bold,
+        modifier = modifier.padding(vertical = 8.dp)
+    )
 }
 
 @Composable

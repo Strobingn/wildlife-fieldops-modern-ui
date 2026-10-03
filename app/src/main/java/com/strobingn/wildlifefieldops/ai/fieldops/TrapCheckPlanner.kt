@@ -32,6 +32,14 @@ object TrapCheckPlanner {
 
     fun dayEnd(now: Long): Long = dayStart(now) + DAY_MS
 
+    /** Operator-facing label. The stored due state is unchanged. */
+    fun dueLabel(state: TrapDueState): String = when (state) {
+        TrapDueState.OVERDUE -> "Past check"
+        TrapDueState.DUE_TODAY -> "Due today"
+        TrapDueState.UPCOMING -> "Upcoming"
+        TrapDueState.UNSET -> "No date"
+    }
+
     fun dueState(nextCheckDate: Long?, now: Long): TrapDueState {
         if (nextCheckDate == null) return TrapDueState.UNSET
         val start = dayStart(now)

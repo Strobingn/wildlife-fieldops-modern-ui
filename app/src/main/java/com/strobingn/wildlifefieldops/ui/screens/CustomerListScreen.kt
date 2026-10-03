@@ -25,6 +25,7 @@ import com.strobingn.wildlifefieldops.ui.viewmodel.CustomersViewModel
 fun CustomerListScreen(
     onNavigateToCustomerForm: (String?) -> Unit,
     onBack: () -> Unit,
+    showBack: Boolean = true,
     viewModel: CustomersViewModel = hiltViewModel()
 ) {
     val customers by viewModel.customers.collectAsState()
@@ -34,7 +35,7 @@ fun CustomerListScreen(
         topBar = {
             FieldTopBar(
                 title = "Customers",
-                onBack = onBack
+                onBack = if (showBack) onBack else null
             )
         },
         floatingActionButton = {

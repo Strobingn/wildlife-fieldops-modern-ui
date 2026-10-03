@@ -108,7 +108,8 @@ class MoneyFieldOpsViewModel @Inject constructor(
 
     fun markInvoice(invoice: Invoice, status: InvoiceStatus) = viewModelScope.launch {
         store.saveInvoice(InvoiceReminder.withStatus(invoice, status))
-        _message.value = "Invoice marked ${status.name}."
+        val shown = if (status == com.strobingn.wildlifefieldops.data.model.InvoiceStatus.OVERDUE) "Unpaid" else status.name
+        _message.value = "Invoice marked $shown."
     }
 
     fun markReminded(invoice: Invoice) = viewModelScope.launch {

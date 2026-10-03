@@ -36,6 +36,8 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
 
     // Customer Screens
     object CustomerList : Screen("customers", "Customers", Icons.Default.People)
+    /** Tools that used to live in the drawer, plus Schedule and Tax. */
+    object More : Screen("more", "More", Icons.Default.Menu)
     object CustomerForm : Screen("customer_form?customerId={customerId}", "Customer Form") {
         fun createRoute(customerId: String? = null) =
             if (customerId != null) "customer_form?customerId=$customerId" else "customer_form"
@@ -96,7 +98,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     }
 
     companion object {
-        val bottomNavItems = listOf(Dashboard, JobList, InspectionList, Schedule, EarningsTax)
+        val bottomNavItems = listOf(Dashboard, JobList, InspectionList, CustomerList, More)
         val drawerItems = listOf(
             Map,
             EarningsTax,

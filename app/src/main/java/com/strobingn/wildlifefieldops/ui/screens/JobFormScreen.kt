@@ -17,6 +17,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.ai.fieldops.FieldDate
+import com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline
 import com.strobingn.wildlifefieldops.ai.fieldops.SpeciesJobLegal
 import com.strobingn.wildlifefieldops.data.model.*
 import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
@@ -57,6 +58,8 @@ fun JobFormScreen(
     var nextStepDueError by remember { mutableStateOf<String?>(null) }
     var confirmCatalog by remember { mutableStateOf(false) }
     val priceLines = remember { mutableStateListOf(blankPriceLine()) }
+    var selectedStatus by remember { mutableStateOf(JobStatus.SCHEDULED) }
+    var statusTouched by remember { mutableStateOf(false) }
     var showTypeDropdown by remember { mutableStateOf(false) }
     var showPriorityDropdown by remember { mutableStateOf(false) }
     var showAddServiceDialog by remember { mutableStateOf(false) }
@@ -81,6 +84,8 @@ fun JobFormScreen(
             description = job.description
             selectedType = DefaultServiceTypes.display(job.type)
             selectedPriority = job.priority
+            selectedStatus = JobStatusPipeline.flag(job.status)
+            statusTouched = false
             estimatedValue = if (job.estimatedValue > 0) job.estimatedValue.toString() else ""
             actualCost = if (job.actualCost > 0) job.actualCost.toString() else ""
             notes = job.notes
@@ -189,6 +194,24 @@ fun JobFormScreen(
                 shape = RoundedCornerShape(12.dp),
                 singleLine = true
             )
+
+            Text("Status", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                JobStatusPipeline.stages.forEach { status ->
+                    FilterChip(
+                        selected = selectedStatus == status,
+                        onClick = {
+                            selectedStatus = status
+                            statusTouched = true
+                        },
+                        label = { Text(JobStatusPipeline.label(status)) },
+                        modifier = Modifier.heightIn(min = 48.dp)
+                    )
+                }
+            }
 
             JobCustomerSection(
                 draft = customerDraft,
@@ -485,7 +508,8 @@ fun JobFormScreen(
                         nextStepDueAtSet = true,
                         priceLines = priceLines.map { line ->
                             line.copy(total = line.quantity * line.unitPrice)
-                        }.filter { it.description.isNotBlank() || it.unitPrice != 0.0 }
+                        }.filter { it.description.isNotBlank() || it.unitPrice != 0.0 },
+                        status = if (!isEditing || statusTouched) selectedStatus else null
                     ) {
                         onBack()
                     }

@@ -46,7 +46,6 @@ import com.strobingn.wildlifefieldops.ui.theme.BackgroundCard
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundDark
 import com.strobingn.wildlifefieldops.ui.theme.OnPrimary
 import com.strobingn.wildlifefieldops.ui.theme.PrimaryGreen
-import com.strobingn.wildlifefieldops.ui.theme.StatusUrgent
 import com.strobingn.wildlifefieldops.ui.theme.TextPrimary
 import com.strobingn.wildlifefieldops.ui.theme.TextSecondary
 import com.strobingn.wildlifefieldops.ui.viewmodel.MoneyFieldOpsViewModel
@@ -91,7 +90,7 @@ fun InvoiceListScreen(
         ) {
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = overdueOnly, onClick = { overdueOnly = true }, label = { Text("Overdue (${overdue.size})") })
+                    FilterChip(selected = overdueOnly, onClick = { overdueOnly = true }, label = { Text("Unpaid (${overdue.size})") })
                     FilterChip(selected = !overdueOnly, onClick = { overdueOnly = false }, label = { Text("All (${invoices.size})") })
                 }
             }
@@ -146,14 +145,15 @@ private fun InvoiceReminderCard(
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                invoice.invoiceNumber.ifBlank { "Invoice" } + " · " + invoice.status.name,
+                invoice.invoiceNumber.ifBlank { "Invoice" } + " · " +
+                    if (invoice.status == com.strobingn.wildlifefieldops.data.model.InvoiceStatus.OVERDUE) "Unpaid" else invoice.status.name,
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold
             )
             Text(invoice.customerName, color = TextSecondary)
             Text(
                 "Due ${SimpleDateFormat("MMM d, yyyy", Locale.US).format(Date(invoice.dueDate))} · $${"%.2f".format(invoice.balanceDue.takeIf { it > 0 } ?: invoice.totalAmount)}",
-                color = if (overdue) StatusUrgent else TextSecondary,
+                color = TextSecondary,
                 style = MaterialTheme.typography.bodySmall
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
