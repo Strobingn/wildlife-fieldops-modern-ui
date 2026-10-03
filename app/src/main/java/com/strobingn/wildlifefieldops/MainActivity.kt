@@ -505,7 +505,7 @@ private fun AppDrawer(onNavigate: (String) -> Unit, onClose: () -> Unit) {
         Column(modifier = Modifier.fillMaxHeight().verticalScroll(rememberScrollState())) {
             Box(
                 modifier = Modifier.fillMaxWidth().background(
-                    Brush.verticalGradient(listOf(GradientStart, MaterialTheme.colorScheme.surfaceContainerLow))
+                    Brush.verticalGradient(listOf(GradientStart, GradientEnd))
                 ).padding(horizontal = 20.dp, vertical = 28.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

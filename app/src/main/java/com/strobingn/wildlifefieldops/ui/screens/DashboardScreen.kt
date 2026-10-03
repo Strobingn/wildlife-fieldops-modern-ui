@@ -206,7 +206,7 @@ fun DashboardScreen(
                             .fillMaxWidth()
                             .background(
                                 Brush.horizontalGradient(
-                                    listOf(GradientStart, GradientMid, PrimaryContainer)
+                                    listOf(GradientStart, GradientMid, GradientEnd)
                                 ),
                                 FieldShapes.hero
                             )
@@ -234,7 +234,7 @@ fun DashboardScreen(
                                     Spacer(modifier = Modifier.height(6.dp))
                                     StatusChip(
                                         text = "${stats.overdueJobs} overdue",
-                                        color = StatusUrgent
+                                        color = OnHeroWarning
                                     )
                                 }
                             }

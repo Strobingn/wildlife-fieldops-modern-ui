@@ -79,7 +79,7 @@ private fun DashboardThemePreview() {
                     Modifier
                         .fillMaxWidth()
                         .background(
-                            Brush.horizontalGradient(listOf(GradientStart, GradientMid, PrimaryContainer)),
+                            Brush.horizontalGradient(listOf(GradientStart, GradientMid, GradientEnd)),
                             FieldShapes.hero
                         )
                         .padding(18.dp)
@@ -87,7 +87,7 @@ private fun DashboardThemePreview() {
                     Text("Today", color = OnPrimary.copy(alpha = 0.8f), style = MaterialTheme.typography.labelLarge)
                     Text("3 jobs scheduled", color = OnPrimary, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(6.dp))
-                    StatusChip(text = "1 overdue", color = StatusUrgent)
+                    StatusChip(text = "1 overdue", color = OnHeroWarning)
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

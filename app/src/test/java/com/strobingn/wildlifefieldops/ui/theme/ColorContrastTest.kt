@@ -1,6 +1,7 @@
 package com.strobingn.wildlifefieldops.ui.theme
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -18,6 +19,7 @@ class ColorContrastTest {
         assertTrue(Contrast.passesAa(FieldSwatch.Light.OnSurfaceMuted, card))
         assertTrue(Contrast.passesAa(FieldSwatch.Light.Primary, bg))
         assertTrue(Contrast.passesAa(FieldSwatch.Light.Error, card))
+        assertTrue(Contrast.passesAa(FieldSwatch.Light.OnPrimary, FieldSwatch.Light.Error))
         assertTrue(Contrast.passesAa(FieldSwatch.Light.AccentAmber, card))
         assertTrue(Contrast.passesAa(FieldSwatch.Light.StatusPending, card))
         assertTrue(Contrast.passesAa(FieldSwatch.Light.StatusInProgress, card))
@@ -38,6 +40,8 @@ class ColorContrastTest {
         assertTrue(Contrast.passesAa(FieldSwatch.Dark.OnSurfaceVariant, card))
         assertTrue(Contrast.passesAa(FieldSwatch.Dark.OnSurfaceMuted, card))
         assertTrue(Contrast.passesAa(FieldSwatch.Dark.Error, card))
+        assertTrue(Contrast.passesAa(FieldSwatch.Dark.StatusUrgent, card))
+        assertTrue(Contrast.passesAa(FieldSwatch.Dark.OnPrimary, FieldSwatch.Dark.Error))
         assertTrue(Contrast.passesAa(FieldSwatch.Dark.AccentAmber, card))
         assertTrue(Contrast.passesAa(FieldSwatch.Dark.StatusPending, card))
         assertTrue(Contrast.passesAa(FieldSwatch.Dark.StatusInProgress, card))
@@ -91,8 +95,14 @@ class ColorContrastTest {
         assertTrue(isGreen(FieldSwatch.Light.StatusCompleted))
         assertTrue(isRed(FieldSwatch.Light.Error))
         assertTrue(isRed(FieldSwatch.Dark.Error))
-        assertTrue(isAmber(FieldSwatch.Light.StatusUrgent))
-        assertTrue(isAmber(FieldSwatch.Dark.StatusUrgent))
+        assertTrue(isRed(FieldSwatch.Light.StatusUrgent))
+        assertTrue(isRed(FieldSwatch.Dark.StatusUrgent))
+        assertTrue(isRed(FieldSwatch.Light.OnHeroWarning))
+        assertTrue(isRed(FieldSwatch.Dark.OnHeroWarning))
+        assertFalse(Contrast.isYellowAmberOrangeOrLime(FieldSwatch.Light.StatusUrgent))
+        assertFalse(Contrast.isYellowAmberOrangeOrLime(FieldSwatch.Dark.StatusUrgent))
+        assertFalse(Contrast.isYellowAmberOrangeOrLime(FieldSwatch.Light.OnHeroWarning))
+        assertFalse(Contrast.isYellowAmberOrangeOrLime(FieldSwatch.Dark.OnHeroWarning))
     }
 
     @Test
@@ -122,10 +132,4 @@ class ColorContrastTest {
         return r > g && r > b
     }
 
-    private fun isAmber(argb: Long): Boolean {
-        val r = ((argb shr 16) and 0xFF).toInt()
-        val g = ((argb shr 8) and 0xFF).toInt()
-        val b = (argb and 0xFF).toInt()
-        return r > b && g > b && r >= g
-    }
 }
