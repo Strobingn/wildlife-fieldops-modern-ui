@@ -98,29 +98,34 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     }
 
     companion object {
-        val bottomNavItems = listOf(Dashboard, JobList, InspectionList, CustomerList, More)
-        val drawerItems = listOf(
-            Map,
-            EarningsTax,
-            DecNwcoLog,
-            SmartSearch,
-            TrapChecks,
-            GPS,
-            InvoiceList,
-            WarrantyList,
-            DuplicateCustomers,
-            MileageLog,
-            CountyReports,
-            PhotoGallery,
-            LiveCapture,
-            VoiceLog,
-            Expense,
-            Inventory,
-            TodayRoute,
-            RouteOptimizer,
-            AIOperations,
-            AIAssistant,
-            Settings
-        )
+        // Lazy so nested objects are finished initializing before the lists read them.
+        val bottomNavItems: List<Screen> by lazy {
+            listOf(Dashboard, JobList, InspectionList, CustomerList, More)
+        }
+        val drawerItems: List<Screen> by lazy {
+            listOf(
+                Map,
+                EarningsTax,
+                DecNwcoLog,
+                SmartSearch,
+                TrapChecks,
+                GPS,
+                InvoiceList,
+                WarrantyList,
+                DuplicateCustomers,
+                MileageLog,
+                CountyReports,
+                PhotoGallery,
+                LiveCapture,
+                VoiceLog,
+                Expense,
+                Inventory,
+                TodayRoute,
+                RouteOptimizer,
+                AIOperations,
+                AIAssistant,
+                Settings
+            )
+        }
     }
 }

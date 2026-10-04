@@ -107,6 +107,7 @@ fun FieldCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     accentColor: Color? = null,
+    contentPadding: PaddingValues = PaddingValues(16.dp),
     content: @Composable ColumnScope.() -> Unit
 ) {
     val shape = FieldShapes.card
@@ -140,7 +141,7 @@ fun FieldCard(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(16.dp),
+                    .padding(contentPadding),
                 content = content
             )
         }
@@ -313,7 +314,7 @@ fun StatPillCard(
 ) {
     Surface(
         modifier = modifier
-            .height(104.dp)
+            .height(88.dp)
             .clip(FieldShapes.card)
             .clickable(onClick = onClick),
         shape = FieldShapes.card,
@@ -332,7 +333,7 @@ fun StatPillCard(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(14.dp),
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

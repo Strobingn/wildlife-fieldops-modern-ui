@@ -6,6 +6,7 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -17,9 +18,9 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -130,7 +131,9 @@ fun WildlifeFieldOpsNavHost() {
             if (showBottomNav) {
                 Column {
                     AppUpdateBannerBar()
-                    AutoSyncStatusBar()
+                    if (showsFloatingSync(currentRoute)) {
+                        AutoSyncStatusBar()
+                    }
                     ModernBottomBar(
                         currentRoute = currentRoute ?: Screen.Dashboard.route,
                         onNavigate = { route -> navigateTab(route) }
@@ -375,9 +378,10 @@ private fun AppNavHost(
             )
         }
         composable(Screen.More.route) {
+            val sync = rememberSyncSnapshot()
             MoreScreen(
                 onOpen = onOpenTool,
-                header = { MoreShellHeader() },
+                header = { MoreShellHeader(sync) },
                 primaryActions = {
                     MoreShellActions(
                         onNewJob = { navController.navigate(ManualJobEntry.createRoute()) },
@@ -427,17 +431,21 @@ private fun AppNavHost(
     }
 }
 
-@Composable
-private fun AutoSyncStatusBar(viewModel: SettingsViewModel = hiltViewModel()) {
-    val backlog by viewModel.backlog.collectAsState()
-    val lastOk by viewModel.lastSyncOk.collectAsState()
-    val isSyncing by viewModel.isSyncing.collectAsState()
-    LaunchedEffect(Unit) { viewModel.refreshBacklog() }
-    val pending = backlog?.pendingTotal ?: 0
-    val failed = backlog?.hasFailures == true || lastOk == false
-    val text = when {
+/** Home and More draw sync in the header chip. Other tabs keep the line above the bar. */
+internal fun showsFloatingSync(route: String?): Boolean =
+    route != Screen.More.route && route != Screen.Dashboard.route
+
+data class SyncSnapshot(val label: String, val color: Color)
+
+internal fun syncSnapshot(
+    isSyncing: Boolean,
+    failed: Boolean,
+    pending: Int,
+    failureDetail: String?
+): SyncSnapshot {
+    val label = when {
         isSyncing -> "Syncing…"
-        failed -> "Sync failed" + (backlog?.recentFailures?.firstOrNull()?.let { " — $it" } ?: "")
+        failed -> "Sync failed" + (failureDetail?.let { " — $it" } ?: "")
         pending > 0 -> "Pending sync · $pending"
         else -> "Synced"
     }
@@ -447,6 +455,11 @@ private fun AutoSyncStatusBar(viewModel: SettingsViewModel = hiltViewModel()) {
         pending > 0 -> TextTertiary
         else -> TextSecondary
     }
+    return SyncSnapshot(label, color)
+}
+
+@Composable
+internal fun SyncStatusLine(text: String, color: Color) {
     Text(
         text = text,
         color = color,
@@ -460,7 +473,29 @@ private fun AutoSyncStatusBar(viewModel: SettingsViewModel = hiltViewModel()) {
 }
 
 @Composable
-private fun ModernBottomBar(currentRoute: String, onNavigate: (String) -> Unit) {
+internal fun rememberSyncSnapshot(viewModel: SettingsViewModel = hiltViewModel()): SyncSnapshot {
+    val backlog by viewModel.backlog.collectAsState()
+    val lastOk by viewModel.lastSyncOk.collectAsState()
+    val isSyncing by viewModel.isSyncing.collectAsState()
+    LaunchedEffect(Unit) { viewModel.refreshBacklog() }
+    val pending = backlog?.pendingTotal ?: 0
+    val failed = backlog?.hasFailures == true || lastOk == false
+    return syncSnapshot(
+        isSyncing = isSyncing,
+        failed = failed,
+        pending = pending,
+        failureDetail = backlog?.recentFailures?.firstOrNull()
+    )
+}
+
+@Composable
+private fun AutoSyncStatusBar() {
+    val snapshot = rememberSyncSnapshot()
+    SyncStatusLine(text = snapshot.label, color = snapshot.color)
+}
+
+@Composable
+internal fun ModernBottomBar(currentRoute: String, onNavigate: (String) -> Unit) {
     NavigationBar(
         containerColor = if (ThemeMode.isDark) {
             MaterialTheme.colorScheme.surfaceDim
@@ -496,80 +531,113 @@ private fun ModernBottomBar(currentRoute: String, onNavigate: (String) -> Unit) 
 }
 
 @Composable
-private fun MoreShellHeader() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp)
-            .background(
-                Brush.verticalGradient(listOf(GradientStart, GradientEnd)),
-                FieldShapes.hero
-            )
-            .padding(horizontal = 20.dp, vertical = 20.dp)
+internal fun MoreShellHeader(sync: SyncSnapshot) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = FieldShapes.hero,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            BrandMark(size = 48)
-            Spacer(modifier = Modifier.width(14.dp))
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BrandMark(size = 40)
+            Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     "Wildlife Whisperer",
                     style = MaterialTheme.typography.titleLarge,
-                    color = OnPrimary,
-                    fontWeight = FontWeight.Bold
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     "FieldOps · Cornwall, NY",
                     style = MaterialTheme.typography.bodySmall,
-                    color = OnPrimary.copy(alpha = 0.75f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "v${BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    SyncStatusChip(label = sync.label, color = sync.color)
+                }
             }
-            Text(
-                "v${BuildConfig.VERSION_NAME}",
-                color = OnPrimary.copy(alpha = 0.9f),
-                style = MaterialTheme.typography.labelMedium
-            )
         }
     }
 }
 
 @Composable
-private fun moreActionContainer(): Color = if (ThemeMode.isDark) {
-    MaterialTheme.colorScheme.surfaceContainerHigh
-} else {
-    MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+internal fun SyncStatusChip(label: String, color: Color) {
+    Surface(
+        shape = FieldShapes.chip,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Text(
+            text = label,
+            color = color,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+        )
+    }
 }
 
 @Composable
-private fun MoreShellActions(onNewJob: () -> Unit, onDictate: () -> Unit) {
-    Column(
-        modifier = Modifier.padding(top = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+internal fun MoreShellActions(onNewJob: () -> Unit, onDictate: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Button(
             onClick = onNewJob,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
+            modifier = Modifier.weight(1f).height(56.dp),
             shape = FieldShapes.button,
+            contentPadding = PaddingValues(horizontal = 12.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = moreActionContainer(),
-                contentColor = MaterialTheme.colorScheme.primary
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
             )
         ) {
             Icon(Icons.Default.Add, contentDescription = ManualJobEntry.ACTION_LABEL)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(ManualJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                ManualJobEntry.ACTION_LABEL,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
         }
         Button(
             onClick = onDictate,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
+            modifier = Modifier.weight(1f).height(56.dp),
             shape = FieldShapes.button,
+            contentPadding = PaddingValues(horizontal = 12.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = moreActionContainer(),
-                contentColor = MaterialTheme.colorScheme.primary
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
             )
         ) {
             Icon(Icons.Default.Mic, contentDescription = VoiceJobEntry.ACTION_LABEL)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(VoiceJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                VoiceJobEntry.ACTION_LABEL,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
         }
     }
 }

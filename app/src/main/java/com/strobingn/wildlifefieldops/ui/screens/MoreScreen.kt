@@ -2,11 +2,11 @@ package com.strobingn.wildlifefieldops.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -61,14 +61,13 @@ fun MoreScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = FieldMetrics.screenPadding),
-            verticalArrangement = Arrangement.spacedBy(FieldMetrics.space8)
+                .padding(padding),
+            contentPadding = PaddingValues(FieldMetrics.screenPadding),
+            verticalArrangement = Arrangement.spacedBy(FieldMetrics.space12)
         ) {
-            item {
-                header()
-                primaryActions()
-                Spacer(modifier = Modifier.height(FieldMetrics.space8))
+            item(key = "header") { header() }
+            item(key = "actions") { primaryActions() }
+            item(key = "search") {
                 FieldSearchBar(
                     value = query,
                     onValueChange = { query = it },
@@ -89,28 +88,29 @@ fun MoreScreen(
                 item(key = "group-$group") {
                     Text(
                         group,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(top = FieldMetrics.space12, bottom = FieldMetrics.space4)
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
                 items(rows, key = { "${it.group}-${it.label}" }) { dest ->
                     MoreToolRow(dest = dest, onClick = { onOpen(dest) })
                 }
             }
-            item { Spacer(modifier = Modifier.height(FieldMetrics.space24)) }
         }
     }
 }
 
 @Composable
 private fun MoreToolRow(dest: MoreDestination, onClick: () -> Unit) {
-    FieldCard(onClick = onClick) {
+    FieldCard(
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = FieldMetrics.space16, vertical = FieldMetrics.space8)
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = FieldMetrics.primaryTouch),
+                .heightIn(min = FieldMetrics.minTouch),
             verticalAlignment = Alignment.CenterVertically
         ) {
             dest.screen.icon?.let { icon ->
