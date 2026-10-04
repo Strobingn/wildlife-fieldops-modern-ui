@@ -431,10 +431,11 @@ private fun AppNavHost(
     }
 }
 
-/** More draws sync in the header chip. Other tabs keep the line above the bar. */
-internal fun showsFloatingSync(route: String?): Boolean = route != Screen.More.route
+/** Home and More draw sync in the header chip. Other tabs keep the line above the bar. */
+internal fun showsFloatingSync(route: String?): Boolean =
+    route != Screen.More.route && route != Screen.Dashboard.route
 
-internal data class SyncSnapshot(val label: String, val color: Color)
+data class SyncSnapshot(val label: String, val color: Color)
 
 internal fun syncSnapshot(
     isSyncing: Boolean,

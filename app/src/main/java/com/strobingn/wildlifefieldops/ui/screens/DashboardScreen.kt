@@ -1,5 +1,6 @@
 package com.strobingn.wildlifefieldops.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -7,7 +8,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -15,24 +15,43 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.strobingn.wildlifefieldops.MoreShellHeader
+import com.strobingn.wildlifefieldops.SyncSnapshot
+import com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckItem
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobStatus
+import com.strobingn.wildlifefieldops.data.model.Reminder
 import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
 import com.strobingn.wildlifefieldops.navigation.VoiceJobEntry
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
+import com.strobingn.wildlifefieldops.ui.viewmodel.DashboardStats
 import com.strobingn.wildlifefieldops.ui.viewmodel.DashboardViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.LiveWeatherViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.SettingsViewModel
+import com.strobingn.wildlifefieldops.ui.viewmodel.WeatherUiState
 import com.strobingn.wildlifefieldops.ui.components.WeatherBanner
 import java.text.SimpleDateFormat
 import java.util.*
+
+data class DashboardPreview(
+    val stats: DashboardStats,
+    val recentJobs: List<Job>,
+    val todayOnSchedule: List<Job>,
+    val reminders: List<Reminder>,
+    val dueNextSteps: List<Job>,
+    val dueTrapChecks: List<TrapCheckItem>,
+    val weather: WeatherUiState,
+    val sync: SyncSnapshot,
+    val greeting: String,
+    val todayLabel: String,
+    val isLoading: Boolean = false
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,8 +70,31 @@ fun DashboardScreen(
     onNavigateToDictate: () -> Unit = {},
     onNavigateToTodayRoute: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
-    viewModel: DashboardViewModel = hiltViewModel()
+    preview: DashboardPreview? = null
 ) {
+    if (preview != null) {
+        HomeDashboard(
+            preview = preview,
+            showUpdateChip = false,
+            onRefreshWeather = {},
+            onNavigateToJobs = onNavigateToJobs,
+            onNavigateToInspections = onNavigateToInspections,
+            onNavigateToSchedule = onNavigateToSchedule,
+            onNavigateToJobDetail = onNavigateToJobDetail,
+            onNavigateToJobForm = onNavigateToJobForm,
+            onNavigateToMap = onNavigateToMap,
+            onNavigateToRoutes = onNavigateToRoutes,
+            onNavigateToCountyReports = onNavigateToCountyReports,
+            onNavigateToSettings = onNavigateToSettings,
+            onNavigateToAI = onNavigateToAI,
+            onNavigateToTrapChecks = onNavigateToTrapChecks,
+            onNavigateToDictate = onNavigateToDictate,
+            onNavigateToTodayRoute = onNavigateToTodayRoute,
+            onOpenDrawer = onOpenDrawer
+        )
+        return
+    }
+    val viewModel: DashboardViewModel = hiltViewModel()
     val stats by viewModel.stats.collectAsState()
     val recentJobs by viewModel.recentJobs.collectAsState()
     val reminders by viewModel.pendingReminders.collectAsState()
@@ -93,6 +135,72 @@ fun DashboardScreen(
     val todayLabel = remember {
         SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(Date())
     }
+    HomeDashboard(
+        preview = DashboardPreview(
+            stats = stats,
+            recentJobs = recentJobs,
+            todayOnSchedule = todayOnSchedule,
+            reminders = reminders,
+            dueNextSteps = dueNextSteps,
+            dueTrapChecks = dueTrapChecks,
+            weather = weatherState,
+            sync = SyncSnapshot(syncLabel, syncColor),
+            greeting = greeting,
+            todayLabel = todayLabel,
+            isLoading = isLoading
+        ),
+        showUpdateChip = true,
+        onRefreshWeather = { weatherVm.loadShopWeather() },
+        onNavigateToJobs = onNavigateToJobs,
+        onNavigateToInspections = onNavigateToInspections,
+        onNavigateToSchedule = onNavigateToSchedule,
+        onNavigateToJobDetail = onNavigateToJobDetail,
+        onNavigateToJobForm = onNavigateToJobForm,
+        onNavigateToMap = onNavigateToMap,
+        onNavigateToRoutes = onNavigateToRoutes,
+        onNavigateToCountyReports = onNavigateToCountyReports,
+        onNavigateToSettings = onNavigateToSettings,
+        onNavigateToAI = onNavigateToAI,
+        onNavigateToTrapChecks = onNavigateToTrapChecks,
+        onNavigateToDictate = onNavigateToDictate,
+        onNavigateToTodayRoute = onNavigateToTodayRoute,
+        onOpenDrawer = onOpenDrawer
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HomeDashboard(
+    preview: DashboardPreview,
+    showUpdateChip: Boolean,
+    onRefreshWeather: () -> Unit,
+    onNavigateToJobs: () -> Unit,
+    onNavigateToInspections: () -> Unit,
+    onNavigateToSchedule: () -> Unit,
+    onNavigateToJobDetail: (String) -> Unit,
+    onNavigateToJobForm: () -> Unit,
+    onNavigateToMap: () -> Unit,
+    onNavigateToRoutes: () -> Unit,
+    onNavigateToCountyReports: () -> Unit,
+    onNavigateToSettings: () -> Unit,
+    onNavigateToAI: () -> Unit,
+    onNavigateToTrapChecks: () -> Unit,
+    onNavigateToDictate: () -> Unit,
+    onNavigateToTodayRoute: () -> Unit,
+    onOpenDrawer: () -> Unit
+) {
+    val stats = preview.stats
+    val recentJobs = preview.recentJobs
+    val reminders = preview.reminders
+    val dueNextSteps = preview.dueNextSteps
+    val dueTrapChecks = preview.dueTrapChecks
+    val todayOnSchedule = preview.todayOnSchedule
+    val isLoading = preview.isLoading
+    val syncLabel = preview.sync.label
+    val syncColor = preview.sync.color
+    val weatherState = preview.weather
+    val greeting = preview.greeting
+    val todayLabel = preview.todayLabel
 
     Scaffold(
         floatingActionButton = {
@@ -133,33 +241,32 @@ fun DashboardScreen(
             return@Scaffold
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-        HomeCreateBar(
-            onDictate = onNavigateToDictate,
-            onNewJob = onNavigateToJobForm
-        )
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(padding),
+            contentPadding = PaddingValues(FieldMetrics.screenPadding),
+            verticalArrangement = Arrangement.spacedBy(FieldMetrics.space12)
         ) {
+            item {
+                MoreShellHeader(preview.sync)
+            }
+            item {
+                HomeCreateBar(
+                    onNewJob = onNavigateToJobForm,
+                    onDictate = onNavigateToDictate
+                )
+            }
             item {
                 WeatherBanner(
                     state = weatherState,
                     title = "Shop weather",
-                    onRefresh = { weatherVm.loadShopWeather() }
+                    onRefresh = onRefreshWeather
                 )
-                AppUpdateHomeChip()
+                if (showUpdateChip) AppUpdateHomeChip()
             }
 
-            // ── Hero header ───────────────────────────────────────────────
             item {
-                Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -223,66 +330,56 @@ fun DashboardScreen(
                 }
             }
 
-            // ── Today strip ───────────────────────────────────────────────
             item {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = FieldShapes.hero,
-                    color = Color.Transparent
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
-                    Box(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(
-                                Brush.horizontalGradient(
-                                    listOf(GradientStart, GradientMid, GradientEnd)
-                                ),
-                                FieldShapes.hero
-                            )
-                            .padding(18.dp)
+                            .padding(FieldMetrics.space16),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    "Today",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = OnPrimary.copy(alpha = 0.8f)
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    "${stats.todayJobs} jobs scheduled",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = OnPrimary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Today",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "${stats.todayJobs} jobs scheduled",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(FieldMetrics.space8)) {
                             FilledTonalButton(
                                 onClick = onNavigateToSchedule,
                                 modifier = Modifier.height(48.dp),
                                 colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = OnPrimary.copy(alpha = 0.18f),
-                                    contentColor = OnPrimary
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                                 ),
                                 shape = FieldShapes.button
                             ) {
-                                Text("Schedule")
+                                Text("Schedule", maxLines = 1)
                             }
                             FilledTonalButton(
                                 onClick = onNavigateToTodayRoute,
                                 modifier = Modifier.height(48.dp),
                                 colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = OnPrimary.copy(alpha = 0.18f),
-                                    contentColor = OnPrimary
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                                 ),
                                 shape = FieldShapes.button
                             ) {
-                                Text("Today's route")
-                            }
+                                Text("Today's route", maxLines = 1)
                             }
                         }
                     }
@@ -293,7 +390,7 @@ fun DashboardScreen(
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(FieldMetrics.space12)
                 ) {
                     ScaleIn(delayMillis = 0) {
                         StatPillCard(
@@ -321,7 +418,7 @@ fun DashboardScreen(
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(FieldMetrics.space12)
                 ) {
                     ScaleIn(delayMillis = 160) {
                         StatPillCard(
@@ -356,19 +453,19 @@ fun DashboardScreen(
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             "At a glance",
-                            style = MaterialTheme.typography.titleSmall,
+                            style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.SemiBold
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(FieldMetrics.space8))
                         Text(
                             syncLabel,
                             style = MaterialTheme.typography.bodyMedium,
                             color = syncColor,
                             fontWeight = FontWeight.Medium
                         )
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Spacer(modifier = Modifier.height(FieldMetrics.space12))
+                        Column(verticalArrangement = Arrangement.spacedBy(FieldMetrics.space12)) {
                             listOf(
                                 OverviewItem("Customers", stats.totalCustomers.toString(), Icons.Default.People, AccentPurple),
                                 OverviewItem("Inspections", stats.totalInspections.toString(), Icons.Default.Search, AccentCyan),
@@ -398,11 +495,10 @@ fun DashboardScreen(
             // ── Quick actions ─────────────────────────────────────────────
             item {
                 SectionHeader(title = "Quick actions")
-                Spacer(modifier = Modifier.height(4.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(FieldMetrics.space12)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(FieldMetrics.space12)
                     ) {
                         QuickActionTile(ManualJobEntry.ACTION_LABEL, Icons.Default.AddBox, PrimaryGreen, Modifier.weight(1f), onNavigateToJobForm)
                         QuickActionTile(VoiceJobEntry.ACTION_LABEL, Icons.Default.Mic, PrimaryGreen, Modifier.weight(1f), onNavigateToDictate)
@@ -410,7 +506,7 @@ fun DashboardScreen(
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(FieldMetrics.space12)
                     ) {
                         QuickActionTile("Map", Icons.Default.Map, AccentBlue, Modifier.weight(1f), onNavigateToMap)
                         QuickActionTile("Inspect", Icons.Default.Search, AccentCyan, Modifier.weight(1f), onNavigateToInspections)
@@ -418,7 +514,7 @@ fun DashboardScreen(
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(FieldMetrics.space12)
                     ) {
                         QuickActionTile("Reports", Icons.Default.Assessment, AccentBlue, Modifier.weight(1f), onNavigateToCountyReports)
                         Spacer(modifier = Modifier.weight(1f))
@@ -444,7 +540,11 @@ fun DashboardScreen(
                 }
             } else {
                 items(todayOnSchedule, key = { "today-${it.id}" }) { job ->
-                    JobCard(job = job, onClick = { onNavigateToJobDetail(job.id) })
+                    JobCard(
+                        job = job,
+                        onClick = { onNavigateToJobDetail(job.id) },
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    )
                 }
             }
 
@@ -478,7 +578,8 @@ fun DashboardScreen(
                     FadeSlideIn(index = index) {
                         JobCard(
                             job = job,
-                            onClick = { onNavigateToJobDetail(job.id) }
+                            onClick = { onNavigateToJobDetail(job.id) },
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                         )
                     }
                 }
@@ -496,10 +597,10 @@ fun DashboardScreen(
                                 if (item.trap.jobId.isNotBlank()) onNavigateToJobDetail(item.trap.jobId)
                                 else onNavigateToTrapChecks()
                             },
-                        colors = CardDefaults.cardColors(containerColor = BackgroundCard),
-                        shape = RoundedCornerShape(12.dp)
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                        shape = FieldShapes.card
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
+                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                             Text(
                                 item.trap.trapId.ifBlank { "Trap" } + " · " + item.trap.status.name.replace('_', ' '),
                                 color = TextPrimary,
@@ -529,10 +630,10 @@ fun DashboardScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onNavigateToJobDetail(job.id) },
-                        colors = CardDefaults.cardColors(containerColor = BackgroundCard),
-                        shape = RoundedCornerShape(12.dp)
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                        shape = FieldShapes.card
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
+                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                             Text(job.title.ifBlank { job.customerName }, color = TextPrimary, fontWeight = FontWeight.SemiBold)
                             Text(job.nextStep, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
                             job.nextStepDueAt?.let { due ->
@@ -558,43 +659,42 @@ fun DashboardScreen(
 
             item { Spacer(modifier = Modifier.height(168.dp)) }
         }
-        }
     }
 }
 
 @Composable
-private fun HomeCreateBar(onDictate: () -> Unit, onNewJob: () -> Unit) {
+private fun HomeCreateBar(onNewJob: () -> Unit, onDictate: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(FieldMetrics.space12)
     ) {
-        Button(
-            onClick = onDictate,
-            modifier = Modifier.weight(1f).height(56.dp),
-            shape = FieldShapes.button,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-        ) {
-            Icon(Icons.Default.Mic, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(VoiceJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold, maxLines = 1)
-        }
         Button(
             onClick = onNewJob,
             modifier = Modifier.weight(1f).height(56.dp),
             shape = FieldShapes.button,
+            contentPadding = PaddingValues(horizontal = 12.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             )
         ) {
             Icon(Icons.Default.Add, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
             Text(ManualJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        }
+        Button(
+            onClick = onDictate,
+            modifier = Modifier.weight(1f).height(56.dp),
+            shape = FieldShapes.button,
+            contentPadding = PaddingValues(horizontal = 12.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+        ) {
+            Icon(Icons.Default.Mic, contentDescription = null)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(VoiceJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
     }
 }
@@ -607,12 +707,17 @@ private data class OverviewItem(
 )
 
 @Composable
-fun JobCard(job: Job, onClick: () -> Unit) {
+fun JobCard(
+    job: Job,
+    onClick: () -> Unit,
+    contentPadding: PaddingValues = PaddingValues(16.dp)
+) {
     val statusColor = jobStatusColor(job.status)
 
     FieldCard(
         onClick = onClick,
-        accentColor = statusColor
+        accentColor = statusColor,
+        contentPadding = contentPadding
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -663,7 +768,7 @@ fun JobCard(job: Job, onClick: () -> Unit) {
 
 @Composable
 private fun ReminderCard(reminder: com.strobingn.wildlifefieldops.data.model.Reminder) {
-    FieldCard {
+    FieldCard(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically

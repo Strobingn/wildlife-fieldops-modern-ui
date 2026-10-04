@@ -114,7 +114,7 @@ Spacing: 4, 8, 12, 16, 20, 24 dp. Screen and card padding 16 dp. Minimum touch 4
 | chip | pill (100) |
 | bottom sheet | 28 top corners only |
 
-List gap on Home is 14 dp. More uses 12 dp between the header, actions, search, section labels, and tool rows. More tool rows keep the 20 dp card radius and use 8 dp vertical padding so more rows fit; the row is still at least 48 dp tall.
+Home and More use 12 dp between rows. Screen padding is 16 dp. More tool rows and Home job rows keep the 20 dp card radius and use 8 dp vertical padding so more fit; a row is still at least 48 dp tall. The Home Today strip is the same card surface as the header (`surfaceContainerLow`, 1 dp `outlineVariant`), with `onSurface` / `onSurfaceVariant` text and `secondaryContainer` actions. Home uses the same brand header as More, including the sync chip.
 
 ## Components
 

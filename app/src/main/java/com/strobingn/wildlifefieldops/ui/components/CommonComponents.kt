@@ -314,7 +314,7 @@ fun StatPillCard(
 ) {
     Surface(
         modifier = modifier
-            .height(104.dp)
+            .height(88.dp)
             .clip(FieldShapes.card)
             .clickable(onClick = onClick),
         shape = FieldShapes.card,
@@ -333,7 +333,7 @@ fun StatPillCard(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(14.dp),
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

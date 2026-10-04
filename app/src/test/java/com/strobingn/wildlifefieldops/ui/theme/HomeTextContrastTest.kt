@@ -11,10 +11,10 @@ import java.io.File
  * Every text color drawn on Home, against the background it actually sits on,
  * including translucent chip, button, and label washes. WCAG AA normal text is 4.5:1.
  *
- * Alphas match the composables: StatusChip 0.14, Today label 0.80, Schedule button
- * 0.18, light-theme nav indicator 0.16. Dark nav uses a solid pill. The More
- * header is the card surface (no inverse gradient). Its sync chip is solid
- * `surface` with onSurfaceVariant / muted / error text.
+ * Alphas match the composables: StatusChip 0.14, light-theme nav indicator 0.16.
+ * Dark nav uses a solid pill. Home and More headers are the card surface.
+ * The sync chip is solid `surface` with onSurfaceVariant / muted / error text.
+ * The Home Today strip is that same card, not an inverse gradient.
  */
 class HomeTextContrastTest {
 
@@ -67,13 +67,14 @@ class HomeTextContrastTest {
         val main = readSource("MainActivity.kt")
         val weather = readSource("ui/components/WeatherBanner.kt")
         val update = readSource("ui/screens/AppUpdateUi.kt")
-        assertTrue(dash.contains("listOf(GradientStart, GradientMid, GradientEnd)"))
+        assertFalse(dash.contains("GradientStart"))
         assertFalse(dash.contains("PrimaryContainer"))
         assertFalse(dash.contains("OnHeroWarning"))
         assertFalse(dash.contains("overdue", ignoreCase = true))
         assertFalse(dash.contains("color = StatusUrgent"))
-        assertTrue(dash.contains("OnPrimary.copy(alpha = 0.8f)"))
-        assertTrue(dash.contains("OnPrimary.copy(alpha = 0.18f)"))
+        assertTrue(dash.contains("MoreShellHeader"))
+        assertTrue(dash.contains("surfaceContainerLow"))
+        assertTrue(dash.contains("secondaryContainer"))
         assertTrue(dash.contains("ManualJobEntry.ACTION_LABEL"))
         assertTrue(dash.contains("VoiceJobEntry.ACTION_LABEL"))
         assertTrue(common.contains("color.copy(alpha = 0.14f)"))
@@ -210,10 +211,6 @@ class HomeTextContrastTest {
         fun wash(name: String, fg: Long, surface: Long, alpha: Double) {
             pairs += Pair(name, fg, Contrast.composite(fg, surface, alpha))
         }
-        fun faded(name: String, ink: Long, surface: Long, alpha: Double) {
-            pairs += Pair(name, Contrast.composite(ink, surface, alpha), surface)
-        }
-
         solid("greeting + date on page", chrome.onVariant, chrome.page)
         solid("FieldOps title on page", chrome.onBackground, chrome.page)
         solid("section title on page", chrome.onBackground, chrome.page)
@@ -250,6 +247,9 @@ class HomeTextContrastTest {
         solid("sync chip Synced on chip surface", chrome.onVariant, chrome.chip)
         solid("sync chip Pending on chip surface", chrome.onMuted, chrome.chip)
         solid("sync chip failed on chip surface", chrome.error, chrome.chip)
+        solid("Today label on card", chrome.onVariant, chrome.tile)
+        solid("jobs scheduled on card", chrome.onSurface, chrome.tile)
+        solid("Schedule / route label on secondary", chrome.dictateLabel, chrome.dictateFill)
 
         solid("bottom nav unselected on nav bar", chrome.onVariant, chrome.navBar)
         if (chrome.name == "DARK") {
@@ -270,16 +270,6 @@ class HomeTextContrastTest {
         wash("job chip CANCELLED on tile", chrome.error, chrome.tile, 0.14)
         wash("job chip INVOICED on tile", chrome.purple, chrome.tile, 0.14)
         wash("job chip PAID on tile", chrome.primary, chrome.tile, 0.14)
-
-        val samples = listOf(0.0, 0.25, 0.5, 0.75, 1.0)
-        samples.forEach { t ->
-            val under = gradientAt(chrome.hero, t)
-            val where = "hero t=${"%.2f".format(t)}"
-            faded("Today label on $where", chrome.onPrimary, under, 0.8)
-            solid("jobs scheduled on $where", chrome.onPrimary, under)
-            wash("Schedule button on $where", chrome.onPrimary, under, 0.18)
-            solid("route button on $where", chrome.onPrimary, under)
-        }
         return pairs
     }
 
@@ -296,14 +286,6 @@ class HomeTextContrastTest {
         IconTint("AI button icon AccentPurple", chrome.purple),
         IconTint("weather icon Primary", chrome.primary)
     )
-
-    private fun gradientAt(stops: List<Long>, t: Double): Long {
-        val clamped = t.coerceIn(0.0, 1.0)
-        val scaled = clamped * (stops.size - 1)
-        val index = scaled.toInt().coerceAtMost(stops.size - 2)
-        val local = scaled - index
-        return Contrast.blend(stops[index], stops[index + 1], local)
-    }
 
     private fun readSource(relativeUnderJava: String): String {
         val suffix = "src/main/java/com/strobingn/wildlifefieldops/$relativeUnderJava"
