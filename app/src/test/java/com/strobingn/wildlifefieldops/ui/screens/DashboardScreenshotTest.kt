@@ -92,8 +92,28 @@ class DashboardScreenshotTest {
         }
         composeRule.mainClock.advanceTimeBy(2_500)
         composeRule.waitForIdle()
-        listOf("New Job", "Dictate job", "In progress", "Scheduled", "Completed", "Bat exclusion").forEach { label ->
+        listOf("Good morning", "Sunday, Oct 4").forEach { label ->
+            assertTrue(label, composeRule.onAllNodesWithText(label, substring = true).fetchSemanticsNodes().isNotEmpty())
+        }
+        listOf(
+            "Wildlife Whisperer",
+            "New Job",
+            "Dictate job",
+            "Today",
+            "3 jobs scheduled",
+            "Schedule",
+            "Today's route",
+            "Today's jobs",
+            "Bat exclusion",
+            "Shop weather"
+        ).forEach { label ->
             assertTrue(label, composeRule.onAllNodesWithText(label).fetchSemanticsNodes().isNotEmpty())
+        }
+        listOf("Quick actions", "At a glance", "Recent jobs", "Follow-ups", "Customers").forEach { label ->
+            assertTrue(
+                "$label should have moved off Home",
+                composeRule.onAllNodesWithText(label).fetchSemanticsNodes().isEmpty()
+            )
         }
         val bitmap = composeRule.runOnIdle {
             val compose = composeRule.activity.window.decorView.findComposeView()

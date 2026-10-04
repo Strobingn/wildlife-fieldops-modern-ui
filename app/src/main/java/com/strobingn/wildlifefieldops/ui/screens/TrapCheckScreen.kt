@@ -163,6 +163,14 @@ fun TrapCheckScreen(
         ) {
             item { Spacer(Modifier.height(4.dp)) }
             item {
+                Text(
+                    "Trap checks due",
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            item {
                 val adviceJob = customerJobs.firstOrNull { it.id == adviceJobId }
                 key(adviceJobId) {
                     WeatherAdviceCard(

@@ -35,8 +35,9 @@ object FieldSwatch {
         const val OnSurface: Long = 0xFFF5F5F5
         const val OnSurfaceVariant: Long = 0xFFBDBDBD
         const val OnSurfaceMuted: Long = 0xFFB0B0B0
-        const val Outline: Long = 0xFF5A5A5A
-        const val OutlineVariant: Long = 0xFF5A5A5A
+        /** #666666 is 3.2:1 on the #121212 page. The old #5A5A5A outline was 2.7:1. */
+        const val Outline: Long = 0xFF666666
+        const val OutlineVariant: Long = 0xFF666666
         /**
          * Light red on the lifted dark cards. Brighter than the old #EF9A9A so a
          * 15% badge wash still clears 4.5:1 on #333333. Not yellow.

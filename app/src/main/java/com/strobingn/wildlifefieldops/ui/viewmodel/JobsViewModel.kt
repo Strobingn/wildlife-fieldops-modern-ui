@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.strobingn.wildlifefieldops.data.local.DeletedRecordDao
 import com.strobingn.wildlifefieldops.data.local.JobDao
+import com.strobingn.wildlifefieldops.data.local.ReminderDao
 import com.strobingn.wildlifefieldops.data.local.VisitDao
 import com.strobingn.wildlifefieldops.data.model.DeletedRecord
 import com.strobingn.wildlifefieldops.data.model.Job
@@ -17,6 +18,8 @@ import com.strobingn.wildlifefieldops.data.repository.SyncRepository
 import com.strobingn.wildlifefieldops.data.workspace.JobCustomerWorkspace
 import com.strobingn.wildlifefieldops.data.workspace.JobSaveRequest
 import com.strobingn.wildlifefieldops.ai.fieldops.JobFieldOpsCodec
+import com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline
+import com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger
 import com.strobingn.wildlifefieldops.ai.fieldops.ManualField
 import com.strobingn.wildlifefieldops.pricing.JobPricing
 import com.strobingn.wildlifefieldops.pricing.PricingCalculator
@@ -28,11 +31,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
+data class JobFlagCounts(
+    val scheduled: Int = 0,
+    val inProgress: Int = 0,
+    val completed: Int = 0
+)
+
 @HiltViewModel
 class JobsViewModel @Inject constructor(
     private val jobDao: JobDao,
     private val visitDao: VisitDao,
     private val deletedRecordDao: DeletedRecordDao,
+    private val reminderDao: ReminderDao,
     private val syncRepository: SyncRepository,
     private val geocodingService: GeocodingService,
     private val aiService: AiService,
@@ -71,6 +81,39 @@ class JobsViewModel @Inject constructor(
     val completedCount = jobDao.getByStatus(JobStatus.COMPLETED)
         .map { it.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    /** Same Scheduled / In progress / Completed buckets Home used to show. */
+    val flagCounts = jobDao.getAll()
+        .map { list ->
+            val jobs = list.filterNot { OpsLedger.isLedger(it) }
+            JobFlagCounts(
+                scheduled = jobs.count { JobStatusPipeline.flag(it.status) == JobStatus.SCHEDULED },
+                inProgress = jobs.count { JobStatusPipeline.flag(it.status) == JobStatus.IN_PROGRESS },
+                completed = jobs.count { JobStatusPipeline.flag(it.status) == JobStatus.COMPLETED }
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), JobFlagCounts())
+
+    val recentJobs = jobDao.getAll()
+        .map { list -> list.filterNot { OpsLedger.isLedger(it) }.take(5) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val pendingReminders = reminderDao.getPending()
+        .map { it.take(5) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val dueNextSteps = jobDao.getAll()
+        .map { jobs ->
+            val now = System.currentTimeMillis()
+            jobs.filter { it.nextStep.isNotBlank() }
+                .sortedBy { it.nextStepDueAt ?: Long.MAX_VALUE }
+                .filter { step ->
+                    val due = step.nextStepDueAt
+                    due == null || due <= now + 2 * 86_400_000L
+                }
+                .take(5)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val totalRevenue = jobDao.getByStatus(JobStatus.PAID)
         .map { jobs -> jobs.sumOf { it.actualCost } }

@@ -99,8 +99,8 @@ class ColorContrastTest {
         assertEquals(0xFF333333, FieldSwatch.Dark.PrimaryContainer)
         assertEquals(0xFF404040, FieldSwatch.Dark.SurfaceBright)
         assertEquals(0xFF4A4A4A, FieldSwatch.Dark.NavIndicator)
-        assertEquals(0xFF5A5A5A, FieldSwatch.Dark.Outline)
-        assertEquals(0xFF5A5A5A, FieldSwatch.Dark.OutlineVariant)
+        assertEquals(0xFF666666, FieldSwatch.Dark.Outline)
+        assertEquals(0xFF666666, FieldSwatch.Dark.OutlineVariant)
         assertEquals(0xFFD0D0D0, FieldSwatch.Dark.Primary)
         val background = (FieldSwatch.Dark.Background and 0xFF).toInt()
         listOf(
@@ -114,6 +114,19 @@ class ColorContrastTest {
             val channel = (argb and 0xFF).toInt()
             assertTrue("${argb.toString(16)} should be lighter than the page", channel > background)
         }
+    }
+
+    @Test
+    fun darkOutlineMeetsUiContrastOnThePage() {
+        val page = FieldSwatch.Dark.Background
+        listOf(FieldSwatch.Dark.Outline, FieldSwatch.Dark.OutlineVariant).forEach { outline ->
+            val ratio = Contrast.ratio(outline, page)
+            assertTrue(
+                "dark outline ${outline.toString(16)} on page was $ratio",
+                ratio >= Contrast.AA_UI
+            )
+        }
+        assertTrue(Contrast.ratio(0xFF5A5A5A, page) < Contrast.AA_UI)
     }
 
     @Test

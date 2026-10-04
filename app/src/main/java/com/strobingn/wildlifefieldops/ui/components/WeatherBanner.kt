@@ -27,7 +27,8 @@ fun WeatherBanner(
     state: WeatherUiState,
     title: String = "Weather",
     onRefresh: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -60,8 +61,53 @@ fun WeatherBanner(
                 }
             }
             is WeatherUiState.Ready -> {
-                WeatherReadyContent(title = title, snap = state.snap, place = state.placeLabel, onRefresh = onRefresh)
+                if (compact) {
+                    WeatherCompactContent(title = title, snap = state.snap, place = state.placeLabel, onRefresh = onRefresh)
+                } else {
+                    WeatherReadyContent(title = title, snap = state.snap, place = state.placeLabel, onRefresh = onRefresh)
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun WeatherCompactContent(
+    title: String,
+    snap: WeatherSnapshot,
+    place: String,
+    onRefresh: () -> Unit
+) {
+    Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(weatherIcon(snap.condition), contentDescription = null, tint = PrimaryGreen, modifier = Modifier.size(22.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, color = TextPrimary, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+                Text(place, color = TextTertiary, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+            }
+            Text(
+                "${snap.tempF}°F",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+            IconButton(onClick = onRefresh) {
+                Icon(Icons.Default.Refresh, contentDescription = "Refresh weather", tint = TextSecondary)
+            }
+        }
+        Text(
+            snap.description.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() },
+            color = TextSecondary,
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            snap.humidity?.let { MetaChip(Icons.Default.WaterDrop, "$it% humidity") }
+            snap.windMph?.let { MetaChip(Icons.Default.Air, "${"%.0f".format(it)} mph wind") }
         }
     }
 }

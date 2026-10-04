@@ -6,7 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -15,12 +15,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.strobingn.wildlifefieldops.MoreShellHeader
+import com.strobingn.wildlifefieldops.HomeShellHeader
 import com.strobingn.wildlifefieldops.SyncSnapshot
 import com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckItem
 import com.strobingn.wildlifefieldops.data.model.Job
@@ -190,17 +188,12 @@ private fun HomeDashboard(
     onOpenDrawer: () -> Unit
 ) {
     val stats = preview.stats
-    val recentJobs = preview.recentJobs
-    val reminders = preview.reminders
-    val dueNextSteps = preview.dueNextSteps
-    val dueTrapChecks = preview.dueTrapChecks
     val todayOnSchedule = preview.todayOnSchedule
     val isLoading = preview.isLoading
-    val syncLabel = preview.sync.label
-    val syncColor = preview.sync.color
     val weatherState = preview.weather
     val greeting = preview.greeting
     val todayLabel = preview.todayLabel
+    val listState = rememberLazyListState()
 
     Scaffold(
         floatingActionButton = {
@@ -242,95 +235,36 @@ private fun HomeDashboard(
         }
 
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(FieldMetrics.screenPadding),
+            contentPadding = PaddingValues(
+                start = FieldMetrics.screenPadding,
+                top = FieldMetrics.screenPadding,
+                end = FieldMetrics.screenPadding,
+                bottom = 200.dp
+            ),
             verticalArrangement = Arrangement.spacedBy(FieldMetrics.space12)
         ) {
-            item {
-                MoreShellHeader(preview.sync)
+            item(key = "header") {
+                HomeShellHeader(
+                    sync = preview.sync,
+                    greeting = greeting,
+                    todayLabel = todayLabel,
+                    onOpenDrawer = onOpenDrawer,
+                    onOpenAssistant = onNavigateToAI,
+                    onOpenSettings = onNavigateToSettings
+                )
             }
-            item {
+            item(key = "create-bar") {
                 HomeCreateBar(
                     onNewJob = onNavigateToJobForm,
                     onDictate = onNavigateToDictate
                 )
             }
-            item {
-                WeatherBanner(
-                    state = weatherState,
-                    title = "Shop weather",
-                    onRefresh = onRefreshWeather
-                )
-                if (showUpdateChip) AppUpdateHomeChip()
-            }
 
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        IconButton(onClick = onOpenDrawer) {
-                            Icon(
-                                Icons.Default.Menu,
-                                contentDescription = "More",
-                                tint = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
-                        Column {
-                            Text(
-                                greeting,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                "FieldOps",
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                todayLabel,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    Row {
-                        IconButton(onClick = onNavigateToAI) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(AccentPurple.copy(alpha = 0.16f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.Psychology,
-                                    contentDescription = "AI Assistant",
-                                    tint = AccentPurple,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        }
-                        IconButton(onClick = onNavigateToSettings) {
-                            Icon(
-                                Icons.Default.Settings,
-                                contentDescription = "Settings",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-
-            item {
+            item(key = "today") {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = FieldShapes.hero,
@@ -386,144 +320,8 @@ private fun HomeDashboard(
                 }
             }
 
-            // ── Stats ─────────────────────────────────────────────────────
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(FieldMetrics.space12)
-                ) {
-                    ScaleIn(delayMillis = 0) {
-                        StatPillCard(
-                            title = "In progress",
-                            value = stats.inProgressJobs,
-                            icon = Icons.Default.PlayCircle,
-                            color = AccentBlue,
-                            modifier = Modifier.weight(1f),
-                            onClick = onNavigateToJobs
-                        )
-                    }
-                    ScaleIn(delayMillis = 80) {
-                        StatPillCard(
-                            title = "Scheduled",
-                            value = stats.scheduledJobs,
-                            icon = Icons.Default.Schedule,
-                            color = StatusPending,
-                            modifier = Modifier.weight(1f),
-                            onClick = onNavigateToJobs
-                        )
-                    }
-                }
-            }
 
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(FieldMetrics.space12)
-                ) {
-                    ScaleIn(delayMillis = 160) {
-                        StatPillCard(
-                            title = "Completed",
-                            value = stats.completedJobs,
-                            icon = Icons.Default.CheckCircle,
-                            color = SuccessGreen,
-                            modifier = Modifier.weight(1f),
-                            onClick = onNavigateToJobs
-                        )
-                    }
-                    ScaleIn(delayMillis = 240) {
-                        StatPillCard(
-                            title = "Inspections",
-                            value = stats.totalInspections,
-                            icon = Icons.Default.Search,
-                            color = AccentCyan,
-                            modifier = Modifier.weight(1f),
-                            onClick = onNavigateToInspections
-                        )
-                    }
-                }
-            }
-
-            // ── Overview grid ─────────────────────────────────────────────
-            item {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = FieldShapes.cardLarge,
-                    color = MaterialTheme.colorScheme.surfaceContainerLow
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            "At a glance",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(modifier = Modifier.height(FieldMetrics.space8))
-                        Text(
-                            syncLabel,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = syncColor,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Spacer(modifier = Modifier.height(FieldMetrics.space12))
-                        Column(verticalArrangement = Arrangement.spacedBy(FieldMetrics.space12)) {
-                            listOf(
-                                OverviewItem("Customers", stats.totalCustomers.toString(), Icons.Default.People, AccentPurple),
-                                OverviewItem("Inspections", stats.totalInspections.toString(), Icons.Default.Search, AccentCyan),
-                                OverviewItem("Follow-ups", stats.followUpRequired.toString(), Icons.Default.FollowTheSigns, AccentOrange)
-                            ).chunked(2).forEach { row ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    row.forEach { item ->
-                                        MetricTile(
-                                            label = item.label,
-                                            value = item.value,
-                                            icon = item.icon,
-                                            color = item.color,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                    }
-                                    if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ── Quick actions ─────────────────────────────────────────────
-            item {
-                SectionHeader(title = "Quick actions")
-                Column(verticalArrangement = Arrangement.spacedBy(FieldMetrics.space12)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(FieldMetrics.space12)
-                    ) {
-                        QuickActionTile(ManualJobEntry.ACTION_LABEL, Icons.Default.AddBox, PrimaryGreen, Modifier.weight(1f), onNavigateToJobForm)
-                        QuickActionTile(VoiceJobEntry.ACTION_LABEL, Icons.Default.Mic, PrimaryGreen, Modifier.weight(1f), onNavigateToDictate)
-                        QuickActionTile("Schedule", Icons.Default.CalendarMonth, AccentPurple, Modifier.weight(1f), onNavigateToSchedule)
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(FieldMetrics.space12)
-                    ) {
-                        QuickActionTile("Map", Icons.Default.Map, AccentBlue, Modifier.weight(1f), onNavigateToMap)
-                        QuickActionTile("Inspect", Icons.Default.Search, AccentCyan, Modifier.weight(1f), onNavigateToInspections)
-                        QuickActionTile("Routes", Icons.Default.Route, AccentBlue, Modifier.weight(1f), onNavigateToRoutes)
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(FieldMetrics.space12)
-                    ) {
-                        QuickActionTile("Reports", Icons.Default.Assessment, AccentBlue, Modifier.weight(1f), onNavigateToCountyReports)
-                        Spacer(modifier = Modifier.weight(1f))
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                }
-            }
-
-            item {
+            item(key = "today-jobs") {
                 SectionHeader(
                     title = "Today's jobs",
                     actionLabel = "Schedule",
@@ -547,117 +345,15 @@ private fun HomeDashboard(
                     )
                 }
             }
-
-            // ── Recent jobs ───────────────────────────────────────────────
-            item {
-                SectionHeader(
-                    title = "Recent jobs",
-                    actionLabel = "View all",
-                    onAction = onNavigateToJobs
+            item(key = "weather") {
+                WeatherBanner(
+                    state = weatherState,
+                    title = "Shop weather",
+                    onRefresh = onRefreshWeather,
+                    compact = true
                 )
+                if (showUpdateChip) AppUpdateHomeChip()
             }
-
-            if (recentJobs.isEmpty()) {
-                item {
-                    EmptyState(
-                        icon = {
-                            Icon(
-                                Icons.Default.WorkOutline,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(36.dp)
-                            )
-                        },
-                        title = "No jobs yet",
-                        subtitle = "Tap ${ManualJobEntry.ACTION_LABEL} to create your first one",
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            } else {
-                itemsIndexed(recentJobs) { index, job ->
-                    FadeSlideIn(index = index) {
-                        JobCard(
-                            job = job,
-                            onClick = { onNavigateToJobDetail(job.id) },
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
-                }
-            }
-
-            if (dueTrapChecks.isNotEmpty()) {
-                item {
-                    SectionHeader(title = "Trap checks due")
-                }
-                items(dueTrapChecks) { item ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                if (item.trap.jobId.isNotBlank()) onNavigateToJobDetail(item.trap.jobId)
-                                else onNavigateToTrapChecks()
-                            },
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                        shape = FieldShapes.card
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                            Text(
-                                item.trap.trapId.ifBlank { "Trap" } + " · " + item.trap.status.name.replace('_', ' '),
-                                color = TextPrimary,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            if (item.jobTitle.isNotBlank()) {
-                                Text(item.jobTitle, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
-                            } else if (item.trap.trapLocation.isNotBlank()) {
-                                Text(item.trap.trapLocation, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
-                            }
-                            Text(
-                                com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckPlanner.dueLabel(item.dueState),
-                                color = TextTertiary,
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (dueNextSteps.isNotEmpty()) {
-                item {
-                    SectionHeader(title = "Next steps due")
-                }
-                items(dueNextSteps) { job ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onNavigateToJobDetail(job.id) },
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                        shape = FieldShapes.card
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                            Text(job.title.ifBlank { job.customerName }, color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                            Text(job.nextStep, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
-                            job.nextStepDueAt?.let { due ->
-                                Text(
-                                    SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).format(Date(due)),
-                                    color = TextTertiary,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (reminders.isNotEmpty()) {
-                item {
-                    SectionHeader(title = "Reminders")
-                }
-                items(reminders) { reminder ->
-                    ReminderCard(reminder = reminder)
-                }
-            }
-
-            item { Spacer(modifier = Modifier.height(168.dp)) }
         }
     }
 }
@@ -698,13 +394,6 @@ private fun HomeCreateBar(onNewJob: () -> Unit, onDictate: () -> Unit) {
         }
     }
 }
-
-private data class OverviewItem(
-    val label: String,
-    val value: String,
-    val icon: ImageVector,
-    val color: Color
-)
 
 @Composable
 fun JobCard(
@@ -767,7 +456,30 @@ fun JobCard(
 }
 
 @Composable
-private fun ReminderCard(reminder: com.strobingn.wildlifefieldops.data.model.Reminder) {
+internal fun DueNextStepCard(job: Job, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        shape = FieldShapes.card
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Text(job.title.ifBlank { job.customerName }, color = TextPrimary, fontWeight = FontWeight.SemiBold)
+            Text(job.nextStep, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+            job.nextStepDueAt?.let { due ->
+                Text(
+                    SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).format(Date(due)),
+                    color = TextTertiary,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ReminderCard(reminder: com.strobingn.wildlifefieldops.data.model.Reminder) {
     FieldCard(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),

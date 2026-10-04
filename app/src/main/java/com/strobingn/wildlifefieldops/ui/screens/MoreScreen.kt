@@ -32,6 +32,7 @@ import com.strobingn.wildlifefieldops.navigation.FieldNav
 import com.strobingn.wildlifefieldops.navigation.MoreDestination
 import com.strobingn.wildlifefieldops.ui.components.FieldCard
 import com.strobingn.wildlifefieldops.ui.components.FieldSearchBar
+import com.strobingn.wildlifefieldops.ui.components.QuickActionsGrid
 import com.strobingn.wildlifefieldops.ui.theme.FieldMetrics
 
 @Composable
@@ -39,6 +40,13 @@ fun MoreScreen(
     onOpen: (MoreDestination) -> Unit,
     header: @Composable () -> Unit,
     primaryActions: @Composable () -> Unit,
+    onNewJob: () -> Unit = {},
+    onDictate: () -> Unit = {},
+    onSchedule: () -> Unit = {},
+    onMap: () -> Unit = {},
+    onInspect: () -> Unit = {},
+    onRoutes: () -> Unit = {},
+    onReports: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -67,6 +75,17 @@ fun MoreScreen(
         ) {
             item(key = "header") { header() }
             item(key = "actions") { primaryActions() }
+            item(key = "quick-actions") {
+                QuickActionsGrid(
+                    onNewJob = onNewJob,
+                    onDictate = onDictate,
+                    onSchedule = onSchedule,
+                    onMap = onMap,
+                    onInspect = onInspect,
+                    onRoutes = onRoutes,
+                    onReports = onReports
+                )
+            }
             item(key = "search") {
                 FieldSearchBar(
                     value = query,
