@@ -107,6 +107,7 @@ fun FieldCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     accentColor: Color? = null,
+    contentPadding: PaddingValues = PaddingValues(16.dp),
     content: @Composable ColumnScope.() -> Unit
 ) {
     val shape = FieldShapes.card
@@ -140,7 +141,7 @@ fun FieldCard(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(16.dp),
+                    .padding(contentPadding),
                 content = content
             )
         }

@@ -22,7 +22,7 @@ android {
         // Local/dev installs keep this hand-set code. GitHub Actions overrides with
         // 1_000_000 + GITHUB_RUN_NUMBER so branch APKs never VERSION_DOWNGRADE (48/49/50+).
         versionCode = 50
-        versionName = "2.7.3-lighter-dark-surfaces"
+        versionName = "2.7.4-home-polish"
         buildConfigField("String", "UPDATE_RELEASE_TAG", "\"debug-latest\"")
         buildConfigField("String", "UPDATE_CHANNEL", "\"main\"")
         buildConfigField("String", "CI_SIGNER_SHA256", "\"EC:75:D0:BC:BC:62:30:6B:0C:38:91:76:9E:05:4C:EB:C7:7C:6A:84:4D:11:9B:40:18:B9:0C:7E:F7:57:0C:A6\"")
@@ -148,6 +148,13 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all { test ->
+            test.systemProperty("robolectric.graphicsMode", "NATIVE")
+        }
+    }
+
     packaging {
         resources {
             excludes += setOf(
@@ -246,6 +253,11 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     testImplementation("org.xerial:sqlite-jdbc:3.45.3.0")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.activity:activity-compose:1.8.2")
+    testImplementation("androidx.core:core-ktx:1.12.0")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")

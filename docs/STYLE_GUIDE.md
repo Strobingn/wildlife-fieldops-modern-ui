@@ -1,6 +1,6 @@
 # FieldOps design system
 
-Copy this for other Jetpack Compose apps. Values match `2.7.3-lighter-dark-surfaces`. Greyscale chrome, one gray accent, red and green only for status. Dynamic Material You is off.
+Copy this for other Jetpack Compose apps. Values match `2.7.4-home-polish`. Greyscale chrome, one gray accent, red and green only for status. Dynamic Material You is off.
 
 Source of truth (copy these files, do not invent a parallel palette):
 
@@ -114,13 +114,13 @@ Spacing: 4, 8, 12, 16, 20, 24 dp. Screen and card padding 16 dp. Minimum touch 4
 | chip | pill (100) |
 | bottom sheet | 28 top corners only |
 
-List gap on Home is 14 dp. More groups use 8 dp between rows.
+List gap on Home is 14 dp. More uses 12 dp between the header, actions, search, section labels, and tool rows. More tool rows keep the 20 dp card radius and use 8 dp vertical padding so more rows fit; the row is still at least 48 dp tall.
 
 ## Components
 
-**Header card** (More). `FieldShapes.hero` (24 dp). Horizontal gradient from `GradientStart` to `GradientEnd` (light `#3A3A3A` → `#242424`, dark `#D0D0D0` → `#B0B0B0`). 20 dp padding. Logo circle 48 dp, title `titleLarge` Bold in `onPrimary`, subtitle `bodySmall` at 75% `onPrimary`, version `labelMedium` at 90% `onPrimary`.
+**Header card** (More). `FieldShapes.hero` (24 dp). Fill is the card surface `surfaceContainerLow` (light `#EEEEEE`, dark `#333333`) with a 1 dp `outlineVariant` stroke. 16 dp horizontal and 12 dp vertical padding. Logo circle 40 dp. Title `titleLarge` Bold in `onSurface`. Location `bodySmall` in `onSurfaceVariant` on the next line. Version is `labelSmall` in `onSurfaceMuted` under the location, not beside the name.
 
-**Action buttons.** 56 dp tall, `FieldShapes.button` (14 dp), label SemiBold, one line. New Job: `primary` / `onPrimary`. Dictate job: `secondaryContainer` / `onSecondaryContainer`. On Home they sit side by side (12 dp gap, 16 dp screen inset). On More they stack full width. Dark More uses `surfaceContainerHigh` with `primary` content so the fill is `#333333` and the label stays `#D0D0D0`.
+**Action buttons.** 56 dp tall, `FieldShapes.button` (14 dp), label SemiBold, one line. New Job: `primary` / `onPrimary`. Dictate job: `secondaryContainer` / `onSecondaryContainer`. On Home and on More they sit side by side as equal weights (12 dp gap, 16 dp screen inset). New Job stays the manual path.
 
 **Search.** `OutlinedTextField`, single line, `FieldShapes.search` (16 dp). Container is `surfaceContainerLow` (light `#EEEEEE`, dark `#333333`). Unfocused border `outline`. Text and icons `onSurface` / `onSurfaceVariant`. Placeholder "Search tools" on More.
 
@@ -130,13 +130,13 @@ List gap on Home is 14 dp. More groups use 8 dp between rows.
 
 **Bottom nav.** Five tabs, in order: Home, Jobs, Inspections, Customers, More. Bar fill is light `surfaceContainerLow` `#EEEEEE` or dark `surfaceDim` `#2A2A2A`. Tonal elevation 0. Selected icon and label use `primary`; unselected use `onSurfaceVariant`. Indicator is the light 16% primary wash, or the dark solid pill `#4A4A4A`.
 
-**More grouping.** One scroll under the header and the two create buttons. Groups, in order: Today, Money, Records, Field, AI, App. Group label is `titleSmall` SemiBold `onSurfaceVariant`. Each tool is one list card.
+**More grouping.** One scroll under the header and the two create buttons. Groups, in order: Today, Money, Records, Field, AI, App. Group label matches the section header: `titleMedium` SemiBold `onBackground`. Each tool is one list card.
 
-**Sync line.** `labelSmall`, one line, full width, on `surfaceContainerLow`, 12 dp horizontal / 4 dp vertical padding. Copy: "Synced", "Syncing…", "Pending sync · N", "Sync failed". Failed uses `error`. Pending uses muted. The rest use `onSurfaceVariant`.
+**Sync status.** Copy: "Synced", "Syncing…", "Pending sync · N", "Sync failed" (a failure detail may follow "Sync failed"). Failed uses `error`. Pending uses muted. The rest use `onSurfaceVariant`. On More this is a chip in the header: `labelSmall` on solid `surface`, 1 dp `outline` stroke, sitting on the version line. Other tabs keep the sync line: `labelSmall`, one line, full width, on `surfaceContainerLow`, 12 dp horizontal / 4 dp vertical padding.
 
 ## Layout
 
-- The manual **New Job** button is always beside the **Dictate job** button. Do not fold one into the other.
+- The manual **New Job** button is always beside the **Dictate job** button, including on More. Do not fold one into the other.
 - Do not remove a screen, button, or tool. Extra tools live on More, at most two taps from a tab.
 - A job page shows the customer (name, phone, company, address, preferred contact) and a link to the inspection. Home shows schedule, route, and job counts. Home does not show dollar amounts; money lives under More → Money.
 
