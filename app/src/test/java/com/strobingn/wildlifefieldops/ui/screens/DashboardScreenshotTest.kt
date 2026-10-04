@@ -10,8 +10,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.printToString
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.dp
 import androidx.core.view.drawToBitmap
 import com.strobingn.wildlifefieldops.SyncSnapshot
@@ -30,6 +42,8 @@ import com.strobingn.wildlifefieldops.ui.theme.TextSecondary
 import com.strobingn.wildlifefieldops.ui.theme.WildlifeFieldOpsTheme
 import com.strobingn.wildlifefieldops.ui.viewmodel.DashboardStats
 import com.strobingn.wildlifefieldops.ui.viewmodel.WeatherUiState
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -46,7 +60,7 @@ import java.io.FileOutputStream
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35], application = Application::class, qualifiers = "w480dp-h1800dp-xhdpi")
+@Config(sdk = [35], application = Application::class, qualifiers = "w480dp-h900dp-xhdpi")
 class DashboardScreenshotTest {
 
     @get:Rule
@@ -63,7 +77,8 @@ class DashboardScreenshotTest {
         composeRule.setContent {
             WildlifeFieldOpsTheme(darkTheme = dark) {
                 val sync = SyncSnapshot("Synced", TextSecondary)
-                Box(Modifier.size(411.dp, 1680.dp)) {
+                // Phone content height: short enough that always-on FABs would cover Today.
+                Box(Modifier.size(411.dp, 520.dp)) {
                     Column(Modifier.fillMaxSize()) {
                         Box(Modifier.weight(1f)) {
                             DashboardScreen(
@@ -80,7 +95,7 @@ class DashboardScreenshotTest {
                                 onNavigateToDictate = {},
                                 onNavigateToTodayRoute = {},
                                 onOpenDrawer = {},
-                                preview = sampleHome(sync)
+                                preview = emptyTodayHome(sync)
                             )
                         }
                         if (showsFloatingSync(Screen.Dashboard.route)) {
@@ -92,36 +107,87 @@ class DashboardScreenshotTest {
         }
         composeRule.mainClock.advanceTimeBy(2_500)
         composeRule.waitForIdle()
-        listOf("Good morning", "Sunday, Oct 4").forEach { label ->
-            assertTrue(label, composeRule.onAllNodesWithText(label, substring = true).fetchSemanticsNodes().isNotEmpty())
+        assertTopDoesNotCoverToday()
+        saveShot(name, "top")
+        scrollHomeToEnd()
+        composeRule.waitForIdle()
+        saveShot(name, "bottom")
+        assertBottomClearsFloatingActions()
+    }
+
+    private fun assertTopDoesNotCoverToday() {
+        assertEquals(0, composeRule.onAllNodesWithTag("home-floating-create").fetchSemanticsNodes().size)
+        composeRule.onNodeWithTag("home-create-bar").assertIsDisplayed()
+        composeRule.onNodeWithText("0 jobs scheduled").assertIsDisplayed()
+        val protected = listOf("Schedule", "Today's route").flatMap { label ->
+            val nodes = composeRule.onAllNodesWithText(label).fetchSemanticsNodes()
+            assertTrue("$label missing at the top", nodes.isNotEmpty())
+            nodes.map { it.boundsInRoot }
         }
-        listOf(
-            "Wildlife Whisperer",
-            "New Job",
-            "Dictate job",
-            "Today",
-            "3 jobs scheduled",
-            "Schedule",
-            "Today's route",
-            "Today's jobs",
-            "Bat exclusion",
-            "Shop weather"
-        ).forEach { label ->
-            assertTrue(label, composeRule.onAllNodesWithText(label).fetchSemanticsNodes().isNotEmpty())
+        listOf("New Job", "Dictate job").forEach { label ->
+            composeRule.onAllNodesWithText(label).fetchSemanticsNodes().forEach { node ->
+                protected.forEach { target ->
+                    assertFalse(
+                        "$label overlaps a Today action at the top",
+                        overlaps(node.boundsInRoot, target)
+                    )
+                }
+            }
         }
-        listOf("Quick actions", "At a glance", "Recent jobs", "Follow-ups", "Customers").forEach { label ->
-            assertTrue(
-                "$label should have moved off Home",
-                composeRule.onAllNodesWithText(label).fetchSemanticsNodes().isEmpty()
+    }
+
+    private fun assertBottomClearsFloatingActions() {
+        val createCount = composeRule.onAllNodesWithTag("home-create-bar").fetchSemanticsNodes().size
+        val fabCount = composeRule.onAllNodesWithTag("home-floating-create").fetchSemanticsNodes().size
+        if (createCount != 0 || fabCount != 1) {
+            File("/tmp/home-bottom.txt").writeText(
+                "create=$createCount fab=$fabCount\n" + composeRule.onRoot(useUnmergedTree = true).printToString()
             )
         }
+        assertEquals("create bar still composed after scrolling to the end", 0, createCount)
+        assertEquals("floating actions missing after the in-page buttons scroll off", 1, fabCount)
+        composeRule.onNodeWithTag("home-floating-create").assertIsDisplayed()
+        composeRule.onNodeWithText("Shop weather").assertIsDisplayed()
+        val weather = composeRule.onNodeWithText("Shop weather").fetchSemanticsNode().boundsInRoot
+        val fab = composeRule.onNodeWithTag("home-floating-create").fetchSemanticsNode().boundsInRoot
+        val dictate = composeRule.onAllNodesWithText("Dictate job", useUnmergedTree = true)
+            .fetchSemanticsNodes().map { it.boundsInRoot }
+        val newJob = composeRule.onAllNodesWithText("New Job", useUnmergedTree = true)
+            .fetchSemanticsNodes().map { it.boundsInRoot }
+        assertTrue("Dictate job missing at the bottom: $dictate", dictate.isNotEmpty())
+        assertTrue("New Job missing at the bottom: $newJob", newJob.isNotEmpty())
+        assertFalse(
+            "Shop weather $weather is behind floating actions $fab",
+            overlaps(weather, fab)
+        )
+        assertTrue(
+            "weather bottom ${weather.bottom} should sit above fab top ${fab.top}",
+            weather.bottom <= fab.top + 1f
+        )
+    }
+
+    private fun scrollHomeToEnd() {
+        val scrollable = composeRule.onNode(hasScrollAction())
+        repeat(8) {
+            scrollable.performTouchInput { swipeUp() }
+            composeRule.waitForIdle()
+        }
+        repeat(8) {
+            scrollable.performSemanticsAction(SemanticsActions.ScrollBy) { scrollBy ->
+                scrollBy(0f, 800f)
+            }
+            composeRule.waitForIdle()
+        }
+    }
+
+    private fun saveShot(name: String, position: String) {
         val bitmap = composeRule.runOnIdle {
             val compose = composeRule.activity.window.decorView.findComposeView()
                 ?: error("AndroidComposeView not in the hierarchy")
             compose.drawToBitmap()
         }
         val colors = mutableSetOf<Int>()
-        val step = 32
+        val step = 24
         for (y in 0 until bitmap.height step step) {
             for (x in 0 until bitmap.width step step) {
                 colors += bitmap.getPixel(x, y)
@@ -135,11 +201,25 @@ class DashboardScreenshotTest {
         )
         dirs.forEach { dir ->
             dir.mkdirs()
-            FileOutputStream(File(dir, "$prefix-$name.png")).use { out ->
+            FileOutputStream(File(dir, "$prefix-$name-$position.png")).use { out ->
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
             }
         }
     }
+}
+
+private fun overlaps(a: Rect, b: Rect): Boolean {
+    if (a.right <= b.left || b.right <= a.left) return false
+    if (a.bottom <= b.top || b.bottom <= a.top) return false
+    return true
+}
+
+private fun emptyTodayHome(sync: SyncSnapshot): DashboardPreview {
+    val home = sampleHome(sync)
+    return home.copy(
+        stats = home.stats.copy(todayJobs = 0),
+        todayOnSchedule = emptyList()
+    )
 }
 
 private fun sampleHome(sync: SyncSnapshot): DashboardPreview {

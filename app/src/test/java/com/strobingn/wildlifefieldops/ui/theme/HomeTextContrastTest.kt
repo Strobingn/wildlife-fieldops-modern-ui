@@ -73,7 +73,7 @@ class HomeTextContrastTest {
         assertFalse(dash.contains("overdue", ignoreCase = true))
         assertFalse(dash.contains("color = StatusUrgent"))
         assertTrue(dash.contains("HomeShellHeader"))
-        assertTrue(dash.contains("bottom = 200.dp"))
+        assertTrue(dash.contains("HomeListBottomClearance"))
         assertFalse(dash.contains("At a glance"))
         assertFalse(dash.contains("Quick actions"))
         assertTrue(dash.contains("surfaceContainerLow"))

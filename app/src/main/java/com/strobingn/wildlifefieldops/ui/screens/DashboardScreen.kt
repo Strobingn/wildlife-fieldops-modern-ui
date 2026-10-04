@@ -15,8 +15,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.HomeShellHeader
 import com.strobingn.wildlifefieldops.SyncSnapshot
@@ -194,10 +198,17 @@ private fun HomeDashboard(
     val greeting = preview.greeting
     val todayLabel = preview.todayLabel
     val listState = rememberLazyListState()
+    var createBarBottomPx by remember { mutableIntStateOf(Int.MAX_VALUE) }
+    var listTopPx by remember { mutableIntStateOf(0) }
+    // In-page New Job / Dictate stay under the header. Floating copies appear
+    // only once that row has left the viewport, so they never cover Today.
+    val showFloatingCreate = createBarBottomPx <= listTopPx
 
     Scaffold(
         floatingActionButton = {
+            if (showFloatingCreate) {
             Column(
+                modifier = Modifier.testTag("home-floating-create"),
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -222,6 +233,7 @@ private fun HomeDashboard(
                     }
                 )
             }
+            }
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
@@ -238,12 +250,13 @@ private fun HomeDashboard(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .onGloballyPositioned { listTopPx = it.boundsInWindow().top.roundToInt() },
             contentPadding = PaddingValues(
                 start = FieldMetrics.screenPadding,
                 top = FieldMetrics.screenPadding,
                 end = FieldMetrics.screenPadding,
-                bottom = 200.dp
+                bottom = HomeListBottomClearance
             ),
             verticalArrangement = Arrangement.spacedBy(FieldMetrics.space12)
         ) {
@@ -258,7 +271,15 @@ private fun HomeDashboard(
                 )
             }
             item(key = "create-bar") {
+                DisposableEffect(Unit) {
+                    onDispose { createBarBottomPx = Int.MIN_VALUE }
+                }
                 HomeCreateBar(
+                    modifier = Modifier
+                        .testTag("home-create-bar")
+                        .onGloballyPositioned {
+                            createBarBottomPx = it.boundsInWindow().bottom.roundToInt()
+                        },
                     onNewJob = onNavigateToJobForm,
                     onDictate = onNavigateToDictate
                 )
@@ -358,10 +379,17 @@ private fun HomeDashboard(
     }
 }
 
+/** Clears two stacked extended FABs plus the scaffold margin. */
+internal val HomeListBottomClearance = 240.dp
+
 @Composable
-private fun HomeCreateBar(onNewJob: () -> Unit, onDictate: () -> Unit) {
+private fun HomeCreateBar(
+    onNewJob: () -> Unit,
+    onDictate: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(FieldMetrics.space12)
     ) {
         Button(

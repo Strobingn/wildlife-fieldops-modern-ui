@@ -61,7 +61,7 @@ class HomeDashboardNoEarningsTest {
         assertTrue(home.contains("HomeShellHeader"))
         assertTrue(home.contains("Today's jobs"))
         assertTrue(home.contains("compact = true"))
-        assertTrue(home.contains("bottom = 200.dp"))
+        assertTrue(home.contains("HomeListBottomClearance"))
         assertTrue(home.contains("ManualJobEntry.ACTION_LABEL"))
         assertTrue(home.contains("VoiceJobEntry.ACTION_LABEL"))
         assertTrue(home.contains("AppUpdateHomeChip"))
