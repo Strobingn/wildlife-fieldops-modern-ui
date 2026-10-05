@@ -318,6 +318,21 @@ jobs:
           fail_on_unmatched_files: true
           make_latest: false
 
+      - name: Remove stale debug zip from debug-latest
+        if: success() && github.event_name == 'push' && env.HAS_CI_DEBUG_KEYSTORE == 'true' && (github.ref_name == 'main' || github.ref_name == 'master')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ASSET_ID="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/debug-latest" \
+            --jq '.assets[] | select(.name=="WildlifeFieldOps-main-debug.zip") | .id' | tr -d '[:space:]')"
+          if [ -n "${ASSET_ID}" ]; then
+            echo "Deleting stale WildlifeFieldOps-main-debug.zip asset ${ASSET_ID}"
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${ASSET_ID}"
+          else
+            echo "WildlifeFieldOps-main-debug.zip is not on debug-latest"
+          fi
+
       - name: Summary
         if: success()
         run: |

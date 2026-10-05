@@ -26,6 +26,14 @@ import com.strobingn.wildlifefieldops.ui.viewmodel.InspectionsViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
+data class InspectionListPreview(
+    val inspections: List<Inspection>,
+    val inspectionCount: Int = inspections.size,
+    val followUpCount: Int = inspections.count { it.followUpRequired },
+    val searchQuery: String = "",
+    val isLoading: Boolean = false
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InspectionListScreen(
@@ -33,12 +41,57 @@ fun InspectionListScreen(
     onNavigateToInspectionForm: () -> Unit,
     onBack: () -> Unit,
     showBack: Boolean = true,
-    viewModel: InspectionsViewModel = hiltViewModel()
+    preview: InspectionListPreview? = null
 ) {
+    if (preview != null) {
+        InspectionListContent(
+            inspections = preview.inspections,
+            inspectionCount = preview.inspectionCount,
+            followUpCount = preview.followUpCount,
+            searchQuery = preview.searchQuery,
+            isLoading = preview.isLoading,
+            onSearch = {},
+            onNavigateToInspectionDetail = onNavigateToInspectionDetail,
+            onNavigateToInspectionForm = onNavigateToInspectionForm,
+            onBack = onBack,
+            showBack = showBack
+        )
+        return
+    }
+    val viewModel: InspectionsViewModel = hiltViewModel()
     val inspections by viewModel.inspections.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val inspectionCount by viewModel.inspectionCount.collectAsState()
+    val followUpCount by viewModel.followUpCount.collectAsState()
+    InspectionListContent(
+        inspections = inspections,
+        inspectionCount = inspectionCount,
+        followUpCount = followUpCount,
+        searchQuery = searchQuery,
+        isLoading = isLoading,
+        onSearch = viewModel::setSearchQuery,
+        onNavigateToInspectionDetail = onNavigateToInspectionDetail,
+        onNavigateToInspectionForm = onNavigateToInspectionForm,
+        onBack = onBack,
+        showBack = showBack
+    )
+}
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun InspectionListContent(
+    inspections: List<Inspection>,
+    inspectionCount: Int,
+    followUpCount: Int,
+    searchQuery: String,
+    isLoading: Boolean,
+    onSearch: (String) -> Unit,
+    onNavigateToInspectionDetail: (String) -> Unit,
+    onNavigateToInspectionForm: () -> Unit,
+    onBack: () -> Unit,
+    showBack: Boolean
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -71,7 +124,7 @@ fun InspectionListScreen(
         ) {
             OutlinedTextField(
                 value = searchQuery,
-                onValueChange = viewModel::setSearchQuery,
+                onValueChange = onSearch,
                 placeholder = { Text("Search inspections...", color = TextTertiary) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextSecondary) },
                 colors = OutlinedTextFieldDefaults.colors(
@@ -88,6 +141,24 @@ fun InspectionListScreen(
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp)
             )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CountSummaryCell(
+                    label = "Inspections",
+                    count = inspectionCount,
+                    modifier = Modifier.weight(1f)
+                )
+                CountSummaryCell(
+                    label = "Follow-ups",
+                    count = followUpCount,
+                    modifier = Modifier.weight(1f)
+                )
+            }
 
             if (isLoading) {
                 ListShimmer(modifier = Modifier.fillMaxSize())

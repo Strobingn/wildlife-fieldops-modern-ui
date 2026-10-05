@@ -6,25 +6,15 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Scaffold
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
 import androidx.core.view.drawToBitmap
-import com.strobingn.wildlifefieldops.ModernBottomBar
-import com.strobingn.wildlifefieldops.MoreShellActions
-import com.strobingn.wildlifefieldops.MoreShellHeader
-import com.strobingn.wildlifefieldops.SyncStatusLine
-import com.strobingn.wildlifefieldops.navigation.Screen
-import com.strobingn.wildlifefieldops.showsFloatingSync
-import com.strobingn.wildlifefieldops.syncSnapshot
+import com.strobingn.wildlifefieldops.data.model.Job
+import com.strobingn.wildlifefieldops.data.model.JobStatus
+import com.strobingn.wildlifefieldops.data.model.Reminder
 import com.strobingn.wildlifefieldops.ui.theme.WildlifeFieldOpsTheme
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -37,14 +27,13 @@ import java.io.File
 import java.io.FileOutputStream
 
 /**
- * Renders the actual More-tab composables (brand header, New Job, Dictate job,
- * Search tools, Today cards, sync, bottom nav) through the Compose view.
- * Pixel copy is unavailable in this JVM, so the bitmap comes from [drawToBitmap].
+ * Renders the Jobs tab through the Compose view. Pixel copy is unavailable
+ * in this JVM, so the bitmap comes from [drawToBitmap].
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35], application = Application::class, qualifiers = "w480dp-h1600dp-xhdpi")
-class MoreTabScreenshotTest {
+@Config(sdk = [35], application = Application::class, qualifiers = "w480dp-h2000dp-xhdpi")
+class JobsScreenshotTest {
 
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
@@ -57,28 +46,35 @@ class MoreTabScreenshotTest {
 
     private fun render(dark: Boolean, name: String) {
         composeRule.setContent {
-                Box(Modifier.size(411.dp, 1400.dp)) {
-                MoreTabRender(dark = dark)
+            WildlifeFieldOpsTheme(darkTheme = dark) {
+                Box(Modifier.size(411.dp, 1800.dp)) {
+                    JobListScreen(
+                        onNavigateToJobDetail = {},
+                        onNavigateToJobForm = {},
+                        onNavigateToDictate = {},
+                        onBack = {},
+                        showBack = false,
+                        preview = sampleJobs()
+                    )
+                }
             }
         }
+        composeRule.waitForIdle()
         listOf(
-            "Wildlife Whisperer",
-            "New Job",
+            "Jobs",
             "Dictate job",
-            "Quick actions",
-            "Map",
-            "Inspect",
-            "Routes",
-            "Reports",
-            "Search tools",
-            "Today",
-            "Schedule",
-            "Today's route",
-            "Synced"
+            "New Job",
+            "Scheduled",
+            "In progress",
+            "Completed",
+            "Recent jobs",
+            "Bat exclusion",
+            "Next steps due",
+            "Reminders",
+            "Call Willow Properties"
         ).forEach { label ->
             assertTrue(label, composeRule.onAllNodesWithText(label).fetchSemanticsNodes().isNotEmpty())
         }
-        composeRule.waitForIdle()
         val bitmap = composeRule.runOnIdle {
             val compose = composeRule.activity.window.decorView.findComposeView()
                 ?: error("AndroidComposeView not in the hierarchy")
@@ -92,7 +88,7 @@ class MoreTabScreenshotTest {
             }
         }
         assertTrue("render is blank", colors.size > 4)
-        val prefix = System.getenv("HOME_SHOT_PREFIX") ?: "home"
+        val prefix = System.getenv("JOBS_SHOT_PREFIX") ?: "jobs"
         val dirs = listOfNotNull(
             File("build/screenshots"),
             System.getenv("HOME_SHOT_DIR")?.let { File(it) }
@@ -106,6 +102,41 @@ class MoreTabScreenshotTest {
     }
 }
 
+private fun sampleJobs(): JobListPreview {
+    val scheduled = Job(
+        id = "job-scheduled",
+        title = "Bat exclusion",
+        customerName = "Willow Properties",
+        address = "210 Willow Avenue, Cornwall",
+        status = JobStatus.SCHEDULED,
+        scheduledDate = System.currentTimeMillis()
+    )
+    val inProgress = Job(
+        id = "job-progress",
+        title = "Squirrel one-way door",
+        customerName = "Pat Lee",
+        address = "12 Oak Street",
+        status = JobStatus.IN_PROGRESS
+    )
+    val completed = Job(
+        id = "job-done",
+        title = "Raccoon attic check",
+        customerName = "Hudson Valley Customer",
+        address = "4 River Road",
+        status = JobStatus.COMPLETED
+    )
+    val withStep = completed.copy(nextStep = "Pull the one-way door", nextStepDueAt = System.currentTimeMillis())
+    return JobListPreview(
+        jobs = listOf(scheduled, inProgress, withStep),
+        recentJobs = listOf(scheduled, inProgress, withStep),
+        scheduledCount = 2,
+        inProgressCount = 1,
+        completedCount = 3,
+        dueNextSteps = listOf(withStep),
+        reminders = listOf(Reminder(id = "rem-1", title = "Call Willow Properties"))
+    )
+}
+
 private fun View.findComposeView(): View? {
     if (javaClass.simpleName == "AndroidComposeView") return this
     if (this is ViewGroup) {
@@ -114,25 +145,4 @@ private fun View.findComposeView(): View? {
         }
     }
     return null
-}
-
-@Composable
-internal fun MoreTabRender(dark: Boolean) {
-    WildlifeFieldOpsTheme(darkTheme = dark) {
-        val sync = syncSnapshot(isSyncing = false, failed = false, pending = 0, failureDetail = null)
-        Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
-            Column(Modifier.fillMaxSize().padding(padding)) {
-                MoreScreen(
-                    onOpen = {},
-                    header = { MoreShellHeader(sync) },
-                    primaryActions = { MoreShellActions(onNewJob = {}, onDictate = {}) },
-                    modifier = Modifier.weight(1f)
-                )
-                if (showsFloatingSync(Screen.More.route)) {
-                    SyncStatusLine(text = sync.label, color = sync.color)
-                }
-                ModernBottomBar(currentRoute = Screen.More.route, onNavigate = {})
-            }
-        }
-    }
 }

@@ -9,9 +9,14 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.*
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -387,7 +392,14 @@ private fun AppNavHost(
                         onNewJob = { navController.navigate(ManualJobEntry.createRoute()) },
                         onDictate = { navController.navigate(VoiceJobEntry.createRoute()) }
                     )
-                }
+                },
+                onNewJob = { navController.navigate(ManualJobEntry.createRoute()) },
+                onDictate = { navController.navigate(VoiceJobEntry.createRoute()) },
+                onSchedule = { navController.navigate(Screen.Schedule.route) },
+                onMap = { navController.navigate(Screen.Map.route) },
+                onInspect = { navController.navigate(Screen.InspectionList.route) },
+                onRoutes = { navController.navigate(Screen.RouteOptimizer.route) },
+                onReports = { navController.navigate(Screen.CountyReports.route) }
             )
         }
         composable(Screen.Settings.route) { entry ->
@@ -526,6 +538,100 @@ internal fun ModernBottomBar(currentRoute: String, onNavigate: (String) -> Unit)
                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             )
+        }
+    }
+}
+
+@Composable
+internal fun HomeShellHeader(
+    sync: SyncSnapshot,
+    greeting: String,
+    todayLabel: String,
+    onOpenDrawer: () -> Unit,
+    onOpenAssistant: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = FieldShapes.hero,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onOpenDrawer) {
+                Icon(
+                    Icons.Default.Menu,
+                    contentDescription = "More",
+                    tint = MaterialTheme.colorScheme.onBackground
+                )
+            }
+            BrandMark(size = 40)
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Wildlife Whisperer",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "$greeting · $todayLabel",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "FieldOps · Cornwall, NY",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "v${BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    SyncStatusChip(label = sync.label, color = sync.color)
+                }
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(onClick = onOpenAssistant) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(AccentPurple.copy(alpha = 0.16f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Psychology,
+                            contentDescription = "AI Assistant",
+                            tint = AccentPurple,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+                IconButton(onClick = onOpenSettings) {
+                    Icon(
+                        Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }

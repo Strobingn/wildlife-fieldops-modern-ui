@@ -20,17 +20,58 @@ import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.CustomersViewModel
 
+data class CustomerListPreview(
+    val customers: List<Customer>,
+    val customerCount: Int = customers.size,
+    val searchQuery: String = ""
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomerListScreen(
     onNavigateToCustomerForm: (String?) -> Unit,
     onBack: () -> Unit,
     showBack: Boolean = true,
-    viewModel: CustomersViewModel = hiltViewModel()
+    preview: CustomerListPreview? = null
 ) {
+    if (preview != null) {
+        CustomerListContent(
+            customers = preview.customers,
+            customerCount = preview.customerCount,
+            searchQuery = preview.searchQuery,
+            onSearch = {},
+            onNavigateToCustomerForm = onNavigateToCustomerForm,
+            onBack = onBack,
+            showBack = showBack
+        )
+        return
+    }
+    val viewModel: CustomersViewModel = hiltViewModel()
     val customers by viewModel.customers.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val customerCount by viewModel.customerCount.collectAsState()
+    CustomerListContent(
+        customers = customers,
+        customerCount = customerCount,
+        searchQuery = searchQuery,
+        onSearch = viewModel::setSearchQuery,
+        onNavigateToCustomerForm = onNavigateToCustomerForm,
+        onBack = onBack,
+        showBack = showBack
+    )
+}
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CustomerListContent(
+    customers: List<Customer>,
+    customerCount: Int,
+    searchQuery: String,
+    onSearch: (String) -> Unit,
+    onNavigateToCustomerForm: (String?) -> Unit,
+    onBack: () -> Unit,
+    showBack: Boolean
+) {
     Scaffold(
         topBar = {
             FieldTopBar(
@@ -55,9 +96,21 @@ fun CustomerListScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                CountSummaryCell(
+                    label = "Customers",
+                    count = customerCount,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
             FieldSearchBar(
                 value = searchQuery,
-                onValueChange = viewModel::setSearchQuery,
+                onValueChange = onSearch,
                 placeholder = "Search customers…",
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )

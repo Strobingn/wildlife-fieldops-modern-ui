@@ -17,11 +17,25 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobStatus
+import com.strobingn.wildlifefieldops.data.model.Reminder
 import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
 import com.strobingn.wildlifefieldops.navigation.VoiceJobEntry
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
+
+data class JobListPreview(
+    val jobs: List<Job>,
+    val recentJobs: List<Job> = emptyList(),
+    val searchQuery: String = "",
+    val selectedStatus: JobStatus? = null,
+    val isLoading: Boolean = false,
+    val scheduledCount: Int = 0,
+    val inProgressCount: Int = 0,
+    val completedCount: Int = 0,
+    val reminders: List<Reminder> = emptyList(),
+    val dueNextSteps: List<Job> = emptyList()
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,13 +45,81 @@ fun JobListScreen(
     onNavigateToDictate: () -> Unit = {},
     onBack: () -> Unit,
     showBack: Boolean = true,
-    viewModel: JobsViewModel = hiltViewModel()
+    preview: JobListPreview? = null
 ) {
+    if (preview != null) {
+        JobListContent(
+            jobs = preview.jobs,
+            recentJobs = preview.recentJobs,
+            searchQuery = preview.searchQuery,
+            selectedStatus = preview.selectedStatus,
+            isLoading = preview.isLoading,
+            scheduledCount = preview.scheduledCount,
+            inProgressCount = preview.inProgressCount,
+            completedCount = preview.completedCount,
+            reminders = preview.reminders,
+            dueNextSteps = preview.dueNextSteps,
+            onSearch = {},
+            onStatus = {},
+            onNavigateToJobDetail = onNavigateToJobDetail,
+            onNavigateToJobForm = onNavigateToJobForm,
+            onNavigateToDictate = onNavigateToDictate,
+            onBack = onBack,
+            showBack = showBack
+        )
+        return
+    }
+    val viewModel: JobsViewModel = hiltViewModel()
     val jobs by viewModel.jobs.collectAsState()
+    val recentJobs by viewModel.recentJobs.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedStatus by viewModel.selectedStatus.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val flagCounts by viewModel.flagCounts.collectAsState()
+    val reminders by viewModel.pendingReminders.collectAsState()
+    val dueNextSteps by viewModel.dueNextSteps.collectAsState()
+    JobListContent(
+        jobs = jobs,
+        recentJobs = recentJobs,
+        searchQuery = searchQuery,
+        selectedStatus = selectedStatus,
+        isLoading = isLoading,
+        scheduledCount = flagCounts.scheduled,
+        inProgressCount = flagCounts.inProgress,
+        completedCount = flagCounts.completed,
+        reminders = reminders,
+        dueNextSteps = dueNextSteps,
+        onSearch = viewModel::setSearchQuery,
+        onStatus = viewModel::setStatusFilter,
+        onNavigateToJobDetail = onNavigateToJobDetail,
+        onNavigateToJobForm = onNavigateToJobForm,
+        onNavigateToDictate = onNavigateToDictate,
+        onBack = onBack,
+        showBack = showBack
+    )
+}
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun JobListContent(
+    jobs: List<Job>,
+    recentJobs: List<Job>,
+    searchQuery: String,
+    selectedStatus: JobStatus?,
+    isLoading: Boolean,
+    scheduledCount: Int,
+    inProgressCount: Int,
+    completedCount: Int,
+    reminders: List<Reminder>,
+    dueNextSteps: List<Job>,
+    onSearch: (String) -> Unit,
+    onStatus: (JobStatus?) -> Unit,
+    onNavigateToJobDetail: (String) -> Unit,
+    onNavigateToJobForm: () -> Unit,
+    onNavigateToDictate: () -> Unit,
+    onBack: () -> Unit,
+    showBack: Boolean
+) {
     Scaffold(
         topBar = {
             FieldTopBar(
@@ -86,21 +168,67 @@ fun JobListScreen(
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(padding),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 200.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            FieldSearchBar(
-                value = searchQuery,
-                onValueChange = viewModel::setSearchQuery,
-                placeholder = "Search jobs, customers, addresses…",
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
+            item(key = "flags") {
+                JobFlagSummaryRow(
+                    scheduled = scheduledCount,
+                    inProgress = inProgressCount,
+                    completed = completedCount,
+                    selected = selectedStatus,
+                    onSelect = onStatus
+                )
+            }
+            item(key = "recent-header") {
+                SectionHeader(
+                    title = "Recent jobs",
+                    actionLabel = "View all",
+                    onAction = {
+                        onStatus(null)
+                        onSearch("")
+                    }
+                )
+            }
+            if (recentJobs.isEmpty()) {
+                item(key = "recent-empty") {
+                    EmptyState(
+                        icon = {
+                            Icon(
+                                Icons.Default.WorkOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        },
+                        title = "No jobs yet",
+                        subtitle = "Tap ${ManualJobEntry.ACTION_LABEL} to create your first one",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            } else {
+                items(recentJobs, key = { "recent-${it.id}" }) { job ->
+                    JobCard(
+                        job = job,
+                        onClick = { onNavigateToJobDetail(job.id) },
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            }
+            item(key = "search") {
+                FieldSearchBar(
+                    value = searchQuery,
+                    onValueChange = onSearch,
+                    placeholder = "Search jobs, customers, addresses…"
+                )
+            }
+            item(key = "create") {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedButton(
@@ -126,17 +254,18 @@ fun JobListScreen(
                     Text(ManualJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
             }
+            }
 
             // Status filter chips
+            item(key = "chips") {
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(bottom = 4.dp)
             ) {
                 item {
                     FilterChip(
                         selected = selectedStatus == null,
-                        onClick = { viewModel.setStatusFilter(null) },
+                        onClick = { onStatus(null) },
                         label = { Text("All") },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
@@ -149,7 +278,7 @@ fun JobListScreen(
                     FilterChip(
                         selected = selected,
                         onClick = {
-                            viewModel.setStatusFilter(if (selected) null else status)
+                            onStatus(if (selected) null else status)
                         },
                         label = { Text(com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.label(status)) },
                         colors = FilterChipDefaults.filterChipColors(
@@ -159,49 +288,63 @@ fun JobListScreen(
                     )
                 }
             }
+            }
 
-            Text(
-                "${jobs.size} job${if (jobs.size != 1) "s" else ""}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
+            item(key = "count") {
+                Text(
+                    "${jobs.size} job${if (jobs.size != 1) "s" else ""}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
 
             if (isLoading) {
-                ListShimmer(modifier = Modifier.fillMaxSize())
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    if (jobs.isEmpty()) {
-                        item {
-                            EmptyState(
-                                icon = {
-                                    Icon(
-                                        Icons.Default.WorkOutline,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(36.dp)
-                                    )
-                                },
-                                title = "No jobs found",
-                                subtitle = "Create a job or clear filters",
-                                modifier = Modifier.fillMaxWidth()
+                item(key = "loading") {
+                    ListShimmer(modifier = Modifier.fillMaxWidth().height(240.dp))
+                }
+            } else if (jobs.isEmpty()) {
+                item(key = "empty") {
+                    EmptyState(
+                        icon = {
+                            Icon(
+                                Icons.Default.WorkOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(36.dp)
                             )
-                        }
-                    } else {
-                        itemsIndexed(jobs, key = { _, job -> job.id }) { index, job ->
-                            FadeSlideIn(index = index) {
-                                JobListItem(
-                                    job = job,
-                                    onClick = { onNavigateToJobDetail(job.id) }
-                                )
-                            }
-                        }
+                        },
+                        title = "No jobs found",
+                        subtitle = "Create a job or clear filters",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            } else {
+                itemsIndexed(jobs, key = { _, job -> job.id }) { index, job ->
+                    FadeSlideIn(index = index) {
+                        JobListItem(
+                            job = job,
+                            onClick = { onNavigateToJobDetail(job.id) }
+                        )
                     }
-                    item { Spacer(modifier = Modifier.height(168.dp)) }
+                }
+            }
+
+            if (dueNextSteps.isNotEmpty()) {
+                item(key = "next-steps-header") {
+                    SectionHeader(title = "Next steps due")
+                }
+                items(dueNextSteps, key = { "step-${it.id}" }) { job ->
+                    DueNextStepCard(job = job, onClick = { onNavigateToJobDetail(job.id) })
+                }
+            }
+
+            if (reminders.isNotEmpty()) {
+                item(key = "reminders-header") {
+                    SectionHeader(title = "Reminders")
+                }
+                items(reminders, key = { "rem-${it.id}" }) { reminder ->
+                    ReminderCard(reminder = reminder)
                 }
             }
         }

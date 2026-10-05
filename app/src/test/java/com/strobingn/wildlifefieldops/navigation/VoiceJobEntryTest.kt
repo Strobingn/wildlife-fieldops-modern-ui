@@ -25,7 +25,7 @@ class VoiceJobEntryTest {
         assertTrue(home.contains("onNavigateToDictate"))
         assertTrue(home.contains("Icons.Default.Mic"))
         assertTrue(home.contains("Icons.Default.Add"))
-        assertTrue(home.contains("168.dp"))
+        assertTrue(home.contains("HomeListBottomClearance"))
         assertFalse(home.contains("onNavigateToJobForm = onNavigateToDictate"))
     }
 
