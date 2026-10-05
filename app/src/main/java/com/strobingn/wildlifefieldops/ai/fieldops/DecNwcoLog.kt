@@ -92,6 +92,12 @@ object DecNwcoLog {
         "H — Other"
     )
 
+    /**
+     * Every coded option is a picker choice. Abatement includes A–H and
+     * Exclusion (F). Do not cap this list. Anything else stays free text.
+     */
+    fun selectableChoices(options: List<String>): List<String> = options.distinct()
+
     val AREAS = listOf(
         "A — Urban",
         "B — Suburban",
