@@ -2,6 +2,8 @@ package com.strobingn.wildlifefieldops.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +23,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -192,16 +195,22 @@ private fun Cell(label: String, value: String, locked: Boolean, onChange: (Strin
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun PickerCell(label: String, value: String, options: List<String>, onChange: (String) -> Unit) {
-    Column {
+    val choices = DecNwcoLog.selectableChoices(options)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, color = TextSecondary, style = MaterialTheme.typography.labelSmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-            options.distinct().take(4).forEach { opt ->
-                androidx.compose.material3.FilterChip(
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            choices.forEach { opt ->
+                FilterChip(
                     selected = value == opt,
                     onClick = { onChange(opt) },
-                    label = { Text(opt.take(18), style = MaterialTheme.typography.labelSmall) }
+                    label = { Text(opt, style = MaterialTheme.typography.labelSmall) }
                 )
             }
         }

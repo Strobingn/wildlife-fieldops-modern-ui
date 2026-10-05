@@ -80,6 +80,21 @@ class DecNwcoLogTest {
     }
 
     @Test
+    fun abatementPickerListsAThroughHAndExclusion() {
+        val choices = DecNwcoLog.selectableChoices(DecNwcoLog.METHODS)
+        assertEquals(DecNwcoLog.METHODS, choices)
+        assertEquals(8, choices.size)
+        listOf("A", "B", "C", "D", "E", "F", "G", "H").forEach { letter ->
+            assertTrue(choices.any { it.startsWith("$letter —") })
+        }
+        assertTrue(choices.any { it.contains("Exclusion") })
+        assertEquals(
+            listOf("A", "B", "C", "D"),
+            DecNwcoLog.selectableChoices(DecNwcoLog.COMPLAINT_TYPES).map { it.substringBefore(" ") }
+        )
+    }
+
+    @Test
     fun csvUsesOfficial2024ColumnOrder() {
         val csv = DecNwcoLog.toCsv(
             NwcoOperatorProfile(lastName = "Diggler", firstName = "Dirk", licenseNumber = "NW-1", decRegion = "3", countyOfResidence = "Orange"),
