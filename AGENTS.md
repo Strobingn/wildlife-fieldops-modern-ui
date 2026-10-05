@@ -35,10 +35,10 @@ commit secrets, keystores, or real API keys.
 | Google Maps | `GOOGLE_MAPS_API` (also `GOOGLE_MAPS_API_KEY`, `VITE_GOOGLE_MAPS_API_KEY`, `VITE_GOOGLE_MAPS_API`) |
 | Supabase | `SUPABASE_URL`, `SUPABASE_ANON_KEY` |
 | Weather | `OPENWEATHER_API_KEY` |
-| Cloud LLM | `XAI_API_KEY` or `LLM_API_KEY` |
+| Cloud LLM | Supabase secret `XAI_API_KEY` on edge function `ai-assistant` (do not bake it into the APK) |
 
 Compile and debug assemble succeed without secrets (placeholders / empty keys).
-Maps, sync, and cloud AI need secrets to function in a built APK.
+Maps and sync need secrets to function in a built APK. Cloud Grok needs `XAI_API_KEY` as a Supabase secret, not in the APK.
 
 ### Preferred verify command
 

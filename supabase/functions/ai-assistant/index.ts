@@ -1,7 +1,10 @@
 // supabase/functions/ai-assistant/index.ts
-// Wildlife Whisperer FieldOps AI Assistant
-// Supports: OpenRouter, Gemini, OpenAI, DeepSeek, Moonshot
-// Add your preferred API key to Supabase Edge Function Secrets
+// Wildlife FieldOps AI. The xAI key is a Supabase secret (XAI_API_KEY), never a client secret.
+// Deployed behavior (structured modes, optional Agent Framework, ai_runs) stays.
+// Android chat/estimate/report calls use action "complete" and receive raw text.
+
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 type AiMode =
   | "field_plan"
@@ -9,9 +12,14 @@ type AiMode =
   | "estimate"
   | "customer_message"
   | "invoice_notes"
-  | "risk_check";
+  | "risk_check"
+  | "photo_inspection"
+  | "business_query";
+
+type ChatMessage = { role?: string; content?: string };
 
 type AiRequest = {
+  action?: string;
   mode?: AiMode;
   job?: Record<string, unknown>;
   observation?: string;
@@ -19,7 +27,20 @@ type AiRequest = {
   services?: Array<Record<string, unknown>>;
   inspections?: Array<Record<string, unknown>>;
   businessContext?: string;
+  imageUrl?: string;
+  question?: string;
+  system?: string;
+  user?: string;
+  prompt?: string;
+  messages?: ChatMessage[];
+  maxTokens?: number;
+  max_tokens?: number;
+  temperature?: number;
+  jsonMode?: boolean;
+  json_mode?: boolean;
 };
+
+type Provider = { name: string; key: string; baseUrl: string; model: string };
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,235 +51,276 @@ const corsHeaders = {
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
-function safeString(value: unknown, max = 6000) {
+function publicError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message
+    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/xai-[A-Za-z0-9_\-]+/g, "[redacted]")
+    .replace(/sk-[A-Za-z0-9_\-]+/g, "[redacted]")
+    .slice(0, 500);
+}
+
+function safeString(value: unknown, max: number) {
   return String(value ?? "").slice(0, max);
 }
 
-function buildMessages(payload: AiRequest) {
-  const mode = payload.mode || "field_plan";
-
-  const system = [
-    "You are the Wildlife Whisperer FieldOps AI assistant.",
-    "You help a nuisance wildlife removal technician produce practical field notes, estimate guidance, customer messages, and invoice notes.",
-    "You are not a lawyer, veterinarian, pesticide label authority, or code-enforcement official.",
-    "Do not invent exact legal claims. Give reminders to verify local/state rules, pesticide labels, bat exclusion timing, permits, and protected species requirements.",
-    "Prefer concise, job-ready output. Use plain English. Avoid hype.",
-    "Pricing should be guidance only and should be framed as a suggested range, not a guaranteed price.",
-    "Return ONLY valid JSON. Do not wrap it in markdown. Do not add extra commentary.",
-  ].join("\n");
-
-  const user = JSON.stringify(
-    {
-      requested_mode: mode,
-      business_context:
-        payload.businessContext ||
-        "Small nuisance wildlife removal company. Services include inspection, exclusion, repair, trapping coordination, sanitation, and documentation.",
-      job: payload.job || {},
-      species: payload.species || payload.job?.species || "",
-      observation: safeString(payload.observation || payload.job?.notes || ""),
-      services: payload.services || [],
-      inspections: payload.inspections || [],
-      required_json_shape: {
-        mode: "string",
-        summary: "string",
-        recommended_next_steps: ["string"],
-        estimate_guidance: {
-          suggested_line_items: [
-            {
-              service: "string",
-              qty: "number",
-              unit_price: "number",
-              rationale: "string",
-            },
-          ],
-          subtotal_low: "number",
-          subtotal_high: "number",
-          pricing_notes: "string",
-        },
-        customer_message: "string",
-        invoice_notes: "string",
-        safety_flags: ["string"],
-        legal_or_permit_reminders: ["string"],
-        confidence: "low | medium | high",
-      },
-    },
-    null,
-    2,
-  );
-
-  return [
-    { role: "system", content: system },
-    { role: "user", content: user },
-  ];
+function isCompleteAction(payload: AiRequest): boolean {
+  const action = (payload.action ?? "").trim().toLowerCase();
+  return action === "complete" || action === "chat";
 }
 
-function extractJson(text: string) {
-  const cleaned = text
-    .trim()
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/```$/i, "")
-    .trim();
+function completeMessages(payload: AiRequest): Array<{ role: string; content: string }> | null {
+  if (Array.isArray(payload.messages) && payload.messages.length > 0) {
+    const messages = payload.messages
+      .filter((message) => message && typeof message.content === "string" && typeof message.role === "string")
+      .slice(0, 8)
+      .map((message) => ({
+        role: safeString(message.role, 20),
+        content: safeString(message.content, 12000),
+      }))
+      .filter((message) => message.role.length > 0 && message.content.length > 0);
+    return messages.length > 0 ? messages : null;
+  }
+  const system = safeString(payload.system, 8000).trim();
+  const user = safeString(payload.user ?? payload.prompt, 12000).trim();
+  const messages: Array<{ role: string; content: string }> = [];
+  if (system) messages.push({ role: "system", content: system });
+  if (user) messages.push({ role: "user", content: user });
+  return messages.length > 0 ? messages : null;
+}
 
+function provider(): Provider {
+  const xaiKey = Deno.env.get("XAI_API_KEY") || Deno.env.get("GROK_API_KEY") || Deno.env.get("LLM_API_KEY");
+  if (xaiKey) {
+    return {
+      name: "xai",
+      key: xaiKey,
+      baseUrl: Deno.env.get("XAI_BASE_URL") || "https://api.x.ai/v1",
+      model: Deno.env.get("XAI_MODEL") || Deno.env.get("LLM_MODEL") || "grok-4-latest",
+    };
+  }
+  const openaiKey = Deno.env.get("OPENAI_API_KEY");
+  if (openaiKey) {
+    return {
+      name: "openai",
+      key: openaiKey,
+      baseUrl: Deno.env.get("OPENAI_BASE_URL") || "https://api.openai.com/v1",
+      model: Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini",
+    };
+  }
+  const openrouterKey = Deno.env.get("OPENROUTER_API_KEY");
+  if (openrouterKey) {
+    return {
+      name: "openrouter",
+      key: openrouterKey,
+      baseUrl: "https://openrouter.ai/api/v1",
+      model: Deno.env.get("OPENROUTER_MODEL") || "openai/gpt-4o-mini",
+    };
+  }
+  throw new Error(
+    "No AI provider secret is configured in Supabase. Add XAI_API_KEY (preferred), GROK_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY.",
+  );
+}
+
+async function callAgentFramework(payload: AiRequest) {
+  const base = Deno.env.get("AGENT_FRAMEWORK_URL")?.trim();
+  if (!base) return null;
+  const secret = Deno.env.get("AGENT_FRAMEWORK_SHARED_SECRET")?.trim();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (secret) headers.Authorization = "Bearer " + secret;
+  const endpoint = base.replace(/\/+$/, "") + "/v1/fieldops/run";
+  const response = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(payload) });
+  const raw = await response.text();
+  if (!response.ok) throw new Error("Agent Framework error " + response.status + ": " + raw.slice(0, 600));
+  const data = JSON.parse(raw);
+  if (!data?.ok || !data?.result) throw new Error("Agent Framework returned no result.");
+  return data.result;
+}
+
+function parseJson(text: string) {
+  const cleaned = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
   try {
     return JSON.parse(cleaned);
   } catch {
     const start = cleaned.indexOf("{");
     const end = cleaned.lastIndexOf("}");
-    if (start >= 0 && end > start) {
-      return JSON.parse(cleaned.slice(start, end + 1));
-    }
-    throw new Error("AI returned text that was not valid JSON.");
+    if (start >= 0 && end > start) return JSON.parse(cleaned.slice(start, end + 1));
+    throw new Error("AI response was not valid JSON");
   }
 }
 
-type AiProvider = {
-  name: string;
-  apiKey: string;
-  baseUrl: string;
-  model: string;
-};
-
-function getProvider(): AiProvider | null {
-  const openrouterKey = Deno.env.get("OPENROUTER_API_KEY");
-  if (openrouterKey) {
-    return {
-      name: "openrouter",
-      apiKey: openrouterKey,
-      baseUrl: "https://openrouter.ai/api/v1",
-      model: Deno.env.get("OPENROUTER_MODEL") || "openai/gpt-4o-mini",
-    };
-  }
-
-  const geminiKey = Deno.env.get("GEMINI_API_KEY");
-  if (geminiKey) {
-    return {
-      name: "gemini",
-      apiKey: geminiKey,
-      baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-      model: Deno.env.get("GEMINI_MODEL") || "gemini-1.5-flash",
-    };
-  }
-
-  const openaiKey = Deno.env.get("OPENAI_API_KEY");
-  if (openaiKey) {
-    return {
-      name: "openai",
-      apiKey: openaiKey,
-      baseUrl: Deno.env.get("OPENAI_BASE_URL") || "https://api.openai.com/v1",
-      model: Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini",
-    };
-  }
-
-  const deepseekKey = Deno.env.get("DEEPSEEK_API_KEY");
-  if (deepseekKey) {
-    return {
-      name: "deepseek",
-      apiKey: deepseekKey,
-      baseUrl: Deno.env.get("DEEPSEEK_BASE_URL") || "https://api.deepseek.com/v1",
-      model: Deno.env.get("DEEPSEEK_MODEL") || "deepseek-chat",
-    };
-  }
-
-  const moonshotKey = Deno.env.get("MOONSHOT_API_KEY") || Deno.env.get("KIMI_API_KEY");
-  if (moonshotKey) {
-    return {
-      name: "kimi_moonshot",
-      apiKey: moonshotKey,
-      baseUrl: Deno.env.get("MOONSHOT_BASE_URL") || "https://api.moonshot.ai/v1",
-      model: Deno.env.get("KIMI_MODEL") || Deno.env.get("MOONSHOT_MODEL") || "kimi-k2-0905-preview",
-    };
-  }
-
-  console.log("No AI API key found for ai-assistant.");
-  return null;
-}
-
-async function callAI(payload: AiRequest) {
-  const provider = getProvider();
-
-  if (!provider) {
-    // Do not return canned demo content as if it were AI.
-    throw new Error(
-      "No LLM API key configured for ai-assistant. Set OPENROUTER_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, or MOONSHOT_API_KEY / KIMI_API_KEY in Edge Function secrets. Demo/canned responses are disabled.",
-    );
-  }
-
-  const body: Record<string, unknown> = {
-    model: provider.model,
-    messages: buildMessages(payload),
-    temperature: 0.2,
-    max_tokens: 1600,
+async function businessContext(client: ReturnType<typeof createClient>, question: string) {
+  const [snapshot, jobs, callbacks, inventory] = await Promise.all([
+    client.from("business_snapshot_v2").select("*").limit(1),
+    client.from("jobs").select("id,title,status,species,customer_name,grand_total,scheduled_start,completed_at").order("created_at", { ascending: false }).limit(50),
+    client.from("callbacks").select("reason,status,cost,created_at").order("created_at", { ascending: false }).limit(30),
+    client.from("inventory_alerts").select("name,quantity,reorder_level,shortage").limit(30),
+  ]);
+  return {
+    question,
+    snapshot: snapshot.data?.[0] ?? null,
+    jobs: jobs.data ?? [],
+    callbacks: callbacks.data ?? [],
+    inventoryAlerts: inventory.data ?? [],
   };
+}
 
-  // Only add response_format if the provider supports it
-  if (provider.name !== "deepseek") {
-    body.response_format = { type: "json_object" };
-  }
-
-  const res = await fetch(`${provider.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+async function chatCompletion(
+  selected: Provider,
+  messages: Array<{ role: string; content: unknown }>,
+  temperature: number,
+  maxTokens: number,
+  jsonMode: boolean,
+): Promise<string> {
+  const body: Record<string, unknown> = {
+    model: selected.model,
+    messages,
+    temperature,
+    max_tokens: maxTokens,
+  };
+  if (jsonMode) body.response_format = { type: "json_object" };
+  const response = await fetch(`${selected.baseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${provider.apiKey}`,
+      Authorization: `Bearer ${selected.key}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
   });
-
-  const raw = await res.text();
-
-  if (!res.ok) {
-    throw new Error(`${provider.name} error ${res.status}: ${raw.slice(0, 1000)}`);
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(`${selected.name} HTTP ${response.status}: ${raw.slice(0, 600)}`);
   }
-
-  const data = JSON.parse(raw);
-  const content = data?.choices?.[0]?.message?.content;
-
-  if (!content) {
-    throw new Error(`${provider.name} returned no message content.`);
+  const decoded = JSON.parse(raw);
+  const content = decoded?.choices?.[0]?.message?.content;
+  if (!content || typeof content !== "string") {
+    throw new Error("AI provider returned no message content");
   }
-
-  return extractJson(content);
+  return content;
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+async function handleComplete(payload: AiRequest): Promise<Response> {
+  const messages = completeMessages(payload);
+  if (!messages) {
+    return jsonResponse({ ok: false, error: "Send system, user, or messages." }, 400);
   }
+  const selected = provider();
+  const requestedTokens = Number(payload.maxTokens ?? payload.max_tokens ?? 900);
+  const maxTokens = Number.isFinite(requestedTokens) ? Math.min(2000, Math.max(1, Math.round(requestedTokens))) : 900;
+  const requestedTemperature = Number(payload.temperature ?? 0.2);
+  const temperature = Number.isFinite(requestedTemperature)
+    ? Math.min(1, Math.max(0, requestedTemperature))
+    : 0.2;
+  const jsonMode = payload.jsonMode === true || payload.json_mode === true;
+  const text = await chatCompletion(selected, messages, temperature, maxTokens, jsonMode);
+  return jsonResponse({
+    ok: true,
+    provider: selected.name,
+    model: selected.model,
+    text,
+  });
+}
 
-  if (req.method !== "POST") {
-    return jsonResponse({ error: "Method not allowed. Use POST." }, 405);
-  }
-
+Deno.serve(async (request: Request) => {
+  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (request.method !== "POST") return jsonResponse({ ok: false, error: "Method not allowed. Use POST." }, 405);
   try {
-    const payload = (await req.json()) as AiRequest;
-
-    if (!payload.mode) payload.mode = "field_plan";
-    if (!payload.job && !payload.observation && !payload.species) {
-      return jsonResponse(
-        { error: "Send at least one of: job, observation, or species." },
-        400,
-      );
+    const payload = await request.json() as AiRequest;
+    if (isCompleteAction(payload)) {
+      return await handleComplete(payload);
     }
 
-    const result = await callAI(payload);
-    const provider = getProvider();
+    let agentResult = null;
+    try {
+      agentResult = await callAgentFramework(payload);
+    } catch (error) {
+      console.warn("Agent Framework unavailable; using existing provider:", publicError(error));
+    }
+    if (agentResult) {
+      return jsonResponse({ ok: true, provider: "microsoft-agent-framework", result: agentResult });
+    }
 
-    return jsonResponse({
-      ok: true,
-      provider: provider?.name || "none",
-      result,
+    const selected = provider();
+    const authorization = request.headers.get("Authorization") ?? "";
+    const client = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: authorization } },
     });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("ai-assistant failed:", message);
-    return jsonResponse({ ok: false, error: message }, 500);
+    const mode = payload.mode ?? "field_plan";
+    if (!payload.job && !payload.observation && !payload.species && !payload.imageUrl && !payload.question) {
+      throw new Error("Provide job, observation, species, imageUrl, or question");
+    }
+
+    const context = mode === "business_query"
+      ? await businessContext(client, payload.question ?? "Summarize business performance")
+      : {
+        job: payload.job ?? {},
+        observation: payload.observation ?? "",
+        species: payload.species ?? "",
+        services: payload.services ?? [],
+        inspections: payload.inspections ?? [],
+        businessContext: payload.businessContext ?? "",
+      };
+
+    const system = [
+      "You are Wildlife FieldOps AI for a professional nuisance-wildlife company.",
+      "Return only valid JSON.",
+      "Do not invent laws, measurements, species certainty, prices, or completed work.",
+      "Flag uncertainty and require technician confirmation for image findings.",
+      "For compliance, identify what must be verified against the cited agency source.",
+      "For estimates, calculate transparent line items and explain assumptions.",
+      "For business queries, answer only from the supplied database context.",
+    ].join("\n");
+
+    const textPrompt = JSON.stringify({
+      mode,
+      context,
+      requiredShape: {
+        summary: "string",
+        species: "string or null",
+        confidence: "number 0..1",
+        entryPoints: ["string"],
+        damage: ["string"],
+        recommendations: ["string"],
+        safetyFlags: ["string"],
+        complianceChecks: ["string"],
+        estimateLineItems: [{ service: "string", quantity: 0, unitPrice: 0, rationale: "string" }],
+        customerMessage: "string",
+        invoiceNotes: "string",
+        answer: "string",
+      },
+    });
+
+    const userContent: unknown = payload.imageUrl
+      ? [
+        { type: "text", text: textPrompt },
+        { type: "image_url", image_url: { url: payload.imageUrl } },
+      ]
+      : textPrompt;
+
+    const content = await chatCompletion(
+      selected,
+      [{ role: "system", content: system }, { role: "user", content: userContent }],
+      0.15,
+      2200,
+      true,
+    );
+    const result = parseJson(content);
+
+    await client.from("ai_runs").insert({
+      job_id: payload.job && typeof payload.job.id === "string" ? payload.job.id : null,
+      mode,
+      input: payload,
+      output: result,
+      provider: selected.name,
+    });
+
+    return jsonResponse({ ok: true, provider: selected.name, model: selected.model, result });
+  } catch (error) {
+    console.error("ai-assistant failed:", publicError(error));
+    return jsonResponse({ ok: false, error: publicError(error) }, 500);
   }
 });

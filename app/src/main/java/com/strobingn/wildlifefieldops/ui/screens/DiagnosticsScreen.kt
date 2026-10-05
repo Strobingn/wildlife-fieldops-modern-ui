@@ -74,10 +74,9 @@ fun DiagnosticsScreen(
             DiagnosticSection("Configuration") {
                 val supabaseReady = BuildConfig.SUPABASE_URL.isNotBlank() && BuildConfig.SUPABASE_ANON_KEY.isNotBlank()
                 val mapsReady = BuildConfig.GOOGLE_MAPS_API_KEY.isNotBlank()
-                val aiReady = BuildConfig.LLM_API_KEY.isNotBlank()
                 DiagnosticRow("Supabase", if (supabaseReady) "Configured" else "Missing", supabaseReady)
                 DiagnosticRow("Google Maps", if (mapsReady) "Configured" else "Missing", mapsReady)
-                DiagnosticRow("AI", if (aiReady) "Configured" else "Missing", aiReady)
+                DiagnosticRow("Cloud AI", if (supabaseReady) "Via Supabase" else "Missing", supabaseReady)
                 DiagnosticRow(
                     "WM sync canary",
                     if (BuildConfig.WM_SYNC_CANARY_ENABLED) "ON (fieldops-sync)" else "OFF",

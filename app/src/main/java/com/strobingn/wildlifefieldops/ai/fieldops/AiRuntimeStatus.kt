@@ -49,7 +49,7 @@ data class AiRuntimeStatus(
                 mode = mode,
                 label = "Offline heuristic",
                 detail = buildString {
-                    append("No cloud key")
+                    append("Cloud AI unavailable")
                     if (!cloudConfigured && !onDeviceReady) append(" and no local model")
                     append(". Catalog draft only — edit before you quote or file.")
                 }

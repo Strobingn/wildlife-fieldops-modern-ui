@@ -3,6 +3,7 @@ package com.strobingn.wildlifefieldops.data.remote
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.gotrue.Auth
+import io.github.jan.supabase.gotrue.SessionStatus
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.gotrue.providers.builtin.Email
 import io.github.jan.supabase.postgrest.Postgrest
@@ -59,6 +60,24 @@ class SupabaseService @Inject constructor() {
 
     val auth get() = client?.auth
     val postgrest get() = client?.postgrest
+
+    /** Anon or publishable key already shipped for PostgREST. Not an LLM secret. */
+    val anonOrPublishableKey: String get() = supabaseKey
+
+    fun edgeFunctionUrl(functionName: String): String =
+        supabaseUrl.trimEnd('/') + "/functions/v1/" + functionName
+
+    /**
+     * User access token when a session exists; otherwise the anon/publishable key.
+     * Edge Functions with verify_jwt accept the legacy anon JWT and user sessions.
+     */
+    fun edgeAuthorizationBearer(): String {
+        val sessionToken = runCatching {
+            val status = client?.auth?.sessionStatus?.value
+            if (status is SessionStatus.Authenticated) status.session.accessToken else null
+        }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+        return sessionToken ?: supabaseKey
+    }
 
     suspend fun signIn(email: String, password: String): Boolean {
         return try {
