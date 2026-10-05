@@ -31,7 +31,8 @@ class AutoSync @Inject constructor(
     @ApplicationContext private val context: Context,
     private val scheduler: FieldOpsSyncScheduler,
     private val database: AppDatabase,
-    private val gate: AutoSyncGate
+    private val gate: AutoSyncGate,
+    private val syncWrites: SyncWriteGate
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val trigger = AutoSyncTrigger(
@@ -68,6 +69,10 @@ class AutoSync @Inject constructor(
         database.invalidationTracker.addObserver(
             object : InvalidationTracker.Observer(AutoSyncTrigger.WATCHED_TABLES) {
                 override fun onInvalidated(tables: Set<String>) {
+                    if (!SyncWriteGate.shouldEnqueueForInvalidation(syncWrites.isSyncWrite())) {
+                        Log.i(TAG, "ignoring sync-originated write in $tables")
+                        return
+                    }
                     Log.i(TAG, "local write in $tables; scheduling auto-sync")
                     trigger.notifyLocalChange()
                 }

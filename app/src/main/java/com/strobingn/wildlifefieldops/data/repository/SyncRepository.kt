@@ -11,9 +11,9 @@ import com.strobingn.wildlifefieldops.data.model.Customer
 import com.strobingn.wildlifefieldops.data.model.DeletedRecord
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.observation.FieldObservationSyncQueue
+import com.strobingn.wildlifefieldops.data.observation.LocalMediaSync
 import com.strobingn.wildlifefieldops.data.observation.ObservationEventMapper
 import com.strobingn.wildlifefieldops.data.observation.ObservationEventSyncQueue
-import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoPaths
 import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoUploader
 import com.strobingn.wildlifefieldops.data.remote.JobPhotoUploader
 import com.strobingn.wildlifefieldops.data.remote.LiveSyncPayloads
@@ -29,6 +29,8 @@ import com.strobingn.wildlifefieldops.ai.fieldops.MoneyFieldOpsStore
 import com.strobingn.wildlifefieldops.ai.fieldops.TrapFieldOpsStore
 import com.strobingn.wildlifefieldops.data.remote.toLocal
 import com.strobingn.wildlifefieldops.sync.work.FieldOpsSyncGateway
+import com.strobingn.wildlifefieldops.sync.work.LocalEditSignal
+import com.strobingn.wildlifefieldops.sync.work.SyncWriteGate
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.Dispatchers
@@ -65,13 +67,23 @@ class SyncRepository @Inject constructor(
     private val deletedRecordDao: DeletedRecordDao,
     private val itemRunner: SyncItemRunner,
     private val trapFieldOpsStore: TrapFieldOpsStore,
-    private val moneyFieldOpsStore: MoneyFieldOpsStore
+    private val moneyFieldOpsStore: MoneyFieldOpsStore,
+    private val syncWriteGate: SyncWriteGate,
+    private val localEdits: LocalEditSignal,
+    private val syncStatusStore: SyncStatusStore
 ) : FieldOpsSyncGateway {
     override fun isCloudConfigured(): Boolean = supabaseService.isConfigured
 
     override suspend fun syncAll(): SyncResult = withContext(Dispatchers.IO) {
-        try {
-            doSync()
+        val result = try {
+            val pendingBefore = countPending()
+            val synced = syncWriteGate.marking { doSync() }
+            // Pull/ACK writes are drained inside the gate. A row created during
+            // this pass (photo captured while syncing) still needs one push.
+            if (synced.failedItems.isEmpty() && synced.pendingRemaining > pendingBefore) {
+                localEdits.notifyLocalChange()
+            }
+            synced
         } catch (t: Throwable) {
             android.util.Log.e("SyncRepository", "Sync crashed", t)
             SyncResult(
@@ -79,6 +91,9 @@ class SyncRepository @Inject constructor(
                 message = "Sync failed: ${SyncErrorFormatter.reason(t)}. Local data was not deleted."
             )
         }
+        runCatching { syncStatusStore.record(result) }
+            .onFailure { android.util.Log.w("SyncRepository", "Could not store sync status", it) }
+        result
     }
 
     /**
@@ -99,7 +114,7 @@ class SyncRepository @Inject constructor(
                     eq("id", id)
                 }
             }
-            deletedRecordDao.markSynced(id, entityType)
+            syncWriteGate.marking { deletedRecordDao.markSynced(id, entityType) }
         }.onFailure {
             android.util.Log.w("SyncRepository", "Immediate remote delete failed for $entityType/$id", it)
         }
@@ -215,13 +230,9 @@ class SyncRepository @Inject constructor(
                     android.util.Log.w("SyncRepository", "photos row failed for ${photo.id}", e)
                     throw e
                 }
-                runCatching {
-                    client.from("job_photos").upsert(
-                        LiveSyncPayloads.jobPhotoLink(latest, uploaded.storagePath, uploaded.publicUrl)
-                    )
-                }.onFailure {
-                    android.util.Log.w("SyncRepository", "job_photos link skipped for ${photo.id}", it)
-                }
+                client.from("job_photos").upsert(
+                    LiveSyncPayloads.jobPhotoLink(latest, uploaded.storagePath, uploaded.publicUrl)
+                )
                 val acked = photoDao.markUploadedIfDescription(
                     latest.id,
                     uploaded.publicUrl,
@@ -259,22 +270,20 @@ class SyncRepository @Inject constructor(
                 var storagePath: String? = null
                 var publicUrl: String? = null
                 val localPhoto = observation.photoLocalPath.trim()
-                if (ObservationPhotoPaths.isLocalCandidate(localPhoto) &&
-                    observationPhotoUploader.readBytes(localPhoto) != null
-                ) {
-                    val uploaded = observationPhotoUploader.uploadFieldPhoto(
-                        client = client,
-                        observationId = observation.id,
-                        localPath = localPhoto
-                    )
-                    storagePath = uploaded.storagePath
-                    publicUrl = uploaded.publicUrl
-                    uploadedPhotos += 1
-                } else if (ObservationPhotoPaths.isLocalCandidate(localPhoto)) {
-                    android.util.Log.w(
-                        "SyncRepository",
-                        "Field observation ${observation.id} photo missing locally; syncing metadata only"
-                    )
+                when (LocalMediaSync.plan(localPhoto, observationPhotoUploader.readBytes(localPhoto) != null)) {
+                    LocalMediaSync.Plan.UPLOAD -> {
+                        val uploaded = observationPhotoUploader.uploadFieldPhoto(
+                            client = client,
+                            observationId = observation.id,
+                            localPath = localPhoto
+                        )
+                        storagePath = uploaded.storagePath
+                        publicUrl = uploaded.publicUrl
+                        uploadedPhotos += 1
+                    }
+                    LocalMediaSync.Plan.MISSING ->
+                        error("Local observation photo missing: $localPhoto")
+                    LocalMediaSync.Plan.ABSENT -> Unit
                 }
                 client.from("field_observations").upsert(
                     LiveSyncPayloads.fieldObservation(
@@ -300,21 +309,19 @@ class SyncRepository @Inject constructor(
             ) {
                 var storagePath: String? = null
                 val mediaUri = record.mediaUri?.trim().orEmpty()
-                if (ObservationPhotoPaths.isLocalCandidate(mediaUri) &&
-                    observationPhotoUploader.readBytes(mediaUri) != null
-                ) {
-                    val uploaded = observationPhotoUploader.uploadEventMedia(
-                        client = client,
-                        eventId = record.eventId,
-                        mediaUri = mediaUri
-                    )
-                    storagePath = uploaded.storagePath
-                    uploadedPhotos += 1
-                } else if (ObservationPhotoPaths.isLocalCandidate(mediaUri)) {
-                    android.util.Log.w(
-                        "SyncRepository",
-                        "ObservationEvent ${record.eventId} media missing locally; inserting row without storage path"
-                    )
+                when (LocalMediaSync.plan(mediaUri, observationPhotoUploader.readBytes(mediaUri) != null)) {
+                    LocalMediaSync.Plan.UPLOAD -> {
+                        val uploaded = observationPhotoUploader.uploadEventMedia(
+                            client = client,
+                            eventId = record.eventId,
+                            mediaUri = mediaUri
+                        )
+                        storagePath = uploaded.storagePath
+                        uploadedPhotos += 1
+                    }
+                    LocalMediaSync.Plan.MISSING ->
+                        error("Local event media missing: $mediaUri")
+                    LocalMediaSync.Plan.ABSENT -> Unit
                 }
                 val dto = ObservationEventMapper.toRemoteDto(record, mediaStoragePath = storagePath)
                 insertObservationEventIgnoreDuplicate(client, dto)
@@ -327,12 +334,7 @@ class SyncRepository @Inject constructor(
             }
         }
 
-        val pendingRemaining = jobDao.countUnsynced() +
-            customerDao.countUnsynced() +
-            inspectionDao.countUnsynced() +
-            fieldObservationDao.countUnsynced() +
-            observationEventDao.countUnsynced() +
-            photoDao.countUnuploaded()
+        val pendingRemaining = countPending()
 
         val base = "Synced. Pushed: $pushedJobs jobs, $pushedCustomers customers, $pushedInspections inspections, " +
             "$pushedObservations observations, $pushedEvents events, $uploadedPhotos photos. " +
@@ -424,6 +426,7 @@ class SyncRepository @Inject constructor(
             val existing = localById[dto.id]
             if (existing != null && !existing.isSynced) return@forEach
             val mapped = runCatching { dto.toLocal(existing) }.getOrNull() ?: return@forEach
+            if (existing == mapped) return@forEach
             incoming += mapped
         }
         if (incoming.isNotEmpty()) {
@@ -446,9 +449,18 @@ class SyncRepository @Inject constructor(
             val existing = localById[dto.id]
             if (existing != null && !existing.isSynced) return@forEach
             val mapped = runCatching { dto.toLocal(existing) }.getOrNull() ?: return@forEach
+            if (existing == mapped) return@forEach
             incoming += mapped
         }
         if (incoming.isNotEmpty()) customerDao.insertAll(incoming)
         return incoming.size
     }
+
+    private suspend fun countPending(): Int =
+        jobDao.countUnsynced() +
+            customerDao.countUnsynced() +
+            inspectionDao.countUnsynced() +
+            fieldObservationDao.countUnsynced() +
+            observationEventDao.countUnsynced() +
+            photoDao.countUnuploaded()
 }

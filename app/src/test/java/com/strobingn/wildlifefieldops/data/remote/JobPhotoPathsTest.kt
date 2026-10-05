@@ -18,6 +18,22 @@ class JobPhotoPathsTest {
     }
 
     @Test
+    fun sourceCandidatesPreferLocalPathThenFileUri() {
+        assertEquals(
+            listOf("/data/photos/a.jpg", "content://app/internal_files/photos/a.jpg"),
+            JobPhotoPaths.sourceCandidates(
+                "/data/photos/a.jpg",
+                "content://app/internal_files/photos/a.jpg"
+            )
+        )
+        assertEquals(
+            listOf("/data/photos/a.jpg"),
+            JobPhotoPaths.sourceCandidates("/data/photos/a.jpg", "/data/photos/a.jpg")
+        )
+        assertEquals(emptyList<String>(), JobPhotoPaths.sourceCandidates("  ", ""))
+    }
+
+    @Test
     fun unassignedFolderWhenJobIdMissing() {
         val path = JobPhotoPaths.objectPath(null, "p1", "a.png")
         assertEquals("public/unassigned/p1.jpg", path)

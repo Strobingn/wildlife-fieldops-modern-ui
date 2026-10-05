@@ -36,6 +36,7 @@ import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
 import com.strobingn.wildlifefieldops.BuildConfig
+import com.strobingn.wildlifefieldops.data.repository.syncFailureDetail
 import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
 import com.strobingn.wildlifefieldops.navigation.MoreDestination
 import com.strobingn.wildlifefieldops.navigation.Screen
@@ -488,17 +489,24 @@ internal fun SyncStatusLine(text: String, color: Color) {
 internal fun rememberSyncSnapshot(viewModel: SettingsViewModel = hiltViewModel()): SyncSnapshot {
     val backlog by viewModel.backlog.collectAsState()
     val lastOk by viewModel.lastSyncOk.collectAsState()
+    val lastMessage by viewModel.lastSyncMessage.collectAsState()
+    val lastAt by viewModel.lastSyncAt.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
-    LaunchedEffect(Unit) { viewModel.refreshBacklog() }
+    LaunchedEffect(lastAt) { viewModel.refreshBacklog() }
     val pending = backlog?.pendingTotal ?: 0
     val failed = backlog?.hasFailures == true || lastOk == false
     return syncSnapshot(
         isSyncing = isSyncing,
         failed = failed,
         pending = pending,
-        failureDetail = backlog?.recentFailures?.firstOrNull()
+        failureDetail = syncFailureDetail(
+            backlogLine = backlog?.recentFailures?.firstOrNull(),
+            lastOk = lastOk,
+            lastMessage = lastMessage
+        )
     )
 }
+
 
 @Composable
 private fun AutoSyncStatusBar() {

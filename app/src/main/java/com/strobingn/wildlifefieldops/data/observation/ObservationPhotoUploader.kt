@@ -70,14 +70,31 @@ class ObservationPhotoUploader @Inject constructor(
         )
     }
 
-    fun readBytes(pathOrUri: String): ByteArray? {
+    fun readBytes(pathOrUri: String): ByteArray? = readFirstAvailable(listOf(pathOrUri))
+
+    /** First readable candidate wins. Blank paths are skipped. */
+    fun readFirstAvailable(candidates: Iterable<String>): ByteArray? {
+        for (candidate in candidates) {
+            val bytes = readOne(candidate) ?: continue
+            if (bytes.isNotEmpty()) return bytes
+        }
+        return null
+    }
+
+    private fun readOne(pathOrUri: String): ByteArray? {
         val trimmed = pathOrUri.trim()
         if (trimmed.isEmpty() || ObservationPhotoPaths.isRemoteUrl(trimmed)) return null
-        ObservationPhotoPaths.filesystemPath(trimmed)?.let { fs ->
+        val files = buildList {
+            ObservationPhotoPaths.filesystemPath(trimmed)?.let { add(it) }
+            ObservationPhotoPaths.appFileCandidate(
+                trimmed,
+                context.filesDir.absolutePath,
+                context.cacheDir.absolutePath
+            )?.let { add(it) }
+        }
+        for (fs in files.distinct()) {
             val file = File(fs)
-            if (file.isFile && file.length() > 0L) {
-                return file.readBytes()
-            }
+            if (file.isFile && file.length() > 0L) return file.readBytes()
         }
         return runCatching {
             val uri = Uri.parse(trimmed)

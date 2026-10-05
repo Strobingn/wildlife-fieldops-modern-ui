@@ -39,6 +39,27 @@ class ObservationPhotoPathsTest {
     }
 
     @Test
+    fun fileProviderUriMapsBackToAppFiles() {
+        val files = "/data/user/0/com.strobingn.wildlifefieldops/files"
+        val cache = "/data/user/0/com.strobingn.wildlifefieldops/cache"
+        val uri = "content://com.strobingn.wildlifefieldops.provider/internal_files/photos/IMG_1.jpg"
+        assertEquals(
+            "$files/photos/IMG_1.jpg",
+            ObservationPhotoPaths.appFileCandidate(uri, files, cache)
+        )
+        assertEquals(
+            "$files/photos/IMG_1.jpg",
+            ObservationPhotoPaths.appFileCandidate("/internal_files/photos/IMG_1.jpg", files, cache)
+        )
+        assertEquals(
+            "$cache/voice/note.m4a",
+            ObservationPhotoPaths.appFileCandidate("content://pkg/cache_files/voice/note.m4a", files, cache)
+        )
+        assertNull(ObservationPhotoPaths.appFileCandidate("/data/photos/real.jpg", files, cache))
+        assertNull(ObservationPhotoPaths.appFileCandidate("content://pkg/internal_files/../secrets", files, cache))
+    }
+
+    @Test
     fun unknownExtensionsDefaultToJpeg() {
         assertEquals("jpg", ObservationPhotoPaths.extension("/tmp/frame.bin"))
         assertEquals("image/jpeg", ObservationPhotoPaths.mimeType("/tmp/frame.bin"))

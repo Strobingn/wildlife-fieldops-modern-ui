@@ -56,19 +56,19 @@ fun PhotoGalleryScreen(
         "Evidence" to PhotoCategory.EVIDENCE, "Docs" to PhotoCategory.DOCUMENT)
 
     // Camera launcher
-    var tempPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingStill by remember { mutableStateOf<PendingStill?>(null) }
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { success ->
-        if (success && tempPhotoUri != null) {
-            val uri = tempPhotoUri!!
-            val file = File(uri.path ?: "")
+        val shot = pendingStill
+        if (success && shot != null) {
             val photo = Photo(
-                filePath = uri.toString(),
-                localPath = file.absolutePath,
+                filePath = shot.uri.toString(),
+                localPath = shot.absolutePath,
                 category = PhotoCategory.JOB_SITE,
                 description = "Taken ${SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date())}",
-                takenAt = System.currentTimeMillis()
+                takenAt = System.currentTimeMillis(),
+                fileSize = File(shot.absolutePath).takeIf { it.isFile }?.length() ?: 0L
             )
             viewModel.savePhoto(photo)
         }
@@ -98,9 +98,9 @@ fun PhotoGalleryScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
-                    val uri = createImageUri(context)
-                    tempPhotoUri = uri
-                    cameraLauncher.launch(uri)
+                    val shot = createStill(context)
+                    pendingStill = shot
+                    cameraLauncher.launch(shot.uri)
                 },
                 containerColor = PrimaryGreen,
                 contentColor = OnPrimary
@@ -453,7 +453,7 @@ private fun PhotoGridItem(photo: Photo, onDelete: () -> Unit, onClick: () -> Uni
             }
 
             // Info overlay
-            if (photo.description.isNotBlank()) {
+            if (photo.description.isNotBlank() || !photo.uploadError.isNullOrBlank()) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -469,6 +469,14 @@ private fun PhotoGridItem(photo: Photo, onDelete: () -> Unit, onClick: () -> Uni
                             fontWeight = FontWeight.Medium,
                             maxLines = 1
                         )
+                        if (!photo.uploadError.isNullOrBlank()) {
+                            Text(
+                                "Sync failed: ${photo.uploadError}",
+                                color = ErrorRed,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 2
+                            )
+                        }
                         Text(
                             SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
                                 .format(Date(photo.takenAt)),
@@ -483,14 +491,17 @@ private fun PhotoGridItem(photo: Photo, onDelete: () -> Unit, onClick: () -> Uni
     }
 }
 
-private fun createImageUri(context: Context): Uri {
+private data class PendingStill(val uri: Uri, val absolutePath: String)
+
+private fun createStill(context: Context): PendingStill {
     val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
     val fileName = "IMG_${timeStamp}.jpg"
     val storageDir = File(context.filesDir, "photos").apply { mkdirs() }
     val file = File(storageDir, fileName)
-    return FileProvider.getUriForFile(
+    val uri = FileProvider.getUriForFile(
         context,
         "${context.packageName}.provider",
         file
     )
+    return PendingStill(uri = uri, absolutePath = file.absolutePath)
 }

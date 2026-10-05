@@ -34,6 +34,41 @@ object ObservationPhotoPaths {
         return trimmed
     }
 
+    /**
+     * FileProvider URIs from `res/xml/file_paths.xml` are not filesystem paths.
+     * `content://…/internal_files/photos/IMG.jpg` and the bogus absolute path
+     * `/internal_files/photos/IMG.jpg` both map back to [filesDir].
+     */
+    fun appFileCandidate(pathOrUri: String, filesDir: String, cacheDir: String): String? {
+        val relative = providerRelative(pathOrUri) ?: return null
+        if (relative.contains("..")) return null
+        val child = when {
+            relative.startsWith(FILES_PREFIX) -> relative.removePrefix(FILES_PREFIX)
+            relative.startsWith(CACHE_PREFIX) -> relative.removePrefix(CACHE_PREFIX)
+            else -> return null
+        }
+        if (child.isBlank()) return null
+        val root = if (relative.startsWith(FILES_PREFIX)) filesDir else cacheDir
+        return java.io.File(root, child).path
+    }
+
+    private fun providerRelative(pathOrUri: String): String? {
+        val raw = pathOrUri.trim()
+        if (raw.isEmpty() || isRemoteUrl(raw)) return null
+        val path = if (raw.startsWith("content:", ignoreCase = true)) {
+            val afterScheme = raw.substringAfter("://", missingDelimiterValue = "")
+            val slash = afterScheme.indexOf('/')
+            if (slash < 0) return null
+            afterScheme.substring(slash + 1)
+        } else {
+            raw.removePrefix("/")
+        }
+        return path.replace("%2F", "/", ignoreCase = true).replace("%20", " ")
+    }
+
+    private const val FILES_PREFIX = "internal_files/"
+    private const val CACHE_PREFIX = "cache_files/"
+
     fun fieldObservationPath(observationId: String, localPath: String): String =
         "field/${sanitizeSegment(observationId)}/${sanitizeSegment(observationId)}.${extension(localPath)}"
 

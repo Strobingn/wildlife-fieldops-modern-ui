@@ -22,8 +22,9 @@ class JobPhotoUploader @Inject constructor(
     private val observationPhotoUploader: ObservationPhotoUploader
 ) {
     suspend fun upload(client: SupabaseClient, photo: Photo): JobPhotoUpload {
-        val local = photo.localPath.ifBlank { photo.filePath }
-        val bytes = observationPhotoUploader.readBytes(local)
+        val sources = JobPhotoPaths.sourceCandidates(photo.localPath, photo.filePath)
+        val local = sources.firstOrNull().orEmpty()
+        val bytes = observationPhotoUploader.readFirstAvailable(sources)
             ?: error("Local job photo missing: $local")
         require(bytes.isNotEmpty()) { "Local job photo is empty: $local" }
         require(bytes.size <= JobPhotoPaths.MAX_BYTES) {

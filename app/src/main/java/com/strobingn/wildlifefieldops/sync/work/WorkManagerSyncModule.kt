@@ -1,6 +1,8 @@
 package com.strobingn.wildlifefieldops.sync.work
 
+import android.annotation.SuppressLint
 import com.strobingn.wildlifefieldops.BuildConfig
+import com.strobingn.wildlifefieldops.data.local.AppDatabase
 import com.strobingn.wildlifefieldops.data.repository.SyncRepository
 import dagger.Binds
 import dagger.Module
@@ -54,9 +56,25 @@ object WorkManagerSyncProvideModule {
 
     @Provides
     @Singleton
+    fun provideSyncWriteGate(database: AppDatabase): SyncWriteGate = SyncWriteGate(
+        drainInvalidations = { drainSyncInvalidations(database) }
+    )
+
+    @Provides
+    @Singleton
+    fun provideLocalEditSignal(autoSync: AutoSync): LocalEditSignal =
+        LocalEditSignal { autoSync.notifyLocalChange() }
+
+    @Provides
+    @Singleton
     fun provideWorkRunner(
         gateway: FieldOpsSyncGateway,
         ledger: DomainSyncLedger,
         adapter: WorkAnalyticsAdapter
-    ): FieldOpsSyncWorkRunner = FieldOpsSyncWorkRunner(gateway, ledger, adapter)
+        ): FieldOpsSyncWorkRunner = FieldOpsSyncWorkRunner(gateway, ledger, adapter)
+}
+
+@SuppressLint("RestrictedApi")
+private fun drainSyncInvalidations(database: AppDatabase) {
+    database.invalidationTracker.refreshVersionsSync()
 }
