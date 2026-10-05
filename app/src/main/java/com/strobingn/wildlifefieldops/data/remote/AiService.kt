@@ -121,14 +121,14 @@ class AiService @Inject constructor(
     ): EstimateDraft = withContext(Dispatchers.IO) {
         val system = """
 You are a wildlife removal estimator. Return ONLY valid JSON with:
-laborHours, laborRate, materialsCost, equipmentCost, permitCost, disposalCost, mileage, mileageRate, taxRate, discountPercent, rationale, lineItemNotes
-Do NOT invent mileage or taxRate. Use the provided measured miles and tax percent exactly.
+laborHours, laborRate, materialsCost, equipmentCost, permitCost, disposalCost, mileageRate, discountPercent, rationale, lineItemNotes
+Mileage and tax rate are filled in from measured values after you reply; use the measured miles only as context for travel time.
 """.trimIndent()
         val milesLine = if (drivingMiles != null)
-            "MEASURED one-way driving miles shop to job: $drivingMiles. Put this exact number in mileage."
+            "Measured one-way driving miles shop to job: $drivingMiles."
         else
-            "Driving miles could not be measured. Set mileage to 0. Do not guess."
-        val user = buildJobContext(job) + "\n$milesLine\nRequired taxRate: $taxPercent\n$distanceNote\n\nProduce estimate JSON."
+            "Driving miles could not be measured."
+        val user = buildJobContext(job) + "\n$milesLine\nSales tax (applied automatically): $taxPercent%\n$distanceNote\n\nProduce estimate JSON."
         if (isConfigured) {
             when (val result = completeChat(system, user, maxTokens = 700, temperature = 0.25)) {
                 is ChatResult.Ok -> {
