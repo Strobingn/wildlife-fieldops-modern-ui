@@ -21,10 +21,6 @@ jobs:
       GOOGLE_MAPS_API: ${{ secrets.GOOGLE_MAPS_API || secrets.GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API }}
       VITE_GOOGLE_MAPS_API: ${{ secrets.GOOGLE_MAPS_API || secrets.GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API_KEY || secrets.VITE_GOOGLE_MAPS_API }}
       OPENWEATHER_API_KEY: ${{ secrets.VITE_OPENWEATHER_API_KEY }}
-      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
-      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
-      LLM_BASE_URL: https://api.x.ai/v1
-      LLM_MODEL: grok-4.5
       DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
@@ -75,39 +71,12 @@ jobs:
             echo "GOOGLE_MAPS_API present (length ${#GOOGLE_MAPS_API})"
           fi
 
-      - name: Verify AI secrets (no values printed)
-        run: |
-          set -e
-          if [ -z "${XAI_API_KEY}" ] && [ -n "${LLM_API_KEY}" ]; then
-            export XAI_API_KEY="${LLM_API_KEY}"
-            echo "Using LLM_API_KEY as XAI_API_KEY fallback"
-          fi
-          if [ -n "${XAI_API_KEY}" ]; then
-            export XAI_API_KEY="$(printf '%s' "$XAI_API_KEY" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-          fi
-          if [ -n "${LLM_API_KEY}" ]; then
-            export LLM_API_KEY="$(printf '%s' "$LLM_API_KEY" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-          fi
-          echo "XAI_API_KEY length: ${#XAI_API_KEY}"
-          echo "LLM_API_KEY length: ${#LLM_API_KEY}"
-          echo "LLM_BASE_URL: ${LLM_BASE_URL}"
-          echo "LLM_MODEL: ${LLM_MODEL}"
-          if [ "${#XAI_API_KEY}" -lt 10 ] && [ "${#LLM_API_KEY}" -lt 10 ]; then
-            echo "::warning::No usable XAI_API_KEY or LLM_API_KEY secret — AI will be offline in this APK. Add repo secret XAI_API_KEY and rebuild."
-          else
-            echo "AI key present for BuildConfig bake-in."
-          fi
-          echo "XAI_API_KEY=$XAI_API_KEY" >> "$GITHUB_ENV"
-          echo "LLM_API_KEY=$LLM_API_KEY" >> "$GITHUB_ENV"
-
       - name: Build Debug APK
         run: |
           set -o pipefail
           export GRADLE_OPTS="-Xmx6g -XX:MaxMetaspaceSize=512m -XX:+UseG1GC"
-          export XAI_API_KEY="${XAI_API_KEY}"
-          export LLM_API_KEY="${LLM_API_KEY}"
-          export LLM_BASE_URL="${LLM_BASE_URL:-https://api.x.ai/v1}"
-          export LLM_MODEL="${LLM_MODEL:-grok-4.5}"
+          # Cloud LLM key is a Supabase secret, not a Gradle input.
+          unset XAI_API_KEY LLM_API_KEY LLM_BASE_URL LLM_MODEL XAI_BASE_URL XAI_MODEL || true
           ./gradlew :app:assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
         timeout-minutes: 30
 
@@ -119,6 +88,12 @@ jobs:
           ls -la app/build/outputs/apk/debug/
           test -n "$(ls -A app/build/outputs/apk/debug/*.apk 2>/dev/null)"
           echo "=== End check ==="
+          APK="$(ls app/build/outputs/apk/debug/*.apk | head -n 1)"
+          if grep -a -E 'api\.x\.ai|LLM_API_KEY|XAI_API_KEY' "$APK"; then
+            echo "::error::Debug APK still contains a client-side xAI key or endpoint"
+            exit 1
+          fi
+          echo "APK has no client-side xAI key or endpoint"
 
       - name: Unit tests
         run: |

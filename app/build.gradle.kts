@@ -21,8 +21,8 @@ android {
         targetSdk = 35
         // Local/dev installs keep this hand-set code. GitHub Actions overrides with
         // 1_000_000 + GITHUB_RUN_NUMBER so branch APKs never VERSION_DOWNGRADE (48/49/50+).
-        versionCode = 52
-        versionName = "2.7.7-sync-photos"
+        versionCode = 53
+        versionName = "2.7.8-edge-ai"
         buildConfigField("String", "UPDATE_RELEASE_TAG", "\"debug-latest\"")
         buildConfigField("String", "UPDATE_CHANNEL", "\"main\"")
         buildConfigField("String", "CI_SIGNER_SHA256", "\"EC:75:D0:BC:BC:62:30:6B:0C:38:91:76:9E:05:4C:EB:C7:7C:6A:84:4D:11:9B:40:18:B9:0C:7E:F7:57:0C:A6\"")
@@ -57,25 +57,7 @@ android {
                 .replace("\r", "")
                 .replace("\n", "")
 
-        val llmKey = envTrim("XAI_API_KEY").ifBlank { envTrim("LLM_API_KEY") }
-        val llmBase = envTrim("LLM_BASE_URL")
-            .ifBlank { envTrim("XAI_BASE_URL") }
-            .ifBlank { "https://api.x.ai/v1" }
-        val llmModel = envTrim("LLM_MODEL")
-            .ifBlank { envTrim("XAI_MODEL") }
-            .ifBlank { "grok-4.5" }
-
-        logger.lifecycle(
-            "LLM config: keyChars=${llmKey.length} base=$llmBase model=$llmModel " +
-                "(XAI_API_KEY ${if (envTrim("XAI_API_KEY").isNotEmpty()) "set" else "empty"}, " +
-                "LLM_API_KEY ${if (envTrim("LLM_API_KEY").isNotEmpty()) "set" else "empty"})"
-        )
-
-        buildConfigField("String", "LLM_API_KEY", "\"${escapeBuildConfig(llmKey)}\"")
-        buildConfigField("String", "LLM_BASE_URL", "\"${escapeBuildConfig(llmBase)}\"")
-        buildConfigField("String", "LLM_MODEL", "\"${escapeBuildConfig(llmModel)}\"")
-        buildConfigField("int", "LLM_KEY_LENGTH", "${llmKey.length}")
-
+        // Cloud Grok uses the Supabase ai-assistant function. Do not put that provider key in BuildConfig.
         val hfToken = envTrim("HF_TOKEN").ifBlank { envTrim("HUGGING_FACE_HUB_TOKEN") }
         buildConfigField("String", "HF_TOKEN", "\"${escapeBuildConfig(hfToken)}\"")
 

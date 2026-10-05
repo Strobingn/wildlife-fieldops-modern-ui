@@ -7,29 +7,9 @@ import com.strobingn.wildlifefieldops.data.model.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import java.net.HttpURLConnection
-import java.net.URL
 import javax.inject.Inject
 import javax.inject.Singleton
-
-@Serializable
-private data class LlmMessage(
-    val role: String,
-    val content: String
-)
-
-@Serializable
-private data class LlmRequest(
-    val model: String,
-    val messages: List<LlmMessage>,
-    val max_tokens: Int = 600,
-    val temperature: Double = 0.4
-)
 
 @Serializable
 data class EstimateDraft(
@@ -84,29 +64,20 @@ data class InspectionReportResult(
 @Singleton
 class AiService @Inject constructor(
     private val localLlm: LocalLlmEngine,
-    private val modelManager: LocalLlmModelManager
+    private val modelManager: LocalLlmModelManager,
+    private val edge: AiEdgeGateway
 ) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
-    private val apiKey: String get() = BuildConfig.LLM_API_KEY.trim()
-    val isConfigured: Boolean get() = apiKey.isNotBlank() && apiKey.length >= 10
-    val providerLabel: String
-        get() {
-            val base = BuildConfig.LLM_BASE_URL.lowercase()
-            return when {
-                base.contains("x.ai") -> "SpaceXAI (Grok)"
-                base.contains("openai") -> "OpenAI"
-                else -> "LLM"
-            }
-        }
+    val isConfigured: Boolean get() = edge.isConfigured
+    val providerLabel: String get() = "Grok via Supabase"
     val localLlmReady: Boolean get() = localLlm.isReady
 
     fun configDiagnostics(): String = buildString {
         append("Cloud provider: $providerLabel\n")
-        append("Cloud base: ${BuildConfig.LLM_BASE_URL}\n")
-        append("Cloud model: ${BuildConfig.LLM_MODEL}\n")
-        append("Cloud key baked into APK: ")
-        if (isConfigured) append("yes (${BuildConfig.LLM_KEY_LENGTH} chars)")
-        else append("NO — rebuild after setting secret XAI_API_KEY")
+        append("Cloud path: Supabase edge function ai-assistant\n")
+        append("Cloud key in APK: no\n")
+        append("Supabase: ")
+        if (isConfigured) append("configured") else append("not configured")
         append("\n")
         append(localLlm.modelStatusLabel())
         append("\nLocal model file: ${modelManager.activeFileName}")
@@ -333,40 +304,9 @@ Do not invent species or damage that the transcript does not support; mark uncer
     }
 
     private fun completeChat(systemPrompt: String, userPrompt: String, maxTokens: Int, temperature: Double): ChatResult {
-        val baseUrl = BuildConfig.LLM_BASE_URL.trimEnd('/')
-        val endpoint = URL("$baseUrl/chat/completions")
-        val payload = json.encodeToString(
-            LlmRequest(
-                model = detectModel(),
-                messages = listOf(
-                    LlmMessage(role = "system", content = systemPrompt),
-                    LlmMessage(role = "user", content = userPrompt)
-                ),
-                max_tokens = maxTokens,
-                temperature = temperature
-            )
-        )
-        val connection = (endpoint.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            connectTimeout = 30_000
-            readTimeout = 90_000
-            doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("Authorization", "Bearer $apiKey")
-        }
-        return try {
-            connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
-            val code = connection.responseCode
-            val body = (if (code in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) ChatResult.Err("AI error HTTP $code")
-            else {
-                val text = parseLlmResponse(body)
-                if (text.isNullOrBlank()) ChatResult.Err("Empty AI response.") else ChatResult.Ok(text)
-            }
-        } catch (e: Exception) {
-            ChatResult.Err("Network error: ${e.message}")
-        } finally {
-            connection.disconnect()
+        return when (val result = edge.complete(systemPrompt, userPrompt, maxTokens, temperature)) {
+            is EdgeChatResult.Ok -> ChatResult.Ok(result.text)
+            is EdgeChatResult.Err -> ChatResult.Err(result.message)
         }
     }
 
@@ -437,12 +377,6 @@ Do not invent species or damage that the transcript does not support; mark uncer
         return result.getOrElse { null }
     }
 
-    private fun detectModel(): String {
-        val configured = BuildConfig.LLM_MODEL.trim()
-        if (configured.isNotBlank()) return configured
-        return "grok-4.5"
-    }
-
     companion object {
         val CLOUD_SYSTEM_PROMPT: String = """
 You are FieldOps AI for a professional wildlife removal business.
@@ -458,31 +392,19 @@ Reply as the assistant only with the useful answer.
 """.trimIndent()
 
         fun cloudDiagnosticsOnly(): String = buildString {
-            val apiKey = BuildConfig.LLM_API_KEY.trim()
-            val configured = apiKey.isNotBlank() && apiKey.length >= 10
-            val base = BuildConfig.LLM_BASE_URL.lowercase()
-            val provider = when {
-                base.contains("x.ai") -> "SpaceXAI (Grok)"
-                base.contains("openai") -> "OpenAI"
-                else -> "LLM"
-            }
-            append("Cloud provider: $provider\n")
-            append("Cloud base: ${BuildConfig.LLM_BASE_URL}\n")
-            append("Cloud model: ${BuildConfig.LLM_MODEL}\n")
-            append("Cloud key baked into APK: ")
-            if (configured) append("yes (${BuildConfig.LLM_KEY_LENGTH} chars)")
-            else append("NO — rebuild after setting secret XAI_API_KEY")
+            val supabaseReady = BuildConfig.SUPABASE_URL.isNotBlank() &&
+                !BuildConfig.SUPABASE_URL.contains("your-project") &&
+                BuildConfig.SUPABASE_ANON_KEY.isNotBlank() &&
+                BuildConfig.SUPABASE_ANON_KEY != "your-anon-key"
+            append("Cloud provider: Grok via Supabase\n")
+            append("Cloud path: Supabase edge function ai-assistant\n")
+            append("Cloud key in APK: no\n")
+            append("Supabase: ")
+            if (supabaseReady) append("configured") else append("not configured")
             append("\nLocal model: ${LocalLlmModelManager.MODEL_DISPLAY_NAME}")
             append("\nLocal model file: ${LocalLlmModelManager.MODEL_FILE_NAME}")
             append("\nLocal model source: Hugging Face ${LocalLlmModelManager.MODEL_REPO}")
         }
-    }
-
-    private fun parseLlmResponse(body: String): String? = try {
-        val root = json.parseToJsonElement(body).jsonObject
-        root["choices"]?.jsonArray?.firstOrNull()?.jsonObject?.get("message")?.jsonObject?.get("content")?.jsonPrimitive?.content?.trim()
-    } catch (e: Exception) {
-        null
     }
 
     suspend fun askViaSupabase(userMessage: String, species: String = ""): String =

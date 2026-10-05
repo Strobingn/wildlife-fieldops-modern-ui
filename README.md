@@ -107,8 +107,10 @@ When reconciling a missed upload, compare **server rows** vs **Room `isSynced` /
 The chat / estimate / summary paths never answer from hardcoded keyword tip lists.
 
 ### Cloud LLM
-- Bake `XAI_API_KEY` (or `LLM_API_KEY`) into the APK at build time for SpaceXAI / Grok.
-- Optional: deploy Supabase Edge Function `ai-assistant` with a real provider key (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`, etc.). Demo/canned responses are disabled when no key is set.
+- The Android app calls the Supabase Edge Function `ai-assistant`. It sends the anon/publishable key and the signed-in user session when one exists.
+- The xAI key is a Supabase secret named `XAI_API_KEY` on project `wildlife_app` (`hgdzmwfcghtilyqagjak`). It is not a Gradle `BuildConfig` field and must not be shipped in the APK.
+- Structured field modes still return JSON. Android chat, estimates, inspection reports, and photo narration use `action: "complete"` and read `text`.
+- On-device llama.cpp and manual/heuristic entry stay available when the function or network is down.
 
 ### On-device llama.cpp + **abliterated** GGUF (default: Qwen2.5 3B; optional 7B v3)
 - Stack: [`dev.ffmpegkit-maintained:llama-android:0.1.1`](https://central.sonatype.com/artifact/dev.ffmpegkit-maintained/llama-android) (prebuilt llama.cpp JNI, no NDK in this app).

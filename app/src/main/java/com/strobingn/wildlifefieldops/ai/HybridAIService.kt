@@ -3,18 +3,10 @@ package com.strobingn.wildlifefieldops.ai
 import android.content.Context
 import android.net.Uri
 import com.google.gson.Gson
-import com.strobingn.wildlifefieldops.BuildConfig
 import com.strobingn.wildlifefieldops.ai.local.LocalLlmEngine
+import com.strobingn.wildlifefieldops.data.remote.AiEdgeGateway
 import com.strobingn.wildlifefieldops.data.remote.AiService
-import io.ktor.client.HttpClient
-import io.ktor.client.call.body
-import io.ktor.client.request.headers
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.http.ContentType
-import io.ktor.http.contentType
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.strobingn.wildlifefieldops.data.remote.EdgeChatResult
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,14 +16,10 @@ import javax.inject.Singleton
  */
 @Singleton
 class HybridAIService @Inject constructor(
-    private val localLlm: LocalLlmEngine
+    private val localLlm: LocalLlmEngine,
+    private val edge: AiEdgeGateway
 ) {
-    private val client = HttpClient()
     private val gson = Gson()
-
-    private data class ChatEnvelope(val choices: List<Choice> = emptyList())
-    private data class Choice(val message: Message = Message())
-    private data class Message(val content: String = "")
 
     data class GrokFormResponse(
         val species: String = "",
@@ -80,7 +68,7 @@ class HybridAIService @Inject constructor(
             repairScope = repairScope
         )
 
-        if (hasDirectKey()) {
+        if (edge.isConfigured) {
             runCatching {
                 val form = callGrokForForm(prompt)
                 return enrich(vision, form, source = "grok")
@@ -108,7 +96,7 @@ class HybridAIService @Inject constructor(
 
         return vision.copy(
             suggestedNotes = vision.suggestedNotes +
-                "\nGenerative LLM unavailable — download on-device model or configure XAI_API_KEY."
+                "\nGenerative LLM unavailable — download the on-device model. Cloud Grok needs Supabase."
         )
         } catch (t: Throwable) {
             android.util.Log.w("HybridAIService", "form fill failed: ${t.message}")
@@ -122,17 +110,17 @@ class HybridAIService @Inject constructor(
         jobContext: String = ""
     ): String {
         val prompt = GrokPrompts.tieredEstimatePrompt(analysis, jobContext)
-        if (hasDirectKey()) {
+        if (edge.isConfigured) {
             runCatching { return callGrokText(prompt) }
         }
         val local = localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
         if (local != null) return "On-device LLM estimate:\n\n$local"
-        return "No generative LLM ready. Download the on-device model in AI Assistant or set XAI_API_KEY."
+        return "No generative LLM ready. Download the on-device model in AI Assistant. Cloud Grok needs Supabase."
     }
 
     suspend fun analyzeFormForCompliance(formText: String): List<String> {
         val prompt = GrokPrompts.complianceAuditPrompt(formText)
-        if (hasDirectKey()) {
+        if (edge.isConfigured) {
             runCatching {
                 val text = callGrokText(prompt)
                 return text.lines().map { it.trim().removePrefix("-").removePrefix("•").trim() }
@@ -176,10 +164,8 @@ class HybridAIService @Inject constructor(
             equipmentTags = equipmentTags,
             repairScope = repairScope
         )
-        val raw = when {
-            hasDirectKey() -> runCatching { callGrokText(prompt) }.getOrNull()
-            else -> null
-        } ?: localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
+        val cloud = if (edge.isConfigured) runCatching { callGrokText(prompt) }.getOrNull() else null
+        val raw = cloud ?: localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
 
         if (raw.isNullOrBlank()) {
             return CaptureNarration(
@@ -187,13 +173,13 @@ class HybridAIService @Inject constructor(
                     append("• Evidence captured for ")
                     append(checklistTitle ?: "inspection")
                     append("\n• Review on site; confirm species and entry points.")
-                    append("\n• Download on-device model or set API key for fuller AI notes.")
+                    append("\n• Download the on-device model for fuller AI notes.")
                 },
                 customerSummary = "We documented the area during inspection and will review findings with you.",
                 source = "template"
             )
         }
-        return parseNarration(raw, if (hasDirectKey()) "grok" else "local_llm")
+        return parseNarration(raw, if (cloud != null) "grok" else "local_llm")
     }
 
     private fun parseNarration(raw: String, source: String): CaptureNarration {
@@ -242,34 +228,22 @@ class HybridAIService @Inject constructor(
         )
     }
 
-    private fun hasDirectKey(): Boolean = BuildConfig.LLM_API_KEY.trim().length >= 10
-
     private suspend fun callGrokForForm(prompt: String): GrokFormResponse {
         val content = callGrokText(prompt, jsonMode = true)
             .trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
         return gson.fromJson(content, GrokFormResponse::class.java)
     }
 
-    private suspend fun callGrokText(prompt: String, jsonMode: Boolean = false): String = withContext(Dispatchers.IO) {
-        val body = mutableMapOf<String, Any>(
-            "model" to BuildConfig.LLM_MODEL,
-            "messages" to listOf(
-                mapOf("role" to "system", "content" to GrokPrompts.SYSTEM),
-                mapOf("role" to "user", "content" to prompt)
-            ),
-            "temperature" to 0.2,
-            "max_tokens" to 900
-        )
-        if (jsonMode) body["response_format"] = mapOf("type" to "json_object")
-
-        val response: String = client.post("${BuildConfig.LLM_BASE_URL.trimEnd('/')}/chat/completions") {
-            contentType(ContentType.Application.Json)
-            headers { append("Authorization", "Bearer ${BuildConfig.LLM_API_KEY.trim()}") }
-            setBody(gson.toJson(body))
-        }.body()
-
-        val envelope = gson.fromJson(response, ChatEnvelope::class.java)
-        envelope.choices.firstOrNull()?.message?.content?.takeIf { it.isNotBlank() }
-            ?: error("Empty Grok response")
+    private suspend fun callGrokText(prompt: String, jsonMode: Boolean = false): String {
+        return when (val result = edge.complete(
+            system = GrokPrompts.SYSTEM,
+            user = prompt,
+            maxTokens = 900,
+            temperature = 0.2,
+            jsonMode = jsonMode
+        )) {
+            is EdgeChatResult.Ok -> result.text
+            is EdgeChatResult.Err -> error(result.message)
+        }
     }
 }

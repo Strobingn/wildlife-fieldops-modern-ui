@@ -33,7 +33,7 @@ class AiAssistantViewModel @Inject constructor(
         append("Ask anything: general questions, writing help, tech, or field ops.\n\n")
         append("Backend preference (chat):\n")
         append("1) On-device LLM when downloaded (${sel.displayName}) — preferred / local-first\n")
-        append("2) Cloud (SpaceXAI / Grok) only if local is not ready\n\n")
+        append("2) Cloud Grok through Supabase only if local is not ready\n\n")
         append("Pick 3B (default, ~2.1 GB) or 7B v3 (~4.7 GB) below, then download/switch.\n\n")
         append("Responses are labeled 📱 On-device or ☁️ Cloud so you can tell which answered.\n\n")
         append(aiService.configDiagnostics())
@@ -105,20 +105,7 @@ class AiAssistantViewModel @Inject constructor(
         _messages.value = _messages.value + ChatMessage(trimmed, true)
         _isTyping.value = true
         viewModelScope.launch {
-            val reply = runCatching {
-                if (!aiService.isConfigured && !localLlm.isReady) {
-                    val edge = runCatching { aiService.askViaSupabase(trimmed) }.getOrNull()
-                    if (!edge.isNullOrBlank() &&
-                        !edge.startsWith("⚠️") &&
-                        !edge.startsWith("Supabase") &&
-                        !edge.startsWith("Network") &&
-                        !edge.contains("Demo mode", ignoreCase = true)
-                    ) {
-                        return@runCatching "☁️ Supabase ai-assistant:\n\n$edge"
-                    }
-                }
-                aiService.ask(trimmed)
-            }.getOrElse { "AI error: ${it.message}" }
+            val reply = runCatching { aiService.ask(trimmed) }.getOrElse { "AI error: ${it.message}" }
             _messages.value = _messages.value + ChatMessage(reply, false)
             _isTyping.value = false
         }

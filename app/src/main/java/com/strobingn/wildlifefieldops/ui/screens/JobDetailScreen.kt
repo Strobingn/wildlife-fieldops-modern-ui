@@ -585,7 +585,7 @@ fun JobDetailScreen(
                         if (jobAiViewModel.isConfigured) {
                             "Generate a handoff summary or open Estimate and draft from notes."
                         } else {
-                            "Offline mode: still works with heuristics. Add XAI_API_KEY for SpaceXAI Grok."
+                            "Offline mode: heuristics still work. Cloud Grok needs Supabase, or download the on-device model."
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = TextTertiary
