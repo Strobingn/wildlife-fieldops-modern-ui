@@ -3,6 +3,8 @@ package com.strobingn.wildlifefieldops.sync.work
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AutoSyncTriggerTest {
@@ -60,6 +62,26 @@ class AutoSyncTriggerTest {
         trigger.onConnectivityRestored()
         delay(20L)
         assertEquals(1, enqueues)
+    }
+
+    @Test
+    fun pullWriteDoesNotScheduleAnotherSync() {
+        assertFalse(SyncWriteGate.shouldEnqueueForInvalidation(syncWriteInProgress = true))
+        assertTrue(SyncWriteGate.shouldEnqueueForInvalidation(syncWriteInProgress = false))
+    }
+
+    @Test
+    fun syncWriteGateDrainsWhileStillMarked() = runBlocking {
+        val events = mutableListOf<String>()
+        lateinit var gate: SyncWriteGate
+        gate = SyncWriteGate(drainInvalidations = {
+            events += "drain:${gate.isSyncWrite()}"
+        })
+        gate.marking {
+            events += "write:${gate.isSyncWrite()}"
+        }
+        events += "after:${gate.isSyncWrite()}"
+        assertEquals(listOf("write:true", "drain:true", "after:false"), events)
     }
 
     @Test

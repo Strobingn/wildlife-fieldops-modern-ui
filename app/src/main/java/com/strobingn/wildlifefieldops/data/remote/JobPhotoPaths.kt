@@ -12,6 +12,10 @@ object JobPhotoPaths {
     /** Live anon INSERT on job-photos requires first folder `public` and `.jpg`. */
     const val ANON_FOLDER = "public"
 
+    /** localPath first, then filePath. Duplicates dropped. */
+    fun sourceCandidates(localPath: String, filePath: String): List<String> =
+        listOf(localPath, filePath).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+
     fun objectPath(jobId: String?, photoId: String, localPath: String): String {
         val folder = jobId?.takeIf { it.isNotBlank() }?.let { ObservationPhotoPaths.sanitizeSegment(it) }
             ?: "unassigned"

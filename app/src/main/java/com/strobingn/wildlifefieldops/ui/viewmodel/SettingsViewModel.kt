@@ -72,9 +72,6 @@ class SettingsViewModel @Inject constructor(
         val DEFAULT_TAX_RATE = floatPreferencesKey("default_tax_rate")
         val OFFLINE_MODE = booleanPreferencesKey("offline_mode")
         val HIGH_ACCURACY_GPS = booleanPreferencesKey("high_accuracy_gps")
-        val LAST_SYNC_MESSAGE = stringPreferencesKey("last_sync_message")
-        val LAST_SYNC_OK = booleanPreferencesKey("last_sync_ok")
-        val LAST_SYNC_AT = longPreferencesKey("last_sync_at")
         val NWCO_NAME = stringPreferencesKey("nwco_operator_name")
         val NWCO_LICENSE = stringPreferencesKey("nwco_license")
         val NWCO_REGION = stringPreferencesKey("nwco_region")
@@ -109,6 +106,8 @@ class SettingsViewModel @Inject constructor(
     val lastSyncMessage: StateFlow<String?> = settings.map { it[LAST_SYNC_MESSAGE] }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     val lastSyncOk: StateFlow<Boolean?> = settings.map { it[LAST_SYNC_OK] }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val lastSyncAt: StateFlow<Long?> = settings.map { it[LAST_SYNC_AT] }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val themePreference = settings.map {
