@@ -45,3 +45,13 @@ edits; the catch-up file is idempotent.
 Photo / Live Capture backlog (native sync): `20260930120000_sync_photo_backlog_and_live_columns.sql`.
 Additive columns only (photos link fields, nullable `jobs.organization_id`).
 **Does not change GRANT / RLS / storage policies** — a separate permissions agent owns those.
+
+Job pricing overrides keep the same SQL and now use a unique version:
+`20261001110000_job_pricing_overrides.sql` (previously shared `20260930120000`
+with the photo backlog file). The photo file keeps `20260930120000`.
+
+Foreign-key indexes already applied on live `wildlife_app` as
+`add_missing_fk_indexes_20261005` (version `20261005133021`):
+`20261005133021_add_missing_fk_indexes_20261005.sql`.
+26 `CREATE INDEX IF NOT EXISTS` statements. Re-apply is a no-op. Do not run
+this against live again from an agent; the live migration is already recorded.
