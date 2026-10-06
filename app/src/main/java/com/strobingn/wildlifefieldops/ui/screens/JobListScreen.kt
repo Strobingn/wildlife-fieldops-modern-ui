@@ -35,7 +35,8 @@ data class JobListPreview(
     val inProgressCount: Int = 0,
     val completedCount: Int = 0,
     val reminders: List<Reminder> = emptyList(),
-    val dueNextSteps: List<Job> = emptyList()
+    val dueNextSteps: List<Job> = emptyList(),
+    val weatherChips: Map<String, String> = emptyMap()
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,6 +64,7 @@ fun JobListScreen(
             completedCount = preview.completedCount,
             reminders = preview.reminders,
             dueNextSteps = preview.dueNextSteps,
+            weatherChips = preview.weatherChips,
             onSearch = {},
             onStatus = {},
             onNavigateToJobDetail = onNavigateToJobDetail,
@@ -89,6 +91,12 @@ fun JobListScreen(
     val flagCounts by viewModel.flagCounts.collectAsState()
     val reminders by viewModel.pendingReminders.collectAsState()
     val dueNextSteps by viewModel.dueNextSteps.collectAsState()
+    val weatherAlertsVm: com.strobingn.wildlifefieldops.ui.viewmodel.WeatherAlertsViewModel = hiltViewModel()
+    LaunchedEffect(jobs) { weatherAlertsVm.trackJobs(jobs) }
+    val jobAlerts by weatherAlertsVm.jobAlerts.collectAsState()
+    val weatherChips = jobAlerts.mapValues { (_, alerts) ->
+        com.strobingn.wildlifefieldops.weather.WeatherAlertEngine.chipText(alerts).orEmpty()
+    }.filterValues { it.isNotBlank() }
     JobListContent(
         jobs = jobs,
         recentJobs = recentJobs,
@@ -101,6 +109,7 @@ fun JobListScreen(
         completedCount = flagCounts.completed,
         reminders = reminders,
         dueNextSteps = dueNextSteps,
+        weatherChips = weatherChips,
         onSearch = viewModel::setSearchQuery,
         onStatus = viewModel::setStatusFilter,
         onNavigateToJobDetail = onNavigateToJobDetail,
@@ -125,6 +134,7 @@ private fun JobListContent(
     completedCount: Int,
     reminders: List<Reminder>,
     dueNextSteps: List<Job>,
+    weatherChips: Map<String, String> = emptyMap(),
     onSearch: (String) -> Unit,
     onStatus: (JobStatus?) -> Unit,
     onNavigateToJobDetail: (String) -> Unit,
@@ -229,7 +239,8 @@ private fun JobListContent(
                     JobCard(
                         job = job,
                         onClick = { onNavigateToJobDetail(job.id) },
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        weatherWarning = weatherChips[job.id]
                     )
                 }
             }
@@ -342,7 +353,8 @@ private fun JobListContent(
                     FadeSlideIn(index = index) {
                         JobListItem(
                             job = job,
-                            onClick = { onNavigateToJobDetail(job.id) }
+                            onClick = { onNavigateToJobDetail(job.id) },
+                            weatherWarning = weatherChips[job.id]
                         )
                     }
                 }
@@ -370,7 +382,7 @@ private fun JobListContent(
 }
 
 @Composable
-private fun JobListItem(job: Job, onClick: () -> Unit) {
+private fun JobListItem(job: Job, onClick: () -> Unit, weatherWarning: String? = null) {
     val statusColor = jobStatusColor(job.status)
 
     FieldCard(
@@ -442,6 +454,11 @@ private fun JobListItem(job: Job, onClick: () -> Unit) {
                 modifier = Modifier.weight(1f)
             )
             JobDirectionsIconButton(job)
+        }
+
+        if (!weatherWarning.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            JobWeatherWarningChip(weatherWarning)
         }
 
         if (job.estimatedValue > 0) {

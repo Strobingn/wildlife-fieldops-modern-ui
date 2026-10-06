@@ -11,6 +11,7 @@ import com.strobingn.wildlifefieldops.sync.work.AutoSync
 import com.strobingn.wildlifefieldops.sync.work.WorkManagerConfigurationFactory
 import com.strobingn.wildlifefieldops.update.AppUpdateCoordinator
 import com.strobingn.wildlifefieldops.update.AppUpdateScheduler
+import com.strobingn.wildlifefieldops.weather.WeatherAlertScheduler
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -20,6 +21,7 @@ class WildlifeFieldOpsApp : Application(), Configuration.Provider {
     @Inject lateinit var autoSync: AutoSync
     @Inject lateinit var appUpdateCoordinator: AppUpdateCoordinator
     @Inject lateinit var appUpdateScheduler: AppUpdateScheduler
+    @Inject lateinit var weatherAlertScheduler: WeatherAlertScheduler
 
     override fun onCreate() {
         // Restore a staged SAF backup before Hilt opens Room.
@@ -48,6 +50,8 @@ class WildlifeFieldOpsApp : Application(), Configuration.Provider {
             .onFailure { Log.e("WildlifeFieldOps", "Auto-sync failed to start", it) }
         runCatching { appUpdateScheduler.enqueuePeriodic() }
             .onFailure { Log.e("WildlifeFieldOps", "App-update periodic check failed to enqueue", it) }
+        runCatching { weatherAlertScheduler.enqueuePeriodic() }
+            .onFailure { Log.e("WildlifeFieldOps", "Weather alert check failed to enqueue", it) }
         registerActivityLifecycleCallbacks(
             ForegroundAutoSyncCallbacks {
                 autoSync.onForeground()
