@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.strobingn.wildlifefieldops.data.local.*
 import com.strobingn.wildlifefieldops.data.model.JobStatus
+import com.strobingn.wildlifefieldops.ui.screens.OpenHomeJobs
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
@@ -62,6 +63,10 @@ class DashboardViewModel @Inject constructor(
         )
     }.onEach { _isLoading.value = false }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardStats())
+
+    val openJobs = jobDao.getAll()
+        .map { OpenHomeJobs.list(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val todayOnSchedule = jobDao.getAll()
         .map { list ->

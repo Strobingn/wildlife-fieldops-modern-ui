@@ -45,6 +45,7 @@ data class DashboardPreview(
     val stats: DashboardStats,
     val recentJobs: List<Job>,
     val todayOnSchedule: List<Job>,
+    val openJobs: List<Job> = emptyList(),
     val reminders: List<Reminder>,
     val dueNextSteps: List<Job>,
     val dueTrapChecks: List<TrapCheckItem>,
@@ -103,6 +104,7 @@ fun DashboardScreen(
     val dueNextSteps by viewModel.dueNextSteps.collectAsState()
     val dueTrapChecks by viewModel.dueTrapChecks.collectAsState()
     val todayOnSchedule by viewModel.todayOnSchedule.collectAsState()
+    val openJobs by viewModel.openJobs.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val syncVm: SettingsViewModel = hiltViewModel()
     val backlog by syncVm.backlog.collectAsState()
@@ -142,6 +144,7 @@ fun DashboardScreen(
             stats = stats,
             recentJobs = recentJobs,
             todayOnSchedule = todayOnSchedule,
+            openJobs = openJobs,
             reminders = reminders,
             dueNextSteps = dueNextSteps,
             dueTrapChecks = dueTrapChecks,
@@ -193,6 +196,7 @@ private fun HomeDashboard(
 ) {
     val stats = preview.stats
     val todayOnSchedule = preview.todayOnSchedule
+    val openJobs = preview.openJobs
     val isLoading = preview.isLoading
     val weatherState = preview.weather
     val greeting = preview.greeting
@@ -375,11 +379,80 @@ private fun HomeDashboard(
                 )
                 if (showUpdateChip) AppUpdateHomeChip()
             }
+            item(key = "open-jobs") {
+                SectionHeader(title = "Open jobs")
+            }
+            if (openJobs.isEmpty()) {
+                item(key = "open-jobs-empty") {
+                    Text(
+                        "No open jobs",
+                        modifier = Modifier.testTag("home-open-jobs"),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            } else {
+                items(openJobs, key = { "open-${it.id}" }) { job ->
+                    OpenJobRow(
+                        job = job,
+                        onClick = { onNavigateToJobDetail(job.id) }
+                    )
+                }
+            }
         }
     }
 }
 
-/** Clears two stacked extended FABs plus the scaffold margin. */
+@Composable
+private fun OpenJobRow(job: Job, onClick: () -> Unit) {
+    val whenLabel = job.scheduledDate?.let { at ->
+        SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).format(Date(at))
+    } ?: "No time set"
+    FieldCard(
+        onClick = onClick,
+        accentColor = jobStatusColor(job.status),
+        modifier = Modifier.testTag("home-open-job"),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                job.customerName.ifBlank { job.title }.ifBlank { "Open job" },
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            StatusChip(
+                text = com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.label(job.status),
+                color = jobStatusColor(job.status)
+            )
+        }
+        if (job.address.isNotBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                job.address,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            whenLabel,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1
+        )
+    }
+}
+
+/** Clears the stacked New Job and Dictate job buttons so the last Open jobs row stays visible. */
 internal val HomeListBottomClearance = 240.dp
 
 @Composable
