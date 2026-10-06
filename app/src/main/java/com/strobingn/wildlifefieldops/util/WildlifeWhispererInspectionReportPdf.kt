@@ -15,6 +15,7 @@ object WildlifeWhispererInspectionReportPdf {
         profile: BusinessProfile? = null
     ): String {
         val job = com.strobingn.wildlifefieldops.data.model.Job(
+            customerId = fields.customerId,
             customerName = fields.customerName,
             title = fields.jobTitle,
             address = fields.jobAddress,
@@ -24,15 +25,17 @@ object WildlifeWhispererInspectionReportPdf {
             confirmedSpecies = fields.species,
             assignedTo = fields.inspectorName
         )
-        val packet = StandardJobPacket(
+        val packet = DocumentContacts.fill(context, StandardJobPacket(
             job = job,
             profile = profile ?: BusinessProfileStore.load(context),
+            customerPhone = fields.customerPhone,
+            customerEmail = fields.customerEmail,
             technicianName = fields.inspectorName,
             inspection = fields,
             notes = fields.notes,
             includeQr = qr != null,
             nowMillis = fields.inspectionDate.takeIf { it > 0L } ?: System.currentTimeMillis()
-        )
+        ))
         val safe = fields.customerName.replace(Regex("[^A-Za-z0-9_-]"), "_").ifBlank { "inspection" }
         return StandardDocumentPdf.write(
             context = context,

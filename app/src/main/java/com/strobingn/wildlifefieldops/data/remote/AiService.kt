@@ -342,7 +342,13 @@ Do not invent species or damage that the transcript does not support; mark uncer
             .joinToString(" ")
             .trim()
         val rationale = listOf(baseRationale, extra).filter { it.isNotBlank() }.joinToString(" ")
-        return draft.copy(mileage = miles, taxRate = taxPercent, rationale = rationale)
+        // Generated prose never states a tax rate; the totals carry the job's real rate.
+        return draft.copy(
+            mileage = miles,
+            taxRate = taxPercent,
+            rationale = com.strobingn.wildlifefieldops.pricing.GeneratedNoteText.withoutTaxRate(rationale),
+            lineItemNotes = com.strobingn.wildlifefieldops.pricing.GeneratedNoteText.withoutTaxRate(draft.lineItemNotes)
+        )
     }
 
     private fun parseInspectionReport(raw: String): InspectionReportDraft? = try {

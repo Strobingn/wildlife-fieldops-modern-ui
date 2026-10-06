@@ -37,6 +37,16 @@ object DocumentPalette {
     /** Dark green used when a balance is zero. White text clears 4.5:1. */
     const val PAID = "#0E6B38"
 
+    /** Hex for a draw-op color token. The PDF writer and the tests share this table. */
+    fun tokenHex(token: String): String = when {
+        token.length == 7 && token.startsWith("#") -> token
+        token == "muted" || token == "rule" -> "#3A3A3A"
+        token == "light" -> "#BEBEBE"
+        token == "white" -> "#FFFFFF"
+        token == "paid" -> PAID
+        else -> "#141416"
+    }
+
     fun lighten(hex: String, amount: Float): String {
         val rgb = rgb(hex)
         fun channel(value: Int): Int = (value + (255 - value) * amount).toInt().coerceIn(0, 255)
@@ -80,7 +90,9 @@ data class DocTable(
     val columns: List<String>,
     val rows: List<List<String>>,
     val weights: List<Float> = emptyList(),
-    val aligns: List<String> = emptyList()
+    val aligns: List<String> = emptyList(),
+    /** Cell text size. Money documents use 9.5 so tables match the customer block and totals. */
+    val textSize: Float = 8f
 )
 
 data class BodyBlock(
@@ -160,6 +172,12 @@ data class StandardDocument(
 }
 
 object StandardDocumentLayout {
+    /** Customer block text size; matches [StandardDocuments.MONEY_TEXT] and the totals. */
+    const val CUSTOMER_TEXT = 9.5f
+
+    /** Kinds whose logo, header and title band never shrink. */
+    val FIXED_HEADER = setOf(DocumentKind.ESTIMATE, DocumentKind.INVOICE, DocumentKind.CONTRACT)
+
     fun layout(doc: StandardDocument): LayoutResult = Engine(doc).run()
 
     private class Engine(private val doc: StandardDocument) {
@@ -175,16 +193,27 @@ object StandardDocumentLayout {
         private var pageIndex = 0
         private var continued = false
         private var compact = false
+        private var compactHeader = false
 
+        /**
+         * Natural layout first. A near-empty last page tries a tighter body,
+         * then (except on estimates, invoices and contracts) a smaller header.
+         * Money documents always keep the full logo/header/band so an estimate
+         * and an invoice for the same job look the same.
+         */
         fun run(): LayoutResult {
-            val natural = pass(false)
+            val natural = pass(squeeze = false, squeezeHeader = false)
             if (!tailIsNearEmpty(natural)) return natural
-            val squeezed = pass(true)
-            return if (squeezed.pages.size < natural.pages.size) squeezed else natural
+            val body = pass(squeeze = true, squeezeHeader = false)
+            if (body.pages.size < natural.pages.size) return body
+            if (doc.kind in FIXED_HEADER) return natural
+            val full = pass(squeeze = true, squeezeHeader = true)
+            return if (full.pages.size < natural.pages.size) full else natural
         }
 
-        private fun pass(squeeze: Boolean): LayoutResult {
+        private fun pass(squeeze: Boolean, squeezeHeader: Boolean): LayoutResult {
             compact = squeeze
+            compactHeader = squeezeHeader
             pages.clear()
             ops.clear()
             sections.clear()
@@ -226,7 +255,7 @@ object StandardDocumentLayout {
             return contentBottom < last.height * 0.55f
         }
 
-        private fun logoSize(): Float = if (compact) 68f else StandardDocumentTemplate.LOGO
+        private fun logoSize(): Float = if (compactHeader) 68f else StandardDocumentTemplate.LOGO
 
         private fun contentFloor(): Float = pageH - if (compact) 42f else 56f
 
@@ -236,7 +265,7 @@ object StandardDocumentLayout {
 
         private fun startPage(isContinued: Boolean) {
             continued = isContinued
-            y = if (compact) 24f else 32f
+            y = if (compactHeader) 24f else 32f
             if (!isContinued) {
                 mark("logo")
                 mark("header")
@@ -246,7 +275,7 @@ object StandardDocumentLayout {
             val logo = logoSize()
             ops += DrawOp("logo", x = margin, y = y, x2 = logo)
             val stampBottom = drawStamp()
-            var rightY = y + if (compact) 16f else 18f
+            var rightY = y + if (compactHeader) 16f else 18f
             val textLeft = margin + logo + 14f
             val headerRight = (stampLeft() - 8f).coerceAtLeast(textLeft + 80f)
             val lines = doc.profile.headerLines()
@@ -264,10 +293,10 @@ object StandardDocumentLayout {
                         bold = nameLine,
                         color = if (nameLine) "ink" else "muted"
                     )
-                    rightY += if (nameLine) if (compact) 13f else 15f else if (compact) 11f else 12f
+                    rightY += if (nameLine) if (compactHeader) 13f else 15f else if (compactHeader) 11f else 12f
                 }
             }
-            y = maxOf(y + logo + if (compact) 6f else 10f, rightY + 6f, stampBottom + 6f)
+            y = maxOf(y + logo + if (compactHeader) 6f else 10f, rightY + 6f, stampBottom + 6f)
             drawBand(isContinued)
             if (!isContinued) {
                 mark("meta")
@@ -280,7 +309,8 @@ object StandardDocumentLayout {
                 y += if (compact) 10f else 16f
                 mark("customer")
                 sectionTitle("BILL TO / OWNER")
-                doc.customerRows.forEach { (label, value) -> labeled(label, value) }
+                val valueLeft = customerValueLeft()
+                doc.customerRows.forEach { (label, value) -> labeled(label, value, valueLeft) }
                 y += if (compact) 2f else 4f
             }
         }
@@ -337,7 +367,7 @@ object StandardDocumentLayout {
         private fun drawBand(continued: Boolean) {
             val color = doc.kind.bandColor
             val top = y
-            val height = if (compact) 36f else 44f
+            val height = if (compactHeader) 36f else 44f
             ops += DrawOp("fillrect", x = 0f, y = top, x2 = pageW.toFloat(), y2 = top + height, color = color)
             val badge = 30f
             val badgeX = margin
@@ -372,7 +402,7 @@ object StandardDocumentLayout {
                 bold = true,
                 color = "white"
             )
-            y = top + height + if (compact) 8f else 14f
+            y = top + height + if (compactHeader) 8f else 14f
         }
 
         private fun drawPattern(
@@ -475,20 +505,24 @@ object StandardDocumentLayout {
             y += if (compact) 12f else 14f
         }
 
-        private fun labeled(label: String, value: String) {
+        /** One value column for the whole customer block so every value starts at the same x. */
+        private fun customerValueLeft(): Float {
+            val widest = doc.customerRows.maxOfOrNull { measure(it.first, CUSTOMER_TEXT, false) } ?: 0f
+            return margin + minOf(widest + 14f, contentWidth * 0.4f)
+        }
+
+        private fun labeled(label: String, value: String, valueLeft: Float) {
             ensure(16f)
-            ops += DrawOp("text", label, margin, y, size = 9.5f)
-            val labelW = measure(label, 9.5f, false) + 6f
-            val valueLeft = margin + labelW + 4f
-            val lines = if (value.isBlank()) listOf("") else wrap(value, 9.5f, false, contentRight - valueLeft)
+            ops += DrawOp("text", label, margin, y, size = CUSTOMER_TEXT, color = "ink")
+            val lines = if (value.isBlank()) listOf("") else wrap(value, CUSTOMER_TEXT, false, contentRight - valueLeft)
             lines.forEachIndexed { index, line ->
                 if (index > 0) {
                     y += 13f
                     ensure(14f)
                 }
-                rule(margin + labelW, y + 1f, contentRight, y + 1f, "light", 0.65f)
+                rule(valueLeft - 2f, y + 3f, contentRight, y + 3f, "light", 0.65f)
                 if (line.isNotBlank()) {
-                    ops += DrawOp("text", line, valueLeft, y, size = 9.5f)
+                    ops += DrawOp("text", line, valueLeft, y, size = CUSTOMER_TEXT, color = "ink")
                 }
             }
             y += if (compact) 13f else 16f
@@ -509,6 +543,11 @@ object StandardDocumentLayout {
             y += if (compact) 2f else 4f
         }
 
+        /**
+         * Header, rule, then rows. Each row separator sits below that row's
+         * descenders, so a rule never strikes through the next row's text.
+         * Long cells wrap inside their column.
+         */
         private fun table(table: DocTable) {
             val count = table.columns.size
             if (count == 0) return
@@ -516,26 +555,39 @@ object StandardDocumentLayout {
             val weightSum = weights.sum().takeIf { it > 0f } ?: count.toFloat()
             val widths = weights.map { contentWidth * (it / weightSum) }
             val aligns = table.aligns
-            ensure(18f)
-            var x = margin
-            table.columns.forEachIndexed { index, column ->
-                val align = aligns.getOrElse(index) { "left" }
-                val anchor = if (align == "right") x + widths[index] - 2f else x
-                ops += DrawOp("text", column, anchor, y, size = 8.5f, bold = true, align = align)
-                x += widths[index]
+            val cellSize = table.textSize
+            val headSize = if (cellSize < 9.5f) cellSize + 0.5f else cellSize
+            val pitch = cellSize + if (compact) 2f else 3f
+            val gap = if (compact) 1.5f else 2.5f
+            fun header() {
+                var x = margin
+                table.columns.forEachIndexed { index, column ->
+                    val align = aligns.getOrElse(index) { "left" }
+                    val anchor = if (align == "right") x + widths[index] - 2f else x
+                    ops += DrawOp("text", column, anchor, y, size = headSize, bold = true, align = align)
+                    x += widths[index]
+                }
+                val headRule = y + 5f
+                rule(margin, headRule, contentRight, headRule, "rule", 0.8f)
+                y = headRule + cellSize + gap
             }
-            y += 6f
-            rule(margin, y, contentRight, y, "rule", 0.8f)
-            y += 12f
+            ensure(headSize + cellSize + 14f)
+            header()
+            var bottom = y - cellSize - gap
             table.rows.forEach { row ->
                 val cellLines = (0 until count).map { index ->
                     val cell = row.getOrElse(index) { "" }
                     val width = (widths[index] - 6f).coerceAtLeast(12f)
-                    if (cell.isBlank()) listOf("") else wrap(cell, 8f, false, width).ifEmpty { listOf("") }
+                    if (cell.isBlank()) listOf("") else wrap(cell, cellSize, false, width).ifEmpty { listOf("") }
                 }
-                val rowPitch = if (compact) 10f else 11f
-                val rowHeight = cellLines.maxOf { it.size } * rowPitch + if (compact) 4f else 6f
-                ensure(rowHeight)
+                val lineCount = cellLines.maxOf { it.size }
+                val need = (lineCount - 1) * pitch + cellSize * 0.4f + 2f
+                val before = pages.size
+                ensure(need)
+                if (pages.size != before) {
+                    y += headSize
+                    header()
+                }
                 var cx = margin
                 cellLines.forEachIndexed { index, lines ->
                     val align = aligns.getOrElse(index) { "left" }
@@ -546,18 +598,19 @@ object StandardDocumentLayout {
                                 "text",
                                 line,
                                 anchor,
-                                y + lineIndex * rowPitch,
-                                size = 8f,
+                                y + lineIndex * pitch,
+                                size = cellSize,
                                 align = align
                             )
                         }
                     }
                     cx += widths[index]
                 }
-                y += rowHeight
-                rule(margin, y - 4f, contentRight, y - 4f, "light", 0.65f)
+                bottom = y + (lineCount - 1) * pitch + cellSize * 0.25f + 0.6f
+                rule(margin, bottom, contentRight, bottom, "light", 0.65f)
+                y = bottom + cellSize + gap
             }
-            y += 8f
+            y = bottom + if (compact) 13f else 16f
         }
 
         private fun totals(lines: List<TotalLine>) {
@@ -567,7 +620,7 @@ object StandardDocumentLayout {
                 ensure(16f)
                 val size = if (line.bold) 10.5f else 9.5f
                 ops += DrawOp("text", line.label, labelX, y, size = size, bold = line.bold)
-                ops += DrawOp("text", line.amount, contentRight, y, size = size, bold = line.bold, align = "right")
+                ops += DrawOp("text", line.amount, contentRight - 2f, y, size = size, bold = line.bold, align = "right")
                 y += if (line.bold) if (compact) 13f else 15f else if (compact) 12f else 13f
             }
             y += if (compact) 4f else 6f

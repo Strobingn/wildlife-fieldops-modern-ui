@@ -129,7 +129,10 @@ class StandardDocumentTemplateTest {
             }
         }
         documents.forEach { document ->
-            assertEquals("${document.kind} stays on one page for this job", 1, document.layout().pages.size)
+            // Estimates, invoices and contracts keep the full logo/header so they always match each other.
+            // The invoice's fee table, payments and balance lines then put its terms and signatures on page 2.
+            val expected = if (document.kind == DocumentKind.INVOICE) 2 else 1
+            assertEquals("${document.kind} page count for this job", expected, document.layout().pages.size)
         }
         writePngArtifacts(documents)
     }

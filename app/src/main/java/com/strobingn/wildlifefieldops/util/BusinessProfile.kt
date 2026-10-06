@@ -15,7 +15,9 @@ data class BusinessProfile(
     val website: String,
     val licenseNumber: String,
     /** Empty uses the built-in circular Wildlife Whisperer logo. */
-    val logoPath: String = ""
+    val logoPath: String = "",
+    /** Owner/operator from Settings (technician name, else NWCO operator). Fills a blank Tech line. */
+    val ownerName: String = ""
 ) {
     fun headerLines(): List<String> {
         val lines = mutableListOf<String>()
@@ -61,6 +63,8 @@ object BusinessProfileResolve {
     const val KEY_WEBSITE = "business_website"
     const val KEY_LICENSE = "nwco_license"
     const val KEY_LOGO = "business_logo_path"
+    const val KEY_TECHNICIAN = "technician_name"
+    const val KEY_NWCO_NAME = "nwco_operator_name"
 
     /**
      * [present] contains only keys that were actually saved.
@@ -76,7 +80,9 @@ object BusinessProfileResolve {
             address = value(KEY_ADDRESS, WildlifeWhispererIdentity.ADDRESS),
             website = value(KEY_WEBSITE, WildlifeWhispererIdentity.WEBSITE),
             licenseNumber = value(KEY_LICENSE, ""),
-            logoPath = value(KEY_LOGO, "")
+            logoPath = value(KEY_LOGO, ""),
+            ownerName = present[KEY_TECHNICIAN].orEmpty().trim()
+                .ifBlank { present[KEY_NWCO_NAME].orEmpty().trim() }
         )
     }
 }

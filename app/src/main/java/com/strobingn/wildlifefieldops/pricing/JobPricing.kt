@@ -318,8 +318,8 @@ object PricingCalculator {
             mileageRate = mileageRate,
             taxRatePercent = if (current.taxRateManual) current.taxRatePercent else taxRatePercent,
             discountPercent = discountPercent,
-            rationale = rationale,
-            notes = notes
+            rationale = GeneratedNoteText.withoutTaxRate(rationale),
+            notes = GeneratedNoteText.withoutTaxRate(notes)
         )
     }
 

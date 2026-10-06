@@ -19,6 +19,8 @@ object BusinessProfileStore {
     private val websiteKey = stringPreferencesKey(BusinessProfileResolve.KEY_WEBSITE)
     private val licenseKey = stringPreferencesKey(BusinessProfileResolve.KEY_LICENSE)
     private val logoKey = stringPreferencesKey(BusinessProfileResolve.KEY_LOGO)
+    private val technicianKey = stringPreferencesKey(BusinessProfileResolve.KEY_TECHNICIAN)
+    private val nwcoNameKey = stringPreferencesKey(BusinessProfileResolve.KEY_NWCO_NAME)
 
     fun load(context: Context): BusinessProfile = runBlocking {
         read(context.settingsDataStore.data.first())
@@ -36,6 +38,8 @@ object BusinessProfileStore {
             take(websiteKey)
             take(licenseKey)
             take(logoKey)
+            take(technicianKey)
+            take(nwcoNameKey)
         }
         return BusinessProfileResolve.fromStored(present)
     }

@@ -15,14 +15,14 @@ object WildlifeWhispererReceiptPdf {
         notes: String = "",
         terms: String = ""
     ): String {
-        val packet = StandardJobPacket(
+        val packet = DocumentContacts.fill(context, StandardJobPacket(
             job = job,
             profile = profile ?: BusinessProfileStore.load(context),
             total = invoiceTotal,
             payments = payments,
             notes = notes,
             terms = terms
-        )
+        ))
         val safe = job.customerName.replace(Regex("[^A-Za-z0-9_-]"), "_").ifBlank { "customer" }
         return StandardDocumentPdf.write(
             context = context,

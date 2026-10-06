@@ -195,6 +195,7 @@ fun JobBatch5Section(
                             context = context,
                             fields = com.strobingn.wildlifefieldops.util.InspectionReportFields(
                                 customerName = job.customerName,
+                                customerId = job.customerId,
                                 jobTitle = job.title,
                                 jobAddress = job.address,
                                 species = job.confirmedSpecies.ifBlank { job.type },

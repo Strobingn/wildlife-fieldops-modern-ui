@@ -38,13 +38,7 @@ data class Customer(
     val personName: String
         get() = "$firstName $lastName".trim()
 
+    /** "Pam Johnston (TSO)". The company tag is never appended twice. */
     val fullName: String
-        get() {
-            val person = personName
-            return when {
-                companyName.isNotBlank() && person.isNotBlank() -> "$person ($companyName)"
-                companyName.isNotBlank() -> companyName
-                else -> person
-            }
-        }
+        get() = CustomerNames.withCompany(personName, companyName)
 }
