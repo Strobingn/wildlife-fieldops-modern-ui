@@ -126,7 +126,8 @@ class WeatherAlertsScreenshotTest {
             }
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Gusts to 38 mph Wed 2–6 PM").assertIsDisplayed()
+        composeRule.onNodeWithText("Gusts 38 mph, steady 18 mph, Wed 2–6 PM").assertIsDisplayed()
+        composeRule.onNodeWithText("Official NWS alert: Wind Advisory in effect, Wed 2–6 PM").assertIsDisplayed()
         composeRule.onNodeWithText("Heavy rain 0.45 in Wed 3–4 PM").assertIsDisplayed()
         composeRule.onNodeWithText("Snow 0.4 in Thu 6–9 AM").assertIsDisplayed()
         save(name)
@@ -156,14 +157,14 @@ class WeatherAlertsScreenshotTest {
                             scheduledCount = 1,
                             inProgressCount = 0,
                             completedCount = 0,
-                            weatherChips = mapOf(job.id to "Gusts to 38 mph")
+                            weatherChips = mapOf(job.id to "Gusts 38 mph, steady 18 mph")
                         )
                     )
                 }
             }
         }
         composeRule.waitForIdle()
-        composeRule.onAllNodesWithText("Gusts to 38 mph")[0].assertIsDisplayed()
+        composeRule.onAllNodesWithText("Gusts 38 mph, steady 18 mph")[0].assertIsDisplayed()
         composeRule.onAllNodesWithText("Attic raccoon")[0].assertIsDisplayed()
         save(name)
     }
@@ -218,7 +219,7 @@ class WeatherAlertsScreenshotTest {
                 com.strobingn.wildlifefieldops.weather.HourlyWeather(
                     startMillis = hour("2026-10-07T15:00"),
                     windGustsMph = 38.0,
-                    windSpeedMph = 12.0,
+                    windSpeedMph = 18.0,
                     rainInches = 0.45,
                     precipitationInches = 0.45,
                     precipitationProbability = 80
@@ -244,6 +245,15 @@ class WeatherAlertsScreenshotTest {
                 com.strobingn.wildlifefieldops.weather.HourlyWeather(
                     startMillis = hour("2026-10-08T08:00"),
                     snowfallInches = 0.1
+                )
+            ),
+            nws = listOf(
+                com.strobingn.wildlifefieldops.weather.NwsActiveAlert(
+                    id = "wind-advisory",
+                    event = "Wind Advisory",
+                    headline = "Wind Advisory in effect",
+                    onsetMillis = hour("2026-10-07T14:00"),
+                    endsMillis = hour("2026-10-07T18:00")
                 )
             ),
             nowMillis = now

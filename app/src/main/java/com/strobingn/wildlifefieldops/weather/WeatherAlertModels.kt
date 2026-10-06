@@ -3,6 +3,7 @@ package com.strobingn.wildlifefieldops.weather
 import kotlinx.serialization.Serializable
 
 enum class WeatherAlertKind {
+    NWS,
     RAIN,
     HEAVY_RAIN,
     HIGH_WIND,
@@ -57,9 +58,9 @@ data class NwsActiveAlert(
 
 data class WeatherAlert(
     val kind: WeatherAlertKind,
-    /** Full line, for example "Gusts to 38 mph Wed 2–6 PM". */
+    /** Full line, for example "Gusts 38 mph, steady 18 mph, Wed 2–6 PM". */
     val summary: String,
-    /** Short chip, for example "Gusts to 38 mph". */
+    /** Short chip, for example "Gusts 38 mph, steady 18 mph". */
     val amountLabel: String,
     val startMillis: Long,
     val endMillis: Long,
@@ -98,7 +99,9 @@ data class WeatherCacheFile(
 data class ForecastFetch(
     val hourly: List<HourlyWeather>,
     val nws: List<NwsActiveAlert>,
-    val fetchedAtMillis: Long
+    val fetchedAtMillis: Long,
+    /** False when api.weather.gov could not be read. Keep the previous official alerts. */
+    val nwsFetched: Boolean = true
 )
 
 data class LocatedPoint(

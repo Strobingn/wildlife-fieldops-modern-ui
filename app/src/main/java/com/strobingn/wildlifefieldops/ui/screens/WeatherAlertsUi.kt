@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Warning
@@ -234,14 +235,14 @@ fun WeatherAlertsSettingsBody(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    "Rain, heavy rain, wind, and snow for the next 48 hours. The forecast is free and needs no API key.",
+                    "Rain, heavy rain, wind, and snow for the next 48 hours, plus official NWS warnings, watches, and advisories. The forecast is free and needs no API key.",
                     color = TextSecondary,
                     style = MaterialTheme.typography.bodySmall
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 WeatherSwitch("Rain", "Chance of rain at 50% or more", Icons.Default.WaterDrop, settings.rainEnabled, onRain)
-                WeatherSwitch("Heavy rain", "A heavy hour, a full day of rain, or a flood alert", Icons.Default.Warning, settings.heavyRainEnabled, onHeavyRain)
-                WeatherSwitch("High wind", "Sustained wind or gusts over the limit", Icons.Default.Air, settings.highWindEnabled, onHighWind)
+                WeatherSwitch("Heavy rain", "A heavy hour or a full day of rain", Icons.Default.Warning, settings.heavyRainEnabled, onHeavyRain)
+                WeatherSwitch("High wind", "Gusts over the limit. Steady speed is shown next to the gust.", Icons.Default.Air, settings.highWindEnabled, onHighWind)
                 WeatherSwitch("Snow", "Any forecast snowfall", Icons.Default.AcUnit, settings.snowEnabled, onSnow)
                 WeatherSwitch("Notifications", "Phone alert when a new warning shows up", Icons.Default.Notifications, settings.notificationsEnabled, onNotifications)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -250,7 +251,7 @@ fun WeatherAlertsSettingsBody(
                     label = "Wind limit (mph)",
                     onCommit = { raw -> raw.toDoubleOrNull()?.takeIf { it > 0.0 }?.let(onWind) },
                     keyboardType = KeyboardType.Decimal,
-                    supportingText = "Alert when wind or gusts are over this. 30 means 31 mph alerts."
+                    supportingText = "Alert when gusts are over this. 30 means a 31 mph gust alerts. Steady wind is shown beside it."
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 SettingPlainField(
@@ -329,6 +330,7 @@ private fun WeatherSwitch(
 }
 
 private fun alertIcon(kind: WeatherAlertKind): ImageVector = when (kind) {
+    WeatherAlertKind.NWS -> Icons.Default.Info
     WeatherAlertKind.RAIN -> Icons.Default.WaterDrop
     WeatherAlertKind.HEAVY_RAIN -> Icons.Default.Warning
     WeatherAlertKind.HIGH_WIND -> Icons.Default.Air

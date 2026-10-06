@@ -18,32 +18,37 @@ class WeatherAlertEngineTest {
     }
 
     @Test
-    fun thirtyOneMphSustainedIsAnAlert() {
-        val hours = listOf(hour("2026-10-07T14:00", wind = 31.0, gust = 10.0))
+    fun steadyWindAloneDoesNotAlert() {
+        val hours = listOf(hour("2026-10-07T14:00", wind = 40.0, gust = 30.0))
         val alerts = WeatherAlertEngine.evaluate(hours, nowMillis = nowAt("2026-10-07T14:00"))
-        assertEquals("Wind 31 mph Wed 2–3 PM", alerts.single().summary)
+        assertTrue(alerts.none { it.kind == WeatherAlertKind.HIGH_WIND })
+    }
+
+    @Test
+    fun thirtyOneMphGustShowsSteadyWindBesideIt() {
+        val hours = listOf(hour("2026-10-07T14:00", wind = 18.0, gust = 31.0))
+        val alerts = WeatherAlertEngine.evaluate(hours, nowMillis = nowAt("2026-10-07T14:00"))
+        assertEquals("Gusts 31 mph, steady 18 mph, Wed 2–3 PM", alerts.single().summary)
         assertEquals(WeatherAlertKind.HIGH_WIND, alerts.single().kind)
     }
 
     @Test
-    fun thirtyOneMphGustIsAnAlert() {
-        val hours = listOf(hour("2026-10-07T14:00", wind = 10.0, gust = 31.0))
-        val alerts = WeatherAlertEngine.evaluate(hours, nowMillis = nowAt("2026-10-07T14:00"))
-        assertEquals("Gusts to 31 mph Wed 2–3 PM", alerts.single().summary)
-    }
-
-    @Test
-    fun gustsTo38MphUseTheExampleWindow() {
+    fun gustsUseTheSteadySpeedFromThePeakGustHour() {
         val hours = (14..17).map { clock ->
+            val steady = when (clock) {
+                14 -> 25.0
+                15 -> 18.0
+                else -> 12.0
+            }
             hour(
                 "2026-10-07T$clock:00",
-                wind = 12.0,
+                wind = steady,
                 gust = if (clock == 15) 38.0 else 32.0
             )
         }
         val alerts = WeatherAlertEngine.evaluate(hours, nowMillis = nowAt("2026-10-07T12:00"))
-        assertEquals("Gusts to 38 mph Wed 2–6 PM", alerts.single().summary)
-        assertEquals("Gusts to 38 mph", alerts.single().amountLabel)
+        assertEquals("Gusts 38 mph, steady 18 mph, Wed 2–6 PM", alerts.single().summary)
+        assertEquals("Gusts 38 mph, steady 18 mph", alerts.single().amountLabel)
     }
 
     @Test
@@ -120,26 +125,63 @@ class WeatherAlertEngineTest {
     }
 
     @Test
-    fun nwsFloodAndHeavyRainCountAsHeavyRain() {
+    fun officialNwsWarningWatchAndAdvisoryShowHeadlineAndWindow() {
         val now = nowAt("2026-10-07T12:00")
-        val flood = NwsActiveAlert(
-            id = "flood-1",
-            event = "Flood Warning",
-            onsetMillis = now,
-            endsMillis = now + 6 * 3_600_000L
+        val products = listOf(
+            NwsActiveAlert(
+                id = "flood-1",
+                event = "Flood Warning",
+                headline = "Flood Warning issued October 7 at 12:00PM EDT",
+                onsetMillis = now,
+                endsMillis = now + 6 * 3_600_000L
+            ),
+            NwsActiveAlert(
+                id = "watch-1",
+                event = "Severe Thunderstorm Watch",
+                headline = "Severe Thunderstorm Watch 412",
+                onsetMillis = nowAt("2026-10-07T14:00"),
+                endsMillis = nowAt("2026-10-07T18:00")
+            ),
+            NwsActiveAlert(
+                id = "wind-1",
+                event = "Wind Advisory",
+                headline = "Wind Advisory in effect until 6 PM EDT",
+                onsetMillis = nowAt("2026-10-07T14:00"),
+                endsMillis = nowAt("2026-10-07T18:00")
+            ),
+            NwsActiveAlert(
+                id = "statement-1",
+                event = "Special Weather Statement",
+                headline = "Special Weather Statement",
+                onsetMillis = now,
+                endsMillis = now + 3_600_000L
+            )
         )
-        val alerts = WeatherAlertEngine.evaluate(emptyList(), nws = listOf(flood), nowMillis = now)
-        assertTrue(alerts.single().summary.startsWith("Flood Warning"))
-        assertEquals(WeatherAlertKind.HEAVY_RAIN, alerts.single().kind)
-
-        val windAdvisory = NwsActiveAlert(
-            id = "wind-1",
-            event = "Wind Advisory",
-            onsetMillis = now,
-            endsMillis = now + 3_600_000L
+        val alerts = WeatherAlertEngine.evaluate(
+            emptyList(),
+            nws = products,
+            settings = WeatherAlertSettings(heavyRainEnabled = false, highWindEnabled = false),
+            nowMillis = now
         )
-        val ignored = WeatherAlertEngine.evaluate(emptyList(), nws = listOf(windAdvisory), nowMillis = now)
-        assertTrue(ignored.isEmpty())
+        assertEquals(3, alerts.size)
+        assertTrue(alerts.all { it.kind == WeatherAlertKind.NWS })
+        assertTrue(alerts.all { it.summary.startsWith("Official NWS alert:") })
+        assertEquals(
+            "Official NWS alert: Flood Warning issued October 7 at 12:00PM EDT, Wed 12–6 PM",
+            alerts.first { it.dedupeKey.endsWith("flood-1") }.summary
+        )
+        assertEquals(
+            "Official NWS alert: Severe Thunderstorm Watch 412, Wed 2–6 PM",
+            alerts.first { it.dedupeKey.endsWith("watch-1") }.summary
+        )
+        assertEquals(
+            "Official NWS alert: Wind Advisory in effect until 6 PM EDT, Wed 2–6 PM",
+            alerts.first { it.dedupeKey.endsWith("wind-1") }.summary
+        )
+        assertTrue(alerts.none { it.summary.contains("Special Weather Statement") })
+        val onTheJob = WeatherAlertEngine.jobWeatherAlerts(JobStatus.SCHEDULED, now, alerts)
+        assertEquals(3, onTheJob.size)
+        assertEquals(onTheJob.first().summary, WeatherAlertEngine.chipText(listOf(onTheJob.first())))
     }
 
     @Test
@@ -189,7 +231,7 @@ class WeatherAlertEngineTest {
             listOf(hour("2026-10-07T14:00", gust = 45.0)),
             nowMillis = nowAt("2026-10-07T14:00")
         )
-        assertEquals("Gusts to 45 mph Wed 2–3 PM", louder.single().summary)
+        assertEquals("Gusts 45 mph, steady 5 mph, Wed 2–3 PM", louder.single().summary)
         assertEquals(1, WeatherAlertEngine.unseen(louder, keys).size)
         assertFalse(louder.single().dedupeKey in keys)
     }
@@ -208,18 +250,18 @@ class WeatherAlertEngineTest {
     @Test
     fun jobChipFollowsScheduledAndInProgressOnTheAlertDay() {
         val alerts = WeatherAlertEngine.evaluate(
-            listOf(hour("2026-10-07T14:00", gust = 38.0)),
+            listOf(hour("2026-10-07T14:00", wind = 18.0, gust = 38.0)),
             nowMillis = nowAt("2026-10-07T12:00")
         )
         val wednesday = nowAt("2026-10-07T09:00")
         val friday = nowAt("2026-10-09T09:00")
-        assertEquals("Gusts to 38 mph", WeatherAlertEngine.chipText(
+        assertEquals("Gusts 38 mph, steady 18 mph", WeatherAlertEngine.chipText(
             WeatherAlertEngine.jobWeatherAlerts(JobStatus.SCHEDULED, wednesday, alerts)
         ))
-        assertEquals("Gusts to 38 mph", WeatherAlertEngine.chipText(
+        assertEquals("Gusts 38 mph, steady 18 mph", WeatherAlertEngine.chipText(
             WeatherAlertEngine.jobWeatherAlerts(JobStatus.IN_PROGRESS, wednesday, alerts)
         ))
-        assertEquals("Gusts to 38 mph", WeatherAlertEngine.chipText(
+        assertEquals("Gusts 38 mph, steady 18 mph", WeatherAlertEngine.chipText(
             WeatherAlertEngine.jobWeatherAlerts(JobStatus.TRAPPING, wednesday, alerts)
         ))
         assertNull(WeatherAlertEngine.chipText(
@@ -265,8 +307,8 @@ class WeatherAlertEngineTest {
 
     private fun sampleAlert(): WeatherAlert = WeatherAlert(
         kind = WeatherAlertKind.HIGH_WIND,
-        summary = "Gusts to 38 mph Wed 2–6 PM",
-        amountLabel = "Gusts to 38 mph",
+        summary = "Gusts 38 mph, steady 18 mph, Wed 2–6 PM",
+        amountLabel = "Gusts 38 mph, steady 18 mph",
         startMillis = 1L,
         endMillis = 2L,
         dedupeKey = "sample"

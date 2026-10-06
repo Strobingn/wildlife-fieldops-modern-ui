@@ -239,6 +239,7 @@ class WeatherAlertRepository @Inject constructor(
     ) {
         val key = placeKey(latitude, longitude)
         update { file ->
+            val previous = file.places.firstOrNull { it.key == key }
             val place = CachedPlace(
                 key = key,
                 latitude = latitude,
@@ -246,7 +247,7 @@ class WeatherAlertRepository @Inject constructor(
                 label = label,
                 fetchedAtMillis = fetched.fetchedAtMillis,
                 hourly = fetched.hourly,
-                nws = fetched.nws,
+                nws = if (fetched.nwsFetched) fetched.nws else previous?.nws.orEmpty(),
                 error = null
             )
             val without = file.places.filter { it.key != key }

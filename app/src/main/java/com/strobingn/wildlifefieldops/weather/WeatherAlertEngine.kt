@@ -28,6 +28,7 @@ object WeatherAlertEngine {
     private const val RUN_GAP_MS = 90 * 60 * 1000L
 
     private val severity = listOf(
+        WeatherAlertKind.NWS,
         WeatherAlertKind.HEAVY_RAIN,
         WeatherAlertKind.HIGH_WIND,
         WeatherAlertKind.SNOW,
@@ -46,11 +47,11 @@ object WeatherAlertEngine {
             .filter { it.startMillis < horizonEnd && it.startMillis + HOUR_MS > nowMillis }
             .sortedBy { it.startMillis }
         val alerts = mutableListOf<WeatherAlert>()
+        alerts += nwsAlerts(nws, nowMillis, horizonEnd, zone)
         if (settings.rainEnabled) alerts += rainAlerts(hours, settings, zone)
         if (settings.heavyRainEnabled) {
             alerts += heavyHourAlerts(hours, settings, zone)
             alerts += heavyDayAlerts(hours, settings, zone)
-            alerts += nwsAlerts(nws, nowMillis, horizonEnd, zone)
         }
         if (settings.highWindEnabled) alerts += windAlerts(hours, settings, zone)
         if (settings.snowEnabled) alerts += snowAlerts(hours, zone)
@@ -159,9 +160,10 @@ object WeatherAlertEngine {
         else -> hour.precipitationInches
     }
 
-    fun isFloodOrHeavyRain(event: String): Boolean {
+    /** Official NWS products Sir asked to see: warning, watch, or advisory. */
+    fun isOfficialNwsProduct(event: String): Boolean {
         val text = event.lowercase(Locale.US)
-        return "flood" in text || "heavy rain" in text
+        return "warning" in text || "watch" in text || "advisory" in text
     }
 
     private fun rainAlerts(
@@ -252,23 +254,21 @@ object WeatherAlertEngine {
         zone: ZoneId
     ): List<WeatherAlert> {
         val limit = settings.windMphThreshold
-        val hits = hours.filter { it.windSpeedMph > limit || it.windGustsMph > limit }
+        val hits = hours.filter { it.windGustsMph > limit }
         return consecutiveRuns(hits).map { run ->
-            val peakGust = run.maxOf { it.windGustsMph }
-            val peakSustained = run.maxOf { it.windSpeedMph }
-            val gustWins = peakGust > limit && peakGust >= peakSustained
-            val mph = formatMph(if (gustWins) peakGust else peakSustained)
+            val peak = run.maxBy { it.windGustsMph }
+            val gust = formatMph(peak.windGustsMph)
+            val steady = formatMph(peak.windSpeedMph)
             val (start, end) = span(run)
             val window = formatWindow(start, end, zone)
-            val summary = if (gustWins) "Gusts to $mph mph $window" else "Wind $mph mph $window"
-            val amount = if (gustWins) "Gusts to $mph mph" else "Wind $mph mph"
+            val amount = "Gusts $gust mph, steady $steady mph"
             WeatherAlert(
                 kind = WeatherAlertKind.HIGH_WIND,
-                summary = summary,
+                summary = "$amount, $window",
                 amountLabel = amount,
                 startMillis = start,
                 endMillis = end,
-                dedupeKey = key(WeatherAlertKind.HIGH_WIND, start, end, mph.toString())
+                dedupeKey = key(WeatherAlertKind.HIGH_WIND, start, end, "$gust/$steady")
             )
         }
     }
@@ -298,19 +298,20 @@ object WeatherAlertEngine {
         zone: ZoneId
     ): List<WeatherAlert> {
         return nws.mapNotNull { alert ->
-            if (!isFloodOrHeavyRain(alert.event)) return@mapNotNull null
+            if (!isOfficialNwsProduct(alert.event)) return@mapNotNull null
             val onset = alert.onsetMillis ?: nowMillis
             val ends = alert.endsMillis ?: horizonEnd
             if (ends <= nowMillis || onset >= horizonEnd || ends <= onset) return@mapNotNull null
-            val name = alert.event.trim().ifBlank { "Heavy rain" }
+            val headline = alert.headline.trim().ifBlank { alert.event.trim() }.ifBlank { "Weather alert" }
             val window = formatWindow(onset, ends, zone)
+            val summary = "Official NWS alert: $headline, $window"
             WeatherAlert(
-                kind = WeatherAlertKind.HEAVY_RAIN,
-                summary = "$name $window",
-                amountLabel = name,
+                kind = WeatherAlertKind.NWS,
+                summary = summary,
+                amountLabel = summary,
                 startMillis = onset,
                 endMillis = ends,
-                dedupeKey = "HEAVY_RAIN|nws|${alert.id.ifBlank { "$onset|$ends|$name" }}"
+                dedupeKey = "NWS|${alert.id.ifBlank { "$onset|$ends|$headline" }}"
             )
         }
     }

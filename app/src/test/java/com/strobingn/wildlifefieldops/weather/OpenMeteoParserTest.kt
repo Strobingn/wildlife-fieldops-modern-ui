@@ -30,7 +30,7 @@ class OpenMeteoParserTest {
         val summaries = alerts.map { it.summary }.toSet()
         assertEquals(
             setOf(
-                "Gusts to 38 mph Wed 1–3 PM",
+                "Gusts 38 mph, steady 12 mph, Wed 2–3 PM",
                 "Rain likely 80% Wed 4–7 PM",
                 "Heavy rain 0.4 in Wed 6–7 PM",
                 "Snow 0.25 in Wed 8–10 PM"
@@ -79,9 +79,15 @@ class OpenMeteoParserTest {
             .toInstant()
             .toEpochMilli()
         val alerts = WeatherAlertEngine.evaluate(emptyList(), nws = parsed, nowMillis = now)
-        assertEquals(1, alerts.size)
-        assertTrue(alerts.single().summary.startsWith("Flash Flood Warning"))
-        assertTrue(WeatherAlertEngine.unseen(alerts, setOf(alerts.single().dedupeKey)).isEmpty())
+        assertEquals(
+            setOf(
+                "Official NWS alert: Flash Flood Warning issued October 7, Wed 6 PM–Thu 12 AM",
+                "Official NWS alert: Dense Fog Advisory, Wed 6–10 PM"
+            ),
+            alerts.map { it.summary }.toSet()
+        )
+        assertTrue(alerts.all { it.kind == WeatherAlertKind.NWS })
+        assertTrue(WeatherAlertEngine.unseen(alerts, alerts.map { it.dedupeKey }.toSet()).isEmpty())
     }
 
     @Test

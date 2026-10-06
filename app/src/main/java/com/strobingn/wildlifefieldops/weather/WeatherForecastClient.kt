@@ -17,17 +17,22 @@ class WeatherForecastClient @Inject constructor() {
                 ?: return@withContext null
             val hourly = OpenMeteoParser.parse(meteoBody)
             if (hourly.isEmpty()) return@withContext null
-            val nws = runCatching {
-                val body = httpGet(WeatherForecastUrls.nwsActive(latitude, longitude), userAgent = WeatherForecastUrls.USER_AGENT)
-                if (body.isNullOrBlank()) emptyList() else NwsAlertParser.parse(body)
+            val nwsBody = runCatching {
+                httpGet(
+                    WeatherForecastUrls.nwsActive(latitude, longitude),
+                    userAgent = WeatherForecastUrls.USER_AGENT
+                )
             }.getOrElse {
                 Log.w(TAG, "NWS alerts unavailable", it)
-                emptyList()
+                null
             }
+            val nwsFetched = nwsBody != null
+            val nws = if (nwsBody.isNullOrBlank()) emptyList() else NwsAlertParser.parse(nwsBody)
             ForecastFetch(
                 hourly = hourly,
                 nws = nws,
-                fetchedAtMillis = System.currentTimeMillis()
+                fetchedAtMillis = System.currentTimeMillis(),
+                nwsFetched = nwsFetched
             )
         } catch (error: Exception) {
             Log.e(TAG, "Forecast fetch failed", error)
