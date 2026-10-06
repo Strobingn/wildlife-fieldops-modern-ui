@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -50,6 +53,50 @@ class OpenJobsHomeScreenshotTest {
 
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h2400dp-xhdpi")
+    fun seeAllLinkCapsAtEightAndReportsTheTotal() {
+        var opened = 0
+        val jobs = (1..9).map { index ->
+            Job(
+                id = "cap-$index",
+                customerName = "Customer $index",
+                address = "$index Oak St",
+                status = JobStatus.SCHEDULED,
+                scheduledDate = index * 3_600_000L
+            )
+        }
+        composeRule.setContent {
+            WildlifeFieldOpsTheme(darkTheme = false) {
+                Box(Modifier.size(411.dp, 2200.dp)) {
+                    DashboardScreen(
+                        onNavigateToJobs = {},
+                        onNavigateToInspections = {},
+                        onNavigateToSchedule = {},
+                        onNavigateToJobDetail = {},
+                        onNavigateToJobForm = {},
+                        onNavigateToMap = {},
+                        onNavigateToRoutes = {},
+                        onNavigateToSettings = {},
+                        onNavigateToAI = {},
+                        onNavigateToTrapChecks = {},
+                        onNavigateToDictate = {},
+                        onNavigateToTodayRoute = {},
+                        onOpenDrawer = {},
+                        onSeeAllOpenJobs = { opened += 1 },
+                        preview = homeWithOpenJobs(OpenHomeJobs.list(jobs))
+                    )
+                }
+            }
+        }
+        composeRule.onNodeWithText("See all open jobs (9)").assertIsDisplayed()
+        composeRule.onNodeWithTag("home-open-jobs-count").assertTextEquals("9")
+        assertEquals(8, composeRule.onAllNodesWithTag("home-open-job").fetchSemanticsNodes().size)
+        assertEquals(0, composeRule.onAllNodesWithText("Customer 9").fetchSemanticsNodes().size)
+        composeRule.onNodeWithText("See all open jobs (9)").performClick()
+        assertEquals(1, opened)
+    }
 
     @Test
     fun light() = render(dark = false, name = "home-open-jobs-light")

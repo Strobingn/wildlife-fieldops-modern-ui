@@ -85,6 +85,7 @@ fun JobFlagSummaryRow(
     completed: Int,
     selected: JobStatus?,
     onSelect: (JobStatus?) -> Unit,
+    openOnly: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -94,7 +95,7 @@ fun JobFlagSummaryRow(
         CountSummaryCell(
             label = "Scheduled",
             count = scheduled,
-            selected = selected == JobStatus.SCHEDULED,
+            selected = openOnly || selected == JobStatus.SCHEDULED,
             onClick = {
                 onSelect(if (selected == JobStatus.SCHEDULED) null else JobStatus.SCHEDULED)
             },
@@ -103,7 +104,7 @@ fun JobFlagSummaryRow(
         CountSummaryCell(
             label = "In progress",
             count = inProgress,
-            selected = selected == JobStatus.IN_PROGRESS,
+            selected = openOnly || selected == JobStatus.IN_PROGRESS,
             onClick = {
                 onSelect(if (selected == JobStatus.IN_PROGRESS) null else JobStatus.IN_PROGRESS)
             },

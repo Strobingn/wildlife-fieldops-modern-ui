@@ -216,16 +216,32 @@ private fun AppNavHost(
                 onNavigateToTrapChecks = { navController.navigate(Screen.TrapChecks.route) },
                 onNavigateToDictate = { navController.navigate(VoiceJobEntry.createRoute()) },
                 onNavigateToTodayRoute = { navController.navigate(Screen.TodayRoute.route) },
-                onOpenDrawer = onOpenMore
+                onOpenDrawer = onOpenMore,
+                onSeeAllOpenJobs = {
+                    navController.navigate(Screen.JobList.route) {
+                        popUpTo(Screen.Dashboard.route) { inclusive = false; saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                    navController.getBackStackEntry(Screen.JobList.route)
+                        .savedStateHandle["openJobsFilter"] = true
+                }
             )
         }
-        composable(Screen.JobList.route) {
+        composable(Screen.JobList.route) { entry ->
+            val requestOpenJobs by entry.savedStateHandle
+                .getStateFlow("openJobsFilter", false)
+                .collectAsState()
             JobListScreen(
                 onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) },
                 onNavigateToJobForm = { navController.navigate(ManualJobEntry.createRoute()) },
                 onNavigateToDictate = { navController.navigate(VoiceJobEntry.createRoute()) },
                 onBack = { navController.popBackStack() },
-                showBack = false
+                showBack = false,
+                requestOpenJobs = requestOpenJobs,
+                onOpenJobsFilterApplied = {
+                    entry.savedStateHandle["openJobsFilter"] = false
+                }
             )
         }
         composable(

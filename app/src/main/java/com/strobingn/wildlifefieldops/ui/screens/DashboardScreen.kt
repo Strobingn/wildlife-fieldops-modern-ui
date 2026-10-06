@@ -19,6 +19,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -73,6 +74,7 @@ fun DashboardScreen(
     onNavigateToDictate: () -> Unit = {},
     onNavigateToTodayRoute: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
+    onSeeAllOpenJobs: () -> Unit = {},
     preview: DashboardPreview? = null
 ) {
     if (preview != null) {
@@ -93,7 +95,8 @@ fun DashboardScreen(
             onNavigateToTrapChecks = onNavigateToTrapChecks,
             onNavigateToDictate = onNavigateToDictate,
             onNavigateToTodayRoute = onNavigateToTodayRoute,
-            onOpenDrawer = onOpenDrawer
+            onOpenDrawer = onOpenDrawer,
+            onSeeAllOpenJobs = onSeeAllOpenJobs
         )
         return
     }
@@ -169,7 +172,8 @@ fun DashboardScreen(
         onNavigateToTrapChecks = onNavigateToTrapChecks,
         onNavigateToDictate = onNavigateToDictate,
         onNavigateToTodayRoute = onNavigateToTodayRoute,
-        onOpenDrawer = onOpenDrawer
+        onOpenDrawer = onOpenDrawer,
+        onSeeAllOpenJobs = onSeeAllOpenJobs
     )
 }
 
@@ -192,7 +196,8 @@ private fun HomeDashboard(
     onNavigateToTrapChecks: () -> Unit,
     onNavigateToDictate: () -> Unit,
     onNavigateToTodayRoute: () -> Unit,
-    onOpenDrawer: () -> Unit
+    onOpenDrawer: () -> Unit,
+    onSeeAllOpenJobs: () -> Unit
 ) {
     val stats = preview.stats
     val todayOnSchedule = preview.todayOnSchedule
@@ -380,9 +385,10 @@ private fun HomeDashboard(
                 if (showUpdateChip) AppUpdateHomeChip()
             }
             item(key = "open-jobs") {
-                SectionHeader(title = "Open jobs")
+                OpenJobsHeader(total = openJobs.size)
             }
-            if (openJobs.isEmpty()) {
+            val shownOpenJobs = openJobs.take(OpenHomeJobs.HOME_CAP)
+            if (shownOpenJobs.isEmpty()) {
                 item(key = "open-jobs-empty") {
                     Text(
                         "No open jobs",
@@ -392,14 +398,60 @@ private fun HomeDashboard(
                     )
                 }
             } else {
-                items(openJobs, key = { "open-${it.id}" }) { job ->
+                items(shownOpenJobs, key = { "open-${it.id}" }) { job ->
                     OpenJobRow(
                         job = job,
                         onClick = { onNavigateToJobDetail(job.id) }
                     )
                 }
             }
+            val seeAll = OpenHomeJobs.homeSlice(openJobs).seeAllLabel
+            if (seeAll != null) {
+                item(key = "open-jobs-see-all") {
+                    TextButton(
+                        onClick = onSeeAllOpenJobs,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("home-open-jobs-see-all"),
+                        contentPadding = PaddingValues(horizontal = 0.dp)
+                    ) {
+                        Text(
+                            seeAll,
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Start
+                        )
+                    }
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun OpenJobsHeader(total: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            "Open jobs",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            total.toString(),
+            modifier = Modifier.testTag("home-open-jobs-count"),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 
