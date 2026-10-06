@@ -214,6 +214,12 @@ fun JobDetailScreen(
                     onPickCustomer = workspaceViewModel::applyCustomer,
                     onNewCustomer = workspaceViewModel::startNewCustomer
                 )
+                JobDirectionsButton(
+                    target = JobDirections.fromJob(
+                        currentJob,
+                        fullAddress = customerDraft.composedServiceAddress()
+                    )
+                )
                 Button(
                     onClick = { workspaceViewModel.saveCustomerOnJob(currentJob) },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),

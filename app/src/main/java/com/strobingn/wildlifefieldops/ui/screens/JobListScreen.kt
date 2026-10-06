@@ -423,7 +423,10 @@ private fun JobListItem(job: Job, onClick: () -> Unit) {
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Icon(
                 Icons.Default.LocationOn,
                 contentDescription = null,
@@ -435,8 +438,10 @@ private fun JobListItem(job: Job, onClick: () -> Unit) {
                 job.address.ifBlank { "No address" },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
             )
+            JobDirectionsIconButton(job)
         }
 
         if (job.estimatedValue > 0) {

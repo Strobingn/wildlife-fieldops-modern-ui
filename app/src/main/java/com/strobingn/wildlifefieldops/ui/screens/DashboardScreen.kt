@@ -484,6 +484,7 @@ private fun OpenJobRow(job: Job, onClick: () -> Unit) {
                 text = com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.label(job.status),
                 color = jobStatusColor(job.status)
             )
+            JobDirectionsIconButton(job)
         }
         if (job.address.isNotBlank()) {
             Spacer(modifier = Modifier.height(4.dp))
