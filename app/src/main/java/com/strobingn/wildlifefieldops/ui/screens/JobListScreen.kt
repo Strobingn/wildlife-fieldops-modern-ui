@@ -29,6 +29,7 @@ data class JobListPreview(
     val recentJobs: List<Job> = emptyList(),
     val searchQuery: String = "",
     val selectedStatus: JobStatus? = null,
+    val openOnly: Boolean = false,
     val isLoading: Boolean = false,
     val scheduledCount: Int = 0,
     val inProgressCount: Int = 0,
@@ -45,6 +46,8 @@ fun JobListScreen(
     onNavigateToDictate: () -> Unit = {},
     onBack: () -> Unit,
     showBack: Boolean = true,
+    requestOpenJobs: Boolean = false,
+    onOpenJobsFilterApplied: () -> Unit = {},
     preview: JobListPreview? = null
 ) {
     if (preview != null) {
@@ -53,6 +56,7 @@ fun JobListScreen(
             recentJobs = preview.recentJobs,
             searchQuery = preview.searchQuery,
             selectedStatus = preview.selectedStatus,
+            openOnly = preview.openOnly,
             isLoading = preview.isLoading,
             scheduledCount = preview.scheduledCount,
             inProgressCount = preview.inProgressCount,
@@ -74,6 +78,13 @@ fun JobListScreen(
     val recentJobs by viewModel.recentJobs.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedStatus by viewModel.selectedStatus.collectAsState()
+    val openOnly by viewModel.openOnly.collectAsState()
+    LaunchedEffect(requestOpenJobs) {
+        if (requestOpenJobs) {
+            viewModel.showOpenJobs()
+            onOpenJobsFilterApplied()
+        }
+    }
     val isLoading by viewModel.isLoading.collectAsState()
     val flagCounts by viewModel.flagCounts.collectAsState()
     val reminders by viewModel.pendingReminders.collectAsState()
@@ -83,6 +94,7 @@ fun JobListScreen(
         recentJobs = recentJobs,
         searchQuery = searchQuery,
         selectedStatus = selectedStatus,
+        openOnly = openOnly,
         isLoading = isLoading,
         scheduledCount = flagCounts.scheduled,
         inProgressCount = flagCounts.inProgress,
@@ -106,6 +118,7 @@ private fun JobListContent(
     recentJobs: List<Job>,
     searchQuery: String,
     selectedStatus: JobStatus?,
+    openOnly: Boolean,
     isLoading: Boolean,
     scheduledCount: Int,
     inProgressCount: Int,
@@ -181,6 +194,7 @@ private fun JobListContent(
                     inProgress = inProgressCount,
                     completed = completedCount,
                     selected = selectedStatus,
+                    openOnly = openOnly,
                     onSelect = onStatus
                 )
             }
@@ -264,7 +278,7 @@ private fun JobListContent(
             ) {
                 item {
                     FilterChip(
-                        selected = selectedStatus == null,
+                        selected = !openOnly && selectedStatus == null,
                         onClick = { onStatus(null) },
                         label = { Text("All") },
                         colors = FilterChipDefaults.filterChipColors(
@@ -274,7 +288,11 @@ private fun JobListContent(
                     )
                 }
                 items(com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.stages) { status ->
-                    val selected = selectedStatus == status
+                    val selected = if (openOnly) {
+                        status == JobStatus.SCHEDULED || status == JobStatus.IN_PROGRESS
+                    } else {
+                        selectedStatus == status
+                    }
                     FilterChip(
                         selected = selected,
                         onClick = {
@@ -405,7 +423,10 @@ private fun JobListItem(job: Job, onClick: () -> Unit) {
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Icon(
                 Icons.Default.LocationOn,
                 contentDescription = null,
@@ -417,8 +438,10 @@ private fun JobListItem(job: Job, onClick: () -> Unit) {
                 job.address.ifBlank { "No address" },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
             )
+            JobDirectionsIconButton(job)
         }
 
         if (job.estimatedValue > 0) {

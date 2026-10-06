@@ -51,13 +51,29 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val dataStore = context.settingsDataStore
-    private var companyJob: Job? = null
     private var techJob: Job? = null
-    private var addressJob: Job? = null
     private var taxJob: Job? = null
-    private var phoneJob: Job? = null
-    private var emailJob: Job? = null
-    private var websiteJob: Job? = null
+    private val businessWrites = PendingStringWrites(viewModelScope) { batch ->
+        dataStore.edit { prefs ->
+            batch.forEach { (key, value) ->
+                when (key) {
+                    "name" -> prefs[COMPANY_NAME] = value
+                    "phone" -> prefs[BUSINESS_PHONE] = value
+                    "email" -> prefs[BUSINESS_EMAIL] = value
+                    "address" -> prefs[COMPANY_ADDRESS] = value
+                    "website" -> prefs[BUSINESS_WEBSITE] = value
+                }
+            }
+        }
+    }
+
+    /** Writes any business-info keystroke that is still waiting on the debounce. */
+    fun flushPendingBusinessEdits() = businessWrites.flushBlocking()
+
+    override fun onCleared() {
+        flushPendingBusinessEdits()
+        super.onCleared()
+    }
 
     companion object {
         const val DEFAULT_TAX_PERCENT = 8.125f
@@ -189,13 +205,7 @@ class SettingsViewModel @Inject constructor(
         dataStore.edit { it[SYNC_INTERVAL] = minutes }
     }
 
-    fun setCompanyName(name: String) {
-        companyJob?.cancel()
-        companyJob = viewModelScope.launch {
-            delay(350)
-            dataStore.edit { it[COMPANY_NAME] = name }
-        }
-    }
+    fun setCompanyName(name: String) = businessWrites.schedule("name", name)
 
     fun setTechnicianName(name: String) {
         techJob?.cancel()
@@ -205,13 +215,7 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun setCompanyAddress(address: String) {
-        addressJob?.cancel()
-        addressJob = viewModelScope.launch {
-            delay(350)
-            dataStore.edit { it[COMPANY_ADDRESS] = address }
-        }
-    }
+    fun setCompanyAddress(address: String) = businessWrites.schedule("address", address)
 
     fun setDefaultTaxRateText(raw: String) {
         val parsed = raw.trim().toFloatOrNull() ?: return
@@ -259,29 +263,11 @@ class SettingsViewModel @Inject constructor(
         persistNwcoProfile()
     }
 
-    fun setBusinessPhone(value: String) {
-        phoneJob?.cancel()
-        phoneJob = viewModelScope.launch {
-            delay(350)
-            dataStore.edit { it[BUSINESS_PHONE] = value }
-        }
-    }
+    fun setBusinessPhone(value: String) = businessWrites.schedule("phone", value)
 
-    fun setBusinessEmail(value: String) {
-        emailJob?.cancel()
-        emailJob = viewModelScope.launch {
-            delay(350)
-            dataStore.edit { it[BUSINESS_EMAIL] = value }
-        }
-    }
+    fun setBusinessEmail(value: String) = businessWrites.schedule("email", value)
 
-    fun setBusinessWebsite(value: String) {
-        websiteJob?.cancel()
-        websiteJob = viewModelScope.launch {
-            delay(350)
-            dataStore.edit { it[BUSINESS_WEBSITE] = value }
-        }
-    }
+    fun setBusinessWebsite(value: String) = businessWrites.schedule("website", value)
 
     fun setBusinessLogo(uri: Uri) = viewModelScope.launch {
         val path = withContext(Dispatchers.IO) { BusinessProfileStore.importLogo(context, uri) }

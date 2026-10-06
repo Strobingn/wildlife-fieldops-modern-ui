@@ -19,6 +19,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -45,6 +46,7 @@ data class DashboardPreview(
     val stats: DashboardStats,
     val recentJobs: List<Job>,
     val todayOnSchedule: List<Job>,
+    val openJobs: List<Job> = emptyList(),
     val reminders: List<Reminder>,
     val dueNextSteps: List<Job>,
     val dueTrapChecks: List<TrapCheckItem>,
@@ -72,6 +74,7 @@ fun DashboardScreen(
     onNavigateToDictate: () -> Unit = {},
     onNavigateToTodayRoute: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
+    onSeeAllOpenJobs: () -> Unit = {},
     preview: DashboardPreview? = null
 ) {
     if (preview != null) {
@@ -92,7 +95,8 @@ fun DashboardScreen(
             onNavigateToTrapChecks = onNavigateToTrapChecks,
             onNavigateToDictate = onNavigateToDictate,
             onNavigateToTodayRoute = onNavigateToTodayRoute,
-            onOpenDrawer = onOpenDrawer
+            onOpenDrawer = onOpenDrawer,
+            onSeeAllOpenJobs = onSeeAllOpenJobs
         )
         return
     }
@@ -103,6 +107,7 @@ fun DashboardScreen(
     val dueNextSteps by viewModel.dueNextSteps.collectAsState()
     val dueTrapChecks by viewModel.dueTrapChecks.collectAsState()
     val todayOnSchedule by viewModel.todayOnSchedule.collectAsState()
+    val openJobs by viewModel.openJobs.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val syncVm: SettingsViewModel = hiltViewModel()
     val backlog by syncVm.backlog.collectAsState()
@@ -142,6 +147,7 @@ fun DashboardScreen(
             stats = stats,
             recentJobs = recentJobs,
             todayOnSchedule = todayOnSchedule,
+            openJobs = openJobs,
             reminders = reminders,
             dueNextSteps = dueNextSteps,
             dueTrapChecks = dueTrapChecks,
@@ -166,7 +172,8 @@ fun DashboardScreen(
         onNavigateToTrapChecks = onNavigateToTrapChecks,
         onNavigateToDictate = onNavigateToDictate,
         onNavigateToTodayRoute = onNavigateToTodayRoute,
-        onOpenDrawer = onOpenDrawer
+        onOpenDrawer = onOpenDrawer,
+        onSeeAllOpenJobs = onSeeAllOpenJobs
     )
 }
 
@@ -189,10 +196,12 @@ private fun HomeDashboard(
     onNavigateToTrapChecks: () -> Unit,
     onNavigateToDictate: () -> Unit,
     onNavigateToTodayRoute: () -> Unit,
-    onOpenDrawer: () -> Unit
+    onOpenDrawer: () -> Unit,
+    onSeeAllOpenJobs: () -> Unit
 ) {
     val stats = preview.stats
     val todayOnSchedule = preview.todayOnSchedule
+    val openJobs = preview.openJobs
     val isLoading = preview.isLoading
     val weatherState = preview.weather
     val greeting = preview.greeting
@@ -375,11 +384,128 @@ private fun HomeDashboard(
                 )
                 if (showUpdateChip) AppUpdateHomeChip()
             }
+            item(key = "open-jobs") {
+                OpenJobsHeader(total = openJobs.size)
+            }
+            val shownOpenJobs = openJobs.take(OpenHomeJobs.HOME_CAP)
+            if (shownOpenJobs.isEmpty()) {
+                item(key = "open-jobs-empty") {
+                    Text(
+                        "No open jobs",
+                        modifier = Modifier.testTag("home-open-jobs"),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            } else {
+                items(shownOpenJobs, key = { "open-${it.id}" }) { job ->
+                    OpenJobRow(
+                        job = job,
+                        onClick = { onNavigateToJobDetail(job.id) }
+                    )
+                }
+            }
+            val seeAll = OpenHomeJobs.homeSlice(openJobs).seeAllLabel
+            if (seeAll != null) {
+                item(key = "open-jobs-see-all") {
+                    TextButton(
+                        onClick = onSeeAllOpenJobs,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("home-open-jobs-see-all"),
+                        contentPadding = PaddingValues(horizontal = 0.dp)
+                    ) {
+                        Text(
+                            seeAll,
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Start
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
-/** Clears two stacked extended FABs plus the scaffold margin. */
+@Composable
+private fun OpenJobsHeader(total: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            "Open jobs",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            total.toString(),
+            modifier = Modifier.testTag("home-open-jobs-count"),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
+private fun OpenJobRow(job: Job, onClick: () -> Unit) {
+    val whenLabel = job.scheduledDate?.let { at ->
+        SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).format(Date(at))
+    } ?: "No time set"
+    FieldCard(
+        onClick = onClick,
+        accentColor = jobStatusColor(job.status),
+        modifier = Modifier.testTag("home-open-job"),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                job.customerName.ifBlank { job.title }.ifBlank { "Open job" },
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            StatusChip(
+                text = com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.label(job.status),
+                color = jobStatusColor(job.status)
+            )
+            JobDirectionsIconButton(job)
+        }
+        if (job.address.isNotBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                job.address,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            whenLabel,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1
+        )
+    }
+}
+
+/** Clears the stacked New Job and Dictate job buttons so the last Open jobs row stays visible. */
 internal val HomeListBottomClearance = 240.dp
 
 @Composable

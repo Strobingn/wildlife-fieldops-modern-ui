@@ -55,6 +55,10 @@ class JobWorkspaceViewModel @Inject constructor(
     }
 
     fun loadForJob(job: Job?) = viewModelScope.launch {
+        replaceDraft(job)
+    }
+
+    suspend fun replaceDraft(job: Job?) {
         _draft.value = workspace.loadDraft(job)
         _searchQuery.value = ""
         _matches.value = emptyList()

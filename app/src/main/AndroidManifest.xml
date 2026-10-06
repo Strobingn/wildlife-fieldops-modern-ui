@@ -64,6 +64,16 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="fieldops" android:host="report" />
             </intent-filter>
+            <intent-filter android:label="FieldOps">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter android:label="FieldOps">
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
 
         <meta-data

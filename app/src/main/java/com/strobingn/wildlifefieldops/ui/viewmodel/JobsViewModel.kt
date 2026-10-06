@@ -24,6 +24,7 @@ import com.strobingn.wildlifefieldops.ai.fieldops.ManualField
 import com.strobingn.wildlifefieldops.pricing.JobPricing
 import com.strobingn.wildlifefieldops.pricing.PricingCalculator
 import com.strobingn.wildlifefieldops.pricing.markManual
+import com.strobingn.wildlifefieldops.ui.screens.OpenHomeJobs
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
@@ -55,16 +56,20 @@ class JobsViewModel @Inject constructor(
     private val _selectedStatus = MutableStateFlow<JobStatus?>(null)
     val selectedStatus = _selectedStatus.asStateFlow()
 
+    /** Home's "See all open jobs" shows Scheduled and In progress together. */
+    private val _openOnly = MutableStateFlow(false)
+    val openOnly = _openOnly.asStateFlow()
+
     private val _isLoading = MutableStateFlow(true)
     val isLoading = _isLoading.asStateFlow()
 
-    val jobs = combine(_searchQuery, _selectedStatus) { query, status ->
-        Pair(query, status)
-    }.flatMapLatest { (query, status) ->
+    val jobs = combine(_searchQuery, _selectedStatus, _openOnly) { query, status, openOnly ->
+        Triple(query, status, openOnly)
+    }.flatMapLatest { (query, status, openOnly) ->
         val source = if (query.isNotBlank()) jobDao.search(query) else jobDao.getAll()
         source.map { list ->
             list.filterNot { com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger.isLedger(it) }
-                .filter { status == null || com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.matches(it.status, status) }
+                .filter { OpenHomeJobs.matchesJobList(it.status, status, openOnly) }
         }
     }
     .onEach { _isLoading.value = false }
@@ -125,6 +130,13 @@ class JobsViewModel @Inject constructor(
 
     fun setStatusFilter(status: JobStatus?) {
         _selectedStatus.value = status
+        _openOnly.value = false
+    }
+
+    fun showOpenJobs() {
+        _searchQuery.value = ""
+        _selectedStatus.value = null
+        _openOnly.value = true
     }
 
     fun getJobById(id: String): Flow<Job?> {

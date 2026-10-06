@@ -147,8 +147,8 @@ class DashboardScreenshotTest {
         assertEquals("create bar still composed after scrolling to the end", 0, createCount)
         assertEquals("floating actions missing after the in-page buttons scroll off", 1, fabCount)
         composeRule.onNodeWithTag("home-floating-create").assertIsDisplayed()
-        composeRule.onNodeWithText("Shop weather").assertIsDisplayed()
-        val weather = composeRule.onNodeWithText("Shop weather").fetchSemanticsNode().boundsInRoot
+        composeRule.onNodeWithText("Open jobs").assertIsDisplayed()
+        val openJobs = composeRule.onNodeWithText("No open jobs").fetchSemanticsNode().boundsInRoot
         val fab = composeRule.onNodeWithTag("home-floating-create").fetchSemanticsNode().boundsInRoot
         val dictate = composeRule.onAllNodesWithText("Dictate job", useUnmergedTree = true)
             .fetchSemanticsNodes().map { it.boundsInRoot }
@@ -157,12 +157,12 @@ class DashboardScreenshotTest {
         assertTrue("Dictate job missing at the bottom: $dictate", dictate.isNotEmpty())
         assertTrue("New Job missing at the bottom: $newJob", newJob.isNotEmpty())
         assertFalse(
-            "Shop weather $weather is behind floating actions $fab",
-            overlaps(weather, fab)
+            "Open jobs $openJobs is behind floating actions $fab",
+            overlaps(openJobs, fab)
         )
         assertTrue(
-            "weather bottom ${weather.bottom} should sit above fab top ${fab.top}",
-            weather.bottom <= fab.top + 1f
+            "open jobs bottom ${openJobs.bottom} should sit above fab top ${fab.top}",
+            openJobs.bottom <= fab.top + 1f
         )
     }
 
