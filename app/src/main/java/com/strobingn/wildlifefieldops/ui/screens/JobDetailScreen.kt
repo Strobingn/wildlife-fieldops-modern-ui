@@ -60,7 +60,8 @@ fun JobDetailScreen(
     moneyViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.MoneyFieldOpsViewModel = hiltViewModel(),
     customerFieldOpsViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.CustomerFieldOpsViewModel = hiltViewModel(),
     searchFieldOpsViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.SearchFieldOpsViewModel = hiltViewModel(),
-    inspectionsViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.InspectionsViewModel = hiltViewModel()
+    inspectionsViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.InspectionsViewModel = hiltViewModel(),
+    weatherAlertsViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.WeatherAlertsViewModel = hiltViewModel()
 ) {
     val job by viewModel.getJobById(jobId).collectAsState(initial = null)
     val customerDraft by workspaceViewModel.draft.collectAsState()
@@ -122,6 +123,18 @@ fun JobDetailScreen(
         LaunchedEffect(currentJob.id, currentJob.latitude, currentJob.longitude, currentJob.address) {
             weatherVm.loadJobWeather(currentJob.latitude, currentJob.longitude, currentJob.address)
         }
+        LaunchedEffect(
+            currentJob.id,
+            currentJob.latitude,
+            currentJob.longitude,
+            currentJob.address,
+            currentJob.status,
+            currentJob.scheduledDate
+        ) {
+            weatherAlertsViewModel.trackJobs(listOf(currentJob))
+        }
+        val jobWeather by weatherAlertsViewModel.jobAlerts.collectAsState()
+        val weatherLines = jobWeather[currentJob.id].orEmpty()
         val linkedInspections = JobInspectionLink.linkedTo(currentJob.id, allInspections)
         fun openLinkedJobInspection() {
             when (val dest = JobInspectionLink.destination(currentJob.id, allInspections)) {
@@ -182,6 +195,13 @@ fun JobDetailScreen(
                             PriorityBadge(priority = currentJob.priority)
                             Spacer(modifier = Modifier.width(8.dp))
                             TypeBadge(type = currentJob.type)
+                        }
+                        if (weatherLines.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            weatherLines.forEach { alert ->
+                                JobWeatherWarningChip(alert.summary)
+                                Spacer(modifier = Modifier.height(6.dp))
+                            }
                         }
                         if (!currentJob.syncError.isNullOrBlank()) {
                             Spacer(modifier = Modifier.height(8.dp))

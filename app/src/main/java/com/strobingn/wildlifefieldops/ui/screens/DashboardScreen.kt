@@ -54,7 +54,10 @@ data class DashboardPreview(
     val sync: SyncSnapshot,
     val greeting: String,
     val todayLabel: String,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val weatherAlerts: List<com.strobingn.wildlifefieldops.weather.WeatherAlert> = emptyList(),
+    val weatherAlertsFetchedAt: Long? = null,
+    val weatherAlertsExpanded: Boolean = false
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -130,6 +133,8 @@ fun DashboardScreen(
     val weatherVm: LiveWeatherViewModel = hiltViewModel()
     val weatherState by weatherVm.state.collectAsState()
     LaunchedEffect(Unit) { weatherVm.loadShopWeather() }
+    val weatherAlertsVm: com.strobingn.wildlifefieldops.ui.viewmodel.WeatherAlertsViewModel = hiltViewModel()
+    val weatherHome by weatherAlertsVm.home.collectAsState()
 
     val greeting = remember {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
@@ -155,7 +160,9 @@ fun DashboardScreen(
             sync = SyncSnapshot(syncLabel, syncColor),
             greeting = greeting,
             todayLabel = todayLabel,
-            isLoading = isLoading
+            isLoading = isLoading,
+            weatherAlerts = weatherHome.alerts,
+            weatherAlertsFetchedAt = weatherHome.fetchedAtMillis
         ),
         showUpdateChip = true,
         onRefreshWeather = { weatherVm.loadShopWeather() },
@@ -292,6 +299,16 @@ private fun HomeDashboard(
                     onNewJob = onNavigateToJobForm,
                     onDictate = onNavigateToDictate
                 )
+            }
+
+            if (preview.weatherAlerts.isNotEmpty()) {
+                item(key = "weather-alerts") {
+                    WeatherAlertsCard(
+                        alerts = preview.weatherAlerts,
+                        fetchedAtMillis = preview.weatherAlertsFetchedAt,
+                        startExpanded = preview.weatherAlertsExpanded
+                    )
+                }
             }
 
             item(key = "today") {
@@ -553,7 +570,8 @@ private fun HomeCreateBar(
 fun JobCard(
     job: Job,
     onClick: () -> Unit,
-    contentPadding: PaddingValues = PaddingValues(16.dp)
+    contentPadding: PaddingValues = PaddingValues(16.dp),
+    weatherWarning: String? = null
 ) {
     val statusColor = jobStatusColor(job.status)
 
@@ -605,6 +623,10 @@ fun JobCard(
                 text = com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline.label(job.status),
                 color = statusColor
             )
+        }
+        if (!weatherWarning.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            JobWeatherWarningChip(weatherWarning)
         }
     }
 }
