@@ -159,7 +159,8 @@ class SyncRepository @Inject constructor(
         }
 
         val deletedJobIds = deletedRecordDao.getIdsByType(DeletedRecord.TYPE_JOB).toSet()
-        jobDao.getUnsynced().forEach { job ->
+        // The Ops ledger and any non-UUID id cannot go to the uuid `jobs.id` column.
+        JobUploadQueue.pending(jobDao.getUnsynced()).forEach { job ->
             if (job.id in deletedJobIds) return@forEach
             val outcome = itemRunner.run(
                 markSynced = { jobDao.markSynced(job.id) },
@@ -457,7 +458,7 @@ class SyncRepository @Inject constructor(
     }
 
     private suspend fun countPending(): Int =
-        jobDao.countUnsynced() +
+        JobUploadQueue.pending(jobDao.getUnsynced()).size +
             customerDao.countUnsynced() +
             inspectionDao.countUnsynced() +
             fieldObservationDao.countUnsynced() +

@@ -59,7 +59,9 @@ class SyncBacklogRepository @Inject constructor(
     private val photoDao: PhotoDao
 ) {
     suspend fun snapshot(): SyncBacklogSnapshot {
-        val failedJobs = jobDao.getUnsynced().filter { !it.syncError.isNullOrBlank() }
+        // Internal rows (Ops ledger, non-UUID ids) never upload, so they are not backlog.
+        val unsyncedJobs = jobDao.getUnsynced()
+        val failedJobs = JobUploadQueue.failed(unsyncedJobs)
         val failedPhotos = photoDao.getUnuploaded().filter { !it.uploadError.isNullOrBlank() }
         val failedObservations = fieldObservationDao.getUnsynced().filter { !it.syncError.isNullOrBlank() }
         val failedEvents = observationEventDao.getUnsynced().filter { !it.syncError.isNullOrBlank() }
@@ -70,7 +72,7 @@ class SyncBacklogRepository @Inject constructor(
             failedEvents.take(3).forEach { add("Event ${it.eventId.take(8)}: ${it.syncError}") }
         }
         return SyncBacklogSnapshot(
-            pendingJobs = jobDao.countUnsynced(),
+            pendingJobs = JobUploadQueue.pending(unsyncedJobs).size,
             pendingCustomers = customerDao.countUnsynced(),
             pendingInspections = inspectionDao.countUnsynced(),
             pendingObservations = fieldObservationDao.countUnsynced(),
