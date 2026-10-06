@@ -1,6 +1,7 @@
 package com.strobingn.wildlifefieldops
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.compose.setContent
@@ -24,9 +25,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -37,6 +43,8 @@ import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
 import com.strobingn.wildlifefieldops.BuildConfig
 import com.strobingn.wildlifefieldops.data.repository.syncFailureDetail
+import com.strobingn.wildlifefieldops.data.remote.SharedTextIntake
+import com.strobingn.wildlifefieldops.data.remote.TextShareInbox
 import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
 import com.strobingn.wildlifefieldops.navigation.MoreDestination
 import com.strobingn.wildlifefieldops.navigation.Screen
@@ -61,6 +69,7 @@ class MainActivity : AppCompatActivity() {
         val splashScreen = installSplashScreen()
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) acceptSharedText(intent)
         try {
             setContent {
                 val settingsVm: SettingsViewModel = hiltViewModel()
@@ -90,6 +99,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        acceptSharedText(intent)
+    }
+
+    private fun acceptSharedText(intent: Intent?) {
+        val shared = SharedTextIntake.fromIntent(intent) ?: return
+        TextShareInbox.offer(shared)
+    }
+
     private fun requestLaunchPermissions() {
         val permissions = listOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
@@ -110,6 +130,7 @@ class MainActivity : AppCompatActivity() {
 @Composable
 fun WildlifeFieldOpsNavHost() {
     val navController = rememberNavController()
+    val pendingShare by TextShareInbox.pending.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val tabRoutes = Screen.bottomNavItems.map { it.route }
@@ -120,6 +141,17 @@ fun WildlifeFieldOpsNavHost() {
             popUpTo(Screen.Dashboard.route) { inclusive = false; saveState = true }
             launchSingleTop = true
             restoreState = true
+        }
+    }
+
+    LaunchedEffect(pendingShare?.id) {
+        if (pendingShare == null) return@LaunchedEffect
+        val entry = navController.currentBackStackEntry
+        val jobId = entry?.arguments?.getString("jobId")
+        val onNewJob = entry?.destination?.route == Screen.JobForm.route &&
+            (jobId.isNullOrBlank() || jobId == "new")
+        if (!onNewJob) {
+            navController.navigate(Screen.JobForm.createRoute()) { launchSingleTop = true }
         }
     }
 
@@ -165,7 +197,10 @@ private fun AppNavHost(
     onOpenMore: () -> Unit = {},
     onOpenTool: (MoreDestination) -> Unit = {}
 ) {
-    NavHost(navController = navController, startDestination = Screen.Dashboard.route, modifier = modifier) {
+    val startRoute = remember {
+        if (TextShareInbox.peek() != null) Screen.JobForm.createRoute() else Screen.Dashboard.route
+    }
+    NavHost(navController = navController, startDestination = startRoute, modifier = modifier) {
         composable(Screen.Dashboard.route) {
             DashboardScreen(
                 onNavigateToJobs = { navController.navigate(Screen.JobList.route) },
@@ -515,6 +550,37 @@ private fun AutoSyncStatusBar() {
 }
 
 @Composable
+private fun OneLineNavLabel(text: String, selected: Boolean) {
+    val base = MaterialTheme.typography.labelSmall
+    val weight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+    var sizeSp by remember(text) { mutableFloatStateOf(base.fontSize.value) }
+    var overflow by remember(text) { mutableStateOf(false) }
+    Text(
+        text = text,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Clip,
+        textAlign = TextAlign.Center,
+        style = base.copy(
+            fontWeight = weight,
+            fontSize = sizeSp.sp,
+            lineHeight = (sizeSp + 2f).sp,
+            letterSpacing = 0.sp
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = "nav-$text-overflow-$overflow-lines-1" },
+        onTextLayout = { layout ->
+            if (layout.didOverflowWidth && sizeSp > 8f) {
+                sizeSp = (sizeSp - 0.5f).coerceAtLeast(8f)
+            } else if (overflow != layout.didOverflowWidth) {
+                overflow = layout.didOverflowWidth
+            }
+        }
+    )
+}
+
+@Composable
 internal fun ModernBottomBar(currentRoute: String, onNavigate: (String) -> Unit) {
     NavigationBar(
         containerColor = if (ThemeMode.isDark) {
@@ -529,9 +595,7 @@ internal fun ModernBottomBar(currentRoute: String, onNavigate: (String) -> Unit)
             val selected = currentRoute == screen.route
             NavigationBarItem(
                 icon = { screen.icon?.let { Icon(it, contentDescription = screen.title) } },
-                label = {
-                    Text(screen.title, style = MaterialTheme.typography.labelSmall, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
-                },
+                label = { OneLineNavLabel(screen.title, selected) },
                 selected = selected,
                 onClick = { onNavigate(screen.route) },
                 colors = NavigationBarItemDefaults.colors(

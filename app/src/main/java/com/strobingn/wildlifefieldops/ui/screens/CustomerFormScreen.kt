@@ -16,17 +16,21 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.launch
 import com.strobingn.wildlifefieldops.data.model.Customer
 import com.strobingn.wildlifefieldops.data.model.CustomerType
+import com.strobingn.wildlifefieldops.data.remote.TextMessageImport
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.CustomersViewModel
+import com.strobingn.wildlifefieldops.ui.viewmodel.TextImportViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomerFormScreen(
     customerId: String? = null,
     onBack: () -> Unit,
-    viewModel: CustomersViewModel = hiltViewModel()
+    viewModel: CustomersViewModel = hiltViewModel(),
+    textImportViewModel: TextImportViewModel = hiltViewModel()
 ) {
     var firstName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
@@ -44,6 +48,47 @@ fun CustomerFormScreen(
     var paymentTerms by remember { mutableStateOf("Net 30") }
     var showTypeDropdown by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
+    var activeCustomerId by remember(customerId) { mutableStateOf(customerId) }
+    var manualKeys by remember { mutableStateOf(setOf<String>()) }
+    var importMatches by remember { mutableStateOf(listOf<Customer>()) }
+    var importChoice by remember { mutableStateOf(ImportCustomerChoice.UNDECIDED) }
+    var lastParsed by remember { mutableStateOf(TextMessageImport.Fields()) }
+    val customerGate = remember { CustomerImportGate() }
+
+    SideEffect {
+        customerGate.firstName = firstName
+        customerGate.lastName = lastName
+        customerGate.phone = phone
+        customerGate.email = email
+        customerGate.address = address
+        customerGate.city = city
+        customerGate.state = state
+        customerGate.zip = zipCode
+        customerGate.notes = notes
+        customerGate.manual = manualKeys
+    }
+
+    fun applyCustomerImport(fields: TextMessageImport.Fields) {
+        lastParsed = TextMessageImport.fillEmpty(lastParsed, fields)
+        if (importChoice == ImportCustomerChoice.USE_EXISTING) return
+        val next = TextMessageImport.applyToCustomer(customerGate.snapshot(), fields)
+        firstName = next.firstName
+        lastName = next.lastName
+        phone = next.phone
+        email = next.email
+        address = next.address
+        city = next.city
+        state = next.state
+        zipCode = next.zip
+        notes = next.notes
+    }
+
+    suspend fun refreshImportMatches() {
+        if (importChoice != ImportCustomerChoice.UNDECIDED) return
+        importMatches = textImportViewModel.matches(lastParsed)
+    }
+
+    val importScope = rememberCoroutineScope()
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = PrimaryGreen,
@@ -102,10 +147,78 @@ fun CustomerFormScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            PasteFromTextButton(onApply = { fields ->
+                importScope.launch {
+                    applyCustomerImport(fields)
+                    refreshImportMatches()
+                    val source = fields.sourceText
+                    if (source.isNotBlank()) {
+                        applyCustomerImport(textImportViewModel.refine(source, null))
+                        refreshImportMatches()
+                    }
+                }
+            })
+            if (importMatches.isNotEmpty() || importChoice != ImportCustomerChoice.UNDECIDED) {
+                ExistingCustomerChoiceCard(
+                    matches = importMatches,
+                    choice = importChoice,
+                    onUseExisting = { customer ->
+                        importChoice = ImportCustomerChoice.USE_EXISTING
+                        activeCustomerId = customer.id
+                        isEditing = true
+                        firstName = customer.firstName
+                        lastName = customer.lastName
+                        companyName = customer.companyName
+                        email = customer.email
+                        phone = customer.phone
+                        address = customer.address
+                        city = customer.city
+                        state = customer.state
+                        zipCode = customer.zipCode
+                        notes = customer.notes
+                        billingAddress = customer.billingAddress
+                        billingContact = customer.billingContact
+                        paymentTerms = customer.paymentTerms
+                        selectedType = customer.customerType
+                    },
+                    onCreateNew = {
+                        importChoice = ImportCustomerChoice.CREATE_NEW
+                        activeCustomerId = null
+                        isEditing = false
+                        val restored = TextMessageImport.applyToCustomer(
+                            customerGate.snapshot().copy(
+                                firstName = "",
+                                lastName = "",
+                                phone = "",
+                                email = "",
+                                address = "",
+                                city = "",
+                                state = "",
+                                zip = "",
+                                notes = ""
+                            ),
+                            lastParsed
+                        )
+                        firstName = restored.firstName
+                        lastName = restored.lastName
+                        phone = restored.phone
+                        email = restored.email
+                        address = restored.address
+                        city = restored.city
+                        state = restored.state
+                        zipCode = restored.zip
+                        notes = restored.notes
+                    }
+                )
+            }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = firstName,
-                    onValueChange = { firstName = it },
+                    onValueChange = {
+                        firstName = it
+                        manualKeys = TextMessageImport.markEdited(manualKeys, TextMessageImport.FIRST)
+                        manualKeys = TextMessageImport.markEdited(manualKeys, TextMessageImport.LAST)
+                    },
                     label = { Text("First Name *") },
                     colors = fieldColors,
                     modifier = Modifier.weight(1f),
@@ -115,7 +228,11 @@ fun CustomerFormScreen(
                 )
                 OutlinedTextField(
                     value = lastName,
-                    onValueChange = { lastName = it },
+                    onValueChange = {
+                        lastName = it
+                        manualKeys = TextMessageImport.markEdited(manualKeys, TextMessageImport.FIRST)
+                        manualKeys = TextMessageImport.markEdited(manualKeys, TextMessageImport.LAST)
+                    },
                     label = { Text("Last Name *") },
                     colors = fieldColors,
                     modifier = Modifier.weight(1f),
@@ -138,7 +255,10 @@ fun CustomerFormScreen(
 
             OutlinedTextField(
                 value = phone,
-                onValueChange = { phone = it },
+                onValueChange = {
+                    phone = it
+                    manualKeys = TextMessageImport.markEdited(manualKeys, TextMessageImport.PHONE)
+                },
                 label = { Text("Phone") },
                 leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = TextSecondary) },
                 colors = fieldColors,
@@ -150,7 +270,10 @@ fun CustomerFormScreen(
 
             OutlinedTextField(
                 value = email,
-                onValueChange = { email = it },
+                onValueChange = {
+                    email = it
+                    manualKeys = TextMessageImport.markEdited(manualKeys, TextMessageImport.EMAIL)
+                },
                 label = { Text("Email") },
                 leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = TextSecondary) },
                 colors = fieldColors,
@@ -162,7 +285,10 @@ fun CustomerFormScreen(
 
             OutlinedTextField(
                 value = address,
-                onValueChange = { address = it },
+                onValueChange = {
+                    address = it
+                    manualKeys = TextMessageImport.markEdited(manualKeys, TextMessageImport.STREET)
+                },
                 label = { Text("Address") },
                 leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = TextSecondary) },
                 colors = fieldColors,
@@ -175,7 +301,10 @@ fun CustomerFormScreen(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = city,
-                    onValueChange = { city = it },
+                    onValueChange = {
+                        city = it
+                        manualKeys = TextMessageImport.markEdited(manualKeys, TextMessageImport.CITY)
+                    },
                     label = { Text("City") },
                     colors = fieldColors,
                     modifier = Modifier.weight(1f),
@@ -184,7 +313,10 @@ fun CustomerFormScreen(
                 )
                 OutlinedTextField(
                     value = state,
-                    onValueChange = { state = it },
+                    onValueChange = {
+                        state = it
+                        manualKeys = TextMessageImport.markEdited(manualKeys, TextMessageImport.STATE)
+                    },
                     label = { Text("State") },
                     colors = fieldColors,
                     modifier = Modifier.weight(0.6f),
@@ -193,7 +325,10 @@ fun CustomerFormScreen(
                 )
                 OutlinedTextField(
                     value = zipCode,
-                    onValueChange = { zipCode = it },
+                    onValueChange = {
+                        zipCode = it
+                        manualKeys = TextMessageImport.markEdited(manualKeys, TextMessageImport.ZIP)
+                    },
                     label = { Text("ZIP") },
                     colors = fieldColors,
                     modifier = Modifier.weight(0.7f),
@@ -259,7 +394,10 @@ fun CustomerFormScreen(
 
             OutlinedTextField(
                 value = notes,
-                onValueChange = { notes = it },
+                onValueChange = {
+                    notes = it
+                    manualKeys = TextMessageImport.markEdited(manualKeys, TextMessageImport.CUSTOMER_NOTES)
+                },
                 label = { Text("Notes") },
                 colors = fieldColors,
                 modifier = Modifier
@@ -273,10 +411,10 @@ fun CustomerFormScreen(
 
             Button(
                 onClick = {
-                    if (isEditing && customerId != null) {
+                    if (isEditing && activeCustomerId != null) {
                         viewModel.updateCustomer(
                             Customer(
-                                id = customerId,
+                                id = activeCustomerId!!,
                                 firstName = firstName,
                                 lastName = lastName,
                                 companyName = companyName,

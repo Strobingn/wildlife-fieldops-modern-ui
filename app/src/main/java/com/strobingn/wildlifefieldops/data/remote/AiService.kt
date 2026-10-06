@@ -171,6 +171,16 @@ Do NOT invent mileage or taxRate. Use the provided measured miles and tax percen
             notConfiguredMessage = notConfiguredMessage()
         )
 
+    /**
+     * Customer-text assist. The regex parse is kept, and cloud or on-device
+     * intake may fill only fields the regex left blank.
+     */
+    suspend fun assistCustomerText(text: String, senderPhone: String?): TextMessageImport.Fields {
+        val local = TextMessageImport.parse(text, senderPhone)
+        val intake = runCatching { parseJobFromDictation(text).draft }.getOrNull()
+        return TextMessageImport.fillEmpty(local, TextMessageImport.fromIntake(intake))
+    }
+
     suspend fun refineJobFromDictation(transcript: String): JobIntakeResult =
         JobIntakeParser.refine(
             transcript = transcript,

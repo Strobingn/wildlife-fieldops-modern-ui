@@ -16,10 +16,13 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.launch
 import com.strobingn.wildlifefieldops.ai.fieldops.FieldDate
 import com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline
 import com.strobingn.wildlifefieldops.ai.fieldops.SpeciesJobLegal
 import com.strobingn.wildlifefieldops.data.model.*
+import com.strobingn.wildlifefieldops.data.remote.TextMessageImport
+import com.strobingn.wildlifefieldops.data.remote.TextShareInbox
 import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.components.ScheduleDateTimeField
@@ -27,6 +30,7 @@ import com.strobingn.wildlifefieldops.ui.components.defaultAppointmentTime
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobWorkspaceViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.ServiceTypesViewModel
+import com.strobingn.wildlifefieldops.ui.viewmodel.TextImportViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,7 +39,8 @@ fun JobFormScreen(
     onBack: () -> Unit,
     viewModel: JobsViewModel = hiltViewModel(),
     workspaceViewModel: JobWorkspaceViewModel = hiltViewModel(),
-    serviceTypesViewModel: ServiceTypesViewModel = hiltViewModel()
+    serviceTypesViewModel: ServiceTypesViewModel = hiltViewModel(),
+    textImportViewModel: TextImportViewModel = hiltViewModel()
 ) {
     val serviceTypes by serviceTypesViewModel.allTypes.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -68,6 +73,54 @@ fun JobFormScreen(
     var loaded by remember { mutableStateOf(jobId == null) }
     var existingJob by remember { mutableStateOf<Job?>(null) }
     val appointmentTimes = remember { mutableStateListOf(defaultAppointmentTime()) }
+    var serviceTypeTouched by remember { mutableStateOf(false) }
+    var priorityTouched by remember { mutableStateOf(false) }
+    var manualKeys by remember { mutableStateOf(setOf<String>()) }
+    var importQuote by remember { mutableStateOf("") }
+    var importMatches by remember { mutableStateOf(listOf<Customer>()) }
+    var importChoice by remember { mutableStateOf(ImportCustomerChoice.UNDECIDED) }
+    var lastParsed by remember { mutableStateOf(TextMessageImport.Fields()) }
+    var customerReady by remember(jobId) { mutableStateOf(false) }
+    val importGate = remember { ImportGate() }
+    val pendingShare by TextShareInbox.pending.collectAsState()
+
+    SideEffect {
+        importGate.title = title
+        importGate.description = description
+        importGate.notes = notes
+        importGate.species = confirmedSpecies
+        importGate.serviceType = selectedType
+        importGate.serviceTouched = serviceTypeTouched
+        importGate.priority = selectedPriority
+        importGate.priorityTouched = priorityTouched
+        importGate.customer = customerDraft
+        importGate.manual = manualKeys
+    }
+
+    fun applyIncoming(incoming: TextMessageImport.Fields) {
+        lastParsed = TextMessageImport.fillEmpty(lastParsed, incoming)
+        val next = TextMessageImport.applyToJob(importGate.snapshot(), incoming)
+        title = next.title
+        description = next.description
+        notes = next.notes
+        confirmedSpecies = next.species
+        if (!importGate.serviceTouched && next.serviceType.isNotBlank()) {
+            selectedType = next.serviceType
+        }
+        if (!importGate.priorityTouched) {
+            selectedPriority = next.priority
+        }
+        val linked = importChoice == ImportCustomerChoice.USE_EXISTING ||
+            importGate.customer.customerId.isNotBlank()
+        if (!linked) workspaceViewModel.updateDraft(next.customer)
+    }
+
+    suspend fun refreshImportMatches() {
+        if (importChoice != ImportCustomerChoice.UNDECIDED) return
+        importMatches = textImportViewModel.matches(lastParsed)
+    }
+
+    val importScope = rememberCoroutineScope()
 
     // Load job once when editing so party-entered jobs can be revised later.
     LaunchedEffect(jobId) {
@@ -108,7 +161,20 @@ fun JobFormScreen(
     }
 
     LaunchedEffect(loaded, existingJob?.id) {
-        if (loaded) workspaceViewModel.loadForJob(existingJob)
+        if (!loaded) return@LaunchedEffect
+        workspaceViewModel.replaceDraft(existingJob)
+        customerReady = true
+    }
+
+    LaunchedEffect(customerReady, pendingShare?.id) {
+        val share = pendingShare ?: return@LaunchedEffect
+        if (!customerReady || !jobId.isNullOrBlank()) return@LaunchedEffect
+        TextShareInbox.consume(share.id)
+        importQuote = share.body
+        applyIncoming(TextMessageImport.parse(share.body, share.senderPhone))
+        refreshImportMatches()
+        applyIncoming(textImportViewModel.refine(share.body, share.senderPhone))
+        refreshImportMatches()
     }
 
     Scaffold(
@@ -183,9 +249,50 @@ fun JobFormScreen(
                 color = TextSecondary
             )
 
+            if (importQuote.isNotBlank()) {
+                TextImportReviewBanner(importQuote)
+            }
+            PasteFromTextButton(onApply = { fields ->
+                importQuote = fields.sourceText.ifBlank { importQuote }
+                importScope.launch {
+                    applyIncoming(fields)
+                    refreshImportMatches()
+                    val source = fields.sourceText
+                    if (source.isNotBlank()) {
+                        applyIncoming(textImportViewModel.refine(source, null))
+                        refreshImportMatches()
+                    }
+                }
+            })
+            if (importMatches.isNotEmpty() || importChoice != ImportCustomerChoice.UNDECIDED) {
+                ExistingCustomerChoiceCard(
+                    matches = importMatches,
+                    choice = importChoice,
+                    onUseExisting = { customer ->
+                        importChoice = ImportCustomerChoice.USE_EXISTING
+                        workspaceViewModel.applyCustomer(customer)
+                    },
+                    onCreateNew = {
+                        importChoice = ImportCustomerChoice.CREATE_NEW
+                        val restored = TextMessageImport.applyToJob(
+                            importGate.snapshot().copy(
+                                customer = JobCustomerDraft(),
+                                linked = false
+                            ),
+                            lastParsed
+                        )
+                        workspaceViewModel.startNewCustomer()
+                        workspaceViewModel.updateDraft(restored.customer)
+                    }
+                )
+            }
+
             OutlinedTextField(
                 value = title,
-                onValueChange = { title = it },
+                onValueChange = {
+                    title = it
+                    manualKeys = TextMessageImport.markEdited(manualKeys, TextMessageImport.TITLE)
+                },
                 label = { Text("Job Title *") },
                 leadingIcon = { Icon(Icons.Default.Work, contentDescription = null, tint = TextSecondary) },
                 colors = fieldColors(),
@@ -215,7 +322,13 @@ fun JobFormScreen(
 
             JobCustomerSection(
                 draft = customerDraft,
-                onDraftChange = workspaceViewModel::updateDraft,
+                onDraftChange = { next ->
+                    manualKeys = TextMessageImport.markCustomerEdits(manualKeys, customerDraft, next)
+                    if (next.customerId.isBlank() && importChoice == ImportCustomerChoice.USE_EXISTING) {
+                        importChoice = ImportCustomerChoice.CREATE_NEW
+                    }
+                    workspaceViewModel.updateDraft(next)
+                },
                 searchQuery = customerQuery,
                 onSearchQueryChange = workspaceViewModel::searchCustomers,
                 matches = customerMatches,
@@ -250,6 +363,7 @@ fun JobFormScreen(
                                 text = { Text(type, color = TextPrimary) },
                                 onClick = {
                                     selectedType = type
+                                    serviceTypeTouched = true
                                     showTypeDropdown = false
                                 }
                             )
@@ -299,6 +413,7 @@ fun JobFormScreen(
                                 text = { Text(priority.name, color = TextPrimary) },
                                 onClick = {
                                     selectedPriority = priority
+                                    priorityTouched = true
                                     showPriorityDropdown = false
                                 }
                             )
@@ -355,7 +470,10 @@ fun JobFormScreen(
 
             OutlinedTextField(
                 value = description,
-                onValueChange = { description = it },
+                onValueChange = {
+                    description = it
+                    manualKeys = TextMessageImport.markEdited(manualKeys, TextMessageImport.PROBLEM)
+                },
                 label = { Text("Problem") },
                 supportingText = { Text("What the customer called about. Type it — AI is optional.", color = TextTertiary) },
                 colors = fieldColors(),
@@ -369,7 +487,10 @@ fun JobFormScreen(
 
             OutlinedTextField(
                 value = confirmedSpecies,
-                onValueChange = { confirmedSpecies = it },
+                onValueChange = {
+                    confirmedSpecies = it
+                    manualKeys = TextMessageImport.markEdited(manualKeys, TextMessageImport.ANIMAL)
+                },
                 label = { Text("Confirmed species") },
                 supportingText = { Text("Type the animal you confirmed. Safety notes use this.", color = TextTertiary) },
                 colors = fieldColors(),
@@ -431,7 +552,10 @@ fun JobFormScreen(
 
             OutlinedTextField(
                 value = notes,
-                onValueChange = { notes = it },
+                onValueChange = {
+                    notes = it
+                    manualKeys = TextMessageImport.markEdited(manualKeys, TextMessageImport.JOB_NOTES)
+                },
                 label = { Text("Notes") },
                 colors = fieldColors(),
                 modifier = Modifier
