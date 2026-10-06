@@ -96,6 +96,8 @@ jobs:
           echo "APK has no client-side xAI key or endpoint"
 
       - name: Unit tests
+        # Release gate: the APK publish steps below run only when this step passed.
+        id: unit_tests
         run: |
           set -o pipefail
           export GRADLE_OPTS="-Xmx6g -XX:MaxMetaspaceSize=512m -XX:+UseG1GC"
@@ -149,7 +151,7 @@ jobs:
           retention-days: 14
 
       - name: Set release tag from branch
-        if: success() && github.event_name == 'push' && env.HAS_CI_DEBUG_KEYSTORE == 'true'
+        if: success() && steps.unit_tests.outcome == 'success' && github.event_name == 'push' && env.HAS_CI_DEBUG_KEYSTORE == 'true'
         id: apk_tag
         run: |
           RAW="${GITHUB_REF_NAME}"
@@ -188,7 +190,7 @@ jobs:
           echo "Publishing release tag: $TAG"
 
       - name: Write main-channel update.json
-        if: success() && github.event_name == 'push' && env.HAS_CI_DEBUG_KEYSTORE == 'true' && (github.ref_name == 'main' || github.ref_name == 'master')
+        if: success() && steps.unit_tests.outcome == 'success' && github.event_name == 'push' && env.HAS_CI_DEBUG_KEYSTORE == 'true' && (github.ref_name == 'main' || github.ref_name == 'master')
         env:
           BODY_PATH: ${{ steps.apk_tag.outputs.body_path }}
         run: |
@@ -283,7 +285,7 @@ jobs:
           echo "Wrote app/build/outputs/update/update.json versionCode=${VERSION_CODE} versionName=${VERSION_NAME}"
 
       - name: Publish APK on Releases (easy download)
-        if: success() && github.event_name == 'push' && env.HAS_CI_DEBUG_KEYSTORE == 'true'
+        if: success() && steps.unit_tests.outcome == 'success' && github.event_name == 'push' && env.HAS_CI_DEBUG_KEYSTORE == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.apk_tag.outputs.tag }}
@@ -294,7 +296,7 @@ jobs:
           make_latest: false
 
       - name: Remove stale debug zip from debug-latest
-        if: success() && github.event_name == 'push' && env.HAS_CI_DEBUG_KEYSTORE == 'true' && (github.ref_name == 'main' || github.ref_name == 'master')
+        if: success() && steps.unit_tests.outcome == 'success' && github.event_name == 'push' && env.HAS_CI_DEBUG_KEYSTORE == 'true' && (github.ref_name == 'main' || github.ref_name == 'master')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

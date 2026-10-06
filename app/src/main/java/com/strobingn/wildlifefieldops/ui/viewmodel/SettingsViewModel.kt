@@ -125,6 +125,15 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     val lastSyncAt: StateFlow<Long?> = settings.map { it[LAST_SYNC_AT] }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val lastSyncSuccessAt: StateFlow<Long?> = settings.map { prefs ->
+        prefs[LAST_SYNC_SUCCESS_AT] ?: prefs[LAST_SYNC_AT]?.takeIf { prefs[LAST_SYNC_OK] == true }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val lastSyncErrorAt: StateFlow<Long?> = settings.map { prefs ->
+        prefs[LAST_SYNC_ERROR_AT] ?: prefs[LAST_SYNC_AT]?.takeIf { prefs[LAST_SYNC_OK] == false }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val lastSyncError: StateFlow<String?> = settings.map { prefs ->
+        prefs[LAST_SYNC_ERROR] ?: prefs[LAST_SYNC_MESSAGE]?.takeIf { prefs[LAST_SYNC_OK] == false }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val themePreference = settings.map {
         ThemePreference.fromPersisted(it[THEME_MODE], it[DARK_THEME])

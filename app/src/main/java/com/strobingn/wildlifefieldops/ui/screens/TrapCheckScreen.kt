@@ -112,7 +112,12 @@ fun TrapCheckScreen(
         }
     }
     var editing by remember { mutableStateOf<TrapLog?>(null) }
+    var checking by remember { mutableStateOf<TrapLog?>(null) }
+    var pulling by remember { mutableStateOf<TrapLog?>(null) }
     var showTodayOnly by remember { mutableStateOf(true) }
+    val decOffer by viewModel.decOffer.collectAsState()
+    val reminderSettings by viewModel.reminderSettings.collectAsState()
+    val now = rememberMinuteTicker()
 
     LaunchedEffect(Unit) { weatherVm.loadShopWeather() }
     LaunchedEffect(message) {
@@ -222,8 +227,12 @@ fun TrapCheckScreen(
             items(list, key = { it.trap.id }) { item ->
                 TrapCheckCard(
                     item = item,
+                    now = now,
+                    defaultIntervalHours = reminderSettings.defaultIntervalHours,
                     onOpenJob = { if (item.trap.jobId.isNotBlank()) onNavigateToJobDetail(item.trap.jobId) },
-                    onLog = { editing = item.trap }
+                    onLog = { editing = item.trap },
+                    onChecked = { checking = item.trap },
+                    onPulled = { pulling = item.trap }
                 )
             }
             item { Spacer(Modifier.height(72.dp)) }
@@ -256,6 +265,33 @@ fun TrapCheckScreen(
             }
         )
     }
+    checking?.let { trap ->
+        TrapCheckedDialog(
+            trap = trap,
+            onDismiss = { checking = null },
+            onSave = { outcome, species, count, note ->
+                viewModel.markChecked(trap, outcome, species, count, note)
+                checking = null
+            }
+        )
+    }
+    pulling?.let { trap ->
+        TrapPulledDialog(
+            trap = trap,
+            onDismiss = { pulling = null },
+            onConfirm = {
+                viewModel.markPulled(trap)
+                pulling = null
+            }
+        )
+    }
+    decOffer?.let { trap ->
+        DecLogOfferDialog(
+            trap = trap,
+            onDismiss = { viewModel.dismissDecOffer() },
+            onAdd = { viewModel.addDecEntryFromCatch(trap) { onOpenNwcoLog() } }
+        )
+    }
 }
 
 @Composable
@@ -272,6 +308,8 @@ fun WeatherAdviceCard(
     var manual by remember(savedAdvice) { mutableStateOf(adviceManual || savedAdvice.isNotBlank()) }
     var preview by remember { mutableStateOf<String?>(null) }
     var pendingReplace by remember { mutableStateOf<String?>(null) }
+    val aiLog = com.strobingn.wildlifefieldops.ai.accuracy.AiAccuracyLog.get(LocalContext.current)
+    val aiSession = remember(savedAdvice) { com.strobingn.wildlifefieldops.ai.accuracy.AiAccuracyLog.newSession("advice") }
     Card(
         colors = CardDefaults.cardColors(containerColor = BackgroundCard),
         shape = RoundedCornerShape(12.dp),
@@ -308,6 +346,7 @@ fun WeatherAdviceCard(
                     if (suggestion.isBlank()) return@OutlinedButton
                     if (edited.isBlank()) {
                         edited = suggestion
+                        aiLog.recordFill("Suggest", aiSession, "Weather advice", suggestion)
                         preview = null
                     } else {
                         preview = com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins.preview(
@@ -319,7 +358,10 @@ fun WeatherAdviceCard(
                     }
                 }) { Text("Suggest") }
                 Button(
-                    onClick = { onAccept(edited.trim()) },
+                    onClick = {
+                        aiLog.recordSaved(aiSession, mapOf("Weather advice" to edited.trim()))
+                        onAccept(edited.trim())
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
                 ) { Text("Save advice") }
             }
@@ -352,60 +394,6 @@ fun WeatherAdviceCard(
     }
 }
 
-@Composable
-private fun TrapCheckCard(
-    item: TrapCheckItem,
-    onOpenJob: () -> Unit,
-    onLog: () -> Unit
-) {
-    val fmt = remember { SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()) }
-    val dueColor = when (item.dueState) {
-        TrapDueState.OVERDUE -> StatusUrgent
-        TrapDueState.DUE_TODAY -> PrimaryGreen
-        else -> TextTertiary
-    }
-    Card(
-        colors = CardDefaults.cardColors(containerColor = BackgroundCard),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.PestControl, contentDescription = null, tint = PrimaryGreen, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.size(8.dp))
-                Text(
-                    item.trap.trapId.ifBlank { "Trap" } + " · " + item.trap.status.name.replace('_', ' '),
-                    color = TextPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckPlanner.dueLabel(item.dueState),
-                    color = dueColor,
-                    style = MaterialTheme.typography.labelSmall
-                )
-            }
-            if (item.jobTitle.isNotBlank()) Text(item.jobTitle, color = TextSecondary)
-            if (item.trap.trapLocation.isNotBlank()) Text(item.trap.trapLocation, color = TextTertiary, style = MaterialTheme.typography.bodySmall)
-            item.trap.nextCheckDate?.let {
-                Text("Next check ${fmt.format(Date(it))}", color = dueColor, style = MaterialTheme.typography.labelSmall)
-            }
-            if (item.trap.catchType != CatchType.NONE) {
-                Text("Catch: ${item.trap.catchType.name} ×${item.trap.catchCount}", color = TextSecondary)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = onLog,
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
-                ) { Text("Log check") }
-                TextButton(onClick = onOpenJob, enabled = item.trap.jobId.isNotBlank()) {
-                    Text("Open job", color = PrimaryGreen)
-                }
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrapEditorDialog(
@@ -433,6 +421,7 @@ fun TrapEditorDialog(
     var checkDateText by remember { mutableStateOf(prefill.checkDay) }
     var nextCheckText by remember { mutableStateOf(prefill.nextCheckDay) }
     var dateError by remember { mutableStateOf<String?>(null) }
+    var intervalText by remember { mutableStateOf(initial?.checkIntervalHours?.toString().orEmpty()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -469,6 +458,17 @@ fun TrapEditorDialog(
                     onValueChange = { nextCheckText = it; dateError = null },
                     label = { Text("Next check (yyyy-MM-dd)") },
                     supportingText = { Text("Starts at the next check for this status. Clear it for no next check.", color = TextTertiary) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = fieldColors()
+                )
+                OutlinedTextField(
+                    value = intervalText,
+                    onValueChange = { intervalText = it.filter { ch -> ch.isDigit() }.take(3) },
+                    label = { Text("Check every (hours)") },
+                    supportingText = { Text("Blank uses the default in Settings (24 hours unless you changed it).", color = TextTertiary) },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                    ),
                     modifier = Modifier.fillMaxWidth(),
                     colors = fieldColors()
                 )
@@ -510,6 +510,7 @@ fun TrapEditorDialog(
                         longitude = lng.toDoubleOrNull(),
                         checkDate = check.millis ?: 0L,
                         nextCheckDate = nextCheck.millis,
+                        checkIntervalHours = intervalText.toIntOrNull()?.takeIf { it > 0 },
                         updatedAt = now,
                         isSynced = false
                     )
@@ -531,7 +532,7 @@ fun TrapEditorDialog(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun <T : Enum<T>> EnumPicker(label: String, values: List<T>, selected: T, onSelect: (T) -> Unit) {
+internal fun <T : Enum<T>> EnumPicker(label: String, values: List<T>, selected: T, onSelect: (T) -> Unit) {
     var open by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
         OutlinedTextField(

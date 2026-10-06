@@ -57,7 +57,9 @@ data class DashboardPreview(
     val isLoading: Boolean = false,
     val weatherAlerts: List<com.strobingn.wildlifefieldops.weather.WeatherAlert> = emptyList(),
     val weatherAlertsFetchedAt: Long? = null,
-    val weatherAlertsExpanded: Boolean = false
+    val weatherAlertsExpanded: Boolean = false,
+    /** Fixed clock for previews and screenshots; null uses the live clock. */
+    val nowMillis: Long? = null
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -78,6 +80,7 @@ fun DashboardScreen(
     onNavigateToTodayRoute: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
     onSeeAllOpenJobs: () -> Unit = {},
+    onNavigateToSyncStatus: () -> Unit = {},
     preview: DashboardPreview? = null
 ) {
     if (preview != null) {
@@ -99,7 +102,8 @@ fun DashboardScreen(
             onNavigateToDictate = onNavigateToDictate,
             onNavigateToTodayRoute = onNavigateToTodayRoute,
             onOpenDrawer = onOpenDrawer,
-            onSeeAllOpenJobs = onSeeAllOpenJobs
+            onSeeAllOpenJobs = onSeeAllOpenJobs,
+            onNavigateToSyncStatus = onNavigateToSyncStatus
         )
         return
     }
@@ -180,7 +184,8 @@ fun DashboardScreen(
         onNavigateToDictate = onNavigateToDictate,
         onNavigateToTodayRoute = onNavigateToTodayRoute,
         onOpenDrawer = onOpenDrawer,
-        onSeeAllOpenJobs = onSeeAllOpenJobs
+        onSeeAllOpenJobs = onSeeAllOpenJobs,
+        onNavigateToSyncStatus = onNavigateToSyncStatus
     )
 }
 
@@ -204,7 +209,8 @@ private fun HomeDashboard(
     onNavigateToDictate: () -> Unit,
     onNavigateToTodayRoute: () -> Unit,
     onOpenDrawer: () -> Unit,
-    onSeeAllOpenJobs: () -> Unit
+    onSeeAllOpenJobs: () -> Unit,
+    onNavigateToSyncStatus: () -> Unit = {}
 ) {
     val stats = preview.stats
     val todayOnSchedule = preview.todayOnSchedule
@@ -283,7 +289,8 @@ private fun HomeDashboard(
                     todayLabel = todayLabel,
                     onOpenDrawer = onOpenDrawer,
                     onOpenAssistant = onNavigateToAI,
-                    onOpenSettings = onNavigateToSettings
+                    onOpenSettings = onNavigateToSettings,
+                    onOpenSyncStatus = onNavigateToSyncStatus
                 )
             }
             item(key = "create-bar") {
@@ -389,6 +396,15 @@ private fun HomeDashboard(
                         job = job,
                         onClick = { onNavigateToJobDetail(job.id) },
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            }
+            if (preview.dueTrapChecks.isNotEmpty()) {
+                item(key = "trap-checks") {
+                    HomeTrapChecksCard(
+                        items = preview.dueTrapChecks,
+                        now = rememberMinuteTicker(preview.nowMillis),
+                        onOpen = onNavigateToTrapChecks
                     )
                 }
             }

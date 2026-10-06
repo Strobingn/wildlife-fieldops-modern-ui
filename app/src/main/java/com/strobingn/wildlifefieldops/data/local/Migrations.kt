@@ -210,7 +210,17 @@ object Migrations {
         }
     }
 
-    /** Ordered 3→14. Restored backups may be older than VERSION 14; Room must migrate, never wipe. */
+    /**
+     * MIGRATION_14_15 adds a nullable per-trap check interval (hours) on trap_logs.
+     * Null means "use the Settings default", so existing traps keep 24-hour checks.
+     */
+    val MIGRATION_14_15 = object : Migration(14, 15) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE trap_logs ADD COLUMN checkIntervalHours INTEGER")
+        }
+    }
+
+    /** Ordered 3→15. Restored backups may be older than VERSION 15; Room must migrate, never wipe. */
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_3_4,
         MIGRATION_4_5,
@@ -223,5 +233,6 @@ object Migrations {
         MIGRATION_11_12,
         MIGRATION_12_13,
         MIGRATION_13_14,
+        MIGRATION_14_15,
     )
 }

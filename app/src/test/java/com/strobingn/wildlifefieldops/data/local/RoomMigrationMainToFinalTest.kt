@@ -18,7 +18,7 @@ class RoomMigrationMainToFinalTest {
 
     @Test
     fun mainV12MigratesToFinalV13WithoutDroppingRows() {
-        assertEquals(14, AppDatabase.VERSION)
+        assertEquals(15, AppDatabase.VERSION)
         val step = Migrations.MIGRATION_12_13
         assertEquals(12, step.startVersion)
         assertEquals(13, step.endVersion)
@@ -70,14 +70,14 @@ class RoomMigrationMainToFinalTest {
     }
 
     @Test
-    fun migrationsAreSequentialFrom3ToFinal14() {
+    fun migrationsAreSequentialFrom3ToFinal15() {
         var expected = 3
         Migrations.ALL.forEach { migration: Migration ->
             assertEquals(expected, migration.startVersion)
             assertEquals(expected + 1, migration.endVersion)
             expected = migration.endVersion
         }
-        assertEquals(14, expected)
+        assertEquals(15, expected)
     }
 
     private fun columns(conn: Connection, table: String): Set<String> =

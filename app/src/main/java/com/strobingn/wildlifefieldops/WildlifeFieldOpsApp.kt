@@ -22,6 +22,7 @@ class WildlifeFieldOpsApp : Application(), Configuration.Provider {
     @Inject lateinit var appUpdateCoordinator: AppUpdateCoordinator
     @Inject lateinit var appUpdateScheduler: AppUpdateScheduler
     @Inject lateinit var weatherAlertScheduler: WeatherAlertScheduler
+    @Inject lateinit var trapReminderScheduler: com.strobingn.wildlifefieldops.trapreminders.TrapReminderScheduler
 
     override fun onCreate() {
         // Restore a staged SAF backup before Hilt opens Room.
@@ -52,6 +53,8 @@ class WildlifeFieldOpsApp : Application(), Configuration.Provider {
             .onFailure { Log.e("WildlifeFieldOps", "App-update periodic check failed to enqueue", it) }
         runCatching { weatherAlertScheduler.enqueuePeriodic() }
             .onFailure { Log.e("WildlifeFieldOps", "Weather alert check failed to enqueue", it) }
+        runCatching { trapReminderScheduler.enqueuePeriodic() }
+            .onFailure { Log.e("WildlifeFieldOps", "Trap check reminders failed to enqueue", it) }
         registerActivityLifecycleCallbacks(
             ForegroundAutoSyncCallbacks {
                 autoSync.onForeground()

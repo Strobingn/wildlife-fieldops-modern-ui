@@ -39,6 +39,8 @@ data class TrapLog(
     val disposition: String = "",
     /** Take method (live cage, one-way, hand catch, …). */
     val method: String = "",
+    /** Hours between checks for this trap. Null uses the Settings default (24 hours). */
+    val checkIntervalHours: Int? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val isSynced: Boolean = false

@@ -69,6 +69,7 @@ object FieldNav {
         dest(Screen.Inventory, "Field", "Materials on the truck"),
         dest(Screen.AIOperations, "AI", "AI command center"),
         dest(Screen.AIAssistant, "AI", "Ask the assistant"),
+        dest(Screen.AiAccuracy, "AI", "Which filled fields you change most"),
         dest(
             Screen.Settings,
             "App",
@@ -76,7 +77,8 @@ object FieldNav {
             label = "Backup & restore",
             settingsFocus = "backup"
         ),
-        dest(Screen.Settings, "App", "Theme, sync, company, license, and updates")
+        dest(Screen.Settings, "App", "Theme, sync, company, license, and updates"),
+        dest(Screen.SyncStatus, "App", "Last sync, last error, and what is waiting to upload")
     )
 
     /** Every NavHost destination, including the new More tab. */
@@ -115,7 +117,9 @@ object FieldNav {
         Screen.TodayRoute,
         Screen.CountyReports,
         Screen.Estimate,
-        Screen.More
+        Screen.More,
+        Screen.SyncStatus,
+        Screen.AiAccuracy
     )
 
     /**
@@ -195,6 +199,8 @@ object FieldNav {
         Screen.TodayRoute -> "More → Today's route"
         Screen.CountyReports -> "More → County Reports"
         Screen.Estimate -> "Jobs → a job → Estimate"
+        Screen.SyncStatus -> "More → Sync status"
+        Screen.AiAccuracy -> "More → AI accuracy"
         else -> error("No path for ${screen.route}")
     }
 

@@ -31,8 +31,80 @@ import javax.inject.Inject
 class TrapCheckViewModel @Inject constructor(
     private val trapLogDao: TrapLogDao,
     private val jobDao: JobDao,
-    private val trapFieldOpsStore: TrapFieldOpsStore
+    private val trapFieldOpsStore: TrapFieldOpsStore,
+    private val reminderSettingsStore: com.strobingn.wildlifefieldops.trapreminders.TrapReminderSettingsStore,
+    private val reminderScheduler: com.strobingn.wildlifefieldops.trapreminders.TrapReminderScheduler,
+    private val decNwcoLogStore: com.strobingn.wildlifefieldops.ai.fieldops.DecNwcoLogStore
 ) : ViewModel() {
+
+    val reminderSettings: StateFlow<com.strobingn.wildlifefieldops.trapreminders.TrapReminderSettings> =
+        reminderSettingsStore.settings
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                com.strobingn.wildlifefieldops.trapreminders.TrapReminderSettings()
+            )
+
+    /** Set after a check that recorded a caught animal; the screen offers a DEC log entry. */
+    private val _decOffer = MutableStateFlow<TrapLog?>(null)
+    val decOffer: StateFlow<TrapLog?> = _decOffer
+
+    private suspend fun intervalFor(trap: TrapLog): Int =
+        com.strobingn.wildlifefieldops.ai.fieldops.TrapReminders.intervalHours(
+            trap,
+            reminderSettingsStore.current().defaultIntervalHours
+        )
+
+    /** Big Checked button: records the time, the optional note, and the next due time. */
+    fun markChecked(
+        trap: TrapLog,
+        outcome: com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckOutcome,
+        species: CatchType,
+        count: Int,
+        note: String
+    ) = viewModelScope.launch {
+        val now = System.currentTimeMillis()
+        val updated = com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckRecorder.checked(
+            trap = trap,
+            outcome = outcome,
+            species = species,
+            count = count,
+            note = note,
+            now = now,
+            intervalHours = intervalFor(trap)
+        )
+        trapFieldOpsStore.saveTrap(updated)
+        reminderScheduler.checkSoon()
+        val next = com.strobingn.wildlifefieldops.ai.fieldops.TrapReminders.dueText(updated.nextCheckDate, now)
+        _message.value = "Checked. Next check: ${next.removePrefix("Due ")}."
+        if (com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckRecorder.offersDecEntry(outcome)) {
+            _decOffer.value = updated
+        }
+    }
+
+    fun markPulled(trap: TrapLog) = viewModelScope.launch {
+        trapFieldOpsStore.saveTrap(
+            com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckRecorder.pulled(trap, System.currentTimeMillis())
+        )
+        reminderScheduler.checkSoon()
+        _message.value = "Trap pulled. No more reminders for it."
+    }
+
+    fun dismissDecOffer() {
+        _decOffer.value = null
+    }
+
+    /** Only runs on Sir's tap. Never creates a DEC entry on its own. */
+    fun addDecEntryFromCatch(trap: TrapLog, onDone: () -> Unit) = viewModelScope.launch {
+        _decOffer.value = null
+        val added = decNwcoLogStore.addCatchEntry(trap)
+        _message.value = if (added) {
+            "New DEC log entry added. Only its empty cells were filled."
+        } else {
+            "This catch is already on the DEC log."
+        }
+        onDone()
+    }
 
     val jobs: StateFlow<List<Job>> = jobDao.getAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -70,11 +142,13 @@ class TrapCheckViewModel @Inject constructor(
 
     fun saveTrap(trap: TrapLog) = viewModelScope.launch {
         trapFieldOpsStore.saveTrap(trap)
+        reminderScheduler.checkSoon()
         _message.value = "Trap saved — pending cloud sync on the job."
     }
 
     fun deleteTrap(trap: TrapLog) = viewModelScope.launch {
         trapFieldOpsStore.deleteTrap(trap)
+        reminderScheduler.checkSoon()
         _message.value = "Trap removed."
     }
 
@@ -105,6 +179,7 @@ class TrapCheckViewModel @Inject constructor(
                 updatedAt = now
             )
         )
+        reminderScheduler.checkSoon()
         _message.value = "Check logged."
     }
 

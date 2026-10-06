@@ -209,14 +209,18 @@ fun JobBatch2Section(
                     style = MaterialTheme.typography.labelSmall
                 )
             }
+            val followAiLog = com.strobingn.wildlifefieldops.ai.accuracy.AiAccuracyLog.get(androidx.compose.ui.platform.LocalContext.current)
+            val followAiSession = androidx.compose.runtime.remember(job.id) { com.strobingn.wildlifefieldops.ai.accuracy.AiAccuracyLog.newSession("followup") }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
                     val draft = trapVm.suggestFollowUp(job)
                     val notesBefore = followNotes
+                    val beforeMap = followUpFieldMap(followKind, followNotes, followDueText)
                     val filled = FollowUpPlanner.fillBlanks(followKind, followNotes, followDueText, draft, FieldDate::formatDay)
                     followKind = filled.first
                     followNotes = filled.second
                     followDueText = filled.third
+                    followAiLog.recordFills("Suggest", followAiSession, beforeMap, followUpFieldMap(followKind, followNotes, followDueText))
                     followDateError = null
                     followNotesPreview = if (notesBefore.isBlank()) {
                         null
@@ -235,6 +239,10 @@ fun JobBatch2Section(
                             return@Button
                         }
                         followDateError = null
+                        followAiLog.recordSaved(
+                            followAiSession,
+                            followUpFieldMap(followKind, followNotes.trim(), followDueText.trim())
+                        )
                         trapVm.createFollowUp(job, followKind, due.millis, followNotes.trim())
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
@@ -281,3 +289,13 @@ fun JobBatch2Section(
         )
     }
 }
+
+private fun followUpFieldMap(
+    kind: com.strobingn.wildlifefieldops.ai.fieldops.FollowUpKind?,
+    notes: String,
+    due: String
+): Map<String, String> = mapOf(
+    "Follow-up type" to (kind?.let { FollowUpPlanner.label(it) } ?: ""),
+    "Follow-up notes" to notes,
+    "Follow-up date" to due
+)

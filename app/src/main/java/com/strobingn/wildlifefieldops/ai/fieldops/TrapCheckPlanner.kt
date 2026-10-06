@@ -5,7 +5,8 @@ import com.strobingn.wildlifefieldops.data.model.TrapStatus
 import java.util.Calendar
 
 enum class TrapDueState {
-    OVERDUE,
+    /** Due before today. Shown as "Due now". */
+    DUE_NOW,
     DUE_TODAY,
     UPCOMING,
     UNSET
@@ -34,7 +35,7 @@ object TrapCheckPlanner {
 
     /** Operator-facing label. The stored due state is unchanged. */
     fun dueLabel(state: TrapDueState): String = when (state) {
-        TrapDueState.OVERDUE -> "Past check"
+        TrapDueState.DUE_NOW -> "Due now"
         TrapDueState.DUE_TODAY -> "Due today"
         TrapDueState.UPCOMING -> "Upcoming"
         TrapDueState.UNSET -> "No date"
@@ -45,7 +46,7 @@ object TrapCheckPlanner {
         val start = dayStart(now)
         val end = start + DAY_MS
         return when {
-            nextCheckDate < start -> TrapDueState.OVERDUE
+            nextCheckDate < start -> TrapDueState.DUE_NOW
             nextCheckDate < end -> TrapDueState.DUE_TODAY
             else -> TrapDueState.UPCOMING
         }
@@ -55,15 +56,15 @@ object TrapCheckPlanner {
         status != TrapStatus.REMOVED && status != TrapStatus.DISABLED
 
     /**
-     * Today's board: overdue first, then due today. Removed/disabled traps stay off the list.
+     * Today's board: due now first, then due today. Removed/disabled traps stay off the list.
      */
     fun todaysList(traps: List<TrapLog>, now: Long = System.currentTimeMillis()): List<TrapCheckItem> {
         return traps
             .filter { isActive(it.status) }
             .map { TrapCheckItem(it, dueState(it.nextCheckDate, now)) }
-            .filter { it.dueState == TrapDueState.OVERDUE || it.dueState == TrapDueState.DUE_TODAY }
+            .filter { it.dueState == TrapDueState.DUE_NOW || it.dueState == TrapDueState.DUE_TODAY }
             .sortedWith(
-                compareBy<TrapCheckItem> { if (it.dueState == TrapDueState.OVERDUE) 0 else 1 }
+                compareBy<TrapCheckItem> { if (it.dueState == TrapDueState.DUE_NOW) 0 else 1 }
                     .thenBy { it.trap.nextCheckDate ?: Long.MAX_VALUE }
             )
     }

@@ -262,6 +262,7 @@ fun TrapLog.toSynced(): SyncedTrapRecord = SyncedTrapRecord(
     temperature = temperature,
     disposition = disposition,
     method = method,
+    checkIntervalHours = checkIntervalHours,
     createdAt = createdAt,
     updatedAt = updatedAt
 )
@@ -287,6 +288,7 @@ fun SyncedTrapRecord.toTrapLog(): TrapLog = TrapLog(
     temperature = temperature,
     disposition = disposition,
     method = method,
+    checkIntervalHours = checkIntervalHours,
     createdAt = createdAt,
     updatedAt = updatedAt,
     isSynced = false

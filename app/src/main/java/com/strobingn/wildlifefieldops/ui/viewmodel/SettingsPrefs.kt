@@ -17,6 +17,10 @@ val Context.settingsDataStore by preferencesDataStore(name = "settings")
 val LAST_SYNC_MESSAGE = stringPreferencesKey("last_sync_message")
 val LAST_SYNC_OK = booleanPreferencesKey("last_sync_ok")
 val LAST_SYNC_AT = longPreferencesKey("last_sync_at")
+/** Sync status screen only. Written next to the keys above; sync itself never reads them. */
+val LAST_SYNC_SUCCESS_AT = longPreferencesKey("last_sync_success_at")
+val LAST_SYNC_ERROR_AT = longPreferencesKey("last_sync_error_at")
+val LAST_SYNC_ERROR = stringPreferencesKey("last_sync_error")
 
 @Singleton
 class ShopSettings @Inject constructor(

@@ -82,6 +82,9 @@ fun JobFormScreen(
     var lastParsed by remember { mutableStateOf(TextMessageImport.Fields()) }
     var customerReady by remember(jobId) { mutableStateOf(false) }
     val importGate = remember { ImportGate() }
+    // AI accuracy log: observe only. Fill rules stay in TextMessageImport.applyToJob.
+    val aiLog = com.strobingn.wildlifefieldops.ai.accuracy.AiAccuracyLog.get(androidx.compose.ui.platform.LocalContext.current)
+    val aiSession = remember { com.strobingn.wildlifefieldops.ai.accuracy.AiAccuracyLog.newSession("text-import") }
     val pendingShare by TextShareInbox.pending.collectAsState()
 
     SideEffect {
@@ -99,7 +102,19 @@ fun JobFormScreen(
 
     fun applyIncoming(incoming: TextMessageImport.Fields) {
         lastParsed = TextMessageImport.fillEmpty(lastParsed, incoming)
-        val next = TextMessageImport.applyToJob(importGate.snapshot(), incoming)
+        val before = importGate.snapshot()
+        val next = TextMessageImport.applyToJob(before, incoming)
+        val linkedBefore = importChoice == ImportCustomerChoice.USE_EXISTING ||
+            before.customer.customerId.isNotBlank()
+        aiLog.recordFills(
+            "Text import",
+            aiSession,
+            textImportFieldMap(before.title, before.description, before.notes, before.species, before.customer),
+            textImportFieldMap(
+                next.title, next.description, next.notes, next.species,
+                if (linkedBefore) before.customer else next.customer
+            )
+        )
         title = next.title
         description = next.description
         notes = next.notes
@@ -615,6 +630,11 @@ fun JobFormScreen(
                     }
                     val estVal = estimatedValue.toDoubleOrNull() ?: 0.0
                     val service = DefaultServiceTypes.display(selectedType)
+                    aiLog.recordSaved(
+                        aiSession,
+                        textImportFieldMap(title, description, notes, confirmedSpecies, customerDraft)
+                            .mapValues { it.value.trim() }
+                    )
                     workspaceViewModel.saveJob(
                         existingJob = existingJob,
                         title = title.trim(),
@@ -848,4 +868,24 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedLabelColor = TextTertiary,
     focusedContainerColor = BackgroundCard,
     unfocusedContainerColor = BackgroundCard
+)
+
+private fun textImportFieldMap(
+    title: String,
+    description: String,
+    notes: String,
+    species: String,
+    customer: com.strobingn.wildlifefieldops.data.model.JobCustomerDraft
+): Map<String, String> = mapOf(
+    "Job title" to title,
+    "Job description" to description,
+    "Job notes" to notes,
+    "Species" to species,
+    "Customer name" to customer.name,
+    "Phone" to customer.phone,
+    "Email" to customer.email,
+    "Street" to customer.address,
+    "City" to customer.city,
+    "State" to customer.state,
+    "ZIP" to customer.zipCode
 )

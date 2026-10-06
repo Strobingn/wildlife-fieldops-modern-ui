@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.*
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -170,7 +171,9 @@ fun WildlifeFieldOpsNavHost() {
                 Column {
                     AppUpdateBannerBar()
                     if (showsFloatingSync(currentRoute)) {
-                        AutoSyncStatusBar()
+                        AutoSyncStatusBar(
+                            onClick = { navController.navigate(Screen.SyncStatus.route) { launchSingleTop = true } }
+                        )
                     }
                     ModernBottomBar(
                         currentRoute = currentRoute ?: Screen.Dashboard.route,
@@ -217,6 +220,7 @@ private fun AppNavHost(
                 onNavigateToDictate = { navController.navigate(VoiceJobEntry.createRoute()) },
                 onNavigateToTodayRoute = { navController.navigate(Screen.TodayRoute.route) },
                 onOpenDrawer = onOpenMore,
+                onNavigateToSyncStatus = { navController.navigate(Screen.SyncStatus.route) { launchSingleTop = true } },
                 onSeeAllOpenJobs = {
                     navController.navigate(Screen.JobList.route) {
                         popUpTo(Screen.Dashboard.route) { inclusive = false; saveState = true }
@@ -438,7 +442,12 @@ private fun AppNavHost(
             val sync = rememberSyncSnapshot()
             MoreScreen(
                 onOpen = onOpenTool,
-                header = { MoreShellHeader(sync) },
+                header = {
+                    MoreShellHeader(
+                        sync,
+                        onOpenSyncStatus = { navController.navigate(Screen.SyncStatus.route) { launchSingleTop = true } }
+                    )
+                },
                 primaryActions = {
                     MoreShellActions(
                         onNewJob = { navController.navigate(ManualJobEntry.createRoute()) },
@@ -453,6 +462,12 @@ private fun AppNavHost(
                 onRoutes = { navController.navigate(Screen.RouteOptimizer.route) },
                 onReports = { navController.navigate(Screen.CountyReports.route) }
             )
+        }
+        composable(Screen.SyncStatus.route) {
+            SyncStatusScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Screen.AiAccuracy.route) {
+            AiAccuracyScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.Settings.route) { entry ->
             val focus by entry.savedStateHandle.getStateFlow("settingsFocus", "").collectAsState()
@@ -523,7 +538,7 @@ internal fun syncSnapshot(
 }
 
 @Composable
-internal fun SyncStatusLine(text: String, color: Color) {
+internal fun SyncStatusLine(text: String, color: Color, onClick: (() -> Unit)? = null) {
     Text(
         text = text,
         color = color,
@@ -531,6 +546,13 @@ internal fun SyncStatusLine(text: String, color: Color) {
         maxLines = 1,
         modifier = Modifier
             .fillMaxWidth()
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(onClickLabel = "Open sync status", onClick = onClick)
+                } else {
+                    Modifier
+                }
+            )
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .padding(horizontal = 12.dp, vertical = 4.dp)
     )
@@ -560,9 +582,9 @@ internal fun rememberSyncSnapshot(viewModel: SettingsViewModel = hiltViewModel()
 
 
 @Composable
-private fun AutoSyncStatusBar() {
+private fun AutoSyncStatusBar(onClick: (() -> Unit)? = null) {
     val snapshot = rememberSyncSnapshot()
-    SyncStatusLine(text = snapshot.label, color = snapshot.color)
+    SyncStatusLine(text = snapshot.label, color = snapshot.color, onClick = onClick)
 }
 
 @Composable
@@ -637,7 +659,8 @@ internal fun HomeShellHeader(
     todayLabel: String,
     onOpenDrawer: () -> Unit,
     onOpenAssistant: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenSyncStatus: () -> Unit = {}
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -692,7 +715,7 @@ internal fun HomeShellHeader(
                         modifier = Modifier.weight(1f)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    SyncStatusChip(label = sync.label, color = sync.color)
+                    SyncStatusChip(label = sync.label, color = sync.color, onClick = onOpenSyncStatus)
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -725,7 +748,7 @@ internal fun HomeShellHeader(
 }
 
 @Composable
-internal fun MoreShellHeader(sync: SyncSnapshot) {
+internal fun MoreShellHeader(sync: SyncSnapshot, onOpenSyncStatus: () -> Unit = {}) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = FieldShapes.hero,
@@ -765,7 +788,7 @@ internal fun MoreShellHeader(sync: SyncSnapshot) {
                         modifier = Modifier.weight(1f)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    SyncStatusChip(label = sync.label, color = sync.color)
+                    SyncStatusChip(label = sync.label, color = sync.color, onClick = onOpenSyncStatus)
                 }
             }
         }
@@ -773,8 +796,15 @@ internal fun MoreShellHeader(sync: SyncSnapshot) {
 }
 
 @Composable
-internal fun SyncStatusChip(label: String, color: Color) {
+internal fun SyncStatusChip(label: String, color: Color, onClick: (() -> Unit)? = null) {
     Surface(
+        modifier = if (onClick != null) {
+            Modifier
+                .clip(FieldShapes.chip)
+                .clickable(onClickLabel = "Open sync status", onClick = onClick)
+        } else {
+            Modifier
+        },
         shape = FieldShapes.chip,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)

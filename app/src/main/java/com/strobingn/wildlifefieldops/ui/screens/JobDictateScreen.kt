@@ -40,6 +40,9 @@ fun JobDictateScreen(
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) { viewModel.warmupDictationEngine() }
+    // AI accuracy log: observe only. Fill rules stay in JobIntakeParser.merge.
+    val aiLog = com.strobingn.wildlifefieldops.ai.accuracy.AiAccuracyLog.get(androidx.compose.ui.platform.LocalContext.current)
+    val aiSession = remember { com.strobingn.wildlifefieldops.ai.accuracy.AiAccuracyLog.newSession("dictate") }
 
     fun edit(key: String, value: String) {
         val current = draft ?: JobIntakeDraft()
@@ -93,6 +96,7 @@ fun JobDictateScreen(
                         current = { draft },
                         editedFields = { editedFields },
                         onFilled = { d ->
+                            aiLog.recordFills("Dictation", aiSession, dictationFillMap(draft), dictationFillMap(d))
                             draft = d
                             onFilled(d)
                         }
@@ -179,6 +183,7 @@ fun JobDictateScreen(
                     onClick = {
                         if (isSaving) return@Button
                         isSaving = true
+                        aiLog.recordSaved(aiSession, dictationSavedMap(d))
                         val priority = runCatching {
                             JobPriority.valueOf(d.priority.trim().uppercase())
                         }.getOrDefault(JobPriority.MEDIUM)
@@ -216,4 +221,28 @@ private fun dictateFieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedBorderColor = BorderDark,
     focusedTextColor = TextPrimary,
     unfocusedTextColor = TextPrimary
+)
+
+/** Fields the dictation fill can set. Priority counts only when it moves off the default. */
+private fun dictationFillMap(d: JobIntakeDraft?): Map<String, String> {
+    if (d == null) return emptyMap()
+    return buildMap {
+        put("Title", d.title)
+        put("Customer", d.customerName)
+        put("Address", d.address)
+        put("Type", d.type)
+        if (!d.priority.equals("MEDIUM", ignoreCase = true)) put("Priority", d.priority)
+        put("Description", d.description)
+        put("Notes", d.notes)
+    }
+}
+
+private fun dictationSavedMap(d: JobIntakeDraft): Map<String, String> = mapOf(
+    "Title" to d.title.ifBlank { "Voice job" }.trim(),
+    "Customer" to d.customerName.trim(),
+    "Address" to d.address.trim(),
+    "Type" to d.type.trim(),
+    "Priority" to d.priority.trim(),
+    "Description" to d.description.trim(),
+    "Notes" to d.notes.trim()
 )
