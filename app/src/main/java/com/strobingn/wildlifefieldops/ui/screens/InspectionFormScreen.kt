@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +43,7 @@ import com.strobingn.wildlifefieldops.data.inspection.InspectionContact
 import com.strobingn.wildlifefieldops.data.inspection.JobInspectionLink
 import com.strobingn.wildlifefieldops.data.model.*
 import com.strobingn.wildlifefieldops.data.remote.InspectionReportContext
+import com.strobingn.wildlifefieldops.data.remote.InspectionReportDraft
 import com.strobingn.wildlifefieldops.ui.components.AiRuntimeBadge
 import com.strobingn.wildlifefieldops.ui.components.ScheduleDateTimeField
 import com.strobingn.wildlifefieldops.ui.components.defaultAppointmentTime
@@ -85,6 +87,7 @@ fun InspectionFormScreen(
     var weatherConditions by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
     var dictationNotes by remember { mutableStateOf("") }
+    var fillReportOnStop by remember { mutableStateOf(false) }
     var partialDictation by remember { mutableStateOf("") }
     var isListening by remember { mutableStateOf(false) }
     var dictationError by remember { mutableStateOf<String?>(null) }
@@ -290,6 +293,56 @@ fun InspectionFormScreen(
         } else null
     }
 
+    fun transcriptForReport(): String {
+        val committed = dictationNotes.trim()
+        val partial = partialDictation.trim()
+        return when {
+            partial.isBlank() || committed.endsWith(partial) -> committed
+            committed.isBlank() -> partial
+            else -> "$committed $partial"
+        }
+    }
+
+    fun applyReportDraft(draft: InspectionReportDraft) {
+        // Notes only if the model wrote a summary that is not the raw transcript.
+        val spoken = transcriptForReport()
+        val summaryBits = draft.notes.trim().takeUnless { it.isBlank() || it == spoken }.orEmpty()
+        applyLiveNarrative(
+            draft.findings,
+            draft.recommendations,
+            draft.speciesIdentified,
+            draft.entryPoints,
+            draft.damageAssessment,
+            summaryBits
+        )
+        if (replaceAiFields || selectedSeverity == FindingSeverity.NONE) {
+            selectedSeverity = runCatching { FindingSeverity.valueOf(draft.severity.trim().uppercase()) }
+                .getOrDefault(selectedSeverity)
+        }
+    }
+
+    fun fillReportFromDictation() {
+        val transcript = transcriptForReport()
+        if (transcript.isBlank()) return
+        viewModel.writeReportFromDictation(
+            transcript = transcript,
+            context = InspectionReportContext(
+                customerName = customerName,
+                inspectorName = inspectorName,
+                inspectionType = selectedType.name,
+                jobTitle = linkedJobTitle,
+                jobAddress = linkedJobAddress,
+                jobDescription = linkedJobDescription,
+                existingFindings = findings,
+                existingRecommendations = recommendations,
+                existingSpecies = speciesIdentified,
+                existingEntryPoints = entryPoints,
+                existingDamage = damageAssessment,
+                existingNotes = notes
+            )
+        ) { draft -> applyReportDraft(draft) }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             try {
@@ -356,6 +409,10 @@ fun InspectionFormScreen(
                     dictationError = msg
                     isListening = false
                 }
+                if (fillReportOnStop && !isListening) {
+                    fillReportOnStop = false
+                    fillReportFromDictation()
+                }
             }
             override fun onResults(results: Bundle?) {
                 val texts = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
@@ -364,11 +421,12 @@ fun InspectionFormScreen(
                     dictationNotes = listOf(dictationNotes.trim(), best)
                         .filter { it.isNotBlank() }
                         .joinToString(" ")
-                    // Also mirror into notes if empty-ish
-                    if (notes.isBlank()) notes = dictationNotes
                 }
                 partialDictation = ""
-                if (isListening) {
+                if (fillReportOnStop && !isListening) {
+                    fillReportOnStop = false
+                    fillReportFromDictation()
+                } else if (isListening) {
                     try {
                         sr.startListening(buildRecognizerIntent())
                     } catch (e: Exception) {
@@ -394,7 +452,6 @@ fun InspectionFormScreen(
 
     fun stopListeningSession() {
         isListening = false
-        partialDictation = ""
         try {
             speechRecognizer?.stopListening()
         } catch (_: Exception) {
@@ -414,7 +471,15 @@ fun InspectionFormScreen(
 
     fun toggleDictate() {
         if (isListening) {
+            fillReportOnStop = transcriptForReport().isNotBlank()
             stopListeningSession()
+            scope.launch {
+                delay(700)
+                if (fillReportOnStop) {
+                    fillReportOnStop = false
+                    fillReportFromDictation()
+                }
+            }
             return
         }
         val granted = ContextCompat.checkSelfPermission(
@@ -550,18 +615,7 @@ fun InspectionFormScreen(
                                         existingDamage = damageAssessment,
                                         existingNotes = notes
                                     )
-                                ) { draft ->
-                                    val summaryBits = listOf(draft.notes, draft.summary).filter { it.isNotBlank() }.joinToString("\n")
-                                    applyLiveNarrative(
-                                        draft.findings,
-                                        draft.recommendations,
-                                        draft.speciesIdentified,
-                                        draft.entryPoints,
-                                        draft.damageAssessment,
-                                        summaryBits
-                                    )
-                                    if (replaceAiFields) selectedSeverity = severityFromString(draft.severity)
-                                }
+                                ) { draft -> applyReportDraft(draft) }
                             },
                             enabled = !reportLoading,
                             colors = ButtonDefaults.buttonColors(
@@ -839,7 +893,7 @@ fun InspectionFormScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "Sticky bar: Dictate → edit transcript → AI Report. Speech accumulates across pauses.",
+                        "Stop fills the report from what you said. AI Report reruns it. Speech accumulates across pauses.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )

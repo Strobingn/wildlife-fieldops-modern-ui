@@ -273,25 +273,64 @@ class InspectionsViewModel @Inject constructor(
         _reportError.value = null
         _reportSource.value = null
         viewModelScope.launch {
+            val spoken = text.ifBlank {
+                listOf(
+                    context.existingFindings,
+                    context.existingRecommendations,
+                    context.existingNotes
+                ).filter { it.isNotBlank() }.joinToString("\n")
+            }
             val result = aiService.writeInspectionReportFromDictation(
-                transcript = text.ifBlank {
-                    listOf(
-                        context.existingFindings,
-                        context.existingRecommendations,
-                        context.existingNotes
-                    ).filter { it.isNotBlank() }.joinToString("\n")
-                },
+                transcript = spoken,
                 context = context
             )
+            val draft = structuredReport(spoken, context, result.draft)
             _reportLoading.value = false
-            if (result.draft != null) {
-                _lastReportDraft.value = result.draft
-                _reportSource.value = result.sourceLabel
-                onFilled(result.draft)
+            _lastReportDraft.value = draft
+            _reportSource.value = if (result.draft != null) {
+                result.sourceLabel
             } else {
-                _reportError.value = result.error ?: "AI report failed."
+                "Offline structured draft"
             }
+            onFilled(draft)
         }
+    }
+
+    /**
+     * AI JSON wins when a field is non-blank. Empty or failed model output still fills
+     * findings / species / entry / damage from the transcript. Notes stay empty unless
+     * the model wrote a summary that is not the raw dictation.
+     */
+    private fun structuredReport(
+        spoken: String,
+        context: InspectionReportContext,
+        ai: InspectionReportDraft?
+    ): InspectionReportDraft {
+        val heuristic = InspectionNarrativeEngine.fromDictation(
+            transcript = spoken,
+            customerName = context.customerName,
+            jobTitle = context.jobTitle,
+            jobAddress = context.jobAddress,
+            existingSpecies = context.existingSpecies,
+            existingEntryPoints = context.existingEntryPoints,
+            existingDamage = context.existingDamage,
+            existingFindings = context.existingFindings,
+            existingRecommendations = context.existingRecommendations
+        )
+        fun pick(aiValue: String?, fallback: String): String =
+            aiValue?.trim().orEmpty().ifBlank { fallback }
+        val aiNotes = ai?.notes?.trim().orEmpty()
+        val notes = if (aiNotes.isBlank() || aiNotes == spoken.trim()) "" else aiNotes
+        return InspectionReportDraft(
+            findings = pick(ai?.findings, heuristic.findings),
+            recommendations = pick(ai?.recommendations, heuristic.recommendations),
+            speciesIdentified = pick(ai?.speciesIdentified, heuristic.speciesIdentified),
+            entryPoints = pick(ai?.entryPoints, heuristic.entryPoints),
+            damageAssessment = pick(ai?.damageAssessment, heuristic.damageAssessment),
+            severity = ai?.severity?.trim()?.ifBlank { "MODERATE" } ?: "MODERATE",
+            notes = notes,
+            summary = ""
+        )
     }
 
     /**

@@ -42,6 +42,20 @@ class FieldOpsEnginesTest {
         assertEquals(AiRuntimeMode.HEURISTIC, draft.source)
     }
 
+
+    @Test
+    fun dictationFillsFindingsNotNotes() {
+        val draft = InspectionNarrativeEngine.fromDictation(
+            transcript = "Raccoon in the attic, soffit gap on the north side, insulation torn up and droppings",
+            jobAddress = "4 River Rd, Newburgh, NY"
+        )
+        assertTrue(draft.findings.contains("soffit gap"))
+        assertTrue(draft.speciesIdentified.contains("raccoon"))
+        assertTrue(draft.entryPoints.contains("soffit"))
+        assertTrue(draft.damageAssessment.contains("insulation") || draft.damageAssessment.contains("droppings"))
+        assertEquals("", draft.notes)
+    }
+
     @Test
     fun inspectionApplyDoesNotOverwriteTypedFindings() {
         val current = InspectionNarrativeDraft(findings = "I already typed this")

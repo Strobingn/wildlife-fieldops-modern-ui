@@ -69,6 +69,48 @@ object InspectionNarrativeEngine {
         )
     }
 
+    /**
+     * Dictation belongs in findings, species, entry, and damage — never parked only in notes.
+     * Lexicon fills species / entry / damage / recommendations. The spoken words are the findings.
+     */
+    fun fromDictation(
+        transcript: String,
+        customerName: String = "",
+        jobTitle: String = "",
+        jobAddress: String = "",
+        existingSpecies: String = "",
+        existingEntryPoints: String = "",
+        existingDamage: String = "",
+        existingFindings: String = "",
+        existingRecommendations: String = ""
+    ): InspectionNarrativeDraft {
+        val spoken = transcript.trim()
+        val guessed = draft(
+            InspectionEvidence(
+                customerName = customerName,
+                jobTitle = jobTitle,
+                jobAddress = jobAddress,
+                jobNotes = spoken,
+                existingFindings = existingFindings,
+                existingRecommendations = existingRecommendations,
+                existingSpecies = existingSpecies,
+                existingEntryPoints = existingEntryPoints,
+                existingDamage = existingDamage,
+                existingNotes = spoken
+            )
+        )
+        val findings = when {
+            existingFindings.isNotBlank() -> existingFindings
+            spoken.isNotBlank() -> spoken
+            else -> guessed.findings
+        }
+        return guessed.copy(
+            findings = findings,
+            notes = "",
+            source = AiRuntimeMode.HEURISTIC
+        )
+    }
+
     fun evidenceTranscript(evidence: InspectionEvidence): String = buildString {
         appendLine("Job: ${evidence.jobTitle.ifBlank { "(untitled)" }}")
         appendLine("Address: ${evidence.jobAddress.ifBlank { "(none)" }}")
