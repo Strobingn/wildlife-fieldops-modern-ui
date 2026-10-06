@@ -38,6 +38,19 @@ class DecNwcoLogStore @Inject constructor(
         persistLedger { it.copy(decNwcoOperator = profile) }
     }
 
+    /**
+     * Sir tapped "Add to DEC log" after a catch. If the log already lists this trap,
+     * nothing is added. Otherwise a new entry is created with only its empty cells prefilled.
+     * @return true when a new entry was added.
+     */
+    suspend fun addCatchEntry(trap: com.strobingn.wildlifefieldops.data.model.TrapLog): Boolean {
+        val listed = compiledRows().any { !it.deleted && it.trapId == trap.id }
+        if (listed) return false
+        val job = trap.jobId.takeIf { it.isNotBlank() }?.let { jobDao.getById(it) }
+        saveRow(DecCatchPrefill.newEntry(job, trap))
+        return true
+    }
+
     suspend fun saveRow(row: NwcoLogRecord) {
         val target = targetJob(row)
         persistPricing(target) { pricing ->

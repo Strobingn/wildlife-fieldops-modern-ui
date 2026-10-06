@@ -394,6 +394,7 @@ data class SyncedTrapRecord(
     val temperature: Float? = null,
     val disposition: String = "",
     val method: String = "",
+    val checkIntervalHours: Int? = null,
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L
 )

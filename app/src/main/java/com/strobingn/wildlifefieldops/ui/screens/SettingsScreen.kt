@@ -323,6 +323,8 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
             WeatherAlertsSettingsSection()
             Spacer(modifier = Modifier.height(8.dp))
+            TrapReminderSettingsSection()
+            Spacer(modifier = Modifier.height(8.dp))
             SettingsSectionTitle("Notifications")
             SettingsCard {
                 SettingsSwitchItem("Enable Notifications", "Receive alerts and reminders", Icons.Default.Notifications, notificationsEnabled, viewModel::setNotificationsEnabled)

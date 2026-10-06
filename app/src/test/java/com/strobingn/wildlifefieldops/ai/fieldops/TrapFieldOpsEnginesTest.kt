@@ -20,15 +20,15 @@ class TrapFieldOpsEnginesTest {
     }.timeInMillis
 
     @Test
-    fun dueTodayAndOverdueSortOverdueFirst() {
+    fun dueNowSortsBeforeDueToday() {
         val start = TrapCheckPlanner.dayStart(noon)
-        val overdue = TrapLog(id = "o", trapId = "A", nextCheckDate = start - 1_000L, status = TrapStatus.SET)
+        val pastDue = TrapLog(id = "o", trapId = "A", nextCheckDate = start - 1_000L, status = TrapStatus.SET)
         val due = TrapLog(id = "d", trapId = "B", nextCheckDate = start + 3_600_000L, status = TrapStatus.EMPTY)
         val later = TrapLog(id = "l", trapId = "C", nextCheckDate = start + TrapCheckPlanner.DAY_MS + 1, status = TrapStatus.SET)
         val pulled = TrapLog(id = "p", trapId = "D", nextCheckDate = start, status = TrapStatus.REMOVED)
-        val list = TrapCheckPlanner.todaysList(listOf(later, due, overdue, pulled), noon)
+        val list = TrapCheckPlanner.todaysList(listOf(later, due, pastDue, pulled), noon)
         assertEquals(listOf("o", "d"), list.map { it.trap.id })
-        assertEquals(TrapDueState.OVERDUE, list[0].dueState)
+        assertEquals(TrapDueState.DUE_NOW, list[0].dueState)
         assertEquals(TrapDueState.DUE_TODAY, list[1].dueState)
     }
 
