@@ -94,10 +94,10 @@ class CoreJobFlowTest {
         assertEquals("", reloaded.legalNotes)
         assertEquals("", reloaded.confirmedSpecies)
 
-        // Sync mapping: the upload carries no old values, and pulling the row back keeps the blanks.
+        // Sync mapping: the upload sends the cleared values as "", and pulling the row back keeps the blanks.
         val upsert = LiveSyncPayloads.job(reloaded)
-        assertNull(upsert.notes)
-        assertNull(upsert.scope)
+        assertEquals("", upsert.notes)
+        assertEquals("", upsert.scope)
         assertEquals("", upsert.pricing.legalNotes)
         val pulled = reloaded.toRemoteDto().toLocal(existing = reloaded)
         assertEquals("", pulled.notes)

@@ -92,14 +92,19 @@ object LiveSyncPayloads {
             species = speciesGuess,
             customerId = job.customerId.takeIf { it.isNotBlank() && SyncIds.isUuid(it) },
             address = job.address, // empty string satisfies NOT NULL without omitting the column
-            town = inferTown(job.address, job.state),
-            state = job.state?.takeIf { it.isNotBlank() },
+            // Cleared text goes up as "" so the server copy is cleared too. A null here is
+            // omitted (encodeDefaults = false), which left the old server text in place and let
+            // a later pull bring it back. Town is derived from the address, so it is cleared
+            // only when the address is.
+            town = inferTown(job.address, job.state) ?: "".takeIf { job.address.isBlank() },
+            state = job.state.orEmpty().trim(),
             zip = null,
             status = job.status.toRemoteStatus(),
             priority = job.priority.toRemotePriority(),
-            notes = job.notes.takeIf { it.isNotBlank() },
-            aiNotes = job.notes.takeIf { it.contains("AI:", ignoreCase = true) || it.contains("Live Capture") },
-            scope = job.description.takeIf { it.isNotBlank() },
+            notes = job.notes,
+            aiNotes = job.notes.takeIf { it.contains("AI:", ignoreCase = true) || it.contains("Live Capture") }
+                ?: "".takeIf { job.notes.isBlank() },
+            scope = job.description,
             latitude = job.latitude,
             longitude = job.longitude,
             estimate = job.estimatedValue.takeIf { it > 0.0 },
@@ -116,13 +121,14 @@ object LiveSyncPayloads {
     fun customer(customer: Customer): LiveCustomerUpsert = LiveCustomerUpsert(
         id = customer.id.ifBlank { UUID.randomUUID().toString() },
         name = customer.fullName.trim().ifBlank { "Customer" },
-        phone = customer.phone.takeIf { it.isNotBlank() },
-        email = customer.email.takeIf { it.isNotBlank() },
-        address = customer.address.takeIf { it.isNotBlank() },
-        town = customer.city.takeIf { it.isNotBlank() },
-        state = customer.state.takeIf { it.isNotBlank() },
-        zip = customer.zipCode.takeIf { it.isNotBlank() },
-        notes = customer.notes.takeIf { it.isNotBlank() }
+        // Always sent; a cleared field goes up as "" so a pull cannot restore the old text.
+        phone = customer.phone.trim(),
+        email = customer.email.trim(),
+        address = customer.address.trim(),
+        town = customer.city.trim(),
+        state = customer.state.trim(),
+        zip = customer.zipCode.trim(),
+        notes = customer.notes.trim()
     )
 
     fun inspection(inspection: Inspection): LiveInspectionUpsert {
