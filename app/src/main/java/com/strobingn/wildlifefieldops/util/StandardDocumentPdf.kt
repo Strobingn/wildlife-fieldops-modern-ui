@@ -201,17 +201,8 @@ object StandardDocumentPdf {
     }
 
     private fun argb(token: String): Int {
-        if (token.length == 7 && token[0] == '#') {
-            val rgb = DocumentPalette.rgb(token)
-            return Color.rgb(rgb[0], rgb[1], rgb[2])
-        }
-        return when (token) {
-            "muted", "rule" -> Color.rgb(0x3A, 0x3A, 0x3A)
-            "light" -> Color.rgb(0xBE, 0xBE, 0xBE)
-            "white" -> Color.WHITE
-            "paid" -> Color.parseColor(DocumentPalette.PAID)
-            else -> Color.rgb(0x14, 0x14, 0x16)
-        }
+        val rgb = DocumentPalette.rgb(DocumentPalette.tokenHex(token))
+        return Color.rgb(rgb[0], rgb[1], rgb[2])
     }
 
     private fun Context.findActivity(): android.app.Activity? {

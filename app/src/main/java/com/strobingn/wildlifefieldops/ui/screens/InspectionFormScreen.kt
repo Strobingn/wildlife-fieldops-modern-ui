@@ -681,6 +681,8 @@ fun InspectionFormScreen(
                                         context = context,
                                         fields = com.strobingn.wildlifefieldops.util.InspectionReportFields(
                                             customerName = customerName,
+                                            customerId = customerId,
+                                            customerPhone = customerPhone,
                                             inspectorName = inspectorName,
                                             inspectionType = selectedType.name,
                                             inspectionDate = scheduledAt,

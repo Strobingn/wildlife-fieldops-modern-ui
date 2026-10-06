@@ -1,6 +1,7 @@
 package com.strobingn.wildlifefieldops.data.remote
 
 import com.strobingn.wildlifefieldops.data.model.Customer
+import com.strobingn.wildlifefieldops.data.model.CustomerNames
 import com.strobingn.wildlifefieldops.data.model.CustomerType
 import com.strobingn.wildlifefieldops.data.model.FieldObservation
 import com.strobingn.wildlifefieldops.data.model.Inspection
@@ -147,7 +148,9 @@ fun Customer.toRemoteDto(): RemoteCustomerDto = RemoteCustomerDto(
 )
 
 fun RemoteCustomerDto.toLocal(existing: Customer? = null): Customer {
-    val parts = name.trim().split(" ", limit = 2)
+    // The remote name is the display name ("Pam Johnston (TSO)"). Drop the company
+    // tag before splitting, or fullName appends it again on every sync round trip.
+    val parts = CustomerNames.stripCompany(name, existing?.companyName.orEmpty()).split(" ", limit = 2)
     return Customer(
         id = id,
         firstName = parts.getOrNull(0).orEmpty().ifBlank { existing?.firstName.orEmpty() },
@@ -237,7 +240,7 @@ fun RemoteJobDto.toLocal(existing: Job? = null): Job {
         title = title.ifBlank { displayCustomer }.ifBlank { existing?.title.orEmpty() },
         description = scope.orEmpty().ifBlank { existing?.description.orEmpty() },
         customerId = customerId.orEmpty().ifBlank { existing?.customerId.orEmpty() },
-        customerName = displayCustomer,
+        customerName = CustomerNames.dedupeSuffixes(displayCustomer),
         address = address.orEmpty().ifBlank { existing?.address.orEmpty() },
         latitude = latitude ?: existing?.latitude,
         longitude = longitude ?: existing?.longitude,

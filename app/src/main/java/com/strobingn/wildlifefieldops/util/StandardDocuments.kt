@@ -3,6 +3,7 @@ package com.strobingn.wildlifefieldops.util
 import com.strobingn.wildlifefieldops.ai.fieldops.NwcoLogRecord
 import com.strobingn.wildlifefieldops.ai.fieldops.NwcoOperatorProfile
 import com.strobingn.wildlifefieldops.ai.fieldops.WarrantyTracker
+import com.strobingn.wildlifefieldops.data.model.CustomerNames
 import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.pricing.ExclusionPointRecord
@@ -16,6 +17,10 @@ import java.util.Locale
 
 data class InspectionReportFields(
     val customerName: String = "",
+    /** Linked customer record, so the report can print its phone/email. */
+    val customerId: String = "",
+    val customerPhone: String = "",
+    val customerEmail: String = "",
     val inspectorName: String = "",
     val inspectionType: String = "",
     val inspectionDate: Long = 0L,
@@ -70,6 +75,12 @@ data class StandardJobPacket(
 )
 
 object StandardDocuments {
+    /** Fee table row for labor and trap service (hourly labor lands here too). */
+    const val LABOR_FEE_LABEL = "Labor / Trap Service Fee"
+
+    /** Body size shared by the customer block, fee table, line items, payments and totals. */
+    const val MONEY_TEXT = 9.5f
+
     const val ACCEPTANCE =
         "Wildlife Whisperer LLC only recommends exclusion/repairs necessary to prevent future wildlife damage. " +
             "Fees and conditions are as explained by our representative. I have read and fully understand this " +
@@ -99,7 +110,7 @@ object StandardDocuments {
         val blocks = mutableListOf<BodyBlock>()
         blocks += BodyBlock(
             title = "SERVICE & ANIMAL FEES",
-            lines = feeLines(mapFeeRows(packet.lineItems))
+            table = feeTable(packet.lineItems)
         )
         if (packet.lineItems.isNotEmpty()) {
             blocks += BodyBlock(
@@ -129,7 +140,10 @@ object StandardDocuments {
         if (packet.discountAmount != 0.0) {
             totals += TotalLine("Discount:", Money.formatUsd(-packet.discountAmount))
         }
-        totals += TotalLine(taxLabel(packet.taxRatePercent), Money.formatUsd(packet.taxAmount))
+        totals += TotalLine(
+            taxLabel(packet.taxRatePercent, packet.subtotal, packet.discountAmount, packet.taxAmount),
+            Money.formatUsd(packet.taxAmount)
+        )
         totals += TotalLine("Grand-Total:", Money.formatUsd(packet.total), bold = true)
         if (invoiceFields) {
             totals += TotalLine("Amount Paid:", Money.formatUsd(paid))
@@ -200,6 +214,7 @@ object StandardDocuments {
         val meta = mutableListOf("Date: ${day(whenMillis)}")
         if (fields.inspectionType.isNotBlank()) meta += "Type: ${fields.inspectionType}"
         val tech = fields.inspectorName.ifBlank { packet.technicianName.ifBlank { packet.job.assignedTo } }
+            .ifBlank { packet.profile.ownerName }.trim()
         if (tech.isNotBlank()) meta += "Tech: $tech"
         val inspector = signatureSlots(packet).toMutableList()
         if (fields.inspectorName.isNotBlank() && inspector.none { it.name == fields.inspectorName }) {
@@ -214,6 +229,8 @@ object StandardDocuments {
             meta = meta,
             customerRows = customerRows(
                 packet.copy(
+                    customerPhone = fields.customerPhone.ifBlank { packet.customerPhone },
+                    customerEmail = fields.customerEmail.ifBlank { packet.customerEmail },
                     job = packet.job.copy(
                         customerName = fields.customerName.ifBlank { packet.job.customerName },
                         address = fields.jobAddress.ifBlank { packet.job.address },
@@ -434,17 +451,18 @@ object StandardDocuments {
     private fun customerRows(packet: StandardJobPacket): List<Pair<String, String>> {
         val (street, city) = splitAddress(packet.job.address)
         return listOf(
-            "Owner/Manager:" to packet.job.customerName,
+            "Owner/Manager:" to CustomerNames.dedupeSuffixes(packet.job.customerName),
             "Address:" to street,
-            "City/State/ZIP:" to city,
-            "Phone:" to packet.customerPhone,
-            "Email:" to packet.customerEmail,
+            "City/State/ZIP:" to DocumentText.upperState(city),
+            "Phone:" to DocumentText.dash(packet.customerPhone),
+            "Email:" to DocumentText.dash(packet.customerEmail),
             "Job:" to packet.job.title
         )
     }
 
     private fun metaLines(kind: DocumentKind, packet: StandardJobPacket, invoiceFields: Boolean): List<String> {
         val tech = packet.technicianName.ifBlank { packet.job.assignedTo }
+            .ifBlank { packet.profile.ownerName }.trim()
         val lines = mutableListOf(
             "# ${documentNumber(kind, packet)}",
             "Date: ${day(packet.invoiceDateMillis ?: packet.nowMillis)}"
@@ -469,17 +487,9 @@ object StandardDocuments {
         return "$prefix-${packet.nowMillis % 100000}"
     }
 
-    private fun workText(packet: StandardJobPacket): String = buildString {
-        if (packet.notes.isNotBlank()) append(packet.notes.trim())
-        if (packet.job.description.isNotBlank()) {
-            if (isNotEmpty()) append('\n')
-            append(packet.job.description.trim())
-        }
-        if (packet.job.notes.isNotBlank()) {
-            if (isNotEmpty()) append('\n')
-            append(packet.job.notes.trim())
-        }
-    }
+    /** Typed notes, job description, job notes; a paragraph already printed is not printed again. */
+    private fun workText(packet: StandardJobPacket): String =
+        DocumentText.mergeNotes(listOf(packet.notes, packet.job.description, packet.job.notes))
 
     private fun signatureSlots(packet: StandardJobPacket): List<SignatureSlot> {
         val date = packet.signedAtMillis?.takeIf { it > 0L }?.let { day(it) }.orEmpty()
@@ -509,7 +519,8 @@ object StandardDocuments {
             )
         },
         weights = listOf(2.4f, 0.6f, 0.6f, 0.9f, 0.9f),
-        aligns = listOf("left", "right", "left", "right", "right")
+        aligns = listOf("left", "right", "left", "right", "right"),
+        textSize = MONEY_TEXT
     )
 
     private fun paymentTable(payments: List<JobPaymentRecord>): DocTable = DocTable(
@@ -524,18 +535,48 @@ object StandardDocuments {
             listOf(check, day(row.paidAt), Money.formatUsd(row.amount), row.note.trim())
         },
         weights = listOf(1.3f, 1f, 0.9f, 2f),
-        aligns = listOf("left", "left", "right", "left")
+        aligns = listOf("left", "left", "right", "left"),
+        textSize = MONEY_TEXT
     )
 
-    private fun feeLines(rows: List<Pair<String, Double?>>): List<String> = rows.map { (label, amount) ->
-        val money = if (amount != null) Money.formatUsd(amount) else "$" + "_".repeat(8)
-        "$label    $money"
-    }
+    /**
+     * SERVICE & ANIMAL FEES as a two-column table in the line-item style.
+     * The Amount column has the same width as the line-item Amount column so
+     * the two money columns line up. A fee with no amount shows an em dash.
+     */
+    private fun feeTable(lineItems: List<InvoiceLineItem>): DocTable = DocTable(
+        columns = listOf("Fee", "Amount"),
+        rows = feeTableRows(lineItems),
+        weights = listOf(4.5f, 0.9f),
+        aligns = listOf("left", "right"),
+        textSize = MONEY_TEXT
+    )
 
-    private fun taxLabel(rate: Double): String {
-        if (rate <= 0.0) return "Tax:"
-        val shown = String.format(Locale.US, "%.3f", rate).trimEnd('0').trimEnd('.')
-        return "Tax ($shown%):"
+    /** Rendered fee rows: label + amount, or label + em dash. Never underscores. */
+    fun feeTableRows(lineItems: List<InvoiceLineItem>): List<List<String>> =
+        mapFeeRows(lineItems).map { (label, amount) ->
+            listOf(label, amount?.let { Money.formatUsd(it) } ?: DocumentText.EM_DASH)
+        }
+
+    /**
+     * The label always states the rate the math used. A typed rate that does
+     * not produce the printed tax amount is not shown; the effective rate is.
+     */
+    fun taxLabel(rate: Double, subtotal: Double, discount: Double, amount: Double): String {
+        fun shown(value: Double) = String.format(Locale.US, "%.3f", value).trimEnd('0').trimEnd('.')
+        fun near(a: Double, b: Double) = kotlin.math.abs(a - b) <= 0.011
+        val taxable = subtotal - discount
+        val rateMatches = rate > 0.0 && (
+            near(Money.round(subtotal * rate / 100.0), amount) ||
+                near(Money.round(taxable * rate / 100.0), amount)
+            )
+        return when {
+            rateMatches -> "Tax (${shown(rate)}%):"
+            rate <= 0.0 && amount == 0.0 -> "Tax:"
+            taxable > 0.0 && amount > 0.0 -> "Tax (${shown(amount / taxable * 100.0)}%):"
+            rate > 0.0 && taxable <= 0.0 && amount == 0.0 -> "Tax (${shown(rate)}%):"
+            else -> "Tax:"
+        }
     }
 
     private fun exclusionDescription(point: ExclusionPointRecord): String =
@@ -564,13 +605,14 @@ object StandardDocuments {
         else String.format(Locale.US, "%.2f", value).trimEnd('0').trimEnd('.')
 
     /**
-     * Classic five fee rows. Unmatched lines roll into Other so their amounts
-     * are still on the page; the line-item table keeps every description.
+     * Classic five fee rows. Labor and trap service (including hourly labor)
+     * go to [LABOR_FEE_LABEL]; unmatched lines roll into Other so their amounts
+     * are still on the page. The line-item table keeps every description.
      */
     fun mapFeeRows(lineItems: List<InvoiceLineItem>): List<Pair<String, Double?>> {
         if (lineItems.isEmpty()) {
             return listOf(
-                "Trap Service Fee" to null,
+                LABOR_FEE_LABEL to null,
                 "Per Animal Captured Fee" to null,
                 "Non-Target Animal Captured Fee" to null,
                 "Inspection Fee" to null,
@@ -578,25 +620,28 @@ object StandardDocuments {
             )
         }
         val used = mutableSetOf<String>()
+        fun description(item: InvoiceLineItem) = item.description.lowercase(Locale.US)
         fun take(vararg keys: String): Double? {
             val match = lineItems.firstOrNull { item ->
-                if (item.id in used) return@firstOrNull false
-                val description = item.description.lowercase(Locale.US)
-                keys.any { key -> description.contains(key) }
+                item.id !in used && keys.any { key -> description(item).contains(key) }
             } ?: return null
             used.add(match.id)
             return match.effectiveTotal()
         }
-        val trap = take("trap service", "trap fee", "trap setup", "trap set")
-        val perAnimal = take("per animal", "animal captured", "capture fee", "animal fee")
+        // Non-target first: "non-target animal captured" also contains "animal captured".
         val nonTarget = take("non-target", "nontarget", "non target")
+        val perAnimal = take("per animal", "animal captured", "capture fee", "animal fee")
         val inspection = take("inspection")
-        val otherMatched = take("exclusion", "repair", "sealing", "entry point", "materials", "labor", "other")
+        val laborItems = lineItems.filter { item -> item.id !in used && isLabor(item) }
+        laborItems.forEach { used.add(it.id) }
+        val labor: Double? = laborItems.takeIf { it.isNotEmpty() }
+            ?.let { items -> Money.round(items.sumOf { it.effectiveTotal() }) }
+        val otherMatched = take("exclusion", "repair", "sealing", "entry point", "materials", "other")
         val leftover = lineItems.filter { it.id !in used }
-        val otherTotal = (otherMatched ?: 0.0) + leftover.sumOf { it.effectiveTotal() }
+        val otherTotal = Money.round((otherMatched ?: 0.0) + leftover.sumOf { it.effectiveTotal() })
         val otherLabel = if (leftover.isNotEmpty() && leftover.size <= 2 && leftover.all { item ->
-                item.description.isNotBlank() && item.description.lowercase(Locale.US).let { description ->
-                    !description.contains("exclusion") && !description.contains("repair") && !description.contains("other")
+                item.description.isNotBlank() && description(item).let { text ->
+                    !text.contains("exclusion") && !text.contains("repair") && !text.contains("other")
                 }
             }
         ) {
@@ -610,11 +655,23 @@ object StandardDocuments {
             else -> null
         }
         return listOf(
-            "Trap Service Fee" to trap,
+            LABOR_FEE_LABEL to labor,
             "Per Animal Captured Fee" to perAnimal,
             "Non-Target Animal Captured Fee" to nonTarget,
             "Inspection Fee" to inspection,
             otherLabel to otherAmount
         )
+    }
+
+    private val LABOR_KEYS = listOf(
+        "labor", "labour", "trap service", "trap fee", "trap setup", "trap set", "trap check", "service fee", "hourly"
+    )
+    private val HOURLY_UNITS = setOf("hr", "hrs", "hour", "hours", "h")
+
+    /** "Labor / Trap Service", "Labor", "trap service", or anything billed by the hour. */
+    fun isLabor(item: InvoiceLineItem): Boolean {
+        val text = item.description.lowercase(Locale.US)
+        if (LABOR_KEYS.any { text.contains(it) }) return true
+        return item.unit.trim().lowercase(Locale.US).trimEnd('.') in HOURLY_UNITS
     }
 }

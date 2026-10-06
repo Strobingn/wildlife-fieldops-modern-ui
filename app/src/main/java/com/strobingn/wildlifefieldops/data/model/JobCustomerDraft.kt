@@ -33,15 +33,7 @@ data class JobCustomerDraft(
     val notes: String = "",
     val preferredContact: PreferredContact = PreferredContact.PHONE
 ) {
-    fun displayName(): String {
-        val person = name.trim()
-        val company = companyName.trim()
-        return when {
-            person.isNotBlank() && company.isNotBlank() -> "$person ($company)"
-            person.isNotBlank() -> person
-            else -> company
-        }
-    }
+    fun displayName(): String = CustomerNames.withCompany(name, companyName)
 
     fun composedServiceAddress(): String {
         val street = address.trim()

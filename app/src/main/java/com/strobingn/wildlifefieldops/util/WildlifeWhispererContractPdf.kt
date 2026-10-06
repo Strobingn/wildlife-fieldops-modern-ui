@@ -51,7 +51,7 @@ object WildlifeWhispererContractPdf {
         }
         val customerPng = customerSignature?.let { SignatureInk.encodePng(it) }.orEmpty()
         val companyPng = technicianSignature?.let { SignatureInk.encodePng(it) }.orEmpty()
-        val packet = StandardJobPacket(
+        val packet = DocumentContacts.fill(context, StandardJobPacket(
             job = job,
             profile = profile ?: BusinessProfileStore.load(context),
             lineItems = lineItems,
@@ -75,7 +75,7 @@ object WildlifeWhispererContractPdf {
             signedAtMillis = customerSignedAtMillis,
             customerSignatureBase64 = customerPng,
             companySignatureBase64 = companyPng
-        )
+        ))
         val safe = job.customerName.replace(Regex("[^A-Za-z0-9_-]"), "_").ifBlank { "customer" }
         val fileName = "${kind.filePrefix}_${safe}_${System.currentTimeMillis()}.pdf"
         return StandardDocumentPdf.write(
