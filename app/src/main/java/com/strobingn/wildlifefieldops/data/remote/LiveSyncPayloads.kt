@@ -157,7 +157,8 @@ object LiveSyncPayloads {
             id = inspection.id.ifBlank { UUID.randomUUID().toString() },
             jobId = inspection.jobId.takeIf { it.isNotBlank() && SyncIds.isUuid(it) },
             inspectionType = inspection.inspectionType.name,
-            notes = inspection.notes.takeIf { it.isNotBlank() },
+            // Always sent; cleared notes go up as "" so the server copy is cleared too.
+            notes = inspection.notes,
             findings = findingsJson
         )
     }
@@ -178,7 +179,8 @@ object LiveSyncPayloads {
             ?: observation.photoLocalPath.takeIf { ObservationPhotoPaths.isRemoteUrl(it) },
         photoId = observation.photoId?.takeIf { it.isNotBlank() },
         jobId = observation.jobId?.takeIf { it.isNotBlank() && SyncIds.isUuid(it) },
-        speciesHint = observation.speciesHint.takeIf { it.isNotBlank() },
+        // Always sent; a cleared species ID goes up as "" so the server copy is cleared too.
+        speciesHint = observation.speciesHint,
         accuracyMeters = observation.accuracyMeters?.toDouble(),
         observedAt = Instant.ofEpochMilli(observation.observedAt).toString(),
         photoStoragePath = photoStoragePath?.takeIf { it.isNotBlank() },
@@ -292,7 +294,9 @@ data class LiveInspectionUpsert(
 @Serializable
 data class LiveFieldObservationUpsert(
     val id: String,
-    val notes: String = "",
+    // No default: with encodeDefaults = false a "" default was left out of the upload,
+    // so cleared notes never reached the server.
+    val notes: String,
     val latitude: Double? = null,
     val longitude: Double? = null,
     @SerialName("photo_path") val photoPath: String? = null,
