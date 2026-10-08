@@ -3,10 +3,13 @@ package com.strobingn.wildlifefieldops.ai
 import android.content.Context
 import android.net.Uri
 import com.google.gson.Gson
+import com.strobingn.wildlifefieldops.ai.local.HardTimeout
+import com.strobingn.wildlifefieldops.ai.local.LlmJsonSalvage
 import com.strobingn.wildlifefieldops.ai.local.LocalLlmEngine
 import com.strobingn.wildlifefieldops.data.remote.AiEdgeGateway
 import com.strobingn.wildlifefieldops.data.remote.AiService
 import com.strobingn.wildlifefieldops.data.remote.EdgeChatResult
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -51,55 +54,67 @@ class HybridAIService @Inject constructor(
     ): AiAnalysisResult {
         val vision = try {
             PhotoAIHelper.analyzePhotoForFormFilling(context, imageUri)
+        } catch (e: CancellationException) {
+            throw e
         } catch (t: Throwable) {
-            android.util.Log.w("HybridAIService", "vision failed: ${t.message}")
+            android.util.Log.w(TAG, "vision failed: ${t.message}")
             AiAnalysisResult(suggestedNotes = "Vision unavailable: ${t.message}. Manual entry required.")
         }
         return try {
-        val prompt = GrokPrompts.photoToFormFill(
-            speciesTags = vision.species,
-            damageTags = vision.damageTypes,
-            location = jobContext,
-            voiceTranscript = voiceTranscript,
-            evidenceSummary = evidenceSummary.ifBlank { vision.suggestedNotes },
-            entryTags = entryTags,
-            arMeasurement = arMeasurement,
-            equipmentTags = equipmentTags,
-            repairScope = repairScope
-        )
+            val prompt = GrokPrompts.photoToFormFill(
+                speciesTags = vision.species,
+                damageTags = vision.damageTypes,
+                location = jobContext,
+                voiceTranscript = voiceTranscript,
+                evidenceSummary = evidenceSummary.ifBlank { vision.suggestedNotes },
+                entryTags = entryTags,
+                arMeasurement = arMeasurement,
+                equipmentTags = equipmentTags,
+                repairScope = repairScope
+            )
 
-        if (edge.isConfigured) {
-            runCatching {
-                val form = callGrokForForm(prompt)
-                return enrich(vision, form, source = "grok")
-            }.onFailure {
-                android.util.Log.w("HybridAIService", "Cloud form fill failed: ${it.message}")
+            // Cloud first (bounded by CLOUD_TIMEOUT_MS and skipped for a while after a failure so a
+            // dead connection does not stall every capture), then the on-device model.
+            val cloud = cloudComplete(prompt, jsonMode = true)
+            val cloudText = cloud.getOrNull()
+            if (cloudText != null) {
+                val cloudForm = parseFormJson(cloudText)
+                if (cloudForm != null) return enrich(vision, cloudForm, source = "grok")
+                android.util.Log.w(TAG, "Cloud form fill returned unparseable JSON; trying on-device model")
             }
-        }
 
-        val local = localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
-        if (local != null) {
-            val form = runCatching {
-                val cleaned = local.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-                gson.fromJson(cleaned, GrokFormResponse::class.java)
-            }.getOrElse {
-                GrokFormResponse(
+            val localResult = localGenerate(
+                prompt + LOCAL_JSON_SUFFIX,
+                LOCAL_FORM_MAX_TOKENS,
+                LOCAL_FORM_TIMEOUT_MS
+            )
+            val local = localResult.getOrNull()
+            if (local != null) {
+                val form = parseFormJson(local) ?: GrokFormResponse(
                     species = vision.species.joinToString(", "),
                     serviceType = vision.suggestedServiceType,
                     priority = vision.suggestedPriority,
-                    notes = local.take(800),
+                    // Never dump raw (possibly truncated) JSON into the notes field.
+                    notes = if (LlmJsonSalvage.looksLikeJson(local)) vision.suggestedNotes else local.trim().take(800),
                     recommendedActions = emptyList()
                 )
+                return enrich(vision, form, source = "local_llm")
             }
-            return enrich(vision, form, source = "local_llm")
-        }
 
-        return vision.copy(
-            suggestedNotes = vision.suggestedNotes +
-                "\nGenerative LLM unavailable — download the on-device model. Cloud Grok needs Supabase."
-        )
+            val reasons = listOfNotNull(
+                cloud.exceptionOrNull()?.message?.takeIf { edge.isConfigured },
+                localResult.exceptionOrNull()?.message
+            )
+            vision.copy(
+                suggestedNotes = vision.suggestedNotes + "\nAI enrichment unavailable: " +
+                    reasons.joinToString("; ").ifBlank {
+                        "download the on-device model; cloud Grok needs Supabase."
+                    }
+            )
+        } catch (e: CancellationException) {
+            throw e
         } catch (t: Throwable) {
-            android.util.Log.w("HybridAIService", "form fill failed: ${t.message}")
+            android.util.Log.w(TAG, "form fill failed: ${t.message}")
             vision.copy(suggestedNotes = vision.suggestedNotes + "\nAI enrich failed: ${t.message}")
         }
     }
@@ -110,26 +125,19 @@ class HybridAIService @Inject constructor(
         jobContext: String = ""
     ): String {
         val prompt = GrokPrompts.tieredEstimatePrompt(analysis, jobContext)
-        if (edge.isConfigured) {
-            runCatching { return callGrokText(prompt) }
-        }
-        val local = localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
+        val cloud = cloudComplete(prompt, jsonMode = false).getOrNull()
+        if (cloud != null) return cloud
+        val local = localGenerate(prompt, LOCAL_NARRATION_MAX_TOKENS, LOCAL_NARRATION_TIMEOUT_MS).getOrNull()
         if (local != null) return "On-device LLM estimate:\n\n$local"
         return "No generative LLM ready. Download the on-device model in AI Assistant. Cloud Grok needs Supabase."
     }
 
     suspend fun analyzeFormForCompliance(formText: String): List<String> {
         val prompt = GrokPrompts.complianceAuditPrompt(formText)
-        if (edge.isConfigured) {
-            runCatching {
-                val text = callGrokText(prompt)
-                return text.lines().map { it.trim().removePrefix("-").removePrefix("•").trim() }
-                    .filter { it.isNotBlank() }
-            }
-        }
-        val local = localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
-        if (local != null) {
-            return local.lines().map { it.trim().removePrefix("-").removePrefix("•").trim() }
+        val text = cloudComplete(prompt, jsonMode = false).getOrNull()
+            ?: localGenerate(prompt, LOCAL_NARRATION_MAX_TOKENS, LOCAL_NARRATION_TIMEOUT_MS).getOrNull()
+        if (text != null) {
+            return text.lines().map { it.trim().removePrefix("-").removePrefix("•").trim() }
                 .filter { it.isNotBlank() }
         }
         return listOf("No generative LLM ready for compliance analysis.")
@@ -164,8 +172,12 @@ class HybridAIService @Inject constructor(
             equipmentTags = equipmentTags,
             repairScope = repairScope
         )
-        val cloud = if (edge.isConfigured) runCatching { callGrokText(prompt) }.getOrNull() else null
-        val raw = cloud ?: localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
+        val cloud = cloudComplete(prompt, jsonMode = false).getOrNull()?.takeIf { it.isNotBlank() }
+        val raw = cloud ?: localGenerate(
+            prompt,
+            LOCAL_NARRATION_MAX_TOKENS,
+            LOCAL_NARRATION_TIMEOUT_MS
+        ).getOrNull()
 
         if (raw.isNullOrBlank()) {
             return CaptureNarration(
@@ -228,13 +240,97 @@ class HybridAIService @Inject constructor(
         )
     }
 
-    private suspend fun callGrokForForm(prompt: String): GrokFormResponse {
-        val content = callGrokText(prompt, jsonMode = true)
-            .trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-        return gson.fromJson(content, GrokFormResponse::class.java)
+    /**
+     * Strict Gson parse first; if the output was cut off by the token limit (or has stray prose),
+     * recover whatever complete fields exist. Returns null when nothing usable was found.
+     */
+    private fun parseFormJson(raw: String): GrokFormResponse? {
+        val json = LlmJsonSalvage.extractObjectText(raw)
+        val strict: GrokFormResponse? = try {
+            gson.fromJson(json, GrokFormResponse::class.java)
+        } catch (_: Throwable) {
+            null
+        }
+        if (strict != null) {
+            // Gson can leave non-null Kotlin fields null when the JSON has explicit nulls.
+            val species: String? = strict.species
+            val serviceType: String? = strict.serviceType
+            val priority: String? = strict.priority
+            val notes: String? = strict.notes
+            val actions: List<String>? = strict.recommendedActions
+            val flags: List<String>? = strict.complianceFlags
+            return GrokFormResponse(
+                species = species.orEmpty(),
+                serviceType = serviceType.orEmpty(),
+                priority = priority.orEmpty().ifBlank { "MEDIUM" },
+                notes = notes.orEmpty(),
+                recommendedActions = actions.orEmpty(),
+                estimatedPriceLow = strict.estimatedPriceLow,
+                estimatedPriceHigh = strict.estimatedPriceHigh,
+                complianceFlags = flags.orEmpty()
+            )
+        }
+        val notes = LlmJsonSalvage.extractString(json, "notes")
+        val species = LlmJsonSalvage.extractString(json, "species")
+        val service = LlmJsonSalvage.extractString(json, "serviceType")
+        if (notes == null && species == null && service == null) return null
+        return GrokFormResponse(
+            species = species.orEmpty(),
+            serviceType = service.orEmpty(),
+            priority = LlmJsonSalvage.extractString(json, "priority") ?: "MEDIUM",
+            notes = notes.orEmpty(),
+            recommendedActions = LlmJsonSalvage.extractStringList(json, "recommendedActions"),
+            estimatedPriceLow = LlmJsonSalvage.extractNumber(json, "estimatedPriceLow") ?: 0.0,
+            estimatedPriceHigh = LlmJsonSalvage.extractNumber(json, "estimatedPriceHigh") ?: 0.0,
+            complianceFlags = LlmJsonSalvage.extractStringList(json, "complianceFlags")
+        )
     }
 
-    private suspend fun callGrokText(prompt: String, jsonMode: Boolean = false): String {
+    @Volatile private var cloudBackoffUntilMs = 0L
+
+    /** Cloud call with a hard time limit; after a failure/timeout cloud is skipped for [CLOUD_BACKOFF_MS]. */
+    private suspend fun cloudComplete(prompt: String, jsonMode: Boolean): Result<String> {
+        if (!edge.isConfigured) {
+            return Result.failure<String>(IllegalStateException("Cloud AI is not configured"))
+        }
+        if (System.currentTimeMillis() < cloudBackoffUntilMs) {
+            return Result.failure<String>(IllegalStateException("Cloud AI skipped after a recent failure"))
+        }
+        return try {
+            val text = HardTimeout.run(CLOUD_TIMEOUT_MS) { callGrokText(prompt, jsonMode) }
+            if (text == null) {
+                cloudBackoffUntilMs = System.currentTimeMillis() + CLOUD_BACKOFF_MS
+                Result.failure<String>(IllegalStateException("Cloud AI timed out after ${CLOUD_TIMEOUT_MS / 1000}s"))
+            } else {
+                Result.success(text)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            android.util.Log.w(TAG, "Cloud AI failed: ${t.message}")
+            cloudBackoffUntilMs = System.currentTimeMillis() + CLOUD_BACKOFF_MS
+            Result.failure<String>(t)
+        }
+    }
+
+    /** On-device generation with a hard time limit (llama.cpp cannot be interrupted once started). */
+    private suspend fun localGenerate(prompt: String, maxTokens: Int, timeoutMs: Long): Result<String> {
+        return try {
+            val result = HardTimeout.run(timeoutMs) {
+                localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt, maxTokens)
+            }
+            result ?: Result.failure<String>(
+                IllegalStateException("On-device AI timed out after ${timeoutMs / 1000}s")
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            Result.failure<String>(t)
+        }
+    }
+
+    // Blocking HTTP call: only invoked from HardTimeout (Dispatchers.IO), never on the caller's thread.
+    private fun callGrokText(prompt: String, jsonMode: Boolean = false): String {
         return when (val result = edge.complete(
             system = GrokPrompts.SYSTEM,
             user = prompt,
@@ -245,5 +341,20 @@ class HybridAIService @Inject constructor(
             is EdgeChatResult.Ok -> result.text
             is EdgeChatResult.Err -> error(result.message)
         }
+    }
+
+    private companion object {
+        const val TAG = "HybridAIService"
+        const val CLOUD_TIMEOUT_MS = 25_000L
+        const val CLOUD_BACKOFF_MS = 120_000L
+        const val LOCAL_FORM_TIMEOUT_MS = 120_000L
+        const val LOCAL_NARRATION_TIMEOUT_MS = 90_000L
+
+        /** The default 512 cut the form JSON mid-string; the suffix below also keeps the output short. */
+        const val LOCAL_FORM_MAX_TOKENS = 700
+        const val LOCAL_NARRATION_MAX_TOKENS = 512
+        const val LOCAL_JSON_SUFFIX =
+            "\nRespond with ONLY the JSON object, no markdown. Keep notes under 60 words and " +
+                "recommendedActions to at most 4 short items."
     }
 }
