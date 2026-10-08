@@ -439,9 +439,13 @@ Do not invent species or damage that the transcript does not support; mark uncer
     ): ChatResult {
         // Only cut the cloud short when the on-device model can actually take over.
         if (!localLlm.isReady || localLlm.isBusy) return completeChat(systemPrompt, userPrompt, maxTokens, temperature, jsonMode)
-        return withAbandonTimeout(CLOUD_BEFORE_LOCAL_TIMEOUT_MS) {
+        val work = abandonableScope.async {
             completeChat(systemPrompt, userPrompt, maxTokens, temperature, jsonMode)
-        } ?: ChatResult.Err("Cloud AI did not answer in time.")
+        }
+        withTimeoutOrNull(CLOUD_BEFORE_LOCAL_TIMEOUT_MS) { work.await() }?.let { return it }
+        // Another feature may have started a local generation while we waited. With no fallback
+        // left, keep waiting for the cloud instead of failing a request it could still answer.
+        return if (localLlm.isBusy) work.await() else ChatResult.Err("Cloud AI did not answer in time.")
     }
 
     private suspend fun generateLocal(system: String, user: String, maxTokens: Int = 512): String? {
