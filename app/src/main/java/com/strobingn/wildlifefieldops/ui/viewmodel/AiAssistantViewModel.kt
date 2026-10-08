@@ -29,18 +29,18 @@ class AiAssistantViewModel @Inject constructor(
 
     private fun buildWelcome(): String = buildString {
         val sel = modelManager.selected
-        append("Hello — I'm your on-device AI assistant.\n\n")
+        append("Hello — I'm your AI assistant.\n\n")
         append("Ask anything: general questions, writing help, tech, or field ops.\n\n")
-        append("Backend preference (chat):\n")
-        append("1) On-device LLM when downloaded (${sel.displayName}) — preferred / local-first\n")
-        append("2) Cloud Grok through Supabase only if local is not ready\n\n")
+        append("How chat is answered:\n")
+        append("1) Cloud Grok through Supabase when it is set up — your message text is sent to the cloud\n")
+        append("2) On-device LLM (${sel.displayName}) when the cloud is unavailable or not set up — stays on this phone\n\n")
         append("Pick 3B (default, ~2.1 GB) or 7B v3 (~4.7 GB) below, then download/switch.\n\n")
         append("Responses are labeled 📱 On-device or ☁️ Cloud so you can tell which answered.\n\n")
         append(aiService.configDiagnostics())
         if (!localLlm.isReady) {
-            append("\n\n⬇ Tap \"Download local model\" below (${sel.approxSizeLabel}) for preferred on-device answers.")
+            append("\n\n⬇ Tap \"Download local model\" below (${sel.approxSizeLabel}) so chat still works offline.")
         } else {
-            append("\n\n✅ Local model ready — chat will use on-device first.")
+            append("\n\n✅ Local model ready — used when the cloud is unavailable or not set up.")
         }
     }
 

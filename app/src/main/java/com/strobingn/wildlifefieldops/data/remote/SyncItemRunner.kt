@@ -1,5 +1,6 @@
 package com.strobingn.wildlifefieldops.data.remote
 
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 
 /**
@@ -18,6 +19,9 @@ class SyncItemRunner @Inject constructor() {
             val value = block()
             markSynced()
             SyncItemOutcome.Ok(value)
+        } catch (c: CancellationException) {
+            // Work was stopped, not a failed upload. Do not store "cancelled" as the row's error.
+            throw c
         } catch (t: Throwable) {
             val reason = format(t)
             markError(reason)

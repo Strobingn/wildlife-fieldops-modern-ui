@@ -20,6 +20,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import android.widget.Toast
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -85,6 +90,8 @@ fun InvoiceScreen(
     var totalOverride by remember { mutableStateOf<Double?>(null) }
     var pdfPath by remember { mutableStateOf("") }
     var showPdfShare by remember { mutableStateOf(false) }
+    var pdfBusy by remember { mutableStateOf(false) }
+    val pdfScope = rememberCoroutineScope()
     var showSignaturePad by remember { mutableStateOf(false) }
     var showCopyDialog by remember { mutableStateOf(false) }
     var showNoEstimate by remember { mutableStateOf(false) }
@@ -498,7 +505,7 @@ fun InvoiceScreen(
                 }
                 Button(
                     onClick = {
-                        job?.let { currentJob ->
+                        job?.takeIf { !pdfBusy }?.let { currentJob ->
                             val contractSig = com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules
                                 .find(currentJob.pricing, com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.CONTRACT)
                                 ?: com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules
@@ -507,36 +514,53 @@ fun InvoiceScreen(
                                 boundInvoiceId?.let { id -> list.find { it.id == id } }
                                     ?: list.maxByOrNull { it.updatedAt }
                             }
-                            pdfPath = generateInvoicePDF(
-                                context = context,
-                                job = currentJob,
-                                lineItems = lineItems,
-                                subtotal = subtotal,
-                                taxRate = taxRate.toDoubleOrNull() ?: 0.0,
-                                taxAmount = taxAmount,
-                                discountAmount = discountAmount,
-                                total = total,
-                                notes = notes,
-                                terms = terms,
-                                technicianSignature = technicianSignature,
-                                customerSignature = customerSignature
-                                    ?: com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(contractSig?.pngBase64.orEmpty()),
-                                customerSignerName = contractSig?.signerName.orEmpty(),
-                                customerSignedAtMillis = contractSig?.signedAt,
-                                balanceDue = com.strobingn.wildlifefieldops.ai.fieldops.PaymentLedger.balanceDue(
-                                    total,
-                                    currentJob.pricing.payments
-                                ),
-                                documentNumber = saved?.invoiceNumber.orEmpty(),
-                                dueDateMillis = saved?.dueDate?.takeIf { it > 0L },
-                                invoiceDateMillis = saved?.issueDate?.takeIf { it > 0L },
-                                amountPaid = com.strobingn.wildlifefieldops.ai.fieldops.PaymentLedger.totalPaid(
-                                    currentJob.pricing.payments
-                                ),
-                                payments = currentJob.pricing.payments,
-                                customerEmail = saved?.customerEmail.orEmpty()
-                            )
-                            showPdfShare = true
+                            pdfBusy = true
+                            pdfScope.launch {
+                                try {
+                                    pdfPath = withContext(Dispatchers.IO) {
+                                        generateInvoicePDF(
+                                        context = context,
+                                        job = currentJob,
+                                        lineItems = lineItems,
+                                        subtotal = subtotal,
+                                        taxRate = taxRate.toDoubleOrNull() ?: 0.0,
+                                        taxAmount = taxAmount,
+                                        discountAmount = discountAmount,
+                                        total = total,
+                                        notes = notes,
+                                        terms = terms,
+                                        technicianSignature = technicianSignature,
+                                        customerSignature = customerSignature
+                                            ?: com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(contractSig?.pngBase64.orEmpty()),
+                                        customerSignerName = contractSig?.signerName.orEmpty(),
+                                        customerSignedAtMillis = contractSig?.signedAt,
+                                        balanceDue = com.strobingn.wildlifefieldops.ai.fieldops.PaymentLedger.balanceDue(
+                                            total,
+                                            currentJob.pricing.payments
+                                        ),
+                                        documentNumber = saved?.invoiceNumber.orEmpty(),
+                                        dueDateMillis = saved?.dueDate?.takeIf { it > 0L },
+                                        invoiceDateMillis = saved?.issueDate?.takeIf { it > 0L },
+                                        amountPaid = com.strobingn.wildlifefieldops.ai.fieldops.PaymentLedger.totalPaid(
+                                            currentJob.pricing.payments
+                                        ),
+                                        payments = currentJob.pricing.payments,
+                                            customerEmail = saved?.customerEmail.orEmpty()
+                                        )
+                                    }
+                                    showPdfShare = true
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (t: Throwable) {
+                                    Toast.makeText(
+                                        context,
+                                        "Could not create the PDF: ${t.message ?: t.javaClass.simpleName}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                } finally {
+                                    pdfBusy = false
+                                }
+                            }
                         }
                     },
                     modifier = Modifier.weight(1f),

@@ -130,8 +130,8 @@ The chat / estimate / summary paths never answer from hardcoded keyword tip list
 - Catalog / URLs live in `LocalLlmModelManager` (`QWEN25_3B`, `QWEN25_7B_V3`).
 
 ### Priority order
-1. On-device abliterated llama.cpp GGUF when the selected model file is installed (local-first for chat)  
-2. Cloud chat completions when a key is present in the APK  
+1. Cloud chat completions through the Supabase `ai-assistant` edge function when Supabase is configured (chat text is sent to the cloud)  
+2. On-device abliterated llama.cpp GGUF when the cloud is unavailable, not configured, or too slow (stays on the phone). Job summaries are the exception: they use the on-device model first when it is installed, because they contain customer details.  
 3. Clear setup error (never fake “field knowledge” bullets)
 
 

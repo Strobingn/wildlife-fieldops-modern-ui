@@ -22,7 +22,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.ImageBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
@@ -60,9 +63,19 @@ fun BusinessInfoSettingsBlock(viewModel: SettingsViewModel) {
             viewModel.flushPendingBusinessEdits()
         }
     }
-    val preview = remember(profile.logoPath) {
-        profile.logoPath.takeIf { it.isNotBlank() }?.let { path ->
-            BitmapFactory.decodeFile(path)?.asImageBitmap()
+    // Decode off the main thread and downsample: a gallery logo can be a 12 MP photo.
+    val preview by produceState<ImageBitmap?>(initialValue = null, profile.logoPath) {
+        value = profile.logoPath.takeIf { it.isNotBlank() }?.let { path ->
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(path, bounds)
+                    var sample = 1
+                    while (bounds.outWidth / (sample * 2) >= 512 && bounds.outHeight / (sample * 2) >= 512) sample *= 2
+                    BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
+                        ?.asImageBitmap()
+                }.getOrNull()
+            }
         }
     }
     Text(
@@ -126,9 +139,10 @@ fun BusinessInfoSettingsBlock(viewModel: SettingsViewModel) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (preview != null) {
+                    val previewBitmap = preview
+                    if (previewBitmap != null) {
                         Image(
-                            bitmap = preview,
+                            bitmap = previewBitmap,
                             contentDescription = "Business logo",
                             modifier = Modifier.size(72.dp),
                             contentScale = ContentScale.Fit

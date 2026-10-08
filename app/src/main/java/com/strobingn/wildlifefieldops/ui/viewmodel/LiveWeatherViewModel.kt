@@ -30,9 +30,13 @@ class LiveWeatherViewModel @Inject constructor(
     private val _state = MutableStateFlow<WeatherUiState>(WeatherUiState.Idle)
     val state: StateFlow<WeatherUiState> = _state.asStateFlow()
 
+    // A newer lookup replaces an older one, so a slow earlier answer cannot overwrite it.
+    private var weatherWork: kotlinx.coroutines.Job? = null
+
     /** Shop / home-base weather for dashboard. */
     fun loadShopWeather() {
-        viewModelScope.launch {
+        weatherWork?.cancel()
+        weatherWork = viewModelScope.launch {
             _state.value = WeatherUiState.Loading
             if (!weatherService.isConfigured) {
                 _state.value = WeatherUiState.Unavailable(
@@ -54,7 +58,8 @@ class LiveWeatherViewModel @Inject constructor(
 
     /** Job-site weather from coords or address. */
     fun loadJobWeather(latitude: Double?, longitude: Double?, address: String) {
-        viewModelScope.launch {
+        weatherWork?.cancel()
+        weatherWork = viewModelScope.launch {
             _state.value = WeatherUiState.Loading
             if (!weatherService.isConfigured) {
                 _state.value = WeatherUiState.Unavailable("OpenWeather not configured in this build")

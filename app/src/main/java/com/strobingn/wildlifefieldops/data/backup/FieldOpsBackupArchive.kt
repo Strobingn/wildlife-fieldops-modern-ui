@@ -65,6 +65,13 @@ object FieldOpsBackupArchive {
                 if (manifest.appId != FieldOpsBackupFormat.APPLICATION_ID) {
                     return FieldOpsBackupValidation.Invalid("Backup is for a different app")
                 }
+                if (manifest.roomVersion > FieldOpsBackupFormat.CURRENT_ROOM_VERSION) {
+                    // Room cannot downgrade: opening this DB would crash on every launch.
+                    return FieldOpsBackupValidation.Invalid(
+                        "Backup was made by a newer app version (database v${manifest.roomVersion}). " +
+                            "Update the app, then restore again."
+                    )
+                }
                 val dbEntry = zip.getEntry(FieldOpsBackupFormat.dbZipPath())
                     ?: return FieldOpsBackupValidation.Invalid("Missing ${FieldOpsBackupFormat.DB_FILE}")
                 if (dbEntry.size == 0L) {
@@ -112,17 +119,46 @@ object FieldOpsBackupArchive {
     fun applyUnpackedBackup(unpacked: File, databaseFile: File, filesDir: File) {
         val dbSrc = File(unpacked, FieldOpsBackupFormat.dbZipPath())
         require(dbSrc.isFile && dbSrc.length() > 0L) { "Unpacked backup is missing the database" }
+        val userVersion = FieldOpsBackupFormat.readSqliteUserVersion(dbSrc)
+        require(
+            userVersion == null ||
+                userVersion in FieldOpsBackupFormat.MIN_MIGRATABLE_ROOM_VERSION..FieldOpsBackupFormat.CURRENT_ROOM_VERSION
+        ) {
+            "Backup database version $userVersion cannot be opened by this app"
+        }
         databaseFile.parentFile?.mkdirs()
+        // Stage every file next to the live DB first, so a failed copy (disk full, I/O error)
+        // leaves the current database untouched instead of deleted.
+        // Copy the SQLite file as-is. Do not bump user_version here: a v10 (or
+        // older) backup must still be v10 on disk so Room runs MIGRATION_* to v11.
+        val staged = mutableListOf<Pair<File, File>>()
+        try {
+            val dbStage = File(databaseFile.path + ".restore-tmp")
+            dbSrc.copyTo(dbStage, overwrite = true)
+            staged.add(dbStage to databaseFile)
+            listOf("-wal", "-shm").forEach { suffix ->
+                File(unpacked, "${FieldOpsBackupFormat.DB_DIR}/${FieldOpsBackupFormat.DB_FILE}$suffix")
+                    .takeIf { it.isFile }?.let { src ->
+                        val stage = File(databaseFile.path + suffix + ".restore-tmp")
+                        src.copyTo(stage, overwrite = true)
+                        staged.add(stage to File(databaseFile.path + suffix))
+                    }
+            }
+        } catch (t: Throwable) {
+            File(databaseFile.path + ".restore-tmp").delete()
+            File(databaseFile.path + "-wal.restore-tmp").delete()
+            File(databaseFile.path + "-shm.restore-tmp").delete()
+            throw t
+        }
         listOf("", "-wal", "-shm", "-journal").forEach { suffix ->
             File(databaseFile.path + suffix).delete()
         }
-        // Copy the SQLite file as-is. Do not bump user_version here: a v10 (or
-        // older) backup must still be v10 on disk so Room runs MIGRATION_* to v11.
-        dbSrc.copyTo(databaseFile, overwrite = true)
-        File(unpacked, "${FieldOpsBackupFormat.DB_DIR}/${FieldOpsBackupFormat.DB_FILE}-wal")
-            .takeIf { it.isFile }?.copyTo(File(databaseFile.path + "-wal"), overwrite = true)
-        File(unpacked, "${FieldOpsBackupFormat.DB_DIR}/${FieldOpsBackupFormat.DB_FILE}-shm")
-            .takeIf { it.isFile }?.copyTo(File(databaseFile.path + "-shm"), overwrite = true)
+        staged.forEach { (stage, target) ->
+            if (!stage.renameTo(target)) {
+                stage.copyTo(target, overwrite = true)
+                stage.delete()
+            }
+        }
 
         replaceDir(File(unpacked, FieldOpsBackupFormat.PHOTOS_DIR), File(filesDir, FieldOpsBackupFormat.PHOTOS_DIR))
         replaceDir(File(unpacked, FieldOpsBackupFormat.DATASTORE_DIR), File(filesDir, FieldOpsBackupFormat.DATASTORE_DIR))

@@ -15,6 +15,7 @@ import com.strobingn.wildlifefieldops.data.observation.LocalMediaSync
 import com.strobingn.wildlifefieldops.data.observation.ObservationEventMapper
 import com.strobingn.wildlifefieldops.data.observation.ObservationEventSyncQueue
 import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoUploader
+import com.strobingn.wildlifefieldops.data.remote.JobPhotoPaths
 import com.strobingn.wildlifefieldops.data.remote.JobPhotoUploader
 import com.strobingn.wildlifefieldops.data.remote.LiveSyncPayloads
 import com.strobingn.wildlifefieldops.data.remote.RemoteCustomerDto
@@ -33,7 +34,10 @@ import com.strobingn.wildlifefieldops.sync.work.LocalEditSignal
 import com.strobingn.wildlifefieldops.sync.work.SyncWriteGate
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -72,18 +76,22 @@ class SyncRepository @Inject constructor(
     private val localEdits: LocalEditSignal,
     private val syncStatusStore: SyncStatusStore
 ) : FieldOpsSyncGateway {
+    /**
+     * One pass at a time. Sync Now, the WorkManager worker and the pre-update flush can
+     * all call [syncAll]; overlapping passes pushed the same rows twice and raced ACKs.
+     */
+    private val syncMutex = Mutex()
+
     override fun isCloudConfigured(): Boolean = supabaseService.isConfigured
 
     override suspend fun syncAll(): SyncResult = withContext(Dispatchers.IO) {
         val result = try {
-            val pendingBefore = countPending()
-            val synced = syncWriteGate.marking { doSync() }
-            // Pull/ACK writes are drained inside the gate. A row created during
-            // this pass (photo captured while syncing) still needs one push.
-            if (synced.failedItems.isEmpty() && synced.pendingRemaining > pendingBefore) {
-                localEdits.notifyLocalChange()
+            syncMutex.withLock {
+                val pendingBefore = countPending()
+                syncWriteGate.marking { doSync(pendingBefore) }
             }
-            synced
+        } catch (c: CancellationException) {
+            throw c
         } catch (t: Throwable) {
             android.util.Log.e("SyncRepository", "Sync crashed", t)
             SyncResult(
@@ -120,7 +128,7 @@ class SyncRepository @Inject constructor(
         }
     }
 
-    private suspend fun doSync(): SyncResult {
+    private suspend fun doSync(pendingBefore: Int): SyncResult {
         val client = supabaseService.client
             ?: return SyncResult(
                 success = false,
@@ -133,6 +141,8 @@ class SyncRepository @Inject constructor(
         var pushedObservations = 0
         var pushedEvents = 0
         var uploadedPhotos = 0
+        var ackedJobPhotos = 0
+        var photoNeedsAnotherPass = false
         var pulledJobs = 0
         var pulledCustomers = 0
         val failures = mutableListOf<SyncItemFailure>()
@@ -145,7 +155,13 @@ class SyncRepository @Inject constructor(
         customerDao.getUnsynced().forEach { customer ->
             if (customer.id in deletedCustomerIds) return@forEach
             val outcome = itemRunner.run(
-                markSynced = { customerDao.markSynced(customer.id) },
+                // Skip the ACK if the row was edited while the upload was in flight; the
+                // edit stays unsynced and the next pass pushes it (a pull would overwrite it).
+                markSynced = {
+                    if (customerDao.getById(customer.id)?.updatedAt == customer.updatedAt) {
+                        customerDao.markSynced(customer.id)
+                    }
+                },
                 markError = { customerDao.markSyncError(customer.id, it) }
             ) {
                 client.from("customers").upsert(LiveSyncPayloads.customer(customer))
@@ -163,7 +179,9 @@ class SyncRepository @Inject constructor(
         JobUploadQueue.pending(jobDao.getUnsynced()).forEach { job ->
             if (job.id in deletedJobIds) return@forEach
             val outcome = itemRunner.run(
-                markSynced = { jobDao.markSynced(job.id) },
+                markSynced = {
+                    if (jobDao.getById(job.id)?.updatedAt == job.updatedAt) jobDao.markSynced(job.id)
+                },
                 markError = { jobDao.markSyncError(job.id, it) }
             ) {
                 client.from("jobs").upsert(LiveSyncPayloads.job(job))
@@ -187,7 +205,11 @@ class SyncRepository @Inject constructor(
                 return@forEach
             }
             val outcome = itemRunner.run(
-                markSynced = { inspectionDao.markSynced(insp.id) },
+                markSynced = {
+                    if (inspectionDao.getById(insp.id)?.updatedAt == insp.updatedAt) {
+                        inspectionDao.markSynced(insp.id)
+                    }
+                },
                 markError = { inspectionDao.markSyncError(insp.id, it) }
             ) {
                 client.from("inspections").upsert(LiveSyncPayloads.inspection(insp))
@@ -203,6 +225,8 @@ class SyncRepository @Inject constructor(
         try {
             val remoteCustomers = client.from("customers").select().decodeList<RemoteCustomerDto>()
             pulledCustomers = mergeCustomers(remoteCustomers)
+        } catch (c: CancellationException) {
+            throw c
         } catch (e: Exception) {
             android.util.Log.w("SyncRepository", "Customer pull failed", e)
             failures += SyncItemFailure("customer", "*", "pull", SyncErrorFormatter.reason(e))
@@ -211,6 +235,8 @@ class SyncRepository @Inject constructor(
         try {
             val remoteJobs = client.from("jobs").select().decodeList<RemoteJobDto>()
             pulledJobs = mergeJobs(remoteJobs)
+        } catch (c: CancellationException) {
+            throw c
         } catch (e: Exception) {
             android.util.Log.w("SyncRepository", "Job pull failed", e)
             failures += SyncItemFailure("job", "*", "pull", SyncErrorFormatter.reason(e))
@@ -221,18 +247,25 @@ class SyncRepository @Inject constructor(
                 markSynced = { /* ACK inside the block after a description-stable write */ },
                 markError = { photoDao.markUploadError(photo.id, it) }
             ) {
-                val uploaded = jobPhotoUploader.upload(client, photo)
                 val latest = photoDao.getById(photo.id) ?: photo
+                // Inspection photos are saved with an inspectionId and often no jobId.
+                // Follow the inspection's job so they do not upload as "unassigned".
+                val inspectionJobId = latest.inspectionId
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { inspectionDao.getById(it)?.jobId }
+                val resolvedJobId = JobPhotoPaths.resolveJobId(latest.jobId, inspectionJobId)
+                val forServer = if (resolvedJobId == latest.jobId) latest else latest.copy(jobId = resolvedJobId)
+                val uploaded = jobPhotoUploader.upload(client, forServer)
                 try {
                     client.from("photos").upsert(
-                        LiveSyncPayloads.photo(latest, uploaded.storagePath, uploaded.publicUrl)
+                        LiveSyncPayloads.photo(forServer, uploaded.storagePath, uploaded.publicUrl)
                     )
                 } catch (e: Exception) {
                     android.util.Log.w("SyncRepository", "photos row failed for ${photo.id}", e)
                     throw e
                 }
                 client.from("job_photos").upsert(
-                    LiveSyncPayloads.jobPhotoLink(latest, uploaded.storagePath, uploaded.publicUrl)
+                    LiveSyncPayloads.jobPhotoLink(forServer, uploaded.storagePath, uploaded.publicUrl)
                 )
                 val acked = photoDao.markUploadedIfDescription(
                     latest.id,
@@ -240,6 +273,7 @@ class SyncRepository @Inject constructor(
                     latest.description
                 )
                 if (acked == 0) {
+                    photoNeedsAnotherPass = true
                     android.util.Log.i(
                         "SyncRepository",
                         "Photo ${photo.id} notes changed during upload; leaving unsynced for AI retry"
@@ -249,7 +283,10 @@ class SyncRepository @Inject constructor(
             }
             when (outcome) {
                 is SyncItemOutcome.Ok -> {
-                    if (outcome.value > 0) uploadedPhotos += 1
+                    if (outcome.value > 0) {
+                        uploadedPhotos += 1
+                        ackedJobPhotos += 1
+                    }
                 }
                 is SyncItemOutcome.Failed -> {
                     android.util.Log.e("SyncRepository", "Photo upload failed ${photo.id}: ${outcome.reason}")
@@ -337,6 +374,15 @@ class SyncRepository @Inject constructor(
 
         val pendingRemaining = countPending()
 
+        // Pull/ACK writes are drained inside the gate, so a row created or edited while this
+        // pass ran (photo captured, job edited) does not schedule its own sync. Anything still
+        // pending beyond what this pass left unsettled needs another push.
+        val settled = pushedJobs + pushedCustomers + pushedInspections +
+            pushedObservations + pushedEvents + ackedJobPhotos
+        if (failures.isEmpty() && (photoNeedsAnotherPass || pendingRemaining > pendingBefore - settled)) {
+            localEdits.notifyLocalChange()
+        }
+
         val base = "Synced. Pushed: $pushedJobs jobs, $pushedCustomers customers, $pushedInspections inspections, " +
             "$pushedObservations observations, $pushedEvents events, $uploadedPhotos photos. " +
             "Pulled: $pulledJobs jobs, $pulledCustomers customers. Still pending locally: $pendingRemaining."
@@ -401,6 +447,8 @@ class SyncRepository @Inject constructor(
                         }
                     }
                     deletedRecordDao.markSynced(tombstone.id, entityType)
+                } catch (c: CancellationException) {
+                    throw c
                 } catch (e: Exception) {
                     val reason = SyncErrorFormatter.reason(e)
                     android.util.Log.w(
@@ -411,6 +459,8 @@ class SyncRepository @Inject constructor(
                     failures += SyncItemFailure(entityType, tombstone.id, "delete", reason)
                 }
             }
+        } catch (c: CancellationException) {
+            throw c
         } catch (e: Exception) {
             android.util.Log.e("SyncRepository", "Deletion push failed for $entityType", e)
             failures += SyncItemFailure(entityType, "*", "deletions", SyncErrorFormatter.reason(e))

@@ -49,6 +49,9 @@ fun CustomerFormScreen(
     var showTypeDropdown by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
     var activeCustomerId by remember(customerId) { mutableStateOf(customerId) }
+    // The row as loaded, so saving keeps fields this form does not show (alternate phone, coordinates, active flag, created date).
+    var loadedCustomer by remember(customerId) { mutableStateOf<Customer?>(null) }
+    var isSavingCustomer by remember { mutableStateOf(false) }
     var manualKeys by remember { mutableStateOf(setOf<String>()) }
     var importMatches by remember { mutableStateOf(listOf<Customer>()) }
     var importChoice by remember { mutableStateOf(ImportCustomerChoice.UNDECIDED) }
@@ -105,6 +108,7 @@ fun CustomerFormScreen(
         customerId?.let { id ->
             viewModel.getCustomerById(id).collect { customer ->
                 customer?.let {
+                    loadedCustomer = it
                     isEditing = true
                     firstName = it.firstName
                     lastName = it.lastName
@@ -411,10 +415,16 @@ fun CustomerFormScreen(
 
             Button(
                 onClick = {
+                    if (isSavingCustomer) return@Button
+                    isSavingCustomer = true
+                    val base = loadedCustomer
                     if (isEditing && activeCustomerId != null) {
+                        val addressChanged = base != null && (
+                            base.address != address || base.city != city ||
+                                base.state != state || base.zipCode != zipCode
+                            )
                         viewModel.updateCustomer(
-                            Customer(
-                                id = activeCustomerId!!,
+                            (base ?: Customer(id = activeCustomerId!!)).copy(
                                 firstName = firstName,
                                 lastName = lastName,
                                 companyName = companyName,
@@ -424,12 +434,15 @@ fun CustomerFormScreen(
                                 city = city,
                                 state = state,
                                 zipCode = zipCode,
+                                latitude = if (addressChanged) null else base?.latitude,
+                                longitude = if (addressChanged) null else base?.longitude,
                                 customerType = selectedType,
                                 notes = notes,
                                 billingAddress = billingAddress,
                                 billingContact = billingContact,
                                 paymentTerms = paymentTerms
-                            )
+                            ),
+                            onDone = onBack
                         )
                     } else {
                         viewModel.createCustomer(
@@ -446,15 +459,15 @@ fun CustomerFormScreen(
                             notes = notes,
                             billingAddress = billingAddress,
                             billingContact = billingContact,
-                            paymentTerms = paymentTerms
+                            paymentTerms = paymentTerms,
+                            onDone = onBack
                         )
                     }
-                    onBack()
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
                 shape = RoundedCornerShape(12.dp),
-                enabled = firstName.isNotBlank() && lastName.isNotBlank()
+                enabled = firstName.isNotBlank() && lastName.isNotBlank() && !isSavingCustomer
             ) {
                 Icon(Icons.Default.Save, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))

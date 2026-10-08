@@ -15,9 +15,11 @@ import com.strobingn.wildlifefieldops.ai.camera.WildlifeEvidenceDetector
 import com.strobingn.wildlifefieldops.ai.camera.WildlifeEvidenceHit
 import com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins
 import com.strobingn.wildlifefieldops.data.remote.InspectionReportDraft
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.max
@@ -37,6 +39,7 @@ object WalkthroughVideoAnalyzer {
     const val GUIDANCE_SECONDS_MAX = 90
     private const val MAX_SAMPLE_MS = 90_000L
     private const val TARGET_FRAMES = 10
+    private const val ENRICH_TIMEOUT_MS = 90_000L
 
     data class WalkthroughResult(
         val draft: InspectionReportDraft,
@@ -86,6 +89,8 @@ object WalkthroughVideoAnalyzer {
                         val image = InputImage.fromBitmap(scaled, 0)
                         val labels = try {
                             awaitTask(labeler.process(image))
+                        } catch (e: CancellationException) {
+                            throw e
                         } catch (t: Throwable) {
                             Log.w(TAG, "label frame $i failed: ${t.message}")
                             emptyList()
@@ -101,6 +106,9 @@ object WalkthroughVideoAnalyzer {
                         rawLabels += evidence.rawLabels
                         framesOk++
                         if (scaled !== frame) scaled.recycle() else frame.recycle()
+                    } catch (e: CancellationException) {
+                        try { frame.recycle() } catch (_: Throwable) {}
+                        throw e
                     } catch (t: Throwable) {
                         Log.w(TAG, "frame $i analyze failed: ${t.message}")
                         try { frame.recycle() } catch (_: Throwable) {}
@@ -121,11 +129,15 @@ object WalkthroughVideoAnalyzer {
             val offlineDraft = lexiconDraft(aggregated, transcript)
             var usedAi = false
             val draft = try {
-                val enriched = enrichWithAi?.invoke(transcript)
+                // Bounded: the offline draft is already complete, so a stalled cloud/local LLM must not
+                // keep the walkthrough spinner up indefinitely.
+                val enriched = withTimeoutOrNull(ENRICH_TIMEOUT_MS) { enrichWithAi?.invoke(transcript) }
                 if (enriched != null) {
                     usedAi = true
                     mergeDrafts(offlineDraft, enriched)
                 } else offlineDraft
+            } catch (e: CancellationException) {
+                throw e
             } catch (t: Throwable) {
                 Log.w(TAG, "AI enrich failed, using offline draft: ${t.message}")
                 offlineDraft
@@ -152,6 +164,8 @@ object WalkthroughVideoAnalyzer {
                 guidanceHint = guidance,
                 offline = !usedAi
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (t: Throwable) {
             Log.w(TAG, "walkthrough failed: ${t.message}", t)
             WalkthroughResult(

@@ -93,7 +93,9 @@ object NyCountyTaxRates {
     internal fun normalizeCountyName(raw: String): String {
         var s = raw.trim().lowercase()
         // remove ", ny" / ", new york" / ", n.y." suffixes
-        s = s.replace(Regex(",?\\s*(ny|new york|n\\.y\\.)\\s*$"), "").trim()
+        // The state must be its own word or follow a comma: "albany" and "allegany"
+        // end in "ny" and must not lose it.
+        s = s.replace(Regex("(?:,\\s*|\\s+)(ny|new york|n\\.y\\.)\\s*$"), "").trim()
         // remove trailing "county" word
         s = s.replace(Regex("\\s+county\\s*$"), "").trim()
         return s

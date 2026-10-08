@@ -5,6 +5,7 @@ import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoPaths
 import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoUploader
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.storage.storage
+import kotlinx.coroutines.delay
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -54,8 +55,14 @@ class JobPhotoUploader @Inject constructor(
             } catch (t: Throwable) {
                 last = t
                 if (!SyncErrorFormatter.isTransient(t) || index == attempts - 1) throw t
+                // Back off so a flaky link is not hit three times within a second.
+                delay(RETRY_BACKOFF_MS * (index + 1))
             }
         }
         throw last ?: error("Job photo upload failed: $path")
+    }
+
+    private companion object {
+        const val RETRY_BACKOFF_MS = 1_500L
     }
 }

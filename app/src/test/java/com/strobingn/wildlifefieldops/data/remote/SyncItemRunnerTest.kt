@@ -40,6 +40,25 @@ class SyncItemRunnerTest {
     }
 
     @Test
+    fun cancellationIsRethrownAndNotStoredAsRowError() = runBlocking {
+        var error: String? = null
+        val runner = SyncItemRunner()
+        val thrown = try {
+            runner.run(
+                markSynced = { },
+                markError = { error = it }
+            ) {
+                throw kotlinx.coroutines.CancellationException("worker stopped")
+            }
+            null
+        } catch (c: kotlinx.coroutines.CancellationException) {
+            c
+        }
+        assertTrue(thrown != null)
+        assertEquals(null, error)
+    }
+
+    @Test
     fun duplicateKeyIsReadableAndDetectable() {
         val err = RuntimeException("duplicate key value violates unique constraint (23505)")
         assertTrue(SyncErrorFormatter.isDuplicate(err))

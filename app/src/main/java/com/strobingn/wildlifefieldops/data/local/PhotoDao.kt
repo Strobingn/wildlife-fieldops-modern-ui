@@ -65,4 +65,15 @@ interface PhotoDao {
 
     @Query("DELETE FROM photos WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    /**
+     * No foreign keys exist, so deleting an inspection / job does not cascade. Callers that
+     * delete the parent should load the rows ([getByInspectionOnce] / [getByJobOnce]), remove
+     * the files, then call these so photo rows are not orphaned.
+     */
+    @Query("DELETE FROM photos WHERE inspectionId = :inspectionId")
+    suspend fun deleteByInspectionId(inspectionId: String): Int
+
+    @Query("DELETE FROM photos WHERE jobId = :jobId")
+    suspend fun deleteByJobId(jobId: String): Int
 }
