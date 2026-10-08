@@ -43,6 +43,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -75,7 +77,12 @@ import com.strobingn.wildlifefieldops.ui.viewmodel.JobAiViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
 import com.strobingn.wildlifefieldops.util.ContractDocumentType
 import com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf
+import android.widget.Toast
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,7 +101,7 @@ fun EstimateScreen(
     val photoLinesLoading by jobAiViewModel.photoLinesLoading.collectAsState()
     val suggestedLines by jobAiViewModel.suggestedLines.collectAsState()
     val countyTaxState by invoiceViewModel.countyTaxState.collectAsState()
-    var autoDraftFired by remember { mutableStateOf(false) }
+    var autoDraftFired by rememberSaveable { mutableStateOf(false) }
 
     var pricing by remember { mutableStateOf(PricingCalculator.starterWorksheet()) }
     var hydrated by remember { mutableStateOf(false) }
@@ -156,6 +163,18 @@ fun EstimateScreen(
     LaunchedEffect(draft, hydrated) {
         val d = draft ?: return@LaunchedEffect
         if (!hydrated) return@LaunchedEffect
+        // One-shot: consume so a rotation does not re-apply the draft over later edits.
+        jobAiViewModel.consumeEstimateDraft()
+        if (!d.fromAi) {
+            // No model answered: the draft is just starter defaults. Keep the worksheet,
+            // but still take the measured mileage.
+            if (d.mileage > 0.0) {
+                val withMiles = pricing.copy(mileage = d.mileage)
+                applyPricing(withMiles)
+                syncInputTexts(withMiles)
+            }
+            return@LaunchedEffect
+        }
         val filled = PricingCalculator.applyAiInputs(
             current = pricing,
             laborHours = d.laborHours,
@@ -195,6 +214,8 @@ fun EstimateScreen(
     val context = LocalContext.current
     var pdfPath by remember { mutableStateOf("") }
     var showPdfShare by remember { mutableStateOf(false) }
+    var pdfBusy by remember { mutableStateOf(false) }
+    val pdfScope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -548,26 +569,48 @@ fun EstimateScreen(
                 }
                 Button(
                     onClick = {
-                        jobsViewModel.saveJobPricing(j.id, pricing)
-                        val items = buildEstimateLineItems(pricing, result)
-                        val signature = com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules
-                            .find(pricing, com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.ESTIMATE)
-                        pdfPath = WildlifeWhispererContractPdf.generate(
-                            context = context,
-                            documentType = ContractDocumentType.ESTIMATE,
-                            job = j.copy(estimatedValue = result.total.effective, pricing = pricing),
-                            lineItems = items,
-                            subtotal = result.subtotal.effective,
-                            taxRate = pricing.taxRatePercent,
-                            taxAmount = result.taxAmount.effective,
-                            discountAmount = result.discountAmount.effective,
-                            total = result.total.effective,
-                            notes = listOf(pricing.notes, pricing.rationale).filter { it.isNotBlank() }.joinToString("\n"),
-                            customerSignature = com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(signature?.pngBase64.orEmpty()),
-                            customerSignerName = signature?.signerName.orEmpty(),
-                            customerSignedAtMillis = signature?.signedAt
-                        )
-                        showPdfShare = true
+                        if (!pdfBusy) {
+                            jobsViewModel.saveJobPricing(j.id, pricing)
+                            val items = buildEstimateLineItems(pricing, result)
+                            val signature = com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules
+                                .find(pricing, com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.ESTIMATE)
+                            val pricingNow = pricing
+                            val resultNow = result
+                            // PDF drawing and file writes stay off the main thread.
+                            pdfBusy = true
+                            pdfScope.launch {
+                                try {
+                                    pdfPath = withContext(Dispatchers.IO) {
+                                        WildlifeWhispererContractPdf.generate(
+                                            context = context,
+                                            documentType = ContractDocumentType.ESTIMATE,
+                                            job = j.copy(estimatedValue = resultNow.total.effective, pricing = pricingNow),
+                                            lineItems = items,
+                                            subtotal = resultNow.subtotal.effective,
+                                            taxRate = pricingNow.taxRatePercent,
+                                            taxAmount = resultNow.taxAmount.effective,
+                                            discountAmount = resultNow.discountAmount.effective,
+                                            total = resultNow.total.effective,
+                                            notes = listOf(pricingNow.notes, pricingNow.rationale).filter { it.isNotBlank() }.joinToString("\n"),
+                                            customerSignature = com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(signature?.pngBase64.orEmpty()),
+                                            customerSignerName = signature?.signerName.orEmpty(),
+                                            customerSignedAtMillis = signature?.signedAt
+                                        )
+                                    }
+                                    showPdfShare = true
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (t: Throwable) {
+                                    Toast.makeText(
+                                        context,
+                                        "Could not create the PDF: ${t.message ?: t.javaClass.simpleName}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                } finally {
+                                    pdfBusy = false
+                                }
+                            }
+                        }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),

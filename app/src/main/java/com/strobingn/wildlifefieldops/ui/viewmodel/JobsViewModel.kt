@@ -27,6 +27,9 @@ import com.strobingn.wildlifefieldops.pricing.markManual
 import com.strobingn.wildlifefieldops.ui.screens.OpenHomeJobs
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -63,15 +66,20 @@ class JobsViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(true)
     val isLoading = _isLoading.asStateFlow()
 
+    // One shared jobs query for the list, counts, recent and next-step cards.
+    private val allJobsFlow = jobDao.getAll()
+        .shareIn(viewModelScope, SharingStarted.WhileSubscribed(5000), replay = 1)
+
     val jobs = combine(_searchQuery, _selectedStatus, _openOnly) { query, status, openOnly ->
         Triple(query, status, openOnly)
     }.flatMapLatest { (query, status, openOnly) ->
-        val source = if (query.isNotBlank()) jobDao.search(query) else jobDao.getAll()
+        val source = if (query.isNotBlank()) jobDao.search(query) else allJobsFlow
         source.map { list ->
             list.filterNot { com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger.isLedger(it) }
                 .filter { OpenHomeJobs.matchesJobList(it.status, status, openOnly) }
         }
     }
+    .flowOn(Dispatchers.Default)
     .onEach { _isLoading.value = false }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -88,7 +96,7 @@ class JobsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     /** Same Scheduled / In progress / Completed buckets Home used to show. */
-    val flagCounts = jobDao.getAll()
+    val flagCounts = allJobsFlow
         .map { list ->
             val jobs = list.filterNot { OpsLedger.isLedger(it) }
             JobFlagCounts(
@@ -97,17 +105,19 @@ class JobsViewModel @Inject constructor(
                 completed = jobs.count { JobStatusPipeline.flag(it.status) == JobStatus.COMPLETED }
             )
         }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), JobFlagCounts())
 
-    val recentJobs = jobDao.getAll()
+    val recentJobs = allJobsFlow
         .map { list -> list.filterNot { OpsLedger.isLedger(it) }.take(5) }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val pendingReminders = reminderDao.getPending()
         .map { it.take(5) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val dueNextSteps = jobDao.getAll()
+    val dueNextSteps = allJobsFlow
         .map { jobs ->
             val now = System.currentTimeMillis()
             jobs.filter { it.nextStep.isNotBlank() }
@@ -118,6 +128,7 @@ class JobsViewModel @Inject constructor(
                 }
                 .take(5)
         }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val totalRevenue = jobDao.getByStatus(JobStatus.PAID)
@@ -159,13 +170,32 @@ class JobsViewModel @Inject constructor(
         return job.copy(latitude = point.latitude, longitude = point.longitude)
     }
 
-    fun fillMissingCoordinates() = viewModelScope.launch {
-        jobDao.getAllOnce().forEach { job ->
-            if ((job.latitude == null || job.longitude == null) && job.address.isNotBlank()) {
-                val updated = withCoordinates(job)
-                if (updated.latitude != null && updated.longitude != null) {
+    private var fillCoordinatesWork: kotlinx.coroutines.Job? = null
+    private val geocodeAttempted = mutableSetOf<String>()
+
+    /**
+     * Fills missing job coordinates for the route screen. That screen calls this on every jobs
+     * emission, and each write below emits again, so overlapping passes and endless retries of
+     * addresses that never geocode are blocked, and the latest row is re-read before writing
+     * so an edit made during the network lookup is not overwritten.
+     */
+    fun fillMissingCoordinates() {
+        if (fillCoordinatesWork?.isActive == true) return
+        fillCoordinatesWork = viewModelScope.launch {
+            jobDao.getAllOnce().forEach { job ->
+                if ((job.latitude == null || job.longitude == null) &&
+                    job.address.isNotBlank() &&
+                    geocodeAttempted.add(job.id)
+                ) {
+                    val point = geocodingService.geocode(job.address) ?: return@forEach
+                    val latest = jobDao.getById(job.id) ?: return@forEach
+                    if (latest.address != job.address || (latest.latitude != null && latest.longitude != null)) {
+                        return@forEach
+                    }
                     jobDao.insert(
-                        updated.copy(
+                        latest.copy(
+                            latitude = point.latitude,
+                            longitude = point.longitude,
                             updatedAt = System.currentTimeMillis(),
                             isSynced = false
                         )
@@ -236,29 +266,35 @@ class JobsViewModel @Inject constructor(
         )
     }
 
+    // The detail screen pops right after Delete, which clears this ViewModel. The local steps
+    // must finish together or the job is left half-deleted, so they ignore that cancellation.
     fun deleteJob(job: Job) = viewModelScope.launch {
-        deletedRecordDao.insert(
-            DeletedRecord(
-                id = job.id,
-                entityType = DeletedRecord.TYPE_JOB,
-                synced = false
+        withContext(NonCancellable) {
+            deletedRecordDao.insert(
+                DeletedRecord(
+                    id = job.id,
+                    entityType = DeletedRecord.TYPE_JOB,
+                    synced = false
+                )
             )
-        )
-        visitDao.deletePendingForJob(job.id)
-        jobDao.delete(job)
+            visitDao.deletePendingForJob(job.id)
+            jobDao.delete(job)
+        }
         syncRepository.tryRemoteDelete(DeletedRecord.TYPE_JOB, job.id)
     }
 
     fun deleteJobById(id: String) = viewModelScope.launch {
-        deletedRecordDao.insert(
-            DeletedRecord(
-                id = id,
-                entityType = DeletedRecord.TYPE_JOB,
-                synced = false
+        withContext(NonCancellable) {
+            deletedRecordDao.insert(
+                DeletedRecord(
+                    id = id,
+                    entityType = DeletedRecord.TYPE_JOB,
+                    synced = false
+                )
             )
-        )
-        visitDao.deletePendingForJob(id)
-        jobDao.deleteById(id)
+            visitDao.deletePendingForJob(id)
+            jobDao.deleteById(id)
+        }
         syncRepository.tryRemoteDelete(DeletedRecord.TYPE_JOB, id)
     }
 
@@ -346,6 +382,7 @@ class JobsViewModel @Inject constructor(
         appointmentTimes: List<Long>,
         actualCost: Double? = null,
         customer: JobCustomerDraft? = null,
+        onError: (String) -> Unit = {},
         onSaved: () -> Unit
     ) = viewModelScope.launch {
         val draft = customer ?: JobCustomerDraft(
@@ -353,20 +390,27 @@ class JobsViewModel @Inject constructor(
             name = customerName,
             address = address
         )
-        jobCustomerWorkspace.save(
-            JobSaveRequest(
-                existingJob = existingJob,
-                title = title,
-                description = description,
-                type = type,
-                priority = priority,
-                estimatedValue = estimatedValue,
-                notes = notes,
-                appointmentTimes = appointmentTimes,
-                actualCost = actualCost,
-                customer = draft
+        try {
+            jobCustomerWorkspace.save(
+                JobSaveRequest(
+                    existingJob = existingJob,
+                    title = title,
+                    description = description,
+                    type = type,
+                    priority = priority,
+                    estimatedValue = estimatedValue,
+                    notes = notes,
+                    appointmentTimes = appointmentTimes,
+                    actualCost = actualCost,
+                    customer = draft
+                )
             )
-        )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            onError("Could not save the job: ${t.message?.take(120) ?: t::class.java.simpleName}")
+            return@launch
+        }
         onSaved()
     }
 
@@ -522,8 +566,10 @@ class JobsViewModel @Inject constructor(
                 onFilled(merged)
             } else {
                 runCatching { android.util.Log.i("DictationFill", "refine ${refineMs}ms no draft (timeout or skip)") }
-                if (heuristic == null && current() == null) {
-                    _aiFillError.value = result?.error ?: "AI job fill failed."
+                if (heuristic == null) {
+                    // Nothing was filled at all: say so instead of leaving the button looking dead.
+                    _aiFillError.value = result?.error
+                        ?: "AI job fill timed out or returned nothing. Edit the fields by hand."
                 } else if (_aiFillSource.value.isNullOrBlank()) {
                     _aiFillSource.value = "⚙️ Instant heuristic"
                 }

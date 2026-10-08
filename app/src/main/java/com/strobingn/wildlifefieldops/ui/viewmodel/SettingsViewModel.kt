@@ -279,8 +279,14 @@ class SettingsViewModel @Inject constructor(
     fun setBusinessWebsite(value: String) = businessWrites.schedule("website", value)
 
     fun setBusinessLogo(uri: Uri) = viewModelScope.launch {
-        val path = withContext(Dispatchers.IO) { BusinessProfileStore.importLogo(context, uri) }
-        dataStore.edit { it[BUSINESS_LOGO] = path }
+        try {
+            val path = withContext(Dispatchers.IO) { BusinessProfileStore.importLogo(context, uri) }
+            dataStore.edit { it[BUSINESS_LOGO] = path }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            _syncMessage.value = "Failed to use that logo: ${t.message ?: t.javaClass.simpleName}"
+        }
     }
 
     fun resetBusinessLogo() = viewModelScope.launch {

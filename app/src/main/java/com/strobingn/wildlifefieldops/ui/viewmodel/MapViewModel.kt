@@ -40,11 +40,32 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+
+/** Text form of a saved boundary: "lat,lng;lat,lng;...". Bad pairs are skipped on read. */
+object BoundaryCodec {
+    const val MIN_POINTS = 3
+
+    fun encode(points: List<Pair<Double, Double>>): String =
+        points.joinToString(";") { "${it.first},${it.second}" }
+
+    fun decode(raw: String?): List<Pair<Double, Double>> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return raw.split(';').mapNotNull { pair ->
+            val parts = pair.split(',')
+            val lat = parts.getOrNull(0)?.trim()?.toDoubleOrNull()
+            val lng = parts.getOrNull(1)?.trim()?.toDoubleOrNull()
+            if (parts.size == 2 && lat != null && lng != null &&
+                lat.isFinite() && lng.isFinite() && lat in -90.0..90.0 && lng in -180.0..180.0
+            ) lat to lng else null
+        }
+    }
+}
 
 data class MapProperty(
     val id: String,
@@ -88,6 +109,9 @@ class MapViewModel @Inject constructor(
 
     private val _boundaryPoints = MutableStateFlow<List<com.google.android.gms.maps.model.LatLng>>(emptyList())
     val boundaryPoints = _boundaryPoints.asStateFlow()
+
+    private val boundaryPrefs by lazy { appContext.getSharedPreferences("map_boundary", Context.MODE_PRIVATE) }
+    private var savedBoundary: List<com.google.android.gms.maps.model.LatLng> = emptyList()
 
     private val _isObserving = MutableStateFlow(false)
     val isObserving = _isObserving.asStateFlow()
@@ -162,7 +186,7 @@ class MapViewModel @Inject constructor(
                 )
             }
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val properties: StateFlow<List<MapProperty>> = combine(
         roomProperties,
@@ -185,8 +209,10 @@ class MapViewModel @Inject constructor(
         jobDao.getAll(),
         properties
     ) { jobs, located ->
-        (jobs.size - located.map { it.id }.toSet().size).coerceAtLeast(0)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+        // The ops ledger row is bookkeeping, not a job, so it is never "unlocated".
+        val realJobs = jobs.count { !com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger.isLedger(it) }
+        (realJobs - located.map { it.id }.toSet().size).coerceAtLeast(0)
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     val filteredProperties = combine(properties, _searchQuery) { props, query ->
         if (query.isBlank()) props
@@ -197,6 +223,14 @@ class MapViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
+        viewModelScope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                BoundaryCodec.decode(boundaryPrefs.getString("points", null))
+                    .map { com.google.android.gms.maps.model.LatLng(it.first, it.second) }
+            }
+            savedBoundary = saved
+            if (!_isDrawingBoundary.value && _boundaryPoints.value.isEmpty()) _boundaryPoints.value = saved
+        }
         viewModelScope.launch {
             _cachedCamera.value = mapOfflineCache.loadCamera()
             _cachedRegion.value = mapOfflineCache.loadRegion()
@@ -234,9 +268,11 @@ class MapViewModel @Inject constructor(
             _isPlacingTrap.value = false
             _pendingPin.value = null
             _pendingTrapPin.value = null
-        }
-        if (!_isDrawingBoundary.value) {
+            // A new drawing starts clean; the saved boundary stays on disk until replaced or cleared.
             _boundaryPoints.value = emptyList()
+        } else {
+            // Stopped without saving: go back to the last saved boundary.
+            _boundaryPoints.value = savedBoundary
         }
     }
 
@@ -316,12 +352,27 @@ class MapViewModel @Inject constructor(
     fun clearBoundary() {
         _boundaryPoints.value = emptyList()
         _isDrawingBoundary.value = false
+        savedBoundary = emptyList()
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { boundaryPrefs.edit().remove("points").commit() }
+        }
     }
 
+    /** Keeps the drawn polygon on the map and on disk. Needs at least three points. */
     fun saveBoundary() {
+        val points = _boundaryPoints.value
+        if (points.size < BoundaryCodec.MIN_POINTS) {
+            _cacheMessage.value = "Tap at least ${BoundaryCodec.MIN_POINTS} points on the map to save a boundary."
+            return
+        }
+        _isDrawingBoundary.value = false
+        savedBoundary = points
+        val encoded = BoundaryCodec.encode(points.map { it.latitude to it.longitude })
         viewModelScope.launch {
-            _isDrawingBoundary.value = false
-            _boundaryPoints.value = emptyList()
+            val ok = withContext(Dispatchers.IO) {
+                runCatching { boundaryPrefs.edit().putString("points", encoded).commit() }.getOrDefault(false)
+            }
+            _cacheMessage.value = if (ok) "Boundary saved (${points.size} points)." else "Could not save the boundary."
         }
     }
 
@@ -423,14 +474,23 @@ class MapViewModel @Inject constructor(
                 isSynced = false
             )
             fieldObservationDao.insert(observation)
-            persistSpeciesEvents(
-                entityId = observation.id,
-                mediaUri = photoUri ?: speciesState.photoUri,
-                photoLocalPath = photoLocalPath,
-                geometryTrust = lastKnown?.accuracy?.let { acc ->
-                    (1f - (acc / 50f)).coerceIn(0f, 1f)
-                } ?: 0f
-            )
+            // The observation row is already saved. A failure in the species event log must not
+            // crash the screen or leave the pin stuck, but it must not stay silent either.
+            val eventsFailed = try {
+                persistSpeciesEvents(
+                    entityId = observation.id,
+                    mediaUri = photoUri ?: speciesState.photoUri,
+                    photoLocalPath = photoLocalPath,
+                    geometryTrust = lastKnown?.accuracy?.let { acc ->
+                        (1f - (acc / 50f)).coerceIn(0f, 1f)
+                    } ?: 0f
+                )
+                false
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                true
+            }
             _pendingPin.value = null
             _isObserving.value = false
             _speciesId.value = SpeciesIdUiState()
@@ -438,7 +498,7 @@ class MapViewModel @Inject constructor(
                 operational != null -> " Species ID confirmed: $operational."
                 speciesState.suggestion != null -> " Species suggestion stored as unreviewed (not operational)."
                 else -> ""
-            }
+            } + if (eventsFailed) " The species ID log entry could not be written." else ""
             _cacheMessage.value = if (_isOffline.value) {
                 "Saved offline in Room. Will sync when you are back online.$idNote"
             } else {
