@@ -745,6 +745,7 @@ fun InspectionFormScreen(
                         OutlinedButton(
                             onClick = {
                                 viewModel.draftNarrativeFromEvidence(
+                                    appContext = context.applicationContext,
                                     jobId = linkedJobId,
                                     inspectionId = photoOwnerId,
                                     context = InspectionReportContext(
