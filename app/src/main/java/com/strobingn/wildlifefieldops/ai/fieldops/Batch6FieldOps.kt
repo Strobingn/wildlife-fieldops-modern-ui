@@ -126,11 +126,26 @@ object PaymentLedger {
         Money.minus(invoiceTotal, totalPaid(payments)).coerceAtLeast(0.0)
 
     fun upsert(payments: List<JobPaymentRecord>, row: JobPaymentRecord): List<JobPaymentRecord> {
-        val id = row.id.ifBlank { "pay-${row.paidAt}-${payments.size}" }
+        val id = row.id.ifBlank { newPaymentId(payments, row.paidAt) }
         val next = row.copy(id = id, method = row.method.ifBlank { PaymentMethod.OTHER }, checkNumber = row.checkNumber.trim())
         val index = payments.indexOfFirst { it.id == id }
         if (index < 0) return payments + next
         return payments.toMutableList().apply { this[index] = next }
+    }
+
+    /**
+     * "pay-<paidAt>-<count>" repeats once a payment is removed and another is added
+     * on the same day (the day picker gives every payment that day the same paidAt),
+     * which silently overwrote the surviving payment. Skip ids already in use.
+     */
+    private fun newPaymentId(payments: List<JobPaymentRecord>, paidAt: Long): String {
+        var n = payments.size
+        var candidate = "pay-$paidAt-$n"
+        while (payments.any { it.id == candidate }) {
+            n++
+            candidate = "pay-$paidAt-$n"
+        }
+        return candidate
     }
 
     fun remove(payments: List<JobPaymentRecord>, id: String): List<JobPaymentRecord> =

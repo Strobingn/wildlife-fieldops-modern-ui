@@ -28,7 +28,7 @@ object CustomerMessageDraft {
         val name = customerName.ifBlank { "there" }
         val job = jobTitle.ifBlank { "the wildlife job" }
         val where = address.ifBlank { "the property" }
-        val money = amount?.takeIf { it > 0 }?.let { "$${"%.2f".format(it)}" }
+        val money = amount?.takeIf { it > 0 }?.let { "$" + String.format(java.util.Locale.US, "%.2f", it) }
         return when (kind) {
             CustomerMessageKind.ESTIMATE -> CustomerMessage(
                 kind,

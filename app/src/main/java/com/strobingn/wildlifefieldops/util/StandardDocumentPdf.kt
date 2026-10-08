@@ -46,23 +46,27 @@ object StandardDocumentPdf {
             "qr" to qr
         )
         val pdf = PdfDocument()
-        layout.pages.forEachIndexed { index, page ->
-            val pdfPage = pdf.startPage(PdfDocument.PageInfo.Builder(page.width, page.height, index + 1).create())
-            paint(pdfPage.canvas, page, logo)
-            images.forEach { (tag, bitmap) ->
-                if (bitmap != null) drawTagged(pdfPage.canvas, page, tag, bitmap)
+        try {
+            layout.pages.forEachIndexed { index, page ->
+                val pdfPage = pdf.startPage(PdfDocument.PageInfo.Builder(page.width, page.height, index + 1).create())
+                paint(pdfPage.canvas, page, logo)
+                images.forEach { (tag, bitmap) ->
+                    if (bitmap != null) drawTagged(pdfPage.canvas, page, tag, bitmap)
+                }
+                pdf.finishPage(pdfPage)
             }
-            pdf.finishPage(pdfPage)
+            val dir = if (cache) {
+                context.cacheDir
+            } else {
+                context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS) ?: context.filesDir
+            }
+            val file = File(dir, fileName)
+            FileOutputStream(file).use { pdf.writeTo(it) }
+            return file.absolutePath
+        } finally {
+            // Always release the native PdfDocument, even when painting or writing throws.
+            pdf.close()
         }
-        val dir = if (cache) {
-            context.cacheDir
-        } else {
-            context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS) ?: context.filesDir
-        }
-        val file = File(dir, fileName)
-        FileOutputStream(file).use { pdf.writeTo(it) }
-        pdf.close()
-        return file.absolutePath
     }
 
     fun share(context: Context, path: String, chooserTitle: String = "Share PDF") {
