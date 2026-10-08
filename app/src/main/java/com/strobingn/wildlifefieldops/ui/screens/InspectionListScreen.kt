@@ -34,7 +34,10 @@ data class InspectionListPreview(
     val inspectionCount: Int = inspections.size,
     val followUpCount: Int = inspections.count { it.followUpRequired },
     val searchQuery: String = "",
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val scheduled: List<Job> = emptyList(),
+    /** 0 = Scheduled, 1 = Reports. */
+    val initialTab: Int = 0
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,9 +63,10 @@ fun InspectionListScreen(
             onNavigateToInspectionForm = onNavigateToInspectionForm,
             onBack = onBack,
             showBack = showBack,
-            scheduled = emptyList(),
+            scheduled = preview.scheduled,
             onScheduleInspection = onScheduleInspection,
-            onOpenScheduledInspection = onOpenScheduledInspection
+            onOpenScheduledInspection = onOpenScheduledInspection,
+            initialTab = preview.initialTab
         )
         return
     }
@@ -106,10 +110,11 @@ private fun InspectionListContent(
     showBack: Boolean,
     scheduled: List<Job>,
     onScheduleInspection: () -> Unit,
-    onOpenScheduledInspection: (String) -> Unit
+    onOpenScheduledInspection: (String) -> Unit,
+    initialTab: Int = 0
 ) {
     // 0 = Scheduled (inspections only, opens first), 1 = Reports.
-    var tab by rememberSaveable { mutableStateOf(0) }
+    var tab by rememberSaveable { mutableStateOf(initialTab) }
     Scaffold(
         topBar = {
             TopAppBar(
