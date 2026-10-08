@@ -8,6 +8,7 @@ import dev.ffmpegkit.llama.LlamaConfig
 import dev.ffmpegkit.llama.LlamaModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -155,7 +156,9 @@ class LocalLlmEngine @Inject constructor(
                 topK = 40
             )
             // Reading a multi-GB GGUF is blocking disk IO: never do it on the caller's (possibly Main) thread.
-            model = withContext(Dispatchers.IO) { Llama.loadModel(modelPath = path, config = config) }
+            // NonCancellable: if the caller gives up while the native load blocks, the loaded
+            // model must still be stored (and released by close()), not leaked.
+            model = withContext(Dispatchers.IO + NonCancellable) { Llama.loadModel(modelPath = path, config = config) }
             loadedPath = path
             Log.i(TAG, "Loaded abliterated GGUF from $path (pkg=${context.packageName}, threads=$threads)")
             Result.success(Unit)

@@ -514,6 +514,14 @@ fun InvoiceScreen(
                                 boundInvoiceId?.let { id -> list.find { it.id == id } }
                                     ?: list.maxByOrNull { it.updatedAt }
                             }
+                            // Copy the editable form state on the main thread: the PDF is built on
+                            // another thread and must not see edits made after the tap.
+                            val lineItemsSnap = lineItems.toList()
+                            val taxRateSnap = taxRate.toDoubleOrNull() ?: 0.0
+                            val notesSnap = notes
+                            val termsSnap = terms
+                            val technicianSignatureSnap = technicianSignature
+                            val customerSignatureSnap = customerSignature
                             pdfBusy = true
                             pdfScope.launch {
                                 try {
@@ -521,16 +529,16 @@ fun InvoiceScreen(
                                         generateInvoicePDF(
                                         context = context,
                                         job = currentJob,
-                                        lineItems = lineItems,
+                                        lineItems = lineItemsSnap,
                                         subtotal = subtotal,
-                                        taxRate = taxRate.toDoubleOrNull() ?: 0.0,
+                                        taxRate = taxRateSnap,
                                         taxAmount = taxAmount,
                                         discountAmount = discountAmount,
                                         total = total,
-                                        notes = notes,
-                                        terms = terms,
-                                        technicianSignature = technicianSignature,
-                                        customerSignature = customerSignature
+                                        notes = notesSnap,
+                                        terms = termsSnap,
+                                        technicianSignature = technicianSignatureSnap,
+                                        customerSignature = customerSignatureSnap
                                             ?: com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(contractSig?.pngBase64.orEmpty()),
                                         customerSignerName = contractSig?.signerName.orEmpty(),
                                         customerSignedAtMillis = contractSig?.signedAt,

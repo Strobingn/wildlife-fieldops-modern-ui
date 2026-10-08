@@ -577,6 +577,11 @@ class LiveCaptureViewModel @Inject constructor(
             executor,
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                    if (!cont.isActive) {
+                        // The caller timed out and gave up; nobody will record this file.
+                        file.delete()
+                        return
+                    }
                     try {
                         val uri = FileProvider.getUriForFile(
                             appContext,
@@ -590,6 +595,7 @@ class LiveCaptureViewModel @Inject constructor(
                 }
 
                 override fun onError(exception: ImageCaptureException) {
+                    file.delete()
                     cont.resumeWithException(exception)
                 }
             }

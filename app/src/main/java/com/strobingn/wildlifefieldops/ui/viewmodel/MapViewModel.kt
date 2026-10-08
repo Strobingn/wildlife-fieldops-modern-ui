@@ -44,6 +44,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
@@ -112,6 +113,10 @@ class MapViewModel @Inject constructor(
 
     private val boundaryPrefs by lazy { appContext.getSharedPreferences("map_boundary", Context.MODE_PRIVATE) }
     private var savedBoundary: List<com.google.android.gms.maps.model.LatLng> = emptyList()
+    // Boundary disk writes run one at a time in call order, and a load never overrides a later
+    // save or clear (it is dropped if the epoch moved on while it was reading).
+    private val boundaryIo = kotlinx.coroutines.sync.Mutex()
+    @Volatile private var boundaryEpoch = 0
 
     private val _isObserving = MutableStateFlow(false)
     val isObserving = _isObserving.asStateFlow()
@@ -223,11 +228,15 @@ class MapViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
+        val loadEpoch = boundaryEpoch
         viewModelScope.launch {
-            val saved = withContext(Dispatchers.IO) {
-                BoundaryCodec.decode(boundaryPrefs.getString("points", null))
-                    .map { com.google.android.gms.maps.model.LatLng(it.first, it.second) }
+            val saved = boundaryIo.withLock {
+                withContext(Dispatchers.IO) {
+                    BoundaryCodec.decode(boundaryPrefs.getString("points", null))
+                        .map { com.google.android.gms.maps.model.LatLng(it.first, it.second) }
+                }
             }
+            if (loadEpoch != boundaryEpoch) return@launch
             savedBoundary = saved
             if (!_isDrawingBoundary.value && _boundaryPoints.value.isEmpty()) _boundaryPoints.value = saved
         }
@@ -353,8 +362,13 @@ class MapViewModel @Inject constructor(
         _boundaryPoints.value = emptyList()
         _isDrawingBoundary.value = false
         savedBoundary = emptyList()
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching { boundaryPrefs.edit().remove("points").commit() }
+        boundaryEpoch++
+        viewModelScope.launch {
+            boundaryIo.withLock {
+                withContext(Dispatchers.IO) {
+                    runCatching { boundaryPrefs.edit().remove("points").commit() }
+                }
+            }
         }
     }
 
@@ -368,9 +382,12 @@ class MapViewModel @Inject constructor(
         _isDrawingBoundary.value = false
         savedBoundary = points
         val encoded = BoundaryCodec.encode(points.map { it.latitude to it.longitude })
+        boundaryEpoch++
         viewModelScope.launch {
-            val ok = withContext(Dispatchers.IO) {
-                runCatching { boundaryPrefs.edit().putString("points", encoded).commit() }.getOrDefault(false)
+            val ok = boundaryIo.withLock {
+                withContext(Dispatchers.IO) {
+                    runCatching { boundaryPrefs.edit().putString("points", encoded).commit() }.getOrDefault(false)
+                }
             }
             _cacheMessage.value = if (ok) "Boundary saved (${points.size} points)." else "Could not save the boundary."
         }

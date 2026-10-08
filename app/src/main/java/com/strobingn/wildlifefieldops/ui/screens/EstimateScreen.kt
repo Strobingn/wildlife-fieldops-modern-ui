@@ -101,7 +101,7 @@ fun EstimateScreen(
     val photoLinesLoading by jobAiViewModel.photoLinesLoading.collectAsState()
     val suggestedLines by jobAiViewModel.suggestedLines.collectAsState()
     val countyTaxState by invoiceViewModel.countyTaxState.collectAsState()
-    var autoDraftFired by rememberSaveable { mutableStateOf(false) }
+    var autoDraftFired by remember { mutableStateOf(false) }
 
     var pricing by remember { mutableStateOf(PricingCalculator.starterWorksheet()) }
     var hydrated by remember { mutableStateOf(false) }

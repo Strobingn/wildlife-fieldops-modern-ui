@@ -171,7 +171,17 @@ class JobsViewModel @Inject constructor(
     }
 
     private var fillCoordinatesWork: kotlinx.coroutines.Job? = null
-    private val geocodeAttempted = mutableSetOf<String>()
+    private val geocodeAttempted = mutableMapOf<String, Long>()
+
+    /** One lookup per address per 5 minutes, so a failed lookup (offline) is retried later. */
+    private fun claimGeocodeAttempt(jobId: String, address: String): Boolean {
+        val key = "$jobId|$address"
+        val now = System.currentTimeMillis()
+        val last = geocodeAttempted[key]
+        if (last != null && now - last < 5 * 60_000L) return false
+        geocodeAttempted[key] = now
+        return true
+    }
 
     /**
      * Fills missing job coordinates for the route screen. That screen calls this on every jobs
@@ -185,7 +195,7 @@ class JobsViewModel @Inject constructor(
             jobDao.getAllOnce().forEach { job ->
                 if ((job.latitude == null || job.longitude == null) &&
                     job.address.isNotBlank() &&
-                    geocodeAttempted.add(job.id)
+                    claimGeocodeAttempt(job.id, job.address)
                 ) {
                     val point = geocodingService.geocode(job.address) ?: return@forEach
                     val latest = jobDao.getById(job.id) ?: return@forEach
