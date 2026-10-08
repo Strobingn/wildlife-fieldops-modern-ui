@@ -3,6 +3,7 @@ package com.strobingn.wildlifefieldops.data.backup
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import java.io.File
 import java.util.zip.ZipEntry
@@ -190,6 +191,85 @@ class FieldOpsBackupArchiveTest {
         assertEquals(14, last.startVersion)
         assertEquals(15, last.endVersion)
         assertEquals(12, com.strobingn.wildlifefieldops.data.local.Migrations.ALL.size)
+    }
+
+    @Test
+    fun validateRejectsBackupFromNewerRoomVersion() {
+        val root = newTempDir()
+        try {
+            val db = File(root, "wildlife_fieldops.db").apply {
+                writeBytes(sqliteHeaderWithUserVersion(userVersion = 16, payload = "future"))
+            }
+            val zip = File(root, "future.zip")
+            FieldOpsBackupArchive.createZip(
+                dest = zip,
+                manifest = sampleManifest().copy(roomVersion = FieldOpsBackupFormat.CURRENT_ROOM_VERSION + 1),
+                dbFile = db
+            )
+            val result = FieldOpsBackupArchive.validateZip(zip)
+            assertTrue(result is FieldOpsBackupValidation.Invalid)
+            assertTrue((result as FieldOpsBackupValidation.Invalid).reason.contains("newer"))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun applyRefusesUnmigratableDbAndKeepsExistingDatabase() {
+        listOf(99, 2).forEach { badVersion ->
+            val root = newTempDir()
+            try {
+                val unpacked = File(root, "unpacked")
+                File(unpacked, "db").mkdirs()
+                File(unpacked, "db/wildlife_fieldops.db")
+                    .writeBytes(sqliteHeaderWithUserVersion(userVersion = badVersion, payload = "x"))
+                val destDb = File(root, "databases/wildlife_fieldops.db")
+                destDb.parentFile?.mkdirs()
+                destDb.writeText("current-data")
+                try {
+                    FieldOpsBackupArchive.applyUnpackedBackup(
+                        unpacked,
+                        destDb,
+                        File(root, "files").apply { mkdirs() }
+                    )
+                    fail("version $badVersion must be rejected")
+                } catch (expected: IllegalArgumentException) {
+                    // existing database must survive a rejected restore
+                }
+                assertEquals("current-data", destDb.readText())
+            } finally {
+                root.deleteRecursively()
+            }
+        }
+    }
+
+    @Test
+    fun applyLeavesNoStagingFilesBehind() {
+        val root = newTempDir()
+        try {
+            val unpacked = File(root, "unpacked")
+            File(unpacked, "db").mkdirs()
+            File(unpacked, "db/wildlife_fieldops.db")
+                .writeBytes(sqliteHeaderWithUserVersion(userVersion = 15, payload = "ok"))
+            File(unpacked, "db/wildlife_fieldops.db-wal").writeText("wal")
+            val destDb = File(root, "databases/wildlife_fieldops.db")
+            destDb.parentFile?.mkdirs()
+            destDb.writeText("old")
+            File(root, "databases/wildlife_fieldops.db-shm").writeText("stale-shm")
+            FieldOpsBackupArchive.applyUnpackedBackup(
+                unpacked,
+                destDb,
+                File(root, "files").apply { mkdirs() }
+            )
+            assertEquals(15, FieldOpsBackupFormat.readSqliteUserVersion(destDb))
+            assertEquals("wal", File(root, "databases/wildlife_fieldops.db-wal").readText())
+            assertFalse(File(root, "databases/wildlife_fieldops.db-shm").exists())
+            val leftovers = File(root, "databases").listFiles().orEmpty()
+                .filter { it.name.endsWith(".restore-tmp") }
+            assertTrue("staging files left: $leftovers", leftovers.isEmpty())
+        } finally {
+            root.deleteRecursively()
+        }
     }
 
     private fun sampleManifest() = FieldOpsBackupManifest(
