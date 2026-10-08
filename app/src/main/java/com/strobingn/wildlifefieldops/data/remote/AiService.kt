@@ -294,18 +294,18 @@ Do not invent species or damage that the transcript does not support; mark uncer
     suspend fun summarizeJob(job: Job): String = withContext(Dispatchers.IO) {
         val system = "Write a concise wildlife-control job summary. Bullet-first. Max 180 words."
         val user = buildJobContext(job) + "\nWrite the job summary now."
-        var cloudError: String? = null
-        if (isConfigured) {
-            when (val result = completeChatBounded(system, user, maxTokens = 500, temperature = 0.3)) {
-                is ChatResult.Ok -> return@withContext "☁️ Cloud:\n\n${result.text}"
-                is ChatResult.Err -> cloudError = result.message
-            }
-        }
+        // The job text carries the customer's name, address and notes, so keep it on the phone
+        // when the on-device model is ready. The cloud is only the fallback.
         if (localLlm.isReady) {
             val local = generateLocalBounded(system, user)
             if (local != null) return@withContext "📱 On-device:\n\n$local"
         }
-        if (cloudError != null) return@withContext cloudError + "\n\n" + localUnavailableHint()
+        if (isConfigured) {
+            when (val result = completeChat(system, user, maxTokens = 500, temperature = 0.3)) {
+                is ChatResult.Ok -> return@withContext "☁️ Cloud:\n\n${result.text}"
+                is ChatResult.Err -> return@withContext result.message + "\n\n" + localUnavailableHint()
+            }
+        }
         localUnavailableHint() + "\n\n" + buildJobContext(job).take(500)
     }
 
@@ -437,7 +437,8 @@ Do not invent species or damage that the transcript does not support; mark uncer
         temperature: Double,
         jsonMode: Boolean = false
     ): ChatResult {
-        if (!localLlm.isReady) return completeChat(systemPrompt, userPrompt, maxTokens, temperature, jsonMode)
+        // Only cut the cloud short when the on-device model can actually take over.
+        if (!localLlm.isReady || localLlm.isBusy) return completeChat(systemPrompt, userPrompt, maxTokens, temperature, jsonMode)
         return withAbandonTimeout(CLOUD_BEFORE_LOCAL_TIMEOUT_MS) {
             completeChat(systemPrompt, userPrompt, maxTokens, temperature, jsonMode)
         } ?: ChatResult.Err("Cloud AI did not answer in time.")

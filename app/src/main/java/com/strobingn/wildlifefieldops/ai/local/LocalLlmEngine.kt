@@ -32,6 +32,9 @@ class LocalLlmEngine @Inject constructor(
     @Volatile private var model: LlamaModel? = null
     @Volatile private var loadedPath: String? = null
 
+    /** True while a generation is running, including one whose caller already gave up on it. */
+    val isBusy: Boolean get() = generating.get()
+
     val isReady: Boolean
         get() = modelManager.isModelReady()
 
