@@ -1,9 +1,14 @@
 package com.strobingn.wildlifefieldops.sync.work
 
 import android.content.Context
+import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.strobingn.wildlifefieldops.ui.viewmodel.settingsDataStore
 import dagger.hilt.android.EntryPointAccessors
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 
 /**
  * Background upload / reconcile. Delegates to [FieldOpsSyncWorkRunner] →
@@ -15,6 +20,22 @@ class FieldOpsSyncWorker(
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
+        // Offline Mode blocks Sync Now ("Turn it off to sync"), so the periodic safety net
+        // and any work queued before the switch must not upload either. Rows stay unsynced
+        // and AutoSync enqueues again when Offline Mode is turned off.
+        val offline = try {
+            applicationContext.settingsDataStore.data
+                .map { it[AutoSync.OFFLINE_MODE] ?: false }
+                .first()
+        } catch (c: CancellationException) {
+            throw c
+        } catch (_: Exception) {
+            false
+        }
+        if (offline) {
+            Log.i("FieldOpsSyncWorker", "Offline mode is on; skipping background sync")
+            return Result.success()
+        }
         val entry = EntryPointAccessors.fromApplication(
             applicationContext,
             FieldOpsSyncWorkerEntryPoint::class.java

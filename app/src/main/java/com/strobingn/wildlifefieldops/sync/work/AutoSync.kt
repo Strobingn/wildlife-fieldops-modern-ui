@@ -118,6 +118,6 @@ class AutoSync @Inject constructor(
 
     companion object {
         private const val TAG = "FieldOpsAutoSync"
-        private val OFFLINE_MODE = booleanPreferencesKey("offline_mode")
+        internal val OFFLINE_MODE = booleanPreferencesKey("offline_mode")
     }
 }
