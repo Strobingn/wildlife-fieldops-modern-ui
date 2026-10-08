@@ -4,7 +4,10 @@ import com.strobingn.wildlifefieldops.BuildConfig
 import com.strobingn.wildlifefieldops.ai.local.LocalLlmEngine
 import com.strobingn.wildlifefieldops.ai.local.LocalLlmModelManager
 import com.strobingn.wildlifefieldops.data.model.Job
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
@@ -98,13 +101,13 @@ class AiService @Inject constructor(
         // the cloud is unavailable (or not set up), and never for longer than the timeout.
         var cloudError: String? = null
         if (isConfigured) {
-            when (val result = completeChat(CLOUD_SYSTEM_PROMPT, userPrompt, maxTokens = 900, temperature = 0.35)) {
+            when (val result = completeChatBounded(CLOUD_SYSTEM_PROMPT, userPrompt, maxTokens = 900, temperature = 0.35)) {
                 is ChatResult.Ok -> return@withContext "☁️ Cloud ($providerLabel):\n\n${result.text}"
                 is ChatResult.Err -> cloudError = result.message
             }
         }
         if (localLlm.isReady) {
-            val local = withTimeoutOrNull(LOCAL_TIMEOUT_MS) { generateLocal(LOCAL_SYSTEM_PROMPT, userPrompt) }
+            val local = generateLocalBounded(LOCAL_SYSTEM_PROMPT, userPrompt)
             if (local != null) {
                 return@withContext "📱 On-device (${modelManager.activeDisplayName}):\n\n$local"
             }
@@ -253,7 +256,7 @@ Do not invent species or damage that the transcript does not support; mark uncer
         // JSON report takes far longer than the edge call and often truncates mid-object.
         var cloudError: String? = null
         if (isConfigured) {
-            when (val result = completeChat(system, user, maxTokens = 900, temperature = 0.25, jsonMode = true)) {
+            when (val result = completeChatBounded(system, user, maxTokens = 900, temperature = 0.25, jsonMode = true)) {
                 is ChatResult.Ok -> {
                     val parsed = parseInspectionReport(result.text)
                     if (parsed != null) {
@@ -268,9 +271,9 @@ Do not invent species or damage that the transcript does not support; mark uncer
             }
         }
         if (localLlm.isReady) {
-            val local = withTimeoutOrNull(REPORT_LOCAL_TIMEOUT_MS) {
-                generateLocal(system, user, maxTokens = REPORT_LOCAL_MAX_TOKENS)
-            }
+            val local = generateLocalBounded(
+                system, user, maxTokens = REPORT_LOCAL_MAX_TOKENS, timeoutMs = REPORT_LOCAL_TIMEOUT_MS
+            )
             if (local != null) {
                 val parsed = parseInspectionReport(local)
                 if (parsed != null) {
@@ -293,13 +296,13 @@ Do not invent species or damage that the transcript does not support; mark uncer
         val user = buildJobContext(job) + "\nWrite the job summary now."
         var cloudError: String? = null
         if (isConfigured) {
-            when (val result = completeChat(system, user, maxTokens = 500, temperature = 0.3)) {
+            when (val result = completeChatBounded(system, user, maxTokens = 500, temperature = 0.3)) {
                 is ChatResult.Ok -> return@withContext "☁️ Cloud:\n\n${result.text}"
                 is ChatResult.Err -> cloudError = result.message
             }
         }
         if (localLlm.isReady) {
-            val local = withTimeoutOrNull(LOCAL_TIMEOUT_MS) { generateLocal(system, user) }
+            val local = generateLocalBounded(system, user)
             if (local != null) return@withContext "📱 On-device:\n\n$local"
         }
         if (cloudError != null) return@withContext cloudError + "\n\n" + localUnavailableHint()
@@ -404,6 +407,42 @@ Do not invent species or damage that the transcript does not support; mark uncer
         "On-device LLM is not ready. ${localLlm.modelStatusLabel()}. " +
             "Open AI Assistant and tap Download local model for preferred uncensored on-device answers."
 
+    /**
+     * The native llama call and the edge HTTP call block their thread and ignore coroutine
+     * cancellation, so a plain withTimeout would still wait for them. Run them in a scope of
+     * their own and stop waiting after the timeout; the call finishes in the background.
+     */
+    private val abandonableScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private suspend fun <T> withAbandonTimeout(timeoutMs: Long, block: suspend () -> T): T? {
+        val work = abandonableScope.async { block() }
+        return withTimeoutOrNull(timeoutMs) { work.await() }
+    }
+
+    private suspend fun generateLocalBounded(
+        system: String,
+        user: String,
+        maxTokens: Int = 512,
+        timeoutMs: Long = LOCAL_TIMEOUT_MS
+    ): String? = withAbandonTimeout(timeoutMs) { generateLocal(system, user, maxTokens) }
+
+    /**
+     * Cloud attempt that cannot hold up a ready on-device model: with the phone offline or the
+     * edge function down, the raw connection can take 30s+ to give up.
+     */
+    private suspend fun completeChatBounded(
+        systemPrompt: String,
+        userPrompt: String,
+        maxTokens: Int,
+        temperature: Double,
+        jsonMode: Boolean = false
+    ): ChatResult {
+        if (!localLlm.isReady) return completeChat(systemPrompt, userPrompt, maxTokens, temperature, jsonMode)
+        return withAbandonTimeout(CLOUD_BEFORE_LOCAL_TIMEOUT_MS) {
+            completeChat(systemPrompt, userPrompt, maxTokens, temperature, jsonMode)
+        } ?: ChatResult.Err("Cloud AI did not answer in time.")
+    }
+
     private suspend fun generateLocal(system: String, user: String, maxTokens: Int = 512): String? {
         val result = localLlm.generate(system, user, maxTokens)
         return result.getOrElse { null }
@@ -414,6 +453,7 @@ Do not invent species or damage that the transcript does not support; mark uncer
         private const val REPORT_LOCAL_MAX_TOKENS = 900
         private const val REPORT_LOCAL_TIMEOUT_MS = 60_000L
         private const val LOCAL_TIMEOUT_MS = 45_000L
+        private const val CLOUD_BEFORE_LOCAL_TIMEOUT_MS = 20_000L
 
         val CLOUD_SYSTEM_PROMPT: String = """
 You are FieldOps AI for a professional wildlife removal business.

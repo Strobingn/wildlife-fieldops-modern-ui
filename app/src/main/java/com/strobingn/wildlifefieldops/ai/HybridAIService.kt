@@ -1,5 +1,9 @@
 package com.strobingn.wildlifefieldops.ai
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withTimeoutOrNull
 import android.content.Context
 import android.net.Uri
@@ -23,6 +27,7 @@ class HybridAIService @Inject constructor(
     private val edge: AiEdgeGateway
 ) {
     private val gson = Gson()
+    private val localScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     data class GrokFormResponse(
         val species: String = "",
@@ -82,9 +87,11 @@ class HybridAIService @Inject constructor(
 
         // 512 tokens (the default) cuts the form JSON mid-object, so ask for more room, and
         // never let the on-device model hold the capture flow for more than the timeout.
-        val local = withTimeoutOrNull(LOCAL_FORM_TIMEOUT_MS) {
+        // The native call ignores cancellation, so run it in its own scope and stop waiting.
+        val localWork = localScope.async {
             localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt, maxTokens = 900).getOrNull()
         }
+        val local = withTimeoutOrNull(LOCAL_FORM_TIMEOUT_MS) { localWork.await() }
         if (local != null) {
             val form = runCatching {
                 val cleaned = local.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
