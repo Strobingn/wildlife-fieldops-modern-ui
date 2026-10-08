@@ -48,10 +48,12 @@ class CustomersViewModel @Inject constructor(
         )
     }
 
-    fun updateCustomer(customer: Customer) = viewModelScope.launch {
+    /** [onDone] runs after the row is written, so a screen can leave only once it is saved. */
+    fun updateCustomer(customer: Customer, onDone: () -> Unit = {}) = viewModelScope.launch {
         customerDao.update(
-            customer.copy(updatedAt = System.currentTimeMillis(), isSynced = false)
+            customer.copy(updatedAt = System.currentTimeMillis(), isSynced = false, syncError = null)
         )
+        onDone()
     }
 
     fun deleteCustomer(customer: Customer) = viewModelScope.launch {
@@ -80,7 +82,8 @@ class CustomersViewModel @Inject constructor(
         notes: String,
         billingAddress: String,
         billingContact: String,
-        paymentTerms: String
+        paymentTerms: String,
+        onDone: () -> Unit = {}
     ) = viewModelScope.launch {
         val customer = Customer(
             firstName = firstName,
@@ -99,5 +102,6 @@ class CustomersViewModel @Inject constructor(
             paymentTerms = paymentTerms
         )
         customerDao.insert(customer)
+        onDone()
     }
 }

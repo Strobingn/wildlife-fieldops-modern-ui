@@ -20,6 +20,7 @@ import com.strobingn.wildlifefieldops.data.remote.JobIntakeParser
 import com.strobingn.wildlifefieldops.navigation.VoiceJobEntry
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
+import kotlinx.coroutines.launch
 
 /** Dictate → instant heuristic fill → optional AI refine → create job. Save never waits on AI. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,6 +39,7 @@ fun JobDictateScreen(
     var editedFields by remember { mutableStateOf(setOf<String>()) }
     var isSaving by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) { viewModel.warmupDictationEngine() }
     // AI accuracy log: observe only. Fill rules stay in JobIntakeParser.merge.
@@ -198,7 +200,11 @@ fun JobDictateScreen(
                             priority = priority,
                             estimatedValue = 0.0,
                             notes = d.notes.trim(),
-                            appointmentTimes = emptyList()
+                            appointmentTimes = emptyList(),
+                            onError = { msg ->
+                                isSaving = false
+                                scope.launch { snackbar.showSnackbar(msg) }
+                            }
                         ) {
                             isSaving = false
                             onCreated()
