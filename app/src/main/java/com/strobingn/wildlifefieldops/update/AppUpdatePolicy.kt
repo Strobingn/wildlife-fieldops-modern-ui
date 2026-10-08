@@ -71,6 +71,44 @@ object AppUpdatePolicy {
     /** After "Install unknown apps", download first unless an APK is already verified. */
     fun resumeDownloadAfterPermission(hasPendingApk: Boolean): Boolean = !hasPendingApk
 
+    // PackageInstaller.STATUS_FAILURE_* values, kept numeric so this stays a pure JVM function.
+    private const val STATUS_FAILURE_BLOCKED = 2
+    private const val STATUS_FAILURE_INVALID = 4
+    private const val STATUS_FAILURE_CONFLICT = 5
+    private const val STATUS_FAILURE_STORAGE = 6
+    private const val STATUS_FAILURE_INCOMPATIBLE = 7
+
+    /**
+     * Plain-language reason for a PackageInstaller failure, so a signature mismatch or full
+     * storage is explained instead of showing Android's raw INSTALL_FAILED_* text.
+     */
+    fun installFailureMessage(statusCode: Int, systemMessage: String?): String {
+        val detail = systemMessage?.trim().orEmpty()
+        val lower = detail.lowercase()
+        return when {
+            lower.contains("signature") || lower.contains("update_incompatible") ->
+                "Android refused the update: it is signed with a different key than the app on this phone. " +
+                    "Only builds from the Wildlife FieldOps CI key can update this install in place. " +
+                    "Nothing was changed and local data is intact."
+            lower.contains("version_downgrade") || lower.contains("downgrade") ->
+                "Android refused the update because it is not newer than the installed version."
+            statusCode == STATUS_FAILURE_INCOMPATIBLE ->
+                "Android says this update is not compatible with this phone or the installed app." +
+                    (if (detail.isNotEmpty()) " ($detail)" else "")
+            statusCode == STATUS_FAILURE_STORAGE ->
+                "Not enough free storage to install the update. Free up space and tap Update again."
+            statusCode == STATUS_FAILURE_BLOCKED ->
+                "Android (or a security app on this phone) blocked the install. Check Play Protect or " +
+                    "device policy, then tap Update again."
+            statusCode == STATUS_FAILURE_INVALID ->
+                "Android rejected the downloaded APK as invalid. Check for updates and try again."
+            statusCode == STATUS_FAILURE_CONFLICT ->
+                "Android reports a conflicting install. Try again in a moment."
+            detail.isNotEmpty() -> detail
+            else -> "Android could not install the update."
+        }
+    }
+
     fun accept(manifest: AppUpdateManifest): String? {
         if (!isMainChannel(manifest.channel)) {
             return "Ignoring non-main update channel '${manifest.channel}'."

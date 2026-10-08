@@ -139,7 +139,8 @@ class MapTileCache @Inject constructor(
                     return@runCatching null
                 }
                 val bytes = connection.inputStream.use { it.readBytes() }
-                if (bytes.size < MIN_TILE_BYTES) null else bytes
+                // A captive-portal/proxy HTML page with HTTP 200 must not be cached as a tile forever.
+                if (bytes.size < MIN_TILE_BYTES || !looksLikePng(bytes)) null else bytes
             } finally {
                 connection.disconnect()
             }
@@ -155,6 +156,18 @@ class MapTileCache @Inject constructor(
         const val TIMEOUT_MS = 8_000
         const val FETCH_PARALLELISM = 4
         const val USER_AGENT = "WildlifeFieldOps/2.3 (offline tile cache; +https://github.com/Strobingn/wildlife-fieldops-modern-ui)"
+
+        private val PNG_SIGNATURE = byteArrayOf(
+            0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
+        )
+
+        fun looksLikePng(bytes: ByteArray): Boolean {
+            if (bytes.size < PNG_SIGNATURE.size) return false
+            for (i in PNG_SIGNATURE.indices) {
+                if (bytes[i] != PNG_SIGNATURE[i]) return false
+            }
+            return true
+        }
 
         fun tileUrl(coord: TileCoord): String {
             val host = when ((coord.x + coord.y) % 3) {
