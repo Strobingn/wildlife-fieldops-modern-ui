@@ -309,6 +309,11 @@ fun JobDetailScreen(
                     }
                 }
 
+                ScheduledInspectionCard(
+                    job = currentJob,
+                    onSetStatus = { viewModel.updateJobStatus(currentJob.id, it) }
+                )
+
                 Text("Actions", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ActionButton(

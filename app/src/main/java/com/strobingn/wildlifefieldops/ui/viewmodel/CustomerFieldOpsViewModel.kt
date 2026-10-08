@@ -102,7 +102,8 @@ class CustomerFieldOpsViewModel @Inject constructor(
             customerName = job.customerName,
             jobTitle = job.title,
             address = job.address,
-            amount = job.estimatedValue.takeIf { it > 0 }
+            amount = job.estimatedValue.takeIf { it > 0 },
+            appointment = com.strobingn.wildlifefieldops.ai.fieldops.ScheduledInspections.appointmentText(job.scheduledDate)
         )
 
     fun mergeCustomers(keepId: String, dropId: String) = viewModelScope.launch {

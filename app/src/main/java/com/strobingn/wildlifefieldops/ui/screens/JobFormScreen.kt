@@ -37,6 +37,8 @@ import com.strobingn.wildlifefieldops.ui.viewmodel.TextImportViewModel
 fun JobFormScreen(
     jobId: String? = null,
     onBack: () -> Unit,
+    /** [JobStatus.INSPECTION] when opened from "Schedule inspection". Ignored when editing. */
+    initialStatus: JobStatus = JobStatus.SCHEDULED,
     viewModel: JobsViewModel = hiltViewModel(),
     workspaceViewModel: JobWorkspaceViewModel = hiltViewModel(),
     serviceTypesViewModel: ServiceTypesViewModel = hiltViewModel(),
@@ -63,7 +65,7 @@ fun JobFormScreen(
     var nextStepDueError by remember { mutableStateOf<String?>(null) }
     var confirmCatalog by remember { mutableStateOf(false) }
     val priceLines = remember { mutableStateListOf(blankPriceLine()) }
-    var selectedStatus by remember { mutableStateOf(JobStatus.SCHEDULED) }
+    var selectedStatus by remember { mutableStateOf(initialStatus) }
     var statusTouched by remember { mutableStateOf(false) }
     var showTypeDropdown by remember { mutableStateOf(false) }
     var showPriorityDropdown by remember { mutableStateOf(false) }
@@ -198,7 +200,12 @@ fun JobFormScreen(
             TopAppBar(
                 title = {
                     Text(
-                        if (isEditing) "Edit Job" else ManualJobEntry.ACTION_LABEL,
+                        when {
+                            isEditing && selectedStatus.isInspectionOnly() -> "Edit Inspection"
+                            isEditing -> "Edit Job"
+                            selectedStatus.isInspectionOnly() -> ManualJobEntry.INSPECTION_ACTION_LABEL
+                            else -> ManualJobEntry.ACTION_LABEL
+                        },
                         color = TextPrimary
                     )
                 },

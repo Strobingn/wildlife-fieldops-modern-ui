@@ -486,21 +486,24 @@ object JobStatusPipeline {
      * and still match the same flag in filters.
      */
     val stages: List<JobStatus> = listOf(
+        JobStatus.INSPECTION,
         JobStatus.SCHEDULED,
         JobStatus.IN_PROGRESS,
         JobStatus.COMPLETED
     )
 
-    val flagLabels: List<String> = listOf("Scheduled", "In progress", "Completed")
+    val flagLabels: List<String> = listOf("Inspection", "Scheduled", "In progress", "Completed")
 
     /**
      * Display bucket. Does not rewrite the row.
+     * INSPECTION stays its own bucket: a scheduled inspection is not a job yet.
      * PENDING, LEAD, ESTIMATE_SENT, SCHEDULED, and a brand-new job → Scheduled.
      * IN_PROGRESS, TRAPPING, EXCLUSION → In progress (active field work).
      * COMPLETED, INVOICED, PAID, CANCELLED, CLOSED → Completed.
      * Paid versus unpaid stays on the invoice, not on this flag.
      */
     fun flag(status: JobStatus): JobStatus = when (status) {
+        JobStatus.INSPECTION -> JobStatus.INSPECTION
         JobStatus.PENDING,
         JobStatus.LEAD,
         JobStatus.ESTIMATE_SENT,
@@ -516,6 +519,7 @@ object JobStatusPipeline {
     }
 
     fun label(status: JobStatus): String = when (flag(status)) {
+        JobStatus.INSPECTION -> "Inspection"
         JobStatus.IN_PROGRESS -> "In progress"
         JobStatus.COMPLETED -> "Completed"
         else -> "Scheduled"
@@ -530,7 +534,7 @@ object JobStatusPipeline {
     }
 
     fun indexOf(status: JobStatus): Int = when (status) {
-        JobStatus.PENDING, JobStatus.LEAD -> 0
+        JobStatus.INSPECTION, JobStatus.PENDING, JobStatus.LEAD -> 0
         JobStatus.ESTIMATE_SENT -> 1
         JobStatus.SCHEDULED -> 2
         JobStatus.IN_PROGRESS -> 3
@@ -547,6 +551,8 @@ object JobStatusPipeline {
      */
     fun suggest(job: Job): JobStatus? {
         val current = job.status
+        // Only the customer's yes turns an inspection into a job; never hint past it.
+        if (current == JobStatus.INSPECTION) return null
         val total = PricingCalculator.compute(job.pricing).total.effective
             .takeIf { it > 0.0 } ?: job.estimatedValue
         val paid = if (job.pricing.payments.isEmpty()) job.pricing.paidAmount

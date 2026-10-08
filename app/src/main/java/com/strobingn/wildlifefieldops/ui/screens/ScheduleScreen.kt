@@ -158,24 +158,27 @@ fun ScheduleScreen(
                     FadeSlideIn(index = index) {
                         ScheduleAgendaCard(
                             time = visit.visitDate,
-                            label = "JOB VISIT",
+                            label = if (jobsById[visit.jobId]?.status?.isInspectionOnly() == true) "INSPECTION" else "JOB VISIT",
                             title = jobsById[visit.jobId]?.title ?: visit.customerName.ifBlank { "Scheduled job" },
                             subtitle = jobsById[visit.jobId]?.address.orEmpty(),
                             onClick = { if (visit.jobId.isNotBlank()) onNavigateToJobDetail(visit.jobId) }
                         )
                     }
                 }
-                dayInspections.forEachIndexed { index, inspection ->
-                    FadeSlideIn(index = dayVisits.size + index) {
-                        ScheduleAgendaCard(
-                            time = inspection.inspectionDate,
-                            label = "INSPECTION",
-                            title = inspection.customerName.ifBlank { "Scheduled inspection" },
-                            subtitle = inspection.inspectionType.name.lowercase().replaceFirstChar { it.uppercase() },
-                            onClick = { if (inspection.jobId.isNotBlank()) onNavigateToJobDetail(inspection.jobId) }
-                        )
+                // A report linked to a scheduled inspection that already shows as a visit today is the same stop.
+                val visitJobIds = dayVisits.map { it.jobId }.filter { it.isNotBlank() }.toSet()
+                dayInspections.filterNot { it.jobId.isNotBlank() && it.jobId in visitJobIds }
+                    .forEachIndexed { index, inspection ->
+                        FadeSlideIn(index = dayVisits.size + index) {
+                            ScheduleAgendaCard(
+                                time = inspection.inspectionDate,
+                                label = "INSPECTION",
+                                title = inspection.customerName.ifBlank { "Scheduled inspection" },
+                                subtitle = inspection.inspectionType.name.lowercase().replaceFirstChar { it.uppercase() },
+                                onClick = { if (inspection.jobId.isNotBlank()) onNavigateToJobDetail(inspection.jobId) }
+                            )
+                        }
                     }
-                }
             }
             Spacer(modifier = Modifier.height(16.dp))
         }

@@ -8,23 +8,25 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Jobs show exactly three flags. Stored enum values stay; filters match the bucket.
+ * Jobs show three work flags plus Inspection (a scheduled inspection, not a job yet).
+ * Stored enum values stay; filters match the bucket.
  */
 class JobStatusFlagTest {
 
     @Test
-    fun pickerAndFiltersAreExactlyTheThreeFlags() {
+    fun pickerAndFiltersAreInspectionPlusTheThreeWorkFlags() {
         assertEquals(
-            listOf("Scheduled", "In progress", "Completed"),
+            listOf("Inspection", "Scheduled", "In progress", "Completed"),
             JobStatusPipeline.stages.map { JobStatusPipeline.label(it) }
         )
         assertEquals(JobStatusPipeline.flagLabels, JobStatusPipeline.stages.map { JobStatusPipeline.label(it) })
-        assertEquals(3, JobStatusPipeline.stages.size)
+        assertEquals(4, JobStatusPipeline.stages.size)
     }
 
     @Test
     fun everyStoredStatusMapsToOneFlag() {
         val expected = mapOf(
+            JobStatus.INSPECTION to "Inspection",
             JobStatus.PENDING to "Scheduled",
             JobStatus.LEAD to "Scheduled",
             JobStatus.ESTIMATE_SENT to "Scheduled",
@@ -51,6 +53,8 @@ class JobStatusFlagTest {
         assertTrue(JobStatusPipeline.matches(JobStatus.INVOICED, JobStatus.COMPLETED))
         assertTrue(JobStatusPipeline.matches(JobStatus.CANCELLED, JobStatus.CLOSED))
         assertFalse(JobStatusPipeline.matches(JobStatus.SCHEDULED, JobStatus.IN_PROGRESS))
+        assertFalse(JobStatusPipeline.matches(JobStatus.INSPECTION, JobStatus.SCHEDULED))
+        assertEquals(JobStatus.INSPECTION, JobStatusPipeline.flag(JobStatus.INSPECTION))
         assertFalse(JobStatusPipeline.matches(JobStatus.IN_PROGRESS, JobStatus.COMPLETED))
         assertEquals(JobStatus.SCHEDULED, JobStatusPipeline.flag(JobStatus.PENDING))
         assertEquals(JobStatus.IN_PROGRESS, JobStatusPipeline.flag(JobStatus.TRAPPING))

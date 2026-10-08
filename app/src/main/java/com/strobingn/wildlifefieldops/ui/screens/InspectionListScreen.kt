@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.model.FindingSeverity
 import com.strobingn.wildlifefieldops.data.model.Inspection
+import com.strobingn.wildlifefieldops.data.model.Job
+import com.strobingn.wildlifefieldops.ai.fieldops.ScheduledInspections
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.InspectionsViewModel
@@ -41,6 +43,8 @@ fun InspectionListScreen(
     onNavigateToInspectionForm: () -> Unit,
     onBack: () -> Unit,
     showBack: Boolean = true,
+    onScheduleInspection: () -> Unit = {},
+    onOpenScheduledInspection: (String) -> Unit = {},
     preview: InspectionListPreview? = null
 ) {
     if (preview != null) {
@@ -54,7 +58,10 @@ fun InspectionListScreen(
             onNavigateToInspectionDetail = onNavigateToInspectionDetail,
             onNavigateToInspectionForm = onNavigateToInspectionForm,
             onBack = onBack,
-            showBack = showBack
+            showBack = showBack,
+            scheduled = emptyList(),
+            onScheduleInspection = onScheduleInspection,
+            onOpenScheduledInspection = onOpenScheduledInspection
         )
         return
     }
@@ -64,6 +71,8 @@ fun InspectionListScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val inspectionCount by viewModel.inspectionCount.collectAsState()
     val followUpCount by viewModel.followUpCount.collectAsState()
+    val allJobs by viewModel.allJobs.collectAsState()
+    val scheduled = remember(allJobs) { ScheduledInspections.list(allJobs) }
     InspectionListContent(
         inspections = inspections,
         inspectionCount = inspectionCount,
@@ -74,7 +83,10 @@ fun InspectionListScreen(
         onNavigateToInspectionDetail = onNavigateToInspectionDetail,
         onNavigateToInspectionForm = onNavigateToInspectionForm,
         onBack = onBack,
-        showBack = showBack
+        showBack = showBack,
+        scheduled = scheduled,
+        onScheduleInspection = onScheduleInspection,
+        onOpenScheduledInspection = onOpenScheduledInspection
     )
 }
 
@@ -90,7 +102,10 @@ private fun InspectionListContent(
     onNavigateToInspectionDetail: (String) -> Unit,
     onNavigateToInspectionForm: () -> Unit,
     onBack: () -> Unit,
-    showBack: Boolean
+    showBack: Boolean,
+    scheduled: List<Job>,
+    onScheduleInspection: () -> Unit,
+    onOpenScheduledInspection: (String) -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -168,6 +183,43 @@ private fun InspectionListContent(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    item(key = "scheduled-header") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Scheduled inspections (${scheduled.size})",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = TextPrimary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "Not jobs yet. Approve one to make it a job.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextTertiary
+                                )
+                            }
+                            Button(
+                                onClick = onScheduleInspection,
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue, contentColor = OnPrimary)
+                            ) { Text("Schedule inspection") }
+                        }
+                    }
+                    items(scheduled, key = { "scheduled-${it.id}" }) { job ->
+                        JobListItem(job = job, onClick = { onOpenScheduledInspection(job.id) })
+                    }
+                    item(key = "reports-header") {
+                        Text(
+                            "Inspection reports",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
                     if (inspections.isEmpty()) {
                         item {
                             EmptyState(

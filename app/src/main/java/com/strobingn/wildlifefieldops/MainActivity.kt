@@ -47,6 +47,7 @@ import com.strobingn.wildlifefieldops.data.repository.syncFailureDetail
 import com.strobingn.wildlifefieldops.data.remote.SharedTextIntake
 import com.strobingn.wildlifefieldops.data.remote.TextShareInbox
 import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
+import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.navigation.MoreDestination
 import com.strobingn.wildlifefieldops.navigation.Screen
 import com.strobingn.wildlifefieldops.navigation.VoiceJobEntry
@@ -272,8 +273,12 @@ private fun AppNavHost(
         }
         composable(route = Screen.JobForm.route, arguments = listOf(navArgument("jobId") { type = NavType.StringType })) { backStackEntry ->
             val rawId = backStackEntry.arguments?.getString("jobId")
-            val jobId = rawId?.takeUnless { it.isBlank() || it == "new" }
-            JobFormScreen(jobId = jobId, onBack = { navController.popBackStack() })
+            val jobId = rawId?.takeUnless { ManualJobEntry.isCreateId(it) }
+            JobFormScreen(
+                jobId = jobId,
+                onBack = { navController.popBackStack() },
+                initialStatus = if (rawId == ManualJobEntry.CREATE_INSPECTION_ID) JobStatus.INSPECTION else JobStatus.SCHEDULED
+            )
         }
         composable(Screen.JobDictate.route) {
             JobDictateScreen(
@@ -313,7 +318,9 @@ private fun AppNavHost(
                 onNavigateToInspectionDetail = { id -> navController.navigate(Screen.InspectionDetail.createRoute(id)) },
                 onNavigateToInspectionForm = { navController.navigate(Screen.InspectionForm.createRoute()) },
                 onBack = { navController.popBackStack() },
-                showBack = false
+                showBack = false,
+                onScheduleInspection = { navController.navigate(ManualJobEntry.createInspectionRoute()) },
+                onOpenScheduledInspection = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) }
             )
         }
         composable(route = Screen.InspectionDetail.route, arguments = listOf(navArgument("inspectionId") { type = NavType.StringType })) { backStackEntry ->

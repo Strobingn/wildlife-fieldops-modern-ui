@@ -6,6 +6,8 @@ import com.strobingn.wildlifefieldops.pricing.JobPricing
 import java.util.UUID
 
 enum class JobStatus {
+    /** Scheduled inspection only: the customer has not agreed to any work yet. */
+    INSPECTION,
     PENDING,
     LEAD,
     ESTIMATE_SENT,
@@ -24,6 +26,9 @@ enum class JobStatus {
         this == COMPLETED || this == CLOSED || this == PAID
 
     fun isWorkOpen(): Boolean = !isWorkDone() && this != CANCELLED
+
+    /** Not a job yet. Approval turns it into [SCHEDULED] on the same row. */
+    fun isInspectionOnly(): Boolean = this == INSPECTION
 }
 
 enum class JobPriority {

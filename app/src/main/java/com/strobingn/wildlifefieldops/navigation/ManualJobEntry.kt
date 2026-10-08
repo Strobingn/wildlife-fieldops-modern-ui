@@ -9,6 +9,9 @@ package com.strobingn.wildlifefieldops.navigation
 object ManualJobEntry {
     const val ACTION_LABEL = "New Job"
     const val CREATE_JOB_ID = "new"
+    const val INSPECTION_ACTION_LABEL = "Schedule Inspection"
+    /** Same blank Job form, preset to the Inspection status. */
+    const val CREATE_INSPECTION_ID = "new-inspection"
 
     enum class EntryPoint {
         HOME_FAB,
@@ -35,6 +38,11 @@ object ManualJobEntry {
     )
 
     fun createRoute(): String = Screen.JobForm.createRoute()
+
+    fun createInspectionRoute(): String = Screen.JobForm.createRoute(CREATE_INSPECTION_ID)
+
+    fun isCreateId(rawId: String?): Boolean =
+        rawId.isNullOrBlank() || rawId == CREATE_JOB_ID || rawId == CREATE_INSPECTION_ID
 
     fun destination(point: EntryPoint): String = createRoute()
 

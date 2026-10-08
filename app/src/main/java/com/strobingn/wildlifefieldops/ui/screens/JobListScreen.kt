@@ -381,8 +381,9 @@ private fun JobListContent(
     }
 }
 
+/** Shared with the Inspections tab so a scheduled inspection looks exactly like a job. */
 @Composable
-private fun JobListItem(job: Job, onClick: () -> Unit, weatherWarning: String? = null) {
+internal fun JobListItem(job: Job, onClick: () -> Unit, weatherWarning: String? = null) {
     val statusColor = jobStatusColor(job.status)
 
     FieldCard(
