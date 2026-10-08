@@ -35,9 +35,13 @@ data class InspectionReportDraft(
     val speciesIdentified: String = "",
     val entryPoints: String = "",
     val damageAssessment: String = "",
-    val severity: String = "MODERATE",
+    /** Blank when the technician did not state a severity; never defaulted. */
+    val severity: String = "",
     val notes: String = "",
-    val summary: String = ""
+    val summary: String = "",
+    val customerName: String = "",
+    val customerPhone: String = "",
+    val serviceAddress: String = ""
 )
 
 data class InspectionReportContext(
@@ -220,8 +224,9 @@ Do NOT invent mileage or taxRate. Use the provided measured miles and tax percen
         val system = """
 You are a wildlife removal field inspector writing a professional inspection report.
 Return ONLY valid JSON with these string fields:
-findings, recommendations, speciesIdentified, entryPoints, damageAssessment, severity, notes, summary
-severity MUST be one of: NONE, LOW, MODERATE, HIGH, CRITICAL
+findings, recommendations, speciesIdentified, entryPoints, damageAssessment, severity, notes, summary, customerName, customerPhone, serviceAddress
+severity MUST be one of: NONE, LOW, MODERATE, HIGH, CRITICAL, or an empty string if the technician did not state or clearly imply one.
+customerName, customerPhone and serviceAddress: copy them ONLY if the technician spoke them in the dictation, otherwise empty strings. Never put the customer name, phone number or address in findings, notes or summary; they belong only in their own fields.
 Use the technician dictation as primary evidence. Expand into clear field-report language.
 Do not invent species or damage that the transcript does not support; mark uncertain items as \"possible\" or \"unconfirmed\".
 """.trimIndent()
@@ -362,7 +367,7 @@ Do not invent species or damage that the transcript does not support; mark uncer
             val draft = json.decodeFromString(InspectionReportDraft.serializer(), cleaned.substring(start, end + 1))
             val sev = draft.severity.trim().uppercase().replace(' ', '_')
             val allowed = setOf("NONE", "LOW", "MODERATE", "HIGH", "CRITICAL")
-            draft.copy(severity = if (sev in allowed) sev else "MODERATE")
+            draft.copy(severity = if (sev in allowed) sev else "")
         }
     } catch (e: Exception) {
         android.util.Log.w("AiService", "parseInspectionReport failed: ${e.message}")

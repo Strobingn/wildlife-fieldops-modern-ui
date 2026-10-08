@@ -157,8 +157,7 @@ object WalkthroughVideoAnalyzer {
             WalkthroughResult(
                 draft = InspectionReportDraft(
                     findings = "Walkthrough video could not be analyzed: ${t.message}. Dictate findings or retry offline.",
-                    notes = "Manual entry required.",
-                    severity = "MODERATE"
+                    notes = "Manual entry required."
                 ),
                 framesSampled = 0,
                 durationMs = 0L,
