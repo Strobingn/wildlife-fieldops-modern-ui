@@ -98,23 +98,20 @@ class AiService @Inject constructor(
             append(userMessage)
         }
         // Cloud first when configured: the on-device CPU model is slow, so it only answers when
-        // the cloud is unavailable (or not set up), and never for longer than the timeout.
-        var cloudError: String? = null
-        if (isConfigured) {
-            when (val result = completeChatBounded(CLOUD_SYSTEM_PROMPT, userPrompt, maxTokens = 900, temperature = 0.35)) {
-                is ChatResult.Ok -> return@withContext "☁️ Cloud ($providerLabel):\n\n${result.text}"
-                is ChatResult.Err -> cloudError = result.message
-            }
+        // the cloud is unavailable, not set up, or too slow to wait for.
+        val routed = cloudThenLocal(
+            cloud = { completeChat(CLOUD_SYSTEM_PROMPT, userPrompt, maxTokens = 900, temperature = 0.35) },
+            parseCloud = { it },
+            local = { generateLocalBounded(LOCAL_SYSTEM_PROMPT, userPrompt) }
+        )
+        routed.value?.let {
+            return@withContext if (routed.viaCloud) "☁️ Cloud ($providerLabel):\n\n$it"
+            else "📱 On-device (${modelManager.activeDisplayName}):\n\n$it"
         }
+        if (routed.error != null) return@withContext routed.error + "\n\n" + localUnavailableHint()
         if (localLlm.isReady) {
-            val local = generateLocalBounded(LOCAL_SYSTEM_PROMPT, userPrompt)
-            if (local != null) {
-                return@withContext "📱 On-device (${modelManager.activeDisplayName}):\n\n$local"
-            }
-            return@withContext (cloudError ?: "On-device model did not answer in time.") +
-                "\n\n" + localUnavailableHint()
+            return@withContext "On-device model did not answer in time.\n\n" + localUnavailableHint()
         }
-        if (cloudError != null) return@withContext cloudError + "\n\n" + localUnavailableHint()
         notConfiguredMessage()
     }
 
@@ -254,40 +251,28 @@ Do not invent species or damage that the transcript does not support; mark uncer
 
         // Cloud first when configured, like job intake: a 3B/7B CPU model writing an 11-field
         // JSON report takes far longer than the edge call and often truncates mid-object.
-        var cloudError: String? = null
-        if (isConfigured) {
-            when (val result = completeChatBounded(system, user, maxTokens = 900, temperature = 0.25, jsonMode = true)) {
-                is ChatResult.Ok -> {
-                    val parsed = parseInspectionReport(result.text)
-                    if (parsed != null) {
-                        return@withContext InspectionReportResult(
-                            draft = parsed,
-                            sourceLabel = "☁️ Cloud ($providerLabel)"
-                        )
-                    }
-                    cloudError = "AI returned text but JSON parse failed. Try again or edit fields manually."
-                }
-                is ChatResult.Err -> cloudError = result.message
+        val routed = cloudThenLocal(
+            cloud = { completeChat(system, user, maxTokens = 900, temperature = 0.25, jsonMode = true) },
+            parseCloud = { parseInspectionReport(it) },
+            local = {
+                generateLocalBounded(
+                    system, user, maxTokens = REPORT_LOCAL_MAX_TOKENS, timeoutMs = REPORT_LOCAL_TIMEOUT_MS
+                )?.let { parseInspectionReport(it) }
             }
-        }
-        if (localLlm.isReady) {
-            val local = generateLocalBounded(
-                system, user, maxTokens = REPORT_LOCAL_MAX_TOKENS, timeoutMs = REPORT_LOCAL_TIMEOUT_MS
-            )
-            if (local != null) {
-                val parsed = parseInspectionReport(local)
-                if (parsed != null) {
-                    return@withContext InspectionReportResult(
-                        draft = parsed,
-                        sourceLabel = "📱 On-device (${modelManager.activeDisplayName})"
-                    )
-                }
-            }
+        )
+        routed.value?.let {
             return@withContext InspectionReportResult(
-                error = cloudError ?: "On-device model did not return a usable report in time."
+                draft = it,
+                sourceLabel = if (routed.viaCloud) "☁️ Cloud ($providerLabel)"
+                else "📱 On-device (${modelManager.activeDisplayName})"
             )
         }
-        if (cloudError != null) return@withContext InspectionReportResult(error = cloudError)
+        if (routed.error != null) return@withContext InspectionReportResult(error = routed.error)
+        if (localLlm.isReady) {
+            return@withContext InspectionReportResult(
+                error = "On-device model did not return a usable report in time."
+            )
+        }
         InspectionReportResult(error = notConfiguredMessage())
     }
 
@@ -426,26 +411,41 @@ Do not invent species or damage that the transcript does not support; mark uncer
         timeoutMs: Long = LOCAL_TIMEOUT_MS
     ): String? = withAbandonTimeout(timeoutMs) { generateLocal(system, user, maxTokens) }
 
+    private class Routed<T>(val value: T?, val viaCloud: Boolean, val error: String?)
+
     /**
-     * Cloud attempt that cannot hold up a ready on-device model: with the phone offline or the
-     * edge function down, the raw connection can take 30s+ to give up.
+     * Cloud first, with the on-device model as the fallback. When a local model is ready and
+     * idle, the cloud only gets CLOUD_BEFORE_LOCAL_TIMEOUT_MS before the local model is tried,
+     * so an offline or weak-signal phone is not stuck behind the 30s connect / 90s read timeouts.
+     * The cloud request keeps running meanwhile, and is used if the local attempt produces
+     * nothing usable. A ready model file does not guarantee that inference works.
      */
-    private suspend fun completeChatBounded(
-        systemPrompt: String,
-        userPrompt: String,
-        maxTokens: Int,
-        temperature: Double,
-        jsonMode: Boolean = false
-    ): ChatResult {
-        // Only cut the cloud short when the on-device model can actually take over.
-        if (!localLlm.isReady || localLlm.isBusy) return completeChat(systemPrompt, userPrompt, maxTokens, temperature, jsonMode)
-        val work = abandonableScope.async {
-            completeChat(systemPrompt, userPrompt, maxTokens, temperature, jsonMode)
+    private suspend fun <T : Any> cloudThenLocal(
+        cloud: () -> ChatResult,
+        parseCloud: (String) -> T?,
+        local: suspend () -> T?
+    ): Routed<T> {
+        fun fromCloud(result: ChatResult): Routed<T> = when (result) {
+            is ChatResult.Ok -> parseCloud(result.text)?.let { Routed(it, true, null) }
+                ?: Routed(null, true, "AI returned an unusable response. Try again or edit fields manually.")
+            is ChatResult.Err -> Routed(null, false, result.message)
         }
-        withTimeoutOrNull(CLOUD_BEFORE_LOCAL_TIMEOUT_MS) { work.await() }?.let { return it }
-        // Another feature may have started a local generation while we waited. With no fallback
-        // left, keep waiting for the cloud instead of failing a request it could still answer.
-        return if (localLlm.isBusy) work.await() else ChatResult.Err("Cloud AI did not answer in time.")
+        if (!isConfigured) {
+            return Routed(if (localLlm.isReady) local() else null, false, null)
+        }
+        val canFallBack = localLlm.isReady && !localLlm.isBusy
+        val work = abandonableScope.async { cloud() }
+        val early = if (canFallBack) withTimeoutOrNull(CLOUD_BEFORE_LOCAL_TIMEOUT_MS) { work.await() }
+        else work.await()
+        if (early != null) {
+            val answered = fromCloud(early)
+            if (answered.value != null || !localLlm.isReady) return answered
+            val fallback = local()
+            return if (fallback != null) Routed(fallback, false, null) else answered
+        }
+        val fallback = local()
+        if (fallback != null) return Routed(fallback, false, null)
+        return fromCloud(work.await())
     }
 
     private suspend fun generateLocal(system: String, user: String, maxTokens: Int = 512): String? {
