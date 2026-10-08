@@ -293,6 +293,9 @@ class InspectionsViewModel @Inject constructor(
             } else {
                 "Offline structured draft"
             }
+            if (result.draft == null && !result.error.isNullOrBlank()) {
+                _reportError.value = "AI unavailable, filled offline: ${result.error.take(160)}"
+            }
             onFilled(draft)
         }
     }
