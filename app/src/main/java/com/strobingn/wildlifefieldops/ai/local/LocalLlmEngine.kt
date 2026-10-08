@@ -28,6 +28,7 @@ class LocalLlmEngine @Inject constructor(
     private val modelManager: LocalLlmModelManager
 ) {
     private val mutex = Mutex()
+    private val generating = java.util.concurrent.atomic.AtomicBoolean(false)
     @Volatile private var model: LlamaModel? = null
     @Volatile private var loadedPath: String? = null
 
@@ -88,6 +89,14 @@ class LocalLlmEngine @Inject constructor(
                 )
             )
         }
+        // The native call cannot be cancelled, so a caller that timed out leaves it running.
+        // Reject new requests while it is, instead of queueing them behind it and burning CPU
+        // on answers nobody is waiting for.
+        if (!generating.compareAndSet(false, true)) {
+            return@withContext Result.failure(
+                IllegalStateException("On-device model is still busy with an earlier request.")
+            )
+        }
         val path = modelManager.modelFile().absolutePath
         val system = systemPrompt.trim()
         val user = userPrompt.trim()
@@ -124,6 +133,8 @@ class LocalLlmEngine @Inject constructor(
             // Missing/mismatched llama.cpp native library must not crash the capture flow.
             Log.e(TAG, "generate failed (native)", e)
             Result.failure(RuntimeException("On-device AI runtime unavailable: ${e.message}", e))
+        } finally {
+            generating.set(false)
         }
     }
 
