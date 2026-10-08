@@ -94,27 +94,24 @@ class AiService @Inject constructor(
             if (species.isNotBlank()) append("Species context: $species\n")
             append(userMessage)
         }
+        // Cloud first when configured: the on-device CPU model is slow, so it only answers when
+        // the cloud is unavailable (or not set up), and never for longer than the timeout.
+        var cloudError: String? = null
+        if (isConfigured) {
+            when (val result = completeChat(CLOUD_SYSTEM_PROMPT, userPrompt, maxTokens = 900, temperature = 0.35)) {
+                is ChatResult.Ok -> return@withContext "☁️ Cloud ($providerLabel):\n\n${result.text}"
+                is ChatResult.Err -> cloudError = result.message
+            }
+        }
         if (localLlm.isReady) {
-            val local = generateLocal(LOCAL_SYSTEM_PROMPT, userPrompt)
+            val local = withTimeoutOrNull(LOCAL_TIMEOUT_MS) { generateLocal(LOCAL_SYSTEM_PROMPT, userPrompt) }
             if (local != null) {
                 return@withContext "📱 On-device (${modelManager.activeDisplayName}):\n\n$local"
             }
+            return@withContext (cloudError ?: "On-device model did not answer in time.") +
+                "\n\n" + localUnavailableHint()
         }
-        if (isConfigured) {
-            when (val result = completeChat(CLOUD_SYSTEM_PROMPT, userPrompt, maxTokens = 900, temperature = 0.35)) {
-                is ChatResult.Ok -> {
-                    val preferLocalNote = if (!localLlm.isReady) {
-                        "\n\n— Cloud answered because the local abliterated model is not downloaded yet. Download it in AI Assistant for uncensored on-device replies."
-                    } else {
-                        "\n\n— Cloud fallback (local generate failed). On-device is preferred when ready."
-                    }
-                    return@withContext "☁️ Cloud ($providerLabel):\n\n${result.text}$preferLocalNote"
-                }
-                is ChatResult.Err -> {
-                    return@withContext result.message + "\n\n" + localUnavailableHint()
-                }
-            }
-        }
+        if (cloudError != null) return@withContext cloudError + "\n\n" + localUnavailableHint()
         notConfiguredMessage()
     }
 
@@ -294,16 +291,18 @@ Do not invent species or damage that the transcript does not support; mark uncer
     suspend fun summarizeJob(job: Job): String = withContext(Dispatchers.IO) {
         val system = "Write a concise wildlife-control job summary. Bullet-first. Max 180 words."
         val user = buildJobContext(job) + "\nWrite the job summary now."
-        if (localLlm.isReady) {
-            val local = generateLocal(system, user)
-            if (local != null) return@withContext "📱 On-device:\n\n$local"
-        }
+        var cloudError: String? = null
         if (isConfigured) {
             when (val result = completeChat(system, user, maxTokens = 500, temperature = 0.3)) {
                 is ChatResult.Ok -> return@withContext "☁️ Cloud:\n\n${result.text}"
-                is ChatResult.Err -> return@withContext result.message + "\n\n" + localUnavailableHint()
+                is ChatResult.Err -> cloudError = result.message
             }
         }
+        if (localLlm.isReady) {
+            val local = withTimeoutOrNull(LOCAL_TIMEOUT_MS) { generateLocal(system, user) }
+            if (local != null) return@withContext "📱 On-device:\n\n$local"
+        }
+        if (cloudError != null) return@withContext cloudError + "\n\n" + localUnavailableHint()
         localUnavailableHint() + "\n\n" + buildJobContext(job).take(500)
     }
 
@@ -414,6 +413,7 @@ Do not invent species or damage that the transcript does not support; mark uncer
         /** The report JSON has 11 fields; the 512-token default truncates it mid-object. */
         private const val REPORT_LOCAL_MAX_TOKENS = 900
         private const val REPORT_LOCAL_TIMEOUT_MS = 60_000L
+        private const val LOCAL_TIMEOUT_MS = 45_000L
 
         val CLOUD_SYSTEM_PROMPT: String = """
 You are FieldOps AI for a professional wildlife removal business.
