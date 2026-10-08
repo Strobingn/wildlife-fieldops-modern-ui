@@ -108,4 +108,48 @@ class ScheduledInspectionsTest {
         val undated = CustomerMessageDraft.draft(CustomerMessageKind.INSPECTION_REMINDER, "Pat", "Attic", "12 Oak St")
         assertTrue(undated.body.contains("inspection at 12 Oak St."))
     }
+
+    @Test
+    fun sectionsGroupByDayTodayFirstThenUndatedThenPastNeedingADecision() {
+        val utc = TimeZone.getTimeZone("UTC")
+        // "Now" is Wed 2026-10-14 10:00 UTC.
+        val wedTen = 1_791_972_000_000L
+        val hour = 60 * 60 * 1000L
+        val jobs = listOf(
+            Job(id = "today-late", status = JobStatus.INSPECTION, scheduledDate = wedTen + 6 * hour),
+            Job(id = "today-early", status = JobStatus.INSPECTION, scheduledDate = wedTen - 2 * hour),
+            Job(id = "tomorrow", status = JobStatus.INSPECTION, scheduledDate = wedTen + 24 * hour),
+            Job(id = "saturday", status = JobStatus.INSPECTION, scheduledDate = wedTen + 72 * hour),
+            Job(id = "undated", status = JobStatus.INSPECTION, scheduledDate = null),
+            Job(id = "monday", status = JobStatus.INSPECTION, scheduledDate = wedTen - 48 * hour),
+            Job(id = "real-job", status = JobStatus.SCHEDULED, scheduledDate = wedTen + hour)
+        )
+        val sections = ScheduledInspections.sections(jobs, now = wedTen, zone = utc)
+        assertEquals(
+            listOf("Today", "Tomorrow", "Sat Oct 17", "No time set", "Past — mark approved or declined"),
+            sections.map { it.label }
+        )
+        // An earlier appointment today stays under Today, not Past.
+        assertEquals(listOf("today-early", "today-late"), sections[0].jobs.map { it.id })
+        assertEquals(listOf("monday"), sections.last().jobs.map { it.id })
+        assertTrue(sections.none { s -> s.jobs.any { it.id == "real-job" } })
+        assertTrue(ScheduledInspections.sections(emptyList(), now = wedTen, zone = utc).isEmpty())
+    }
+
+    @Test
+    fun searchMatchesNameTitleAddressAndNotes() {
+        val job = Job(
+            status = JobStatus.INSPECTION,
+            customerName = "Pat Smith",
+            title = "Attic noise",
+            address = "12 Oak St, Troy",
+            notes = "gate code 4411"
+        )
+        assertTrue(ScheduledInspections.matches(job, ""))
+        assertTrue(ScheduledInspections.matches(job, "smith"))
+        assertTrue(ScheduledInspections.matches(job, "ATTIC"))
+        assertTrue(ScheduledInspections.matches(job, "troy"))
+        assertTrue(ScheduledInspections.matches(job, "4411"))
+        assertFalse(ScheduledInspections.matches(job, "raccoon"))
+    }
 }
