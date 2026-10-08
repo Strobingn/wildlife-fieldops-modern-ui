@@ -304,6 +304,15 @@ fun InspectionFormScreen(
     }
 
     fun applyReportDraft(draft: InspectionReportDraft) {
+        if (replaceAiFields || customerName.isBlank()) {
+            draft.customerName.takeIf { it.isNotBlank() }?.let { customerName = it }
+        }
+        if (replaceAiFields || customerPhone.isBlank()) {
+            draft.customerPhone.takeIf { it.isNotBlank() }?.let { customerPhone = it }
+        }
+        if (replaceAiFields || serviceAddress.isBlank()) {
+            draft.serviceAddress.takeIf { it.isNotBlank() }?.let { serviceAddress = it }
+        }
         // Notes only if the model wrote a summary that is not the raw transcript.
         val spoken = transcriptForReport()
         val summaryBits = draft.notes.trim().takeUnless { it.isBlank() || it == spoken }.orEmpty()

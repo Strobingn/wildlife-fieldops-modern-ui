@@ -9,6 +9,7 @@ import com.strobingn.wildlifefieldops.ai.fieldops.AiRuntimeMode
 import com.strobingn.wildlifefieldops.ai.fieldops.AiRuntimeStatus
 import com.strobingn.wildlifefieldops.ai.fieldops.InspectionEvidence
 import com.strobingn.wildlifefieldops.ai.fieldops.InspectionNarrativeDraft
+import com.strobingn.wildlifefieldops.ai.fieldops.DictationFieldExtractor
 import com.strobingn.wildlifefieldops.ai.fieldops.InspectionNarrativeEngine
 import com.strobingn.wildlifefieldops.ai.fieldops.PhotoEvidence
 import com.strobingn.wildlifefieldops.ai.fieldops.NarrativeCleared
@@ -306,11 +307,12 @@ class InspectionsViewModel @Inject constructor(
         context: InspectionReportContext,
         ai: InspectionReportDraft?
     ): InspectionReportDraft {
+        val fields = DictationFieldExtractor.extract(spoken)
         val heuristic = InspectionNarrativeEngine.fromDictation(
-            transcript = spoken,
-            customerName = context.customerName,
+            transcript = fields.remainder,
+            customerName = context.customerName.ifBlank { fields.customerName },
             jobTitle = context.jobTitle,
-            jobAddress = context.jobAddress,
+            jobAddress = context.jobAddress.ifBlank { fields.serviceAddress },
             existingSpecies = context.existingSpecies,
             existingEntryPoints = context.existingEntryPoints,
             existingDamage = context.existingDamage,
@@ -319,17 +321,35 @@ class InspectionsViewModel @Inject constructor(
         )
         fun pick(aiValue: String?, fallback: String): String =
             aiValue?.trim().orEmpty().ifBlank { fallback }
+        // What the technician said wins over the model for contact fields, so a model that
+        // dropped them into notes cannot misfile them.
+        val customerName = fields.customerName.ifBlank { ai?.customerName?.trim().orEmpty() }
+        val customerPhone = fields.customerPhone.ifBlank { ai?.customerPhone?.trim().orEmpty() }
+        val serviceAddress = fields.serviceAddress.ifBlank { ai?.serviceAddress?.trim().orEmpty() }
+        val contactValues = listOf(customerName, customerPhone, serviceAddress)
+        fun scrub(value: String) = DictationFieldExtractor.scrubSentences(value, contactValues)
+        // Findings must never end up empty just because their only sentence named the address.
+        fun scrubKeepingText(value: String) = scrub(value).ifBlank { value }
         val aiNotes = ai?.notes?.trim().orEmpty()
-        val notes = if (aiNotes.isBlank() || aiNotes == spoken.trim()) "" else aiNotes
+        val notes = if (aiNotes.isBlank() || aiNotes == spoken.trim()) "" else scrub(aiNotes)
+        val aiSeverity = ai?.severity?.trim()?.uppercase().orEmpty()
+        val severity = when {
+            fields.severity.isNotBlank() -> fields.severity
+            aiSeverity in setOf("NONE", "LOW", "MODERATE", "HIGH", "CRITICAL") -> aiSeverity
+            else -> ""
+        }
         return InspectionReportDraft(
-            findings = pick(ai?.findings, heuristic.findings),
+            findings = scrubKeepingText(pick(ai?.findings, heuristic.findings)),
             recommendations = pick(ai?.recommendations, heuristic.recommendations),
             speciesIdentified = pick(ai?.speciesIdentified, heuristic.speciesIdentified),
             entryPoints = pick(ai?.entryPoints, heuristic.entryPoints),
             damageAssessment = pick(ai?.damageAssessment, heuristic.damageAssessment),
-            severity = ai?.severity?.trim()?.ifBlank { "MODERATE" } ?: "MODERATE",
+            severity = severity,
             notes = notes,
-            summary = ""
+            summary = "",
+            customerName = customerName,
+            customerPhone = customerPhone,
+            serviceAddress = serviceAddress
         )
     }
 
