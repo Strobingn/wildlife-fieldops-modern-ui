@@ -90,7 +90,9 @@ class AppUpdateCoordinator @Inject constructor(
             runCatching { remote.fetchLatestMain() }
                 .getOrElse { AppUpdateFetchResult.Failed(AppUpdateManifestParser.networkErrorMessage(it)) }
         }
-        store.markChecked(now)
+        // A failed check (offline, timeout, HTTP error) must not start the throttle window, or the
+        // next foreground/worker check is skipped and hydrate shows a stale "latest build" message.
+        if (result !is AppUpdateFetchResult.Failed) store.markChecked(now)
         when (result) {
             is AppUpdateFetchResult.Success -> applyManifest(result.manifest, lastCheckedAtMs = now)
             is AppUpdateFetchResult.Unavailable -> _state.update {
@@ -140,6 +142,7 @@ class AppUpdateCoordinator @Inject constructor(
         if (persist) store.saveManifest(manifest)
         val installedCode = BuildConfig.VERSION_CODE
         val newer = AppUpdatePolicy.isNewerVersion(manifest.versionCode, installedCode)
+        if (!newer) discardObsoletePendingApk()
         _state.update {
             it.copy(
                 phase = AppUpdatePhase.Ready,
@@ -159,6 +162,18 @@ class AppUpdateCoordinator @Inject constructor(
                 }
             )
         }
+    }
+
+    /**
+     * After a successful self-update the process is killed before the install broadcast is handled,
+     * so the already-installed APK and its stored path would linger (and could be re-installed by
+     * the permission-resume path). Once the installed build is no longer behind, drop it.
+     */
+    private suspend fun discardObsoletePendingApk() {
+        val stale = resolvedPendingApk() ?: return
+        pendingApk = null
+        store.setPendingApkPath(null)
+        withContext(Dispatchers.IO) { runCatching { stale.delete() } }
     }
 
     fun dismissBanner() {
@@ -216,6 +231,18 @@ class AppUpdateCoordinator @Inject constructor(
     }
 
     private suspend fun beginUpdate() {
+        // Double-taps (or a permission return racing a tap) must not start two downloads into the
+        // same file. The coordinator runs on Main.immediate, so this check-then-set is not racy.
+        if (busy) return
+        busy = true
+        try {
+            beginUpdateLocked()
+        } finally {
+            busy = false
+        }
+    }
+
+    private suspend fun beginUpdateLocked() {
         val manifest = _state.value.latest
             ?: run {
                 check(force = true)
@@ -256,15 +283,10 @@ class AppUpdateCoordinator @Inject constructor(
             return
         }
 
-        busy = true
-        try {
-            val apk = downloadAndVerify(manifest, installed) ?: return
-            pendingApk = apk
-            store.setPendingApkPath(apk.absolutePath)
-            flushThenInstall()
-        } finally {
-            busy = false
-        }
+        val apk = downloadAndVerify(manifest, installed) ?: return
+        pendingApk = apk
+        store.setPendingApkPath(apk.absolutePath)
+        flushThenInstall()
     }
 
     private suspend fun downloadAndVerify(
@@ -459,7 +481,7 @@ class AppUpdateCoordinator @Inject constructor(
                 }
             }
             else -> {
-                fail(event.message?.takeIf { it.isNotBlank() } ?: "Android could not install the update.")
+                fail(AppUpdatePolicy.installFailureMessage(event.statusCode, event.message))
             }
         }
     }

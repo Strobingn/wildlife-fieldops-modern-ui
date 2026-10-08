@@ -9,6 +9,13 @@ permissions:
   contents: write
   actions: read
 
+# Serialize runs per ref so two quick pushes to main can never publish out of order (an older run
+# finishing last would overwrite debug-latest with a lower versionCode). Non-main refs cancel
+# superseded runs; main queues (GitHub keeps only the newest pending run).
+concurrency:
+  group: build-android-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -212,6 +219,12 @@ jobs:
           VERSION_NAME="$(printf '%s\n' "$BADGING" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -n 1)"
           if [ -z "$VERSION_CODE" ]; then
             echo "::error::Could not read versionCode from APK badging"
+            exit 1
+          fi
+          # CI builds must be 1_000_000 + run number; a small code would never outrank installed builds
+          # (or would be refused as a downgrade), so do not publish an update.json for it.
+          if [ "$VERSION_CODE" -lt 1000000 ]; then
+            echo "::error::APK versionCode $VERSION_CODE is not a CI versionCode (expected >= 1000000)"
             exit 1
           fi
           APK_URL="https://github.com/${{ github.repository }}/releases/download/debug-latest/app-debug.apk"
