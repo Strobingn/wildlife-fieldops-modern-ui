@@ -135,7 +135,7 @@ Do NOT invent mileage or taxRate. Use the provided measured miles and tax percen
             "Driving miles could not be measured. Set mileage to 0. Do not guess."
         val user = buildJobContext(job) + "\n$milesLine\nRequired taxRate: $taxPercent\n$distanceNote\n\nProduce estimate JSON."
         if (isConfigured) {
-            when (val result = completeChat(system, user, maxTokens = 700, temperature = 0.25)) {
+            when (val result = completeChat(system, user, maxTokens = 700, temperature = 0.25, jsonMode = true)) {
                 is ChatResult.Ok -> {
                     val parsed = parseEstimateDraft(result.text)
                     if (parsed != null) return@withContext applyMeasured(parsed.copy(fromAi = true), drivingMiles, taxPercent, distanceNote)

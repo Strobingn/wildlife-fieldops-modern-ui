@@ -249,8 +249,8 @@ class InspectionsViewModel @Inject constructor(
             )
             _reportSource.value = AiRuntimeStatus.of(merged.source).label
             _reportLoading.value = false
-            if (ai.draft == null && ai.error != null && suggested.source == AiRuntimeMode.HEURISTIC) {
-                _reportError.value = null
+            if (ai.draft == null && !ai.error.isNullOrBlank() && suggested.source == AiRuntimeMode.HEURISTIC) {
+                _reportError.value = "AI unavailable, filled offline: ${ai.error.take(160)}"
             }
             onFilled(merged)
         }
