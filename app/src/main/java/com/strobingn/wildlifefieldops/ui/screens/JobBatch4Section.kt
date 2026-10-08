@@ -2,11 +2,13 @@ package com.strobingn.wildlifefieldops.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -385,7 +387,12 @@ private fun MessageDraftCard(
     customerVm: CustomerFieldOpsViewModel,
     onShare: (subject: String, body: String, sms: Boolean) -> Unit
 ) {
-    var kind by remember { mutableStateOf(CustomerMessageKind.ON_THE_WAY) }
+    var kind by remember(job.status) {
+        mutableStateOf(
+            if (job.status.isInspectionOnly()) CustomerMessageKind.INSPECTION_REMINDER
+            else CustomerMessageKind.ON_THE_WAY
+        )
+    }
     var subject by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
     var subjectManual by remember { mutableStateOf(false) }
@@ -401,7 +408,10 @@ private fun MessageDraftCard(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Customer message", color = TextPrimary, fontWeight = FontWeight.Medium)
             Text("Type the message yourself, or tap Suggest. What you type is what the phone sends.", color = TextTertiary, style = MaterialTheme.typography.bodySmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.horizontalScroll(rememberScrollState())
+            ) {
                 CustomerMessageKind.entries.forEach { option ->
                     if (kind == option) {
                         Button(

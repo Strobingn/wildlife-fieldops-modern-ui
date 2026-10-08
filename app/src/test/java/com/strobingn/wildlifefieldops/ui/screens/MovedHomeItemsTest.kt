@@ -129,7 +129,8 @@ class MovedHomeItemsTest {
                                 )
                             ),
                             inspectionCount = 4,
-                            followUpCount = 2
+                            followUpCount = 2,
+                            initialTab = 1
                         )
                     )
                 }
@@ -140,6 +141,42 @@ class MovedHomeItemsTest {
         composeRule.onNodeWithText("4").assertIsDisplayed()
         composeRule.onNodeWithText("2").assertIsDisplayed()
         composeRule.onNodeWithText("Willow Properties").assertIsDisplayed()
+        // Report counts live on the Reports tab, beside the Scheduled tab.
+        composeRule.onNodeWithText("Scheduled (0)").assertIsDisplayed()
+        composeRule.onNodeWithText("Reports (4)").assertIsDisplayed()
+    }
+
+    @Test
+    fun scheduledInspectionsOpenFirstOnTheirOwnTab() {
+        composeRule.setContent {
+            WildlifeFieldOpsTheme {
+                Box(Modifier.size(411.dp, 900.dp)) {
+                    InspectionListScreen(
+                        onNavigateToInspectionDetail = {},
+                        onNavigateToInspectionForm = {},
+                        onBack = {},
+                        showBack = false,
+                        preview = InspectionListPreview(
+                            inspections = emptyList(),
+                            scheduled = listOf(
+                                Job(
+                                    id = "insp-job",
+                                    title = "Attic noise inspection",
+                                    customerName = "Dana Reyes",
+                                    status = JobStatus.INSPECTION,
+                                    scheduledDate = null
+                                )
+                            )
+                        )
+                    )
+                }
+            }
+        }
+        composeRule.onNodeWithText("Scheduled (1)").assertIsDisplayed()
+        composeRule.onNodeWithText("No time set (1)").assertIsDisplayed()
+        composeRule.onNodeWithText("Attic noise inspection").assertIsDisplayed()
+        composeRule.onNodeWithText("Dana Reyes").assertIsDisplayed()
+        composeRule.onNodeWithText("Need a decision").assertIsDisplayed()
     }
 
     @Test

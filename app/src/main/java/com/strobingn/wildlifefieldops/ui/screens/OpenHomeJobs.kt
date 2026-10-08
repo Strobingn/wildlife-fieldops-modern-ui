@@ -15,6 +15,7 @@ object OpenHomeJobs {
 
     fun list(jobs: List<Job>): List<Job> =
         jobs.filterNot { OpsLedger.isLedger(it) }
+            .filterNot { it.status.isInspectionOnly() }
             .filter { JobStatusPipeline.flag(it.status) != JobStatus.COMPLETED }
             .sortedWith(
                 compareBy<Job> { it.scheduledDate ?: Long.MAX_VALUE }
@@ -36,8 +37,12 @@ object OpenHomeJobs {
         val seeAllLabel: String?
     )
 
-    /** Jobs tab filter. Open means Scheduled and In progress, and drops Completed. */
+    /**
+     * Jobs tab filter. Open means Scheduled and In progress, and drops Completed.
+     * A scheduled inspection is not a job yet: it shows only under the Inspection chip.
+     */
     fun matchesJobList(status: JobStatus, selected: JobStatus?, openOnly: Boolean): Boolean = when {
+        status.isInspectionOnly() -> selected == JobStatus.INSPECTION
         openOnly -> JobStatusPipeline.flag(status) != JobStatus.COMPLETED
         selected == null -> true
         else -> JobStatusPipeline.matches(status, selected)

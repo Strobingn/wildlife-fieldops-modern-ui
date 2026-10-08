@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.model.FindingSeverity
 import com.strobingn.wildlifefieldops.data.model.Inspection
+import com.strobingn.wildlifefieldops.data.model.Job
+import com.strobingn.wildlifefieldops.ai.fieldops.ScheduledInspections
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.InspectionsViewModel
@@ -31,7 +34,10 @@ data class InspectionListPreview(
     val inspectionCount: Int = inspections.size,
     val followUpCount: Int = inspections.count { it.followUpRequired },
     val searchQuery: String = "",
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val scheduled: List<Job> = emptyList(),
+    /** 0 = Scheduled, 1 = Reports. */
+    val initialTab: Int = 0
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,6 +47,8 @@ fun InspectionListScreen(
     onNavigateToInspectionForm: () -> Unit,
     onBack: () -> Unit,
     showBack: Boolean = true,
+    onScheduleInspection: () -> Unit = {},
+    onOpenScheduledInspection: (String) -> Unit = {},
     preview: InspectionListPreview? = null
 ) {
     if (preview != null) {
@@ -54,7 +62,11 @@ fun InspectionListScreen(
             onNavigateToInspectionDetail = onNavigateToInspectionDetail,
             onNavigateToInspectionForm = onNavigateToInspectionForm,
             onBack = onBack,
-            showBack = showBack
+            showBack = showBack,
+            scheduled = preview.scheduled,
+            onScheduleInspection = onScheduleInspection,
+            onOpenScheduledInspection = onOpenScheduledInspection,
+            initialTab = preview.initialTab
         )
         return
     }
@@ -64,6 +76,8 @@ fun InspectionListScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val inspectionCount by viewModel.inspectionCount.collectAsState()
     val followUpCount by viewModel.followUpCount.collectAsState()
+    val allJobs by viewModel.allJobs.collectAsState()
+    val scheduled = remember(allJobs) { ScheduledInspections.list(allJobs) }
     InspectionListContent(
         inspections = inspections,
         inspectionCount = inspectionCount,
@@ -74,7 +88,10 @@ fun InspectionListScreen(
         onNavigateToInspectionDetail = onNavigateToInspectionDetail,
         onNavigateToInspectionForm = onNavigateToInspectionForm,
         onBack = onBack,
-        showBack = showBack
+        showBack = showBack,
+        scheduled = scheduled,
+        onScheduleInspection = onScheduleInspection,
+        onOpenScheduledInspection = onOpenScheduledInspection
     )
 }
 
@@ -90,8 +107,14 @@ private fun InspectionListContent(
     onNavigateToInspectionDetail: (String) -> Unit,
     onNavigateToInspectionForm: () -> Unit,
     onBack: () -> Unit,
-    showBack: Boolean
+    showBack: Boolean,
+    scheduled: List<Job>,
+    onScheduleInspection: () -> Unit,
+    onOpenScheduledInspection: (String) -> Unit,
+    initialTab: Int = 0
 ) {
+    // 0 = Scheduled (inspections only, opens first), 1 = Reports.
+    var tab by rememberSaveable { mutableStateOf(initialTab) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -108,11 +131,11 @@ private fun InspectionListContent(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = onNavigateToInspectionForm,
-                containerColor = PrimaryGreen,
+                onClick = if (tab == 0) onScheduleInspection else onNavigateToInspectionForm,
+                containerColor = if (tab == 0) AccentBlue else PrimaryGreen,
                 contentColor = OnPrimary
             ) {
-                Icon(Icons.Default.Add, contentDescription = "New Inspection")
+                Icon(Icons.Default.Add, contentDescription = if (tab == 0) "Schedule inspection" else "New inspection report")
             }
         },
         containerColor = BackgroundDark
@@ -122,81 +145,198 @@ private fun InspectionListContent(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = onSearch,
-                placeholder = { Text("Search inspections...", color = TextTertiary) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextSecondary) },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = PrimaryGreen,
-                    unfocusedBorderColor = BorderDark,
-                    focusedTextColor = TextPrimary,
-                    unfocusedTextColor = TextPrimary,
-                    focusedContainerColor = BackgroundCard,
-                    unfocusedContainerColor = BackgroundCard
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp)
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            TabRow(
+                selectedTabIndex = tab,
+                containerColor = BackgroundDark,
+                contentColor = TextPrimary
             ) {
-                CountSummaryCell(
-                    label = "Inspections",
-                    count = inspectionCount,
-                    modifier = Modifier.weight(1f)
+                Tab(
+                    selected = tab == 0,
+                    onClick = { tab = 0 },
+                    text = { Text("Scheduled (${scheduled.size})") }
                 )
-                CountSummaryCell(
-                    label = "Follow-ups",
-                    count = followUpCount,
-                    modifier = Modifier.weight(1f)
+                Tab(
+                    selected = tab == 1,
+                    onClick = { tab = 1 },
+                    text = { Text("Reports ($inspectionCount)") }
                 )
             }
-
-            if (isLoading) {
-                ListShimmer(modifier = Modifier.fillMaxSize())
+            if (tab == 0) {
+                ScheduledInspectionsPane(
+                    scheduled = scheduled,
+                    onScheduleInspection = onScheduleInspection,
+                    onOpen = onOpenScheduledInspection
+                )
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = onSearch,
+                    placeholder = { Text("Search inspections...", color = TextTertiary) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextSecondary) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryGreen,
+                        unfocusedBorderColor = BorderDark,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedContainerColor = BackgroundCard,
+                        unfocusedContainerColor = BackgroundCard
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (inspections.isEmpty()) {
-                        item {
-                            EmptyState(
-                                icon = {
-                                    Icon(
-                                        Icons.Default.SearchOff,
-                                        contentDescription = null,
-                                        tint = TextSecondary,
-                                        modifier = Modifier.size(36.dp)
-                                    )
-                                },
-                                title = if (searchQuery.isBlank()) "No inspections yet" else "No matches",
-                                subtitle = if (searchQuery.isBlank()) "Tap + to create, or open Inspect from a Job" else "Try a different search",
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    } else {
-                        itemsIndexed(inspections, key = { _, insp -> insp.id }) { index, inspection ->
-                            FadeSlideIn(index = index) {
-                                InspectionListItem(
-                                    inspection = inspection,
-                                    onClick = { onNavigateToInspectionDetail(inspection.id) }
+                    CountSummaryCell(
+                        label = "Inspections",
+                        count = inspectionCount,
+                        modifier = Modifier.weight(1f)
+                    )
+                    CountSummaryCell(
+                        label = "Follow-ups",
+                        count = followUpCount,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                if (isLoading) {
+                    ListShimmer(modifier = Modifier.fillMaxSize())
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (inspections.isEmpty()) {
+                            item {
+                                EmptyState(
+                                    icon = {
+                                        Icon(
+                                            Icons.Default.SearchOff,
+                                            contentDescription = null,
+                                            tint = TextSecondary,
+                                            modifier = Modifier.size(36.dp)
+                                        )
+                                    },
+                                    title = if (searchQuery.isBlank()) "No inspections yet" else "No matches",
+                                    subtitle = if (searchQuery.isBlank()) "Tap + to create, or open Inspect from a Job" else "Try a different search",
+                                    modifier = Modifier.fillMaxWidth()
                                 )
                             }
+                        } else {
+                            itemsIndexed(inspections, key = { _, insp -> insp.id }) { index, inspection ->
+                                FadeSlideIn(index = index) {
+                                    InspectionListItem(
+                                        inspection = inspection,
+                                        onClick = { onNavigateToInspectionDetail(inspection.id) }
+                                    )
+                                }
+                            }
                         }
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
                     }
-                    item { Spacer(modifier = Modifier.height(16.dp)) }
                 }
             }
+        }
+    }
+}
+
+/** Only scheduled inspections, grouped by day, with their own search. */
+@Composable
+private fun ScheduledInspectionsPane(
+    scheduled: List<Job>,
+    onScheduleInspection: () -> Unit,
+    onOpen: (String) -> Unit
+) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val shown = remember(scheduled, query) { scheduled.filter { ScheduledInspections.matches(it, query) } }
+    val sections = remember(shown) { ScheduledInspections.sections(shown) }
+    val todayCount = sections.firstOrNull { it.label == "Today" }?.jobs?.size ?: 0
+    val needsDecision = sections.firstOrNull { it.label.startsWith("Past") }?.jobs?.size ?: 0
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            placeholder = { Text("Search name, address...", color = TextTertiary) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextSecondary) },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = AccentBlue,
+                unfocusedBorderColor = BorderDark,
+                focusedTextColor = TextPrimary,
+                unfocusedTextColor = TextPrimary,
+                focusedContainerColor = BackgroundCard,
+                unfocusedContainerColor = BackgroundCard
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp)
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            CountSummaryCell(label = "Scheduled", count = scheduled.size, modifier = Modifier.weight(1f))
+            CountSummaryCell(label = "Today", count = todayCount, modifier = Modifier.weight(1f))
+            CountSummaryCell(label = "Need a decision", count = needsDecision, modifier = Modifier.weight(1f))
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (sections.isEmpty()) {
+                item {
+                    EmptyState(
+                        icon = {
+                            Icon(
+                                Icons.Default.EventAvailable,
+                                contentDescription = null,
+                                tint = TextSecondary,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        },
+                        title = if (query.isBlank()) "No scheduled inspections" else "No matches",
+                        subtitle = if (query.isBlank()) "Tap + to schedule one. It goes on your Schedule like a job." else "Try a different search",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (query.isBlank()) {
+                    item {
+                        Button(
+                            onClick = onScheduleInspection,
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentBlue, contentColor = OnPrimary),
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Schedule inspection") }
+                    }
+                }
+            }
+            sections.forEach { section ->
+                item(key = "day-${section.label}") {
+                    Text(
+                        "${section.label} (${section.jobs.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = if (section.label.startsWith("Past")) AccentOrange else TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                items(section.jobs, key = { "scheduled-${it.id}" }) { job ->
+                    JobListItem(job = job, onClick = { onOpen(job.id) })
+                }
+            }
+            item { Spacer(modifier = Modifier.height(80.dp)) }
         }
     }
 }

@@ -222,6 +222,7 @@ fun RemoteJobDto.toLocal(existing: Job? = null): Job {
         fineStatus != null -> fineStatus
         existing == null -> mappedStatus
         existing.status == JobStatus.INVOICED || existing.status == JobStatus.PAID -> existing.status
+        existing.status == JobStatus.INSPECTION && status?.lowercase() == "scheduled" -> existing.status
         else -> mappedStatus
     }
     val mappedType = species.takeIf { it.isNotBlank() && !it.equals("Wildlife", ignoreCase = true) }
@@ -316,7 +317,8 @@ fun Inspection.toRemoteDtoOrNull(): RemoteInspectionDto {
 internal fun JobStatus.toRemoteStatus(): String = when (this) {
     JobStatus.PENDING, JobStatus.LEAD -> "Active"
     JobStatus.ESTIMATE_SENT -> "Needs Follow-up"
-    JobStatus.SCHEDULED -> "Scheduled"
+    // The inspection-only flag survives a pull through pricing.pipelineStatus.
+    JobStatus.INSPECTION, JobStatus.SCHEDULED -> "Scheduled"
     JobStatus.IN_PROGRESS, JobStatus.TRAPPING, JobStatus.EXCLUSION -> "In Progress"
     JobStatus.COMPLETED, JobStatus.CLOSED, JobStatus.INVOICED, JobStatus.PAID -> "Closed"
     JobStatus.CANCELLED -> "Cancelled"
