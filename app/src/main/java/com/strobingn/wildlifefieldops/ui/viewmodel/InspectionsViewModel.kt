@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.strobingn.wildlifefieldops.ai.WalkthroughVideoAnalyzer
+import com.strobingn.wildlifefieldops.data.model.Photo
 import com.strobingn.wildlifefieldops.ai.fieldops.AiRuntimeMode
 import com.strobingn.wildlifefieldops.ai.fieldops.AiRuntimeStatus
 import com.strobingn.wildlifefieldops.ai.fieldops.InspectionEvidence
@@ -181,8 +182,21 @@ class InspectionsViewModel @Inject constructor(
         onDeviceReady = aiService.localLlmReady
     )
 
+    fun photosForInspection(inspectionId: String): Flow<List<Photo>> =
+        photoDao.getByInspection(inspectionId)
+
+    fun addInspectionPhoto(photo: Photo) = viewModelScope.launch {
+        photoDao.insert(photo)
+    }
+
+    fun removeInspectionPhoto(photo: Photo) = viewModelScope.launch {
+        photoDao.delete(photo)
+        runCatching { java.io.File(photo.localPath).takeIf { it.isFile }?.delete() }
+    }
+
     fun draftNarrativeFromEvidence(
         jobId: String,
+        inspectionId: String = "",
         context: InspectionReportContext,
         replace: Boolean,
         onFilled: (InspectionNarrativeDraft) -> Unit
@@ -192,7 +206,10 @@ class InspectionsViewModel @Inject constructor(
         _reportError.value = null
         _reportSource.value = null
         viewModelScope.launch {
-            val photos = if (jobId.isBlank()) emptyList() else photoDao.getByJobOnce(jobId)
+            val photos = (
+                (if (jobId.isBlank()) emptyList() else photoDao.getByJobOnce(jobId)) +
+                    (if (inspectionId.isBlank()) emptyList() else photoDao.getByInspectionOnce(inspectionId))
+                ).distinctBy { it.id }
             val job = if (jobId.isBlank()) null else jobDao.getById(jobId)
             val evidence = InspectionEvidence(
                 customerName = context.customerName,
@@ -456,6 +473,7 @@ class InspectionsViewModel @Inject constructor(
     }
 
     fun createInspection(
+        id: String = "",
         jobId: String,
         customerId: String,
         customerName: String,
@@ -476,6 +494,7 @@ class InspectionsViewModel @Inject constructor(
         aiDraftSource: String = ""
     ) = viewModelScope.launch {
         val inspection = Inspection(
+            id = id.ifBlank { java.util.UUID.randomUUID().toString() },
             jobId = jobId,
             customerId = customerId,
             customerName = customerName,
