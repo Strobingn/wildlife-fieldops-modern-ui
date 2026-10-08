@@ -4,7 +4,10 @@ import com.strobingn.wildlifefieldops.BuildConfig
 import com.strobingn.wildlifefieldops.ai.local.LocalLlmEngine
 import com.strobingn.wildlifefieldops.ai.local.LocalLlmModelManager
 import com.strobingn.wildlifefieldops.data.model.Job
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
@@ -94,26 +97,20 @@ class AiService @Inject constructor(
             if (species.isNotBlank()) append("Species context: $species\n")
             append(userMessage)
         }
-        if (localLlm.isReady) {
-            val local = generateLocal(LOCAL_SYSTEM_PROMPT, userPrompt)
-            if (local != null) {
-                return@withContext "📱 On-device (${modelManager.activeDisplayName}):\n\n$local"
-            }
+        // Cloud first when configured: the on-device CPU model is slow, so it only answers when
+        // the cloud is unavailable, not set up, or too slow to wait for.
+        val routed = cloudThenLocal(
+            cloud = { completeChat(CLOUD_SYSTEM_PROMPT, userPrompt, maxTokens = 900, temperature = 0.35) },
+            parseCloud = { it },
+            local = { generateLocalBounded(LOCAL_SYSTEM_PROMPT, userPrompt) }
+        )
+        routed.value?.let {
+            return@withContext if (routed.viaCloud) "☁️ Cloud ($providerLabel):\n\n$it"
+            else "📱 On-device (${modelManager.activeDisplayName}):\n\n$it"
         }
-        if (isConfigured) {
-            when (val result = completeChat(CLOUD_SYSTEM_PROMPT, userPrompt, maxTokens = 900, temperature = 0.35)) {
-                is ChatResult.Ok -> {
-                    val preferLocalNote = if (!localLlm.isReady) {
-                        "\n\n— Cloud answered because the local abliterated model is not downloaded yet. Download it in AI Assistant for uncensored on-device replies."
-                    } else {
-                        "\n\n— Cloud fallback (local generate failed). On-device is preferred when ready."
-                    }
-                    return@withContext "☁️ Cloud ($providerLabel):\n\n${result.text}$preferLocalNote"
-                }
-                is ChatResult.Err -> {
-                    return@withContext result.message + "\n\n" + localUnavailableHint()
-                }
-            }
+        if (routed.error != null) return@withContext routed.error + "\n\n" + localUnavailableHint()
+        if (localLlm.isReady) {
+            return@withContext "On-device model did not answer in time.\n\n" + localUnavailableHint()
         }
         notConfiguredMessage()
     }
@@ -254,48 +251,38 @@ Do not invent species or damage that the transcript does not support; mark uncer
 
         // Cloud first when configured, like job intake: a 3B/7B CPU model writing an 11-field
         // JSON report takes far longer than the edge call and often truncates mid-object.
-        var cloudError: String? = null
-        if (isConfigured) {
-            when (val result = completeChat(system, user, maxTokens = 900, temperature = 0.25, jsonMode = true)) {
-                is ChatResult.Ok -> {
-                    val parsed = parseInspectionReport(result.text)
-                    if (parsed != null) {
-                        return@withContext InspectionReportResult(
-                            draft = parsed,
-                            sourceLabel = "☁️ Cloud ($providerLabel)"
-                        )
-                    }
-                    cloudError = "AI returned text but JSON parse failed. Try again or edit fields manually."
-                }
-                is ChatResult.Err -> cloudError = result.message
+        val routed = cloudThenLocal(
+            cloud = { completeChat(system, user, maxTokens = 900, temperature = 0.25, jsonMode = true) },
+            parseCloud = { parseInspectionReport(it) },
+            local = {
+                generateLocalBounded(
+                    system, user, maxTokens = REPORT_LOCAL_MAX_TOKENS, timeoutMs = REPORT_LOCAL_TIMEOUT_MS
+                )?.let { parseInspectionReport(it) }
             }
-        }
-        if (localLlm.isReady) {
-            val local = withTimeoutOrNull(REPORT_LOCAL_TIMEOUT_MS) {
-                generateLocal(system, user, maxTokens = REPORT_LOCAL_MAX_TOKENS)
-            }
-            if (local != null) {
-                val parsed = parseInspectionReport(local)
-                if (parsed != null) {
-                    return@withContext InspectionReportResult(
-                        draft = parsed,
-                        sourceLabel = "📱 On-device (${modelManager.activeDisplayName})"
-                    )
-                }
-            }
+        )
+        routed.value?.let {
             return@withContext InspectionReportResult(
-                error = cloudError ?: "On-device model did not return a usable report in time."
+                draft = it,
+                sourceLabel = if (routed.viaCloud) "☁️ Cloud ($providerLabel)"
+                else "📱 On-device (${modelManager.activeDisplayName})"
             )
         }
-        if (cloudError != null) return@withContext InspectionReportResult(error = cloudError)
+        if (routed.error != null) return@withContext InspectionReportResult(error = routed.error)
+        if (localLlm.isReady) {
+            return@withContext InspectionReportResult(
+                error = "On-device model did not return a usable report in time."
+            )
+        }
         InspectionReportResult(error = notConfiguredMessage())
     }
 
     suspend fun summarizeJob(job: Job): String = withContext(Dispatchers.IO) {
         val system = "Write a concise wildlife-control job summary. Bullet-first. Max 180 words."
         val user = buildJobContext(job) + "\nWrite the job summary now."
+        // The job text carries the customer's name, address and notes, so keep it on the phone
+        // when the on-device model is ready. The cloud is only the fallback.
         if (localLlm.isReady) {
-            val local = generateLocal(system, user)
+            val local = generateLocalBounded(system, user)
             if (local != null) return@withContext "📱 On-device:\n\n$local"
         }
         if (isConfigured) {
@@ -405,6 +392,62 @@ Do not invent species or damage that the transcript does not support; mark uncer
         "On-device LLM is not ready. ${localLlm.modelStatusLabel()}. " +
             "Open AI Assistant and tap Download local model for preferred uncensored on-device answers."
 
+    /**
+     * The native llama call and the edge HTTP call block their thread and ignore coroutine
+     * cancellation, so a plain withTimeout would still wait for them. Run them in a scope of
+     * their own and stop waiting after the timeout; the call finishes in the background.
+     */
+    private val abandonableScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private suspend fun <T> withAbandonTimeout(timeoutMs: Long, block: suspend () -> T): T? {
+        val work = abandonableScope.async { block() }
+        return withTimeoutOrNull(timeoutMs) { work.await() }
+    }
+
+    private suspend fun generateLocalBounded(
+        system: String,
+        user: String,
+        maxTokens: Int = 512,
+        timeoutMs: Long = LOCAL_TIMEOUT_MS
+    ): String? = withAbandonTimeout(timeoutMs) { generateLocal(system, user, maxTokens) }
+
+    private class Routed<T>(val value: T?, val viaCloud: Boolean, val error: String?)
+
+    /**
+     * Cloud first, with the on-device model as the fallback. When a local model is ready and
+     * idle, the cloud only gets CLOUD_BEFORE_LOCAL_TIMEOUT_MS before the local model is tried,
+     * so an offline or weak-signal phone is not stuck behind the 30s connect / 90s read timeouts.
+     * The cloud request keeps running meanwhile, and is used if the local attempt produces
+     * nothing usable. A ready model file does not guarantee that inference works.
+     */
+    private suspend fun <T : Any> cloudThenLocal(
+        cloud: () -> ChatResult,
+        parseCloud: (String) -> T?,
+        local: suspend () -> T?
+    ): Routed<T> {
+        fun fromCloud(result: ChatResult): Routed<T> = when (result) {
+            is ChatResult.Ok -> parseCloud(result.text)?.let { Routed(it, true, null) }
+                ?: Routed(null, true, "AI returned an unusable response. Try again or edit fields manually.")
+            is ChatResult.Err -> Routed(null, false, result.message)
+        }
+        if (!isConfigured) {
+            return Routed(if (localLlm.isReady) local() else null, false, null)
+        }
+        val canFallBack = localLlm.isReady && !localLlm.isBusy
+        val work = abandonableScope.async { cloud() }
+        val early = if (canFallBack) withTimeoutOrNull(CLOUD_BEFORE_LOCAL_TIMEOUT_MS) { work.await() }
+        else work.await()
+        if (early != null) {
+            val answered = fromCloud(early)
+            if (answered.value != null || !localLlm.isReady) return answered
+            val fallback = local()
+            return if (fallback != null) Routed(fallback, false, null) else answered
+        }
+        val fallback = local()
+        if (fallback != null) return Routed(fallback, false, null)
+        return fromCloud(work.await())
+    }
+
     private suspend fun generateLocal(system: String, user: String, maxTokens: Int = 512): String? {
         val result = localLlm.generate(system, user, maxTokens)
         return result.getOrElse { null }
@@ -414,6 +457,8 @@ Do not invent species or damage that the transcript does not support; mark uncer
         /** The report JSON has 11 fields; the 512-token default truncates it mid-object. */
         private const val REPORT_LOCAL_MAX_TOKENS = 900
         private const val REPORT_LOCAL_TIMEOUT_MS = 60_000L
+        private const val LOCAL_TIMEOUT_MS = 45_000L
+        private const val CLOUD_BEFORE_LOCAL_TIMEOUT_MS = 20_000L
 
         val CLOUD_SYSTEM_PROMPT: String = """
 You are FieldOps AI for a professional wildlife removal business.

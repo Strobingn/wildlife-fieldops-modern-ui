@@ -27,8 +27,12 @@ class LocalLlmEngine @Inject constructor(
     private val modelManager: LocalLlmModelManager
 ) {
     private val mutex = Mutex()
+    private val generating = java.util.concurrent.atomic.AtomicBoolean(false)
     @Volatile private var model: LlamaModel? = null
     @Volatile private var loadedPath: String? = null
+
+    /** True while a generation is running, including one whose caller already gave up on it. */
+    val isBusy: Boolean get() = generating.get()
 
     val isReady: Boolean
         get() = modelManager.isModelReady()
@@ -87,6 +91,14 @@ class LocalLlmEngine @Inject constructor(
                 )
             )
         }
+        // The native call cannot be cancelled, so a caller that timed out leaves it running.
+        // Reject new requests while it is, instead of queueing them behind it and burning CPU
+        // on answers nobody is waiting for.
+        if (!generating.compareAndSet(false, true)) {
+            return@withContext Result.failure(
+                IllegalStateException("On-device model is still busy with an earlier request.")
+            )
+        }
         val path = modelManager.modelFile().absolutePath
         val system = systemPrompt.trim()
         val user = userPrompt.trim()
@@ -117,6 +129,8 @@ class LocalLlmEngine @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "generate failed", e)
             Result.failure(e)
+        } finally {
+            generating.set(false)
         }
     }
 

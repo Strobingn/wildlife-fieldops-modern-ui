@@ -1,5 +1,10 @@
 package com.strobingn.wildlifefieldops.ai
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withTimeoutOrNull
 import android.content.Context
 import android.net.Uri
 import com.google.gson.Gson
@@ -9,6 +14,8 @@ import com.strobingn.wildlifefieldops.data.remote.AiService
 import com.strobingn.wildlifefieldops.data.remote.EdgeChatResult
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val LOCAL_FORM_TIMEOUT_MS = 45_000L
 
 /**
  * Hybrid photo → form fill: ML Kit vision labels + generative LLM
@@ -20,6 +27,7 @@ class HybridAIService @Inject constructor(
     private val edge: AiEdgeGateway
 ) {
     private val gson = Gson()
+    private val localScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     data class GrokFormResponse(
         val species: String = "",
@@ -77,17 +85,29 @@ class HybridAIService @Inject constructor(
             }
         }
 
-        val local = localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
+        // 512 tokens (the default) cuts the form JSON mid-object, so ask for more room, and
+        // never let the on-device model hold the capture flow for more than the timeout.
+        // The native call ignores cancellation, so run it in its own scope and stop waiting.
+        val localWork = localScope.async {
+            localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt, maxTokens = 900).getOrNull()
+        }
+        val local = withTimeoutOrNull(LOCAL_FORM_TIMEOUT_MS) { localWork.await() }
         if (local != null) {
             val form = runCatching {
                 val cleaned = local.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-                gson.fromJson(cleaned, GrokFormResponse::class.java)
+                val start = cleaned.indexOf('{')
+                val end = cleaned.lastIndexOf('}')
+                require(start >= 0 && end > start) { "no JSON object in local output" }
+                gson.fromJson(cleaned.substring(start, end + 1), GrokFormResponse::class.java)
+                    ?: error("empty form")
             }.getOrElse {
+                // Truncated or malformed JSON must not end up in the notes field as raw text.
+                val looksLikeJson = local.contains('{') || local.contains("```")
                 GrokFormResponse(
                     species = vision.species.joinToString(", "),
                     serviceType = vision.suggestedServiceType,
                     priority = vision.suggestedPriority,
-                    notes = local.take(800),
+                    notes = if (looksLikeJson) vision.suggestedNotes else local.take(800),
                     recommendedActions = emptyList()
                 )
             }
