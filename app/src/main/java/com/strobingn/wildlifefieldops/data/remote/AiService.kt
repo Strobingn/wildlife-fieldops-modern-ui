@@ -6,6 +6,7 @@ import com.strobingn.wildlifefieldops.ai.local.LocalLlmModelManager
 import com.strobingn.wildlifefieldops.data.model.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
@@ -134,7 +135,7 @@ Do NOT invent mileage or taxRate. Use the provided measured miles and tax percen
             "Driving miles could not be measured. Set mileage to 0. Do not guess."
         val user = buildJobContext(job) + "\n$milesLine\nRequired taxRate: $taxPercent\n$distanceNote\n\nProduce estimate JSON."
         if (isConfigured) {
-            when (val result = completeChat(system, user, maxTokens = 700, temperature = 0.25)) {
+            when (val result = completeChat(system, user, maxTokens = 700, temperature = 0.25, jsonMode = true)) {
                 is ChatResult.Ok -> {
                     val parsed = parseEstimateDraft(result.text)
                     if (parsed != null) return@withContext applyMeasured(parsed.copy(fromAi = true), drivingMiles, taxPercent, distanceNote)
@@ -251,8 +252,28 @@ Do not invent species or damage that the transcript does not support; mark uncer
             append("Write the structured inspection report JSON now.")
         }
 
+        // Cloud first when configured, like job intake: a 3B/7B CPU model writing an 11-field
+        // JSON report takes far longer than the edge call and often truncates mid-object.
+        var cloudError: String? = null
+        if (isConfigured) {
+            when (val result = completeChat(system, user, maxTokens = 900, temperature = 0.25, jsonMode = true)) {
+                is ChatResult.Ok -> {
+                    val parsed = parseInspectionReport(result.text)
+                    if (parsed != null) {
+                        return@withContext InspectionReportResult(
+                            draft = parsed,
+                            sourceLabel = "☁️ Cloud ($providerLabel)"
+                        )
+                    }
+                    cloudError = "AI returned text but JSON parse failed. Try again or edit fields manually."
+                }
+                is ChatResult.Err -> cloudError = result.message
+            }
+        }
         if (localLlm.isReady) {
-            val local = generateLocal(system, user)
+            val local = withTimeoutOrNull(REPORT_LOCAL_TIMEOUT_MS) {
+                generateLocal(system, user, maxTokens = REPORT_LOCAL_MAX_TOKENS)
+            }
             if (local != null) {
                 val parsed = parseInspectionReport(local)
                 if (parsed != null) {
@@ -262,26 +283,11 @@ Do not invent species or damage that the transcript does not support; mark uncer
                     )
                 }
             }
+            return@withContext InspectionReportResult(
+                error = cloudError ?: "On-device model did not return a usable report in time."
+            )
         }
-        if (isConfigured) {
-            when (val result = completeChat(system, user, maxTokens = 900, temperature = 0.25)) {
-                is ChatResult.Ok -> {
-                    val parsed = parseInspectionReport(result.text)
-                    if (parsed != null) {
-                        return@withContext InspectionReportResult(
-                            draft = parsed,
-                            sourceLabel = "☁️ Cloud ($providerLabel)"
-                        )
-                    }
-                    return@withContext InspectionReportResult(
-                        error = "AI returned text but JSON parse failed. Try again or edit fields manually."
-                    )
-                }
-                is ChatResult.Err -> {
-                    return@withContext InspectionReportResult(error = result.message)
-                }
-            }
-        }
+        if (cloudError != null) return@withContext InspectionReportResult(error = cloudError)
         InspectionReportResult(error = notConfiguredMessage())
     }
 
@@ -318,8 +324,14 @@ Do not invent species or damage that the transcript does not support; mark uncer
         data class Err(val message: String) : ChatResult()
     }
 
-    private fun completeChat(systemPrompt: String, userPrompt: String, maxTokens: Int, temperature: Double): ChatResult {
-        return when (val result = edge.complete(systemPrompt, userPrompt, maxTokens, temperature)) {
+    private fun completeChat(
+        systemPrompt: String,
+        userPrompt: String,
+        maxTokens: Int,
+        temperature: Double,
+        jsonMode: Boolean = false
+    ): ChatResult {
+        return when (val result = edge.complete(systemPrompt, userPrompt, maxTokens, temperature, jsonMode)) {
             is EdgeChatResult.Ok -> ChatResult.Ok(result.text)
             is EdgeChatResult.Err -> ChatResult.Err(result.message)
         }
@@ -393,12 +405,16 @@ Do not invent species or damage that the transcript does not support; mark uncer
         "On-device LLM is not ready. ${localLlm.modelStatusLabel()}. " +
             "Open AI Assistant and tap Download local model for preferred uncensored on-device answers."
 
-    private suspend fun generateLocal(system: String, user: String): String? {
-        val result = localLlm.generate(system, user)
+    private suspend fun generateLocal(system: String, user: String, maxTokens: Int = 512): String? {
+        val result = localLlm.generate(system, user, maxTokens)
         return result.getOrElse { null }
     }
 
     companion object {
+        /** The report JSON has 11 fields; the 512-token default truncates it mid-object. */
+        private const val REPORT_LOCAL_MAX_TOKENS = 900
+        private const val REPORT_LOCAL_TIMEOUT_MS = 60_000L
+
         val CLOUD_SYSTEM_PROMPT: String = """
 You are FieldOps AI for a professional wildlife removal business.
 Concise, bullet-first, field-readable. Flag safety risks. Prefer legal exclusion/live-trap approaches.
