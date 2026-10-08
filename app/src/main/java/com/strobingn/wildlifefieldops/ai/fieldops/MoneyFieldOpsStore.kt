@@ -184,9 +184,11 @@ class MoneyFieldOpsStore @Inject constructor(
 
     /** One-time move of the old phone-only file onto the synced ops ledger. */
     private suspend fun importLegacyUnassigned() {
-        val legacy = readUnassigned()
+        // null = the file exists but could not be read or parsed. Keep it: deleting it
+        // would silently throw away the only copy of the old mileage log.
+        val legacy = readUnassigned() ?: return
         if (legacy.isEmpty()) {
-            if (unassignedFile.exists()) withContext(Dispatchers.IO) { unassignedFile.delete() }
+            withContext(Dispatchers.IO) { if (unassignedFile.exists()) unassignedFile.delete() }
             return
         }
         val ledger = ensureLedger()
@@ -197,11 +199,11 @@ class MoneyFieldOpsStore @Inject constructor(
         withContext(Dispatchers.IO) { unassignedFile.delete() }
     }
 
-    private suspend fun readUnassigned(): List<MileageLogEntry> = withContext(Dispatchers.IO) {
+    private suspend fun readUnassigned(): List<MileageLogEntry>? = withContext(Dispatchers.IO) {
         if (!unassignedFile.exists()) return@withContext emptyList()
-        val raw = unassignedFile.readText()
+        val raw = runCatching { unassignedFile.readText() }.getOrNull() ?: return@withContext null
         if (raw.isBlank()) return@withContext emptyList()
-        runCatching { PricingJson.json.decodeFromString(mileageList, raw) }.getOrDefault(emptyList())
+        runCatching { PricingJson.json.decodeFromString(mileageList, raw) }.getOrNull()
     }
 
     private suspend fun writeUnassigned(entries: List<MileageLogEntry>) = withContext(Dispatchers.IO) {

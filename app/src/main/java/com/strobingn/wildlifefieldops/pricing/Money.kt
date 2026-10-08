@@ -29,10 +29,14 @@ object Money {
 
     fun round(dollars: Double): Double = of(dollars).toDouble()
 
-    /** Quantity (hours, miles, qty) × unit price, rounded to cents. */
+    /**
+     * Quantity (hours, miles, qty) × unit price, rounded to cents once at the end.
+     * The unit price is NOT rounded first: a 65.5 cent mileage rate or a $1.495
+     * per-foot price must not turn into 66 cents / $1.50 before multiplying.
+     */
     fun times(quantity: Double, unitPrice: Double): Double {
         val qty = quantity.toBigDecimalSafe()
-        val price = of(unitPrice)
+        val price = unitPrice.toBigDecimalSafe()
         return qty.multiply(price).setScale(TWO, MODE).toDouble()
     }
 

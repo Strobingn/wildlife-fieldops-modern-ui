@@ -777,8 +777,12 @@ object StandardDocumentLayout {
                         out += remaining
                         break
                     }
-                    var breakAt = remaining.length
-                    while (breakAt > 1 && measure(remaining.substring(0, breakAt), size, bold) > maxWidth) {
+                    // measure() is linear in length, so start at the estimate and walk down
+                    // by length. (Measuring a fresh substring per step was quadratic and
+                    // froze the PDF on a very long note.)
+                    val perChar = size * (if (bold) 0.56f else 0.50f)
+                    var breakAt = minOf(remaining.length.toLong(), (maxWidth / perChar).toLong() + 2L).toInt().coerceAtLeast(1)
+                    while (breakAt > 1 && breakAt * size * (if (bold) 0.56f else 0.50f) > maxWidth) {
                         breakAt--
                     }
                     val space = remaining.lastIndexOf(' ', (breakAt - 1).coerceAtLeast(0))
