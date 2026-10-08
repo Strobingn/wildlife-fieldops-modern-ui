@@ -26,12 +26,21 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.saveable.rememberSaveable
+import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.ai.fieldops.AiRuntimeStatus
 import com.strobingn.wildlifefieldops.ai.fieldops.InspectionNarrativeDraft
@@ -515,6 +524,86 @@ fun InspectionFormScreen(
     }.trim()
 
 
+    // Inspection photos: saved against the inspection id as soon as they are taken, so they
+    // survive leaving the screen. A new inspection gets its id up front and keeps it on Save.
+    val photoOwnerId = rememberSaveable(inspectionId) {
+        inspectionId?.takeIf { it.isNotBlank() } ?: java.util.UUID.randomUUID().toString()
+    }
+    val inspectionPhotos by remember(photoOwnerId) { viewModel.photosForInspection(photoOwnerId) }
+        .collectAsState(initial = emptyList())
+    var pendingPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun newPhotoFile(): File {
+        val dir = File(context.filesDir, "photos").apply { mkdirs() }
+        return File(dir, "INS_${System.currentTimeMillis()}_${(0..999).random()}.jpg")
+    }
+    fun recordPhoto(file: File) {
+        viewModel.addInspectionPhoto(
+            Photo(
+                filePath = FileProvider.getUriForFile(context, "${context.packageName}.provider", file).toString(),
+                localPath = file.absolutePath,
+                jobId = linkedJobId.ifBlank { null },
+                inspectionId = photoOwnerId,
+                customerId = customerId.ifBlank { null },
+                category = PhotoCategory.INSPECTION,
+                takenAt = System.currentTimeMillis(),
+                takenBy = inspectorName,
+                fileSize = file.length()
+            )
+        )
+    }
+    val takePictureLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { saved ->
+        val path = pendingPhotoPath
+        pendingPhotoPath = null
+        if (path != null) {
+            val file = File(path)
+            if (saved && file.isFile && file.length() > 0) recordPhoto(file)
+            else file.delete()
+        }
+    }
+    fun startCamera() {
+        val file = newPhotoFile()
+        pendingPhotoPath = file.absolutePath
+        takePictureLauncher.launch(
+            FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+        )
+    }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) startCamera()
+        else scope.launch { snackbarHostState.showSnackbar("Camera permission is needed to take photos.") }
+    }
+    fun takeInspectionPhoto() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        ) startCamera() else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+    }
+    val photoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        scope.launch {
+            val copied = withContext(Dispatchers.IO) {
+                uris.mapNotNull { uri ->
+                    runCatching {
+                        val file = newPhotoFile()
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            file.outputStream().use { input.copyTo(it) }
+                        } ?: return@runCatching null
+                        file.takeIf { it.length() > 0 }
+                    }.getOrNull()
+                }
+            }
+            copied.forEach { recordPhoto(it) }
+            if (copied.size < uris.size) {
+                snackbarHostState.showSnackbar("Could not read ${uris.size - copied.size} photo(s).")
+            }
+        }
+    }
+
     val walkthroughPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -656,7 +745,9 @@ fun InspectionFormScreen(
                         OutlinedButton(
                             onClick = {
                                 viewModel.draftNarrativeFromEvidence(
+                                    appContext = context.applicationContext,
                                     jobId = linkedJobId,
+                                    inspectionId = photoOwnerId,
                                     context = InspectionReportContext(
                                         customerName = customerName,
                                         inspectorName = inspectorName,
@@ -812,6 +903,7 @@ fun InspectionFormScreen(
                                     )
                                 } else {
                                     viewModel.createInspection(
+                                        id = photoOwnerId,
                                         jobId = linkedJobId,
                                         customerId = customerId,
                                         customerName = customerName,
@@ -943,6 +1035,81 @@ fun InspectionFormScreen(
                 }
             }
 
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = BackgroundCard),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "Photos (${inspectionPhotos.size})",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Saved to this inspection as you take them. Draft from photos uses them.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { takeInspectionPhoto() },
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Take photo")
+                        }
+                        OutlinedButton(
+                            onClick = { photoPicker.launch("image/*") },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGreen),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("From gallery")
+                        }
+                    }
+                    if (inspectionPhotos.isNotEmpty()) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(inspectionPhotos, key = { it.id }) { photo ->
+                                Box(Modifier.size(96.dp)) {
+                                    AsyncImage(
+                                        model = File(photo.localPath),
+                                        contentDescription = "Inspection photo",
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(BorderDark, RoundedCornerShape(10.dp))
+                                            .clip(RoundedCornerShape(10.dp))
+                                    )
+                                    IconButton(
+                                        onClick = { viewModel.removeInspectionPhoto(photo) },
+                                        modifier = Modifier.align(Alignment.TopEnd).size(28.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "Remove photo",
+                                            tint = Color.White,
+                                            modifier = Modifier
+                                                .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                                                .padding(3.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             Card(
                 colors = CardDefaults.cardColors(containerColor = BackgroundCard),

@@ -4,7 +4,13 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.strobingn.wildlifefieldops.ai.AiAnalysisResult
+import com.strobingn.wildlifefieldops.ai.PhotoAIHelper
 import com.strobingn.wildlifefieldops.ai.WalkthroughVideoAnalyzer
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.withTimeoutOrNull
+import com.strobingn.wildlifefieldops.data.model.Photo
 import com.strobingn.wildlifefieldops.ai.fieldops.AiRuntimeMode
 import com.strobingn.wildlifefieldops.ai.fieldops.AiRuntimeStatus
 import com.strobingn.wildlifefieldops.ai.fieldops.InspectionEvidence
@@ -181,8 +187,60 @@ class InspectionsViewModel @Inject constructor(
         onDeviceReady = aiService.localLlmReady
     )
 
+    fun photosForInspection(inspectionId: String): Flow<List<Photo>> =
+        photoDao.getByInspection(inspectionId)
+
+    fun addInspectionPhoto(photo: Photo) = viewModelScope.launch {
+        photoDao.insert(photo)
+    }
+
+    fun removeInspectionPhoto(photo: Photo) = viewModelScope.launch {
+        photoDao.delete(photo)
+        runCatching { java.io.File(photo.localPath).takeIf { it.isFile }?.delete() }
+    }
+
+    private val photoAnalysisCache = java.util.concurrent.ConcurrentHashMap<String, AiAnalysisResult>()
+
+    /**
+     * Runs the on-device vision models (ML Kit labels and objects plus the custom evidence model)
+     * over the pixels of every photo, so the draft reflects what the pictures show and not only
+     * what someone typed in their descriptions. Results are cached per photo for this screen.
+     */
+    private suspend fun analyzePhotosForEvidence(
+        appContext: Context,
+        photos: List<Photo>
+    ): Pair<List<String>, List<String>> {
+        val results = photos.take(MAX_ANALYZED_PHOTOS).chunked(PHOTO_ANALYSIS_PARALLELISM).flatMap { batch ->
+            kotlinx.coroutines.coroutineScope {
+                batch.map { photo ->
+                    async(kotlinx.coroutines.Dispatchers.Default) {
+                        photoAnalysisCache[photo.id]?.let { return@async it }
+                        val file = java.io.File(photo.localPath)
+                        if (!file.isFile) return@async null
+                        val analysis = withTimeoutOrNull(PHOTO_ANALYSIS_TIMEOUT_MS) {
+                            PhotoAIHelper.analyzePhotoForFormFilling(appContext, Uri.fromFile(file))
+                        }
+                        analysis?.takeIf { it.hasEvidence() }?.also { photoAnalysisCache[photo.id] = it }
+                    }
+                }.awaitAll()
+            }
+        }.filterNotNull()
+        val tags = results.flatMap { it.species + it.damageTypes + it.entryTypes + it.equipmentTypes }
+            .map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        val notes = results.mapIndexed { i, r -> "Photo ${i + 1}: ${r.evidenceSummary}".trim() }
+            .filter { it.length > "Photo 1:".length }
+            .take(MAX_PHOTO_NOTES)
+        return tags to notes
+    }
+
+    private fun AiAnalysisResult.hasEvidence(): Boolean =
+        species.isNotEmpty() || damageTypes.isNotEmpty() || entryTypes.isNotEmpty() ||
+            equipmentTypes.isNotEmpty() || evidenceSummary.isNotBlank()
+
     fun draftNarrativeFromEvidence(
+        appContext: Context,
         jobId: String,
+        inspectionId: String = "",
         context: InspectionReportContext,
         replace: Boolean,
         onFilled: (InspectionNarrativeDraft) -> Unit
@@ -192,8 +250,12 @@ class InspectionsViewModel @Inject constructor(
         _reportError.value = null
         _reportSource.value = null
         viewModelScope.launch {
-            val photos = if (jobId.isBlank()) emptyList() else photoDao.getByJobOnce(jobId)
+            val photos = (
+                (if (jobId.isBlank()) emptyList() else photoDao.getByJobOnce(jobId)) +
+                    (if (inspectionId.isBlank()) emptyList() else photoDao.getByInspectionOnce(inspectionId))
+                ).distinctBy { it.id }
             val job = if (jobId.isBlank()) null else jobDao.getById(jobId)
+            val (mlTags, mlNotes) = analyzePhotosForEvidence(appContext, photos)
             val evidence = InspectionEvidence(
                 customerName = context.customerName,
                 jobTitle = context.jobTitle.ifBlank { job?.title.orEmpty() },
@@ -206,8 +268,8 @@ class InspectionsViewModel @Inject constructor(
                 existingEntryPoints = context.existingEntryPoints,
                 existingDamage = context.existingDamage,
                 existingNotes = context.existingNotes,
-                photoTags = PhotoEvidence.tags(photos),
-                photoNotes = PhotoEvidence.notes(photos)
+                photoTags = (PhotoEvidence.tags(photos) + mlTags).distinct(),
+                photoNotes = PhotoEvidence.notes(photos) + mlNotes
             )
             val heuristic = InspectionNarrativeEngine.draft(evidence)
             val current = InspectionNarrativeDraft(
@@ -456,6 +518,7 @@ class InspectionsViewModel @Inject constructor(
     }
 
     fun createInspection(
+        id: String = "",
         jobId: String,
         customerId: String,
         customerName: String,
@@ -476,6 +539,7 @@ class InspectionsViewModel @Inject constructor(
         aiDraftSource: String = ""
     ) = viewModelScope.launch {
         val inspection = Inspection(
+            id = id.ifBlank { java.util.UUID.randomUUID().toString() },
             jobId = jobId,
             customerId = customerId,
             customerName = customerName,
@@ -497,5 +561,12 @@ class InspectionsViewModel @Inject constructor(
             aiDraftSource = aiDraftSource
         )
         inspectionDao.insert(inspection)
+    }
+
+    private companion object {
+        const val MAX_ANALYZED_PHOTOS = 30
+        const val MAX_PHOTO_NOTES = 12
+        const val PHOTO_ANALYSIS_PARALLELISM = 3
+        const val PHOTO_ANALYSIS_TIMEOUT_MS = 20_000L
     }
 }
