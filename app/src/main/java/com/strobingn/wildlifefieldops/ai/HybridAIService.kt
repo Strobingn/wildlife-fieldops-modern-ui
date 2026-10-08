@@ -102,7 +102,7 @@ class HybridAIService @Inject constructor(
                     ?: error("empty form")
             }.getOrElse {
                 // Truncated or malformed JSON must not end up in the notes field as raw text.
-                val looksLikeJson = local.trimStart().startsWith("{") || local.contains("\"species\"")
+                val looksLikeJson = local.contains('{') || local.contains("```")
                 GrokFormResponse(
                     species = vision.species.joinToString(", "),
                     serviceType = vision.suggestedServiceType,
