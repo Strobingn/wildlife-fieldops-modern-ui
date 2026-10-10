@@ -346,6 +346,10 @@ class JobsViewModel @Inject constructor(
         appointmentTimes: List<Long>,
         actualCost: Double? = null,
         customer: JobCustomerDraft? = null,
+        /** Canonical Scheduled / In progress / Completed; null keeps the default. */
+        status: com.strobingn.wildlifefieldops.data.model.JobStatus? = null,
+        /** Used only when [appointmentTimes] is empty (e.g. dictated "tomorrow"). */
+        scheduleAt: Long? = null,
         onSaved: () -> Unit
     ) = viewModelScope.launch {
         val draft = customer ?: JobCustomerDraft(
@@ -362,9 +366,10 @@ class JobsViewModel @Inject constructor(
                 priority = priority,
                 estimatedValue = estimatedValue,
                 notes = notes,
-                appointmentTimes = appointmentTimes,
+                appointmentTimes = appointmentTimes.ifEmpty { listOfNotNull(scheduleAt) },
                 actualCost = actualCost,
-                customer = draft
+                customer = draft,
+                status = status
             )
         )
         onSaved()
@@ -513,19 +518,22 @@ class JobsViewModel @Inject constructor(
             val draft = result?.draft
             if (draft != null) {
                 runCatching { android.util.Log.i("DictationFill", "refine ${refineMs}ms source=${result.sourceLabel}") }
+                // AI may improve the instant rule-based guesses, never typed or cleared fields.
                 val merged = JobIntakeParser.merge(
                     current = current() ?: heuristic ?: JobIntakeDraft(),
                     incoming = draft,
-                    editedFields = editedFields()
+                    editedFields = editedFields(),
+                    replaceable = heuristic
                 )
-                _aiFillSource.value = result.sourceLabel.ifBlank { "⚙️ Instant heuristic" }
+                _aiFillSource.value = result.notice ?: result.sourceLabel.ifBlank { "⚙️ Instant heuristic" }
                 onFilled(merged)
             } else {
                 runCatching { android.util.Log.i("DictationFill", "refine ${refineMs}ms no draft (timeout or skip)") }
                 if (heuristic == null && current() == null) {
                     _aiFillError.value = result?.error ?: "AI job fill failed."
-                } else if (_aiFillSource.value.isNullOrBlank()) {
-                    _aiFillSource.value = "⚙️ Instant heuristic"
+                } else {
+                    // Short, readable: the rule-based fill stays on screen.
+                    _aiFillSource.value = result?.notice ?: JobIntakeParser.NOTICE_RULES
                 }
             }
         }
