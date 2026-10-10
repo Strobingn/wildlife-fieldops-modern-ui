@@ -37,6 +37,7 @@ import com.strobingn.wildlifefieldops.ui.viewmodel.TextImportViewModel
 fun JobFormScreen(
     jobId: String? = null,
     onBack: () -> Unit,
+    onImportFromText: (() -> Unit)? = null,
     viewModel: JobsViewModel = hiltViewModel(),
     workspaceViewModel: JobWorkspaceViewModel = hiltViewModel(),
     serviceTypesViewModel: ServiceTypesViewModel = hiltViewModel(),
@@ -254,20 +255,11 @@ fun JobFormScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                if (isEditing) {
-                    "Update any field, then tap Save. Status, photos, and invoices are kept."
-                } else {
-                    "Type every field by hand. Existing-customer lookup is optional. AI is a helper — it is not required to save."
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary
-            )
-
-            if (importQuote.isNotBlank()) {
-                TextImportReviewBanner(importQuote)
-            }
-            PasteFromTextButton(onApply = { fields ->
+            JobFormIntro(
+                isEditing = isEditing,
+                importQuote = importQuote,
+                onImportFromText = onImportFromText,
+                onPasteApply = { fields ->
                 importQuote = fields.sourceText.ifBlank { importQuote }
                 importScope.launch {
                     applyIncoming(fields)
@@ -889,3 +881,32 @@ private fun textImportFieldMap(
     "State" to customer.state,
     "ZIP" to customer.zipCode
 )
+
+/**
+ * Top of the job form: Import from text (new jobs), the manual-entry hint,
+ * the text quote under review, and Paste from text.
+ */
+@Composable
+internal fun JobFormIntro(
+    isEditing: Boolean,
+    importQuote: String,
+    onImportFromText: (() -> Unit)?,
+    onPasteApply: (TextMessageImport.Fields) -> Unit
+) {
+    if (!isEditing && onImportFromText != null) {
+        ImportFromTextButton(onClick = onImportFromText, modifier = Modifier.fillMaxWidth())
+    }
+    Text(
+        if (isEditing) {
+            "Update any field, then tap Save. Status, photos, and invoices are kept."
+        } else {
+            "Type every field by hand. Existing-customer lookup is optional. AI is a helper — it is not required to save."
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = TextSecondary
+    )
+    if (importQuote.isNotBlank()) {
+        TextImportReviewBanner(importQuote)
+    }
+    PasteFromTextButton(onApply = onPasteApply)
+}

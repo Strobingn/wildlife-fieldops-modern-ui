@@ -19,6 +19,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
 import com.strobingn.wildlifefieldops.data.model.Customer
 import com.strobingn.wildlifefieldops.data.model.CustomerType
+import com.strobingn.wildlifefieldops.data.remote.CustomerTextInbox
 import com.strobingn.wildlifefieldops.data.remote.TextMessageImport
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.CustomersViewModel
@@ -89,6 +90,20 @@ fun CustomerFormScreen(
     }
 
     val importScope = rememberCoroutineScope()
+    var importQuote by remember { mutableStateOf("") }
+    val pendingText by CustomerTextInbox.pending.collectAsState()
+
+    // Import from text → Read text. Same parser and empty-only fill as Paste from text.
+    LaunchedEffect(pendingText?.id) {
+        val shared = pendingText ?: return@LaunchedEffect
+        if (customerId != null) return@LaunchedEffect
+        CustomerTextInbox.consume(shared.id)
+        importQuote = shared.body
+        applyCustomerImport(TextMessageImport.parse(shared.body, shared.senderPhone))
+        refreshImportMatches()
+        applyCustomerImport(textImportViewModel.refine(shared.body, shared.senderPhone))
+        refreshImportMatches()
+    }
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = PrimaryGreen,
@@ -147,6 +162,9 @@ fun CustomerFormScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (importQuote.isNotBlank()) {
+                TextImportReviewBanner(importQuote)
+            }
             PasteFromTextButton(onApply = { fields ->
                 importScope.launch {
                     applyCustomerImport(fields)
