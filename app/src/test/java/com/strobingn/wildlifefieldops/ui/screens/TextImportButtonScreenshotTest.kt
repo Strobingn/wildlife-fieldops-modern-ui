@@ -119,9 +119,8 @@ class TextImportButtonScreenshotTest {
         // The Scaffold places its FAB slot a frame later.
         composeRule.mainClock.advanceTimeBy(500)
         composeRule.waitForIdle()
-        println("TREE>>" + composeRule.onRoot(useUnmergedTree = true).printToString())
         composeRule.onNodeWithText(TextImportEntry.ACTION_LABEL).assertIsDisplayed()
-        composeRule.onNodeWithText("Add").assertIsDisplayed()
+        composeRule.onNodeWithText("Add customer").assertIsDisplayed()
         saveTextButtonShot("customers-tab-${mode(dark)}")
     }
 
@@ -202,7 +201,7 @@ class TextImportButtonScreenshotTest {
             }
         }
         assertTrue("render is blank", colors.size > 4)
-        val dir = File("/opt/cursor/artifacts/text-button")
+        val dir = File("/tmp/shots/pr-text-button")
         dir.mkdirs()
         FileOutputStream(File(dir, "$name.png")).use { out ->
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)

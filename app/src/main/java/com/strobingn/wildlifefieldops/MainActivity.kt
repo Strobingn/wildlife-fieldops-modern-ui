@@ -910,7 +910,7 @@ private fun openTextReview(
     val previousRoute = previous?.destination?.route
     val backToForm = when (target) {
         TextImportTarget.JOB -> previousRoute == Screen.JobForm.route &&
-            previous?.arguments?.getString("jobId").let { it.isNullOrBlank() || it == "new" }
+            ManualJobEntry.isCreateId(previous?.arguments?.getString("jobId"))
         TextImportTarget.CUSTOMER -> previousRoute == Screen.CustomerForm.route &&
             previous?.arguments?.getString("customerId").isNullOrBlank()
     }
