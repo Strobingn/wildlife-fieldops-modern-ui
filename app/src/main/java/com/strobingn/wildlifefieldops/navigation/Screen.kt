@@ -42,6 +42,10 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
         fun createRoute(customerId: String? = null) =
             if (customerId != null) "customer_form?customerId=$customerId" else "customer_form"
     }
+    /** Paste or type a customer's text message, then Read text. */
+    object TextImport : Screen("text_import?target={target}", "Import from text") {
+        fun createRoute(target: String = "job") = "text_import?target=$target"
+    }
 
     // Inspection Screens
     object InspectionDetail : Screen("inspection_detail/{inspectionId}", "Inspection Detail") {

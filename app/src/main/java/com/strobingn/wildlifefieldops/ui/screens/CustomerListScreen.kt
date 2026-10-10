@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.model.Customer
+import com.strobingn.wildlifefieldops.data.remote.TextImportEntry
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.CustomersViewModel
@@ -32,6 +33,7 @@ fun CustomerListScreen(
     onNavigateToCustomerForm: (String?) -> Unit,
     onBack: () -> Unit,
     showBack: Boolean = true,
+    onImportFromText: () -> Unit = {},
     preview: CustomerListPreview? = null
 ) {
     if (preview != null) {
@@ -41,6 +43,7 @@ fun CustomerListScreen(
             searchQuery = preview.searchQuery,
             onSearch = {},
             onNavigateToCustomerForm = onNavigateToCustomerForm,
+            onImportFromText = onImportFromText,
             onBack = onBack,
             showBack = showBack
         )
@@ -56,6 +59,7 @@ fun CustomerListScreen(
         searchQuery = searchQuery,
         onSearch = viewModel::setSearchQuery,
         onNavigateToCustomerForm = onNavigateToCustomerForm,
+        onImportFromText = onImportFromText,
         onBack = onBack,
         showBack = showBack
     )
@@ -69,6 +73,7 @@ private fun CustomerListContent(
     searchQuery: String,
     onSearch: (String) -> Unit,
     onNavigateToCustomerForm: (String?) -> Unit,
+    onImportFromText: () -> Unit,
     onBack: () -> Unit,
     showBack: Boolean
 ) {
@@ -80,6 +85,18 @@ private fun CustomerListContent(
             )
         },
         floatingActionButton = {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+            ExtendedFloatingActionButton(
+                onClick = onImportFromText,
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                shape = FieldShapes.fab,
+                icon = { Icon(Icons.Default.Sms, contentDescription = null) },
+                text = { Text(TextImportEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold, maxLines = 1) }
+            )
             ExtendedFloatingActionButton(
                 onClick = { onNavigateToCustomerForm(null) },
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -88,6 +105,7 @@ private fun CustomerListContent(
                 icon = { Icon(Icons.Default.PersonAdd, contentDescription = null) },
                 text = { Text("Add", fontWeight = FontWeight.SemiBold) }
             )
+            }
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
