@@ -14,6 +14,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.model.DefaultServiceTypes
 import com.strobingn.wildlifefieldops.data.model.JobPriority
+import com.strobingn.wildlifefieldops.data.model.JobCustomerDraft
+import com.strobingn.wildlifefieldops.data.model.JobStatus
+import com.strobingn.wildlifefieldops.data.remote.DictationJobParser
 import com.strobingn.wildlifefieldops.data.remote.IntakeField
 import com.strobingn.wildlifefieldops.data.remote.JobIntakeDraft
 import com.strobingn.wildlifefieldops.data.remote.JobIntakeParser
@@ -55,6 +58,13 @@ fun JobDictateScreen(
             IntakeField.PRIORITY -> current.copy(priority = value)
             IntakeField.DESCRIPTION -> current.copy(description = value)
             IntakeField.NOTES -> current.copy(notes = value)
+            IntakeField.PHONE -> current.copy(phone = value)
+            IntakeField.EMAIL -> current.copy(email = value)
+            IntakeField.CITY -> current.copy(city = value)
+            IntakeField.STATE -> current.copy(state = value)
+            IntakeField.ZIP -> current.copy(zip = value)
+            IntakeField.SPECIES -> current.copy(species = value)
+            IntakeField.STATUS -> current.copy(status = value)
             else -> current
         }
     }
@@ -127,58 +137,7 @@ fun JobDictateScreen(
                 }
             }
             draft?.let { d ->
-                Text("Review before create", color = TextPrimary, fontWeight = FontWeight.Bold)
-                OutlinedTextField(
-                    value = d.title,
-                    onValueChange = { edit(IntakeField.TITLE, it) },
-                    label = { Text("Title") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = dictateFieldColors()
-                )
-                OutlinedTextField(
-                    value = d.customerName,
-                    onValueChange = { edit(IntakeField.CUSTOMER, it) },
-                    label = { Text("Customer") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = dictateFieldColors()
-                )
-                OutlinedTextField(
-                    value = d.address,
-                    onValueChange = { edit(IntakeField.ADDRESS, it) },
-                    label = { Text("Address") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = dictateFieldColors()
-                )
-                OutlinedTextField(
-                    value = d.type,
-                    onValueChange = { edit(IntakeField.TYPE, it) },
-                    label = { Text("Type") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = dictateFieldColors()
-                )
-                OutlinedTextField(
-                    value = d.priority,
-                    onValueChange = { edit(IntakeField.PRIORITY, it) },
-                    label = { Text("Priority") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = dictateFieldColors()
-                )
-                OutlinedTextField(
-                    value = d.description,
-                    onValueChange = { edit(IntakeField.DESCRIPTION, it) },
-                    label = { Text("Description") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    colors = dictateFieldColors()
-                )
-                OutlinedTextField(
-                    value = d.notes,
-                    onValueChange = { edit(IntakeField.NOTES, it) },
-                    label = { Text("Notes") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    colors = dictateFieldColors()
-                )
+                DictateReviewFields(d) { key, value -> edit(key, value) }
                 Button(
                     onClick = {
                         if (isSaving) return@Button
@@ -189,11 +148,14 @@ fun JobDictateScreen(
                         }.getOrDefault(JobPriority.MEDIUM)
                         viewModel.saveJobWithSchedule(
                             existingJob = null,
+                            customer = dictatedCustomer(d),
+                            status = dictatedStatus(d.status),
+                            scheduleAt = DictationJobParser.scheduleMillis(d.scheduleDay),
                             title = d.title.ifBlank { "Voice job" }.trim(),
                             description = d.description.trim(),
                             customerId = "",
                             customerName = d.customerName.trim(),
-                            address = d.address.trim(),
+                            address = dictatedCustomer(d).composedServiceAddress(),
                             type = DefaultServiceTypes.display(d.type.ifBlank { DefaultServiceTypes.all.first() }),
                             priority = priority,
                             estimatedValue = 0.0,
@@ -234,6 +196,12 @@ private fun dictationFillMap(d: JobIntakeDraft?): Map<String, String> {
         if (!d.priority.equals("MEDIUM", ignoreCase = true)) put("Priority", d.priority)
         put("Description", d.description)
         put("Notes", d.notes)
+        put("Phone", d.phone)
+        put("Email", d.email)
+        put("Town", d.city)
+        put("State", d.state)
+        put("ZIP", d.zip)
+        put("Species", d.species)
     }
 }
 
@@ -246,3 +214,121 @@ private fun dictationSavedMap(d: JobIntakeDraft): Map<String, String> = mapOf(
     "Description" to d.description.trim(),
     "Notes" to d.notes.trim()
 )
+
+@Composable
+private fun DictateField(
+    value: String,
+    label: String,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    onChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        label = { Text(label) },
+        modifier = modifier,
+        singleLine = true,
+        colors = dictateFieldColors()
+    )
+}
+
+/** Only the three job statuses Sir uses. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DictateStatusPicker(selected: String, onSelect: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Status", color = TextSecondary, style = MaterialTheme.typography.labelMedium)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            JobIntakeParser.allowedStatuses.forEach { s ->
+                FilterChip(
+                    selected = selected.equals(s, ignoreCase = true),
+                    onClick = { onSelect(s) },
+                    label = { Text(s, color = TextPrimary) }
+                )
+            }
+        }
+    }
+}
+
+internal fun dictatedCustomer(d: JobIntakeDraft) = JobCustomerDraft(
+    name = d.customerName.trim(),
+    phone = d.phone.trim(),
+    email = d.email.trim(),
+    address = d.address.trim(),
+    city = d.city.trim(),
+    state = d.state.trim(),
+    zipCode = d.zip.trim()
+)
+
+internal fun dictatedStatus(raw: String): JobStatus? = when (raw.trim().lowercase()) {
+    "in progress" -> JobStatus.IN_PROGRESS
+    "completed" -> JobStatus.COMPLETED
+    "scheduled" -> JobStatus.SCHEDULED
+    else -> null
+}
+
+/** Review fields filled by dictation. Each spoken fact has its own field. */
+@Composable
+internal fun DictateReviewFields(d: JobIntakeDraft, edit: (String, String) -> Unit) {
+                Text("Review before create", color = TextPrimary, fontWeight = FontWeight.Bold)
+                OutlinedTextField(
+                    value = d.title,
+                    onValueChange = { edit(IntakeField.TITLE, it) },
+                    label = { Text("Title") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = dictateFieldColors()
+                )
+                OutlinedTextField(
+                    value = d.customerName,
+                    onValueChange = { edit(IntakeField.CUSTOMER, it) },
+                    label = { Text("Customer") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = dictateFieldColors()
+                )
+                DictateField(d.phone, "Phone") { edit(IntakeField.PHONE, it) }
+                DictateField(d.email, "Email") { edit(IntakeField.EMAIL, it) }
+                OutlinedTextField(
+                    value = d.address,
+                    onValueChange = { edit(IntakeField.ADDRESS, it) },
+                    label = { Text("Street address") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = dictateFieldColors()
+                )
+                DictateField(d.city, "Town") { edit(IntakeField.CITY, it) }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    DictateField(d.state, "State", Modifier.weight(1f)) { edit(IntakeField.STATE, it) }
+                    DictateField(d.zip, "ZIP", Modifier.weight(1f)) { edit(IntakeField.ZIP, it) }
+                }
+                DictateField(d.species, "Species") { edit(IntakeField.SPECIES, it) }
+                OutlinedTextField(
+                    value = d.type,
+                    onValueChange = { edit(IntakeField.TYPE, it) },
+                    label = { Text("Type") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = dictateFieldColors()
+                )
+                OutlinedTextField(
+                    value = d.priority,
+                    onValueChange = { edit(IntakeField.PRIORITY, it) },
+                    label = { Text("Priority") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = dictateFieldColors()
+                )
+                DictateStatusPicker(d.status) { edit(IntakeField.STATUS, it) }
+                OutlinedTextField(
+                    value = d.description,
+                    onValueChange = { edit(IntakeField.DESCRIPTION, it) },
+                    label = { Text("Scope of work") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    colors = dictateFieldColors()
+                )
+                OutlinedTextField(
+                    value = d.notes,
+                    onValueChange = { edit(IntakeField.NOTES, it) },
+                    label = { Text("Notes") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    colors = dictateFieldColors()
+                )
+}
