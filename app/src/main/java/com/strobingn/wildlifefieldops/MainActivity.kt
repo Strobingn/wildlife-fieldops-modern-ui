@@ -45,6 +45,9 @@ import androidx.navigation.navDeepLink
 import com.strobingn.wildlifefieldops.BuildConfig
 import com.strobingn.wildlifefieldops.data.repository.syncFailureDetail
 import com.strobingn.wildlifefieldops.data.remote.SharedTextIntake
+import com.strobingn.wildlifefieldops.data.remote.SharedText
+import com.strobingn.wildlifefieldops.data.remote.TextImportEntry
+import com.strobingn.wildlifefieldops.data.remote.TextImportTarget
 import com.strobingn.wildlifefieldops.data.remote.TextShareInbox
 import com.strobingn.wildlifefieldops.navigation.ManualJobEntry
 import com.strobingn.wildlifefieldops.data.model.JobStatus
@@ -241,6 +244,9 @@ private fun AppNavHost(
                 onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) },
                 onNavigateToJobForm = { navController.navigate(ManualJobEntry.createRoute()) },
                 onNavigateToDictate = { navController.navigate(VoiceJobEntry.createRoute()) },
+                onImportFromText = {
+                    navController.navigate(Screen.TextImport.createRoute(TextImportTarget.JOB.key))
+                },
                 onBack = { navController.popBackStack() },
                 showBack = false,
                 requestOpenJobs = requestOpenJobs,
@@ -277,7 +283,10 @@ private fun AppNavHost(
             JobFormScreen(
                 jobId = jobId,
                 onBack = { navController.popBackStack() },
-                initialStatus = if (rawId == ManualJobEntry.CREATE_INSPECTION_ID) JobStatus.INSPECTION else JobStatus.SCHEDULED
+                initialStatus = if (rawId == ManualJobEntry.CREATE_INSPECTION_ID) JobStatus.INSPECTION else JobStatus.SCHEDULED,
+                onImportFromText = {
+                    navController.navigate(Screen.TextImport.createRoute(TextImportTarget.JOB.key))
+                }
             )
         }
         composable(Screen.JobDictate.route) {
@@ -364,11 +373,25 @@ private fun AppNavHost(
             CustomerListScreen(
                 onNavigateToCustomerForm = { id -> navController.navigate(Screen.CustomerForm.createRoute(id)) },
                 onBack = { navController.popBackStack() },
-                showBack = false
+                showBack = false,
+                onImportFromText = {
+                    navController.navigate(Screen.TextImport.createRoute(TextImportTarget.CUSTOMER.key))
+                }
             )
         }
         composable(route = Screen.CustomerForm.route, arguments = listOf(navArgument("customerId") { type = NavType.StringType; nullable = true; defaultValue = null })) { backStackEntry ->
             CustomerFormScreen(customerId = backStackEntry.arguments?.getString("customerId"), onBack = { navController.popBackStack() })
+        }
+        composable(
+            route = Screen.TextImport.route,
+            arguments = listOf(navArgument("target") { type = NavType.StringType; nullable = true; defaultValue = null })
+        ) { backStackEntry ->
+            val target = TextImportTarget.from(backStackEntry.arguments?.getString("target"))
+            ImportFromTextScreen(
+                target = target,
+                onBack = { navController.popBackStack() },
+                onRead = { shared -> openTextReview(navController, target, shared) }
+            )
         }
         composable(Screen.Map.route) {
             MapScreen(onBack = { navController.popBackStack() }, onNavigateToJobDetail = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) })
@@ -871,4 +894,36 @@ internal fun MoreShellActions(onNewJob: () -> Unit, onDictate: () -> Unit) {
             )
         }
     }
+}
+
+/**
+ * Read text on Import from text: go back to the new form that opened it
+ * (so typed text stays and only empty fields fill), or open a new form.
+ * The form parses the text and shows the review, same as a share.
+ */
+private fun openTextReview(
+    navController: NavHostController,
+    target: TextImportTarget,
+    shared: SharedText
+) {
+    val previous = navController.previousBackStackEntry
+    val previousRoute = previous?.destination?.route
+    val backToForm = when (target) {
+        TextImportTarget.JOB -> previousRoute == Screen.JobForm.route &&
+            ManualJobEntry.isCreateId(previous?.arguments?.getString("jobId"))
+        TextImportTarget.CUSTOMER -> previousRoute == Screen.CustomerForm.route &&
+            previous?.arguments?.getString("customerId").isNullOrBlank()
+    }
+    if (backToForm) {
+        navController.popBackStack()
+    } else {
+        val route = when (target) {
+            TextImportTarget.JOB -> Screen.JobForm.createRoute()
+            TextImportTarget.CUSTOMER -> Screen.CustomerForm.createRoute(null)
+        }
+        navController.navigate(route) {
+            popUpTo(Screen.TextImport.route) { inclusive = true }
+        }
+    }
+    TextImportEntry.deliver(shared, target)
 }
