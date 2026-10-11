@@ -22,9 +22,10 @@ class HomeDashboardNoEarningsTest {
         assertEquals(1, drawer.count { it == Screen.InvoiceList })
         assertEquals(1, drawer.count { it == Screen.MileageLog })
         assertEquals(1, drawer.count { it == Screen.EarningsTax })
-        assertFalse(Screen.bottomNavItems.contains(Screen.EarningsTax))
+        // Money lives on the Tax tab (bottom bar) and More → Earnings & sales tax, never Home.
+        assertTrue(Screen.bottomNavItems.contains(Screen.EarningsTax))
         assertEquals(
-            listOf(Screen.Dashboard, Screen.JobList, Screen.InspectionList, Screen.CustomerList, Screen.More),
+            listOf(Screen.Dashboard, Screen.JobList, Screen.InspectionList, Screen.CustomerList, Screen.EarningsTax, Screen.More),
             Screen.bottomNavItems
         )
     }

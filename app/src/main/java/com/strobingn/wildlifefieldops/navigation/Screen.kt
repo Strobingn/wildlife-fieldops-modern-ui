@@ -106,7 +106,8 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     companion object {
         // Lazy so nested objects are finished initializing before the lists read them.
         val bottomNavItems: List<Screen> by lazy {
-            listOf(Dashboard, JobList, InspectionList, CustomerList, More)
+            // Tax is back as a tab (Sir, Oct 11). It also stays in More.
+            listOf(Dashboard, JobList, InspectionList, CustomerList, EarningsTax, More)
         }
         val drawerItems: List<Screen> by lazy {
             listOf(
