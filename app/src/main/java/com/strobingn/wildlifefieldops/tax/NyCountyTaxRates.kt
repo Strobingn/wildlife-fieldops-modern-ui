@@ -43,7 +43,16 @@ object NyCountyTaxRates {
         "albany"      to 8.0,    // Albany County: 4% state + 4% county
         "nassau"      to 8.625,  // Nassau County: 4% state + 4.25% county + 0.375% MCTD
         "suffolk"     to 8.625,  // Suffolk County: 4% state + 4.25% county + 0.375% MCTD
-        "new york city" to 8.875 // NYC (all five boroughs): 4% + 4.5% city + 0.375% MCTD
+        "new york city" to 8.875, // NYC (all five boroughs): 4% + 4.5% city + 0.375% MCTD
+        // NYC borough counties and common names, same 8.875% NYC rate
+        "bronx"       to 8.875,
+        "the bronx"   to 8.875,
+        "kings"       to 8.875,
+        "brooklyn"    to 8.875,
+        "queens"      to 8.875,
+        "richmond"    to 8.875,
+        "staten island" to 8.875,
+        "manhattan"   to 8.875
     )
 
     /**
