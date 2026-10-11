@@ -73,6 +73,7 @@ fun EarningsTaxScreen(
     val quarters by viewModel.quarters.collectAsState()
     val adjustments by viewModel.adjustments.collectAsState()
     val anchor by viewModel.anchor.collectAsState()
+    val yearSummary by viewModel.yearSummary.collectAsState()
     val context = LocalContext.current
     var showAdjust by remember { mutableStateOf(false) }
     val periodLabel = remember(grain, anchor) {
@@ -109,6 +110,21 @@ fun EarningsTaxScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item { Spacer(Modifier.height(4.dp)) }
+            item {
+                SalesTaxYearCard(
+                    summary = yearSummary,
+                    onKind = viewModel::setYearKind,
+                    onShiftYear = viewModel::shiftYear,
+                    onLock = viewModel::overrideYearField,
+                    onShareCsv = {
+                        DecLogShare.shareCsv(context, viewModel.exportYearCsv(), "ny-sales-tax-${yearSummary.year}.csv")
+                    },
+                    onSharePdf = {
+                        val file = com.strobingn.wildlifefieldops.util.EarningsTaxPdf.generate(context, viewModel.exportYearCsv())
+                        DecLogShare.sharePdf(context, file, "NY sales tax ${yearSummary.year}")
+                    }
+                )
+            }
             item {
                 Text("Paid, invoiced, and estimated from jobs and invoices. Type any total to lock it. Add adjustment for cash or extra tax.", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
             }

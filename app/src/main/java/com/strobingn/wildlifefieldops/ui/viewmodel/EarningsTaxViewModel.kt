@@ -80,6 +80,55 @@ class EarningsTaxViewModel @Inject constructor(
         EarningsTaxEngine.snapshot(inv, jobList.filterNot { OpsLedger.isLedger(it) }, store.allAdjustments(jobList), store.allOverrides(jobList), a, b, NySalesTaxPeriods.Grain.DAY)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), snapshot.value)
 
+    // ── Yearly NY sales tax grand total (top of the Tax tab) ──
+    private val _yearKind = MutableStateFlow(com.strobingn.wildlifefieldops.ai.fieldops.SalesTaxYear.Kind.NYS_TAX_YEAR)
+    private val _year = MutableStateFlow(
+        com.strobingn.wildlifefieldops.ai.fieldops.SalesTaxYear.currentYear(_yearKind.value)
+    )
+
+    val yearSummary: StateFlow<com.strobingn.wildlifefieldops.ai.fieldops.SalesTaxYear.Summary> =
+        combine(jobs, invoices, _yearKind, _year) { jobList, inv, kind, year ->
+            com.strobingn.wildlifefieldops.ai.fieldops.SalesTaxYear.summarize(
+                inv, jobList, store.allAdjustments(jobList), store.allOverrides(jobList), kind, year
+            )
+        }.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            com.strobingn.wildlifefieldops.ai.fieldops.SalesTaxYear.summarize(
+                emptyList(), emptyList(), emptyList(), emptyList(), _yearKind.value, _year.value
+            )
+        )
+
+
+    fun setYearKind(kind: com.strobingn.wildlifefieldops.ai.fieldops.SalesTaxYear.Kind) {
+        if (kind == _yearKind.value) return
+        _yearKind.value = kind
+        _year.value = com.strobingn.wildlifefieldops.ai.fieldops.SalesTaxYear.currentYear(kind)
+    }
+
+    fun shiftYear(delta: Int) {
+        _year.value = _year.value + delta
+    }
+
+    /** Lock a typed yearly total (0.00 included); blank or Unlock returns the calculated total. */
+    fun overrideYearField(field: String, raw: String) {
+        viewModelScope.launch {
+            val (start, _) = com.strobingn.wildlifefieldops.ai.fieldops.SalesTaxYear.bounds(_yearKind.value, _year.value)
+            val grain = com.strobingn.wildlifefieldops.ai.fieldops.SalesTaxYear.overrideGrain
+            val current = store.allOverrides(jobs.value).firstOrNull {
+                it.grain == grain.name && it.startMs == start
+            } ?: EarningsPeriodOverride(grain = grain.name, startMs = start)
+            val next = EarningsTaxEngine.applyLock(current, field, raw) ?: return@launch
+            store.savePeriodOverride(next)
+            // Re-read overrides so the card shows the lock at once.
+            val y = _year.value
+            _year.value = y + 1
+            _year.value = y
+        }
+    }
+
+    fun exportYearCsv(): String = com.strobingn.wildlifefieldops.ai.fieldops.SalesTaxYear.csv(yearSummary.value)
+
     fun setGrain(value: NySalesTaxPeriods.Grain) {
         _grain.value = value
     }
