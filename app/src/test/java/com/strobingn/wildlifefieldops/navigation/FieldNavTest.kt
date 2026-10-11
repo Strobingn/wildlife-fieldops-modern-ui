@@ -8,12 +8,14 @@ import java.io.File
 class FieldNavTest {
 
     @Test
-    fun bottomNavIsTheFiveTabs() {
+    fun bottomNavIsTheSixTabs() {
         assertEquals(
-            listOf("Home", "Jobs", "Inspections", "Customers", "More"),
+            listOf("Home", "Jobs", "Inspections", "Customers", "Tax", "More"),
             Screen.bottomNavItems.map { it.title }
         )
-        assertTrue(Screen.bottomNavItems.size <= 5)
+        assertTrue(Screen.bottomNavItems.size <= 6)
+        // Tax tab and the More entry both stay.
+        assertTrue(Screen.drawerItems.contains(Screen.EarningsTax))
         assertEquals(Screen.bottomNavItems, FieldNav.tabs)
     }
 

@@ -413,7 +413,8 @@ private fun AppNavHost(
         composable(Screen.EarningsTax.route) {
             EarningsTaxScreen(
                 onBack = { navController.popBackStack() },
-                showBack = true,
+                // Tab: no back arrow. Opened from More: back arrow returns there.
+                showBack = navController.previousBackStackEntry?.destination?.route == Screen.More.route,
                 onNavigateToInvoices = { navController.navigate(Screen.InvoiceList.route) },
                 onNavigateToMileage = { navController.navigate(Screen.MileageLog.route) }
             )
