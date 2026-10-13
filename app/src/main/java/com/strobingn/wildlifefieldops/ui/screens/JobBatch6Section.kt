@@ -225,6 +225,7 @@ fun JobPaymentsCard(job: Job, onSave: (JobPricing) -> Unit) {
     var amountText by remember(job.id) { mutableStateOf("") }
     var dateText by remember(job.id) { mutableStateOf(PaymentLedger.formatDay(System.currentTimeMillis())) }
     var note by remember(job.id) { mutableStateOf("") }
+    var amountError by remember(job.id) { mutableStateOf(false) }
     BatchCard(title = "Payments") {
         Text(
             "Paid ${Money.formatUsd(PaymentLedger.totalPaid(job.pricing.payments))} · Balance due ${Money.formatUsd(PaymentLedger.balanceDue(total, job.pricing.payments))}",
@@ -266,8 +267,12 @@ fun JobPaymentsCard(job: Job, onSave: (JobPricing) -> Unit) {
         )
         OutlinedTextField(
             value = amountText,
-            onValueChange = { amountText = it },
+            onValueChange = { amountText = it; amountError = false },
             label = { Text("Amount") },
+            isError = amountError,
+            supportingText = if (amountError) {
+                { Text("Enter an amount like 500 or \$1,250.50", color = TextPrimary) }
+            } else null,
             modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             singleLine = true
@@ -288,11 +293,16 @@ fun JobPaymentsCard(job: Job, onSave: (JobPricing) -> Unit) {
         )
         Button(
             onClick = {
+                val amount = PaymentLedger.parseAmount(amountText)
+                if (amount == null) {
+                    amountError = true
+                    return@Button
+                }
                 val row = JobPaymentRecord(
                     id = UUID.randomUUID().toString(),
                     method = method,
                     checkNumber = checkNumber,
-                    amount = amountText.toDoubleOrNull() ?: 0.0,
+                    amount = amount,
                     paidAt = PaymentLedger.parseDay(dateText),
                     note = note
                 )
