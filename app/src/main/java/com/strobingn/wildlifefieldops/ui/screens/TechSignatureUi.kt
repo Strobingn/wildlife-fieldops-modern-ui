@@ -139,7 +139,10 @@ fun JobSignatureCard(
             Row {
                 TextButton(onClick = {
                     val now = System.currentTimeMillis()
-                    val withCustomer = SignatureRules.save(job.pricing, document, name, now, ink)
+                    // Adding the technician signature to an already customer-signed document keeps the
+                    // customer's ink, name and signed date exactly as they were.
+                    val customerUnchanged = record != null && record.signerName == name.trim() && record.pngBase64 == ink
+                    val withCustomer = if (customerUnchanged) job.pricing else SignatureRules.save(job.pricing, document, name, now, ink)
                     onSave(TechSignatureRules.save(withCustomer, document, techName, now, techInk))
                 }) { Text("Save signatures", color = PrimaryGreen) }
                 TextButton(onClick = {
