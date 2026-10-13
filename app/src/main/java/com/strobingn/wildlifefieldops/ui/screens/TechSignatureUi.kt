@@ -197,7 +197,12 @@ internal fun SignatureBox(
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title, color = TextPrimary, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
-        SignatureCanvas(onInk = { bmp: Bitmap -> onInk(SignatureInk.encodePng(bmp)) }, resetKey = padKey, height = padHeight)
+        SignatureCanvas(
+            onInk = { bmp: Bitmap -> onInk(SignatureInk.encodePng(bmp)) },
+            resetKey = padKey,
+            height = padHeight,
+            tag = "pad-$title"
+        )
         if (ink.isNotBlank()) {
             val preview = remember(ink) { SignatureInk.decodePng(ink) }
             if (preview != null) {

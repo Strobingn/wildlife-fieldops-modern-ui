@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -446,9 +447,14 @@ private fun ExclusionEditor(point: ExclusionPointRecord, job: Job, onSave: (JobP
 internal fun SignatureCanvas(
     onInk: (Bitmap) -> Unit,
     resetKey: Int = 0,
-    height: androidx.compose.ui.unit.Dp = 140.dp
+    height: androidx.compose.ui.unit.Dp = 140.dp,
+    tag: String = "signature-pad"
 ) {
     val density = LocalDensity.current.density
+    // The drag handler lives across recompositions; always deliver ink to the
+    // latest onInk. A stale callback wrote the technician ink into a state the
+    // card had already replaced (after Save, Clear or a chip change), so it never stuck.
+    val latestOnInk by androidx.compose.runtime.rememberUpdatedState(onInk)
     val strokes = remember(resetKey) { mutableStateOf(listOf<List<Offset>>()) }
     var current by remember(resetKey) { mutableStateOf(listOf<Offset>()) }
     Canvas(
@@ -457,13 +463,14 @@ internal fun SignatureCanvas(
             .height(height)
             .background(PaperWhite, RoundedCornerShape(8.dp))
             .border(1.dp, BorderDark, RoundedCornerShape(8.dp))
-            .pointerInput(Unit) {
+            .testTag(tag)
+            .pointerInput(resetKey) {
                 detectDragGestures(
                     onDragStart = { offset -> current = listOf(offset) },
                     onDragEnd = {
                         if (current.size > 1) {
                             strokes.value = strokes.value + listOf(current)
-                            onInk(renderSignature(strokes.value, size.width, size.height, density))
+                            latestOnInk(renderSignature(strokes.value, size.width, size.height, density))
                         }
                         current = emptyList()
                     },
