@@ -161,13 +161,15 @@ object PaymentLedger {
 
     fun formatDay(millis: Long, zone: ZoneId = ZoneId.systemDefault()): String {
         if (millis <= 0L) return ""
-        return Instant.ofEpochMilli(millis).atZone(zone).toLocalDate().toString()
+        val d = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
+        return "%02d/%02d/%04d".format(d.monthValue, d.dayOfMonth, d.year)
     }
 
     fun parseDay(text: String, zone: ZoneId = ZoneId.systemDefault()): Long {
         val trimmed = text.trim()
         if (trimmed.isBlank()) return 0L
-        val date = runCatching { LocalDate.parse(trimmed) }.getOrNull() ?: return 0L
+        val (y, m, d) = FieldDate.parts(trimmed) ?: return 0L
+        val date = runCatching { LocalDate.of(y, m, d) }.getOrNull() ?: return 0L
         return date.atStartOfDay(zone).toInstant().toEpochMilli()
     }
 

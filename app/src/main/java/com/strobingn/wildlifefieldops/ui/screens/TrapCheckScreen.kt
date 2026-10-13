@@ -447,7 +447,7 @@ fun TrapEditorDialog(
                 OutlinedTextField(
                     value = checkDateText,
                     onValueChange = { checkDateText = it; dateError = null },
-                    label = { Text("Check date (yyyy-MM-dd)") },
+                    label = { Text("Check date (MM/DD/YYYY)") },
                     supportingText = { Text("Starts at today. Edit it if the check was another day. This is the DEC log date.", color = TextTertiary) },
                     isError = dateError != null,
                     modifier = Modifier.fillMaxWidth(),
@@ -456,7 +456,7 @@ fun TrapEditorDialog(
                 OutlinedTextField(
                     value = nextCheckText,
                     onValueChange = { nextCheckText = it; dateError = null },
-                    label = { Text("Next check (yyyy-MM-dd)") },
+                    label = { Text("Next check (MM/DD/YYYY)") },
                     supportingText = { Text("Starts at the next check for this status. Clear it for no next check.", color = TextTertiary) },
                     modifier = Modifier.fillMaxWidth(),
                     colors = fieldColors()

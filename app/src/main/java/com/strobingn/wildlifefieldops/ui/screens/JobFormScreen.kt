@@ -553,7 +553,7 @@ fun JobFormScreen(
                     nextStepDue = it
                     nextStepDueError = null
                 },
-                label = { Text("Next step due (yyyy-MM-dd)") },
+                label = { Text("Next step due (MM/DD/YYYY)") },
                 supportingText = {
                     Text(nextStepDueError ?: "Blank clears the due date.", color = if (nextStepDueError != null) StatusUrgent else TextTertiary)
                 },

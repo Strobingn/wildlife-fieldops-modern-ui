@@ -194,7 +194,7 @@ private fun MileageEditorDialog(
                 OutlinedTextField(
                     value = dateText,
                     onValueChange = { dateText = it; dateError = null },
-                    label = { Text("Date yyyy-MM-dd") },
+                    label = { Text("Date MM/DD/YYYY") },
                     supportingText = { Text(dateError ?: "A bad date is not saved as today.", color = if (dateError != null) StatusUrgent else TextTertiary) },
                     isError = dateError != null,
                     modifier = Modifier.fillMaxWidth(),
@@ -213,7 +213,7 @@ private fun MileageEditorDialog(
                 onClick = {
                     val day = FieldDate.parseDay(dateText)
                     if (!day.ok || day.millis == null) {
-                        dateError = day.error ?: "Enter a date (yyyy-MM-dd)."
+                        dateError = day.error ?: "Enter a date (MM/DD/YYYY)."
                         return@Button
                     }
                     val job = jobs.find { it.id == jobId }

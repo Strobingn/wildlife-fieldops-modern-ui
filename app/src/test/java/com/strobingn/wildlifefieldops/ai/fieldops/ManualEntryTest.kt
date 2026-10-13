@@ -21,7 +21,7 @@ class ManualEntryTest {
         assertNull(blank.millis)
         val day = FieldDate.parseDay("2026-03-02")
         assertNull(day.error)
-        assertEquals("2026-03-02", FieldDate.formatDay(day.millis!!))
+        assertEquals("03/02/2026", FieldDate.formatDay(day.millis!!))
     }
 
     @Test
