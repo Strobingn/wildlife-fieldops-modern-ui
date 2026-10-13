@@ -78,6 +78,8 @@ data class JobPricing(
     val decNwcoOperator: com.strobingn.wildlifefieldops.ai.fieldops.NwcoOperatorProfile? = null,
     /** Customer ink or typed-name signatures for the estimate and service contract. */
     val customerSignatures: List<CustomerSignatureRecord> = emptyList(),
+    /** Technician signature per document (estimate/contract/invoice/inspection); syncs with pricing. */
+    val technicianSignatures: List<CustomerSignatureRecord> = emptyList(),
     /** Manual payments. Balance due is invoice total minus the sum of these amounts. */
     val payments: List<JobPaymentRecord> = emptyList(),
     /** Exclusion / repair openings. Seal-up lines are copied into [photoLineItems]. */
