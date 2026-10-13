@@ -280,7 +280,7 @@ fun JobPaymentsCard(job: Job, onSave: (JobPricing) -> Unit) {
         OutlinedTextField(
             value = dateText,
             onValueChange = { dateText = it },
-            label = { Text("Date (yyyy-MM-dd)") },
+            label = { Text("Date (MM/DD/YYYY)") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )

@@ -226,7 +226,7 @@ private fun WarrantyCard(job: Job, customerVm: CustomerFieldOpsViewModel) {
             OutlinedTextField(
                 value = startText,
                 onValueChange = { startText = it },
-                label = { Text("Start date (yyyy-MM-dd)") },
+                label = { Text("Start date (MM/DD/YYYY)") },
                 modifier = Modifier.fillMaxWidth(),
                 colors = batch4FieldColors()
             )
@@ -337,7 +337,7 @@ private fun SeasonalCard(job: Job, customerVm: CustomerFieldOpsViewModel) {
                     dueText = it
                     dateError = null
                 },
-                label = { Text("Due (yyyy-MM-dd)") },
+                label = { Text("Due (MM/DD/YYYY)") },
                 supportingText = { Text(dateError ?: "Blank clears the due date.", color = if (dateError != null) StatusUrgent else TextTertiary) },
                 isError = dateError != null,
                 modifier = Modifier.fillMaxWidth(),
@@ -455,9 +455,7 @@ private fun batch4FieldColors() = OutlinedTextFieldDefaults.colors(
 )
 
 private fun dayStamp(millis: Long): String =
-    SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(millis))
+    com.strobingn.wildlifefieldops.ai.fieldops.FieldDate.formatDay(millis)
 
-private fun parseDayStamp(raw: String): Long? = runCatching {
-    val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(raw.trim()) ?: return null
-    parsed.time + 9 * 60 * 60 * 1000L
-}.getOrNull()
+private fun parseDayStamp(raw: String): Long? =
+    com.strobingn.wildlifefieldops.ai.fieldops.FieldDate.parseDay(raw).millis
