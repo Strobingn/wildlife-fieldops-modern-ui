@@ -119,6 +119,19 @@ object PaymentLedger {
         return record.toInvoice(job)
     }
 
+    /**
+     * Amount Sir typed for a payment/deposit: accepts "$500", "1,250.50",
+     * " 300 ", "$ 1,000". Returns null when it is not a positive amount, so a
+     * bad entry is never saved as $0.
+     */
+    fun parseAmount(text: String): Double? {
+        val cleaned = text.trim().replace("$", "").replace(",", "").replace(" ", "").replace("USD", "", ignoreCase = true)
+        if (cleaned.isBlank()) return null
+        val value = cleaned.toDoubleOrNull() ?: return null
+        if (value.isNaN() || value.isInfinite() || value <= 0.0) return null
+        return Money.round(value)
+    }
+
     fun totalPaid(payments: List<JobPaymentRecord>): Double =
         payments.fold(0.0) { acc, row -> Money.plus(acc, row.amount) }
 
