@@ -42,8 +42,10 @@ object TechSignatureDefaults {
         val name = packet.technicianSignerName.ifBlank {
             if (packet.companySignatureBase64.isBlank()) saved.name.ifBlank { packet.technicianName } else packet.technicianName
         }
+        // Ink without a typed name prints Sir's name from Settings (signature, then business owner).
+        val printedName = name.ifBlank { if (png.isNotBlank()) saved.name.ifBlank { packet.profile.ownerName.trim() } else "" }
         val at = packet.technicianSignedAtMillis?.takeIf { it > 0L }
             ?: if (png.isNotBlank()) packet.nowMillis else null
-        return packet.copy(companySignatureBase64 = png, technicianSignerName = name, technicianSignedAtMillis = at)
+        return packet.copy(companySignatureBase64 = png, technicianSignerName = printedName, technicianSignedAtMillis = at)
     }
 }
