@@ -34,6 +34,9 @@ object WildlifeWhispererContractPdf {
         customerSignature: Bitmap? = null,
         customerSignerName: String = "",
         customerSignedAtMillis: Long? = null,
+        technicianSignerName: String = "",
+        technicianSignedAtMillis: Long? = null,
+        technicianSignatureCleared: Boolean = false,
         balanceDue: Double? = null,
         terms: String = "",
         dueDateMillis: Long? = null,
@@ -74,7 +77,10 @@ object WildlifeWhispererContractPdf {
             signerName = customerSignerName,
             signedAtMillis = customerSignedAtMillis,
             customerSignatureBase64 = customerPng,
-            companySignatureBase64 = companyPng
+            companySignatureBase64 = companyPng,
+            technicianSignerName = technicianSignerName,
+            technicianSignedAtMillis = technicianSignedAtMillis,
+            technicianSignatureCleared = technicianSignatureCleared
         ))
         val safe = job.customerName.replace(Regex("[^A-Za-z0-9_-]"), "_").ifBlank { "customer" }
         val fileName = "${kind.filePrefix}_${safe}_${System.currentTimeMillis()}.pdf"
@@ -83,7 +89,7 @@ object WildlifeWhispererContractPdf {
             document = StandardDocuments.build(kind, packet),
             fileName = fileName,
             customerSignature = customerSignature,
-            companySignature = technicianSignature
+            companySignature = technicianSignature.takeUnless { technicianSignatureCleared }
         )
     }
 

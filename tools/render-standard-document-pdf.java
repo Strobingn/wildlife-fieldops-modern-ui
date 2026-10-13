@@ -93,6 +93,20 @@ class render_standard_document_pdf {
             objects.add(obj.toByteArray());
             logoObj = objects.size();
         }
+        SIGS.clear();
+        for (Page page : pages) {
+            for (String raw : page.ops) {
+                String[] p = raw.split("\t", -1);
+                if (!"sigimg".equals(p[0]) || SIGS.containsKey(p[5])) continue;
+                BufferedImage sig = ImageIO.read(new ByteArrayInputStream(Base64.getMimeDecoder().decode(p[5])));
+                if (sig == null) continue;
+                objects.add(imageObject(sig));
+                SIGS.put(p[5], objects.size());
+                SIG_SIZES.put(objects.size(), sig);
+            }
+        }
+        StringBuilder sigRes = new StringBuilder();
+        for (int id : SIGS.values()) sigRes.append(" /Sg").append(id).append(' ').append(id).append(" 0 R");
         List<Integer> pageIds = new ArrayList<>();
         for (Page page : pages) {
             byte[] content = deflate(content(page).getBytes(StandardCharsets.ISO_8859_1));
@@ -102,7 +116,8 @@ class render_standard_document_pdf {
             obj.write(ascii("\nendstream"));
             objects.add(obj.toByteArray());
             int contentId = objects.size();
-            String xobj = logoObj > 0 ? " /XObject << /Im1 " + logoObj + " 0 R >>" : "";
+            String xobjInner = (logoObj > 0 ? " /Im1 " + logoObj + " 0 R" : "") + sigRes;
+            String xobj = xobjInner.isEmpty() ? "" : " /XObject <<" + xobjInner + " >>";
             objects.add(ascii("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + page.width + " " + page.height + "]"
                 + " /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >>" + xobj + " >> /Contents " + contentId + " 0 R >>"));
             pageIds.add(objects.size());
@@ -128,6 +143,35 @@ class render_standard_document_pdf {
             .append(xref).append("\n%%EOF\n");
         out.write(ascii(table.toString()));
         return out.toByteArray();
+    }
+
+    static final java.util.LinkedHashMap<String, Integer> SIGS = new java.util.LinkedHashMap<>();
+    static final java.util.HashMap<Integer, BufferedImage> SIG_SIZES = new java.util.HashMap<>();
+
+    static byte[] imageObject(BufferedImage src) throws Exception {
+        int w = src.getWidth();
+        int h = src.getHeight();
+        byte[] rgb = new byte[w * h * 3];
+        int i = 0;
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int px = src.getRGB(x, y);
+                int a = (px >>> 24) & 0xff;
+                int r = ((px >> 16) & 0xff) * a / 255 + (255 - a);
+                int gg = ((px >> 8) & 0xff) * a / 255 + (255 - a);
+                int b = (px & 0xff) * a / 255 + (255 - a);
+                rgb[i++] = (byte) r;
+                rgb[i++] = (byte) gg;
+                rgb[i++] = (byte) b;
+            }
+        }
+        byte[] data = deflate(rgb);
+        ByteArrayOutputStream obj = new ByteArrayOutputStream();
+        obj.write(ascii("<< /Type /XObject /Subtype /Image /Width " + w + " /Height " + h
+            + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length " + data.length + " >>\nstream\n"));
+        obj.write(data);
+        obj.write(ascii("\nendstream"));
+        return obj.toByteArray();
     }
 
     static String content(Page page) {
@@ -162,6 +206,19 @@ class render_standard_document_pdf {
                     String rect = num(x1) + " " + num(h - y2) + " " + num(x2 - x1) + " " + num(y2 - y1) + " re";
                     if (p[0].equals("rect")) s.append(stroke(p[5])).append(" 1.2 w ").append(rect).append(" S\n");
                     else s.append(fill(p[5])).append(' ').append(rect).append(" f\n");
+                }
+                case "sigimg" -> {
+                    Integer id = SIGS.get(p[5]);
+                    if (id == null) break;
+                    BufferedImage sig = SIG_SIZES.get(id);
+                    float w = Float.parseFloat(p[3]);
+                    float hh = Float.parseFloat(p[4]);
+                    float scale = Math.min(w / sig.getWidth(), hh / sig.getHeight());
+                    float dw = sig.getWidth() * scale;
+                    float dh = sig.getHeight() * scale;
+                    s.append("q ").append(num(dw)).append(" 0 0 ").append(num(dh)).append(' ')
+                        .append(num(Float.parseFloat(p[1]))).append(' ').append(num(h - Float.parseFloat(p[2]) - dh))
+                        .append(" cm /Sg").append(id).append(" Do Q\n");
                 }
                 case "logo" -> {
                     float x = Float.parseFloat(p[1]);

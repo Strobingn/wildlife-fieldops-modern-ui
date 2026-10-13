@@ -106,6 +106,19 @@ class render_standard_document_pages {
                     int y = (int) Float.parseFloat(p[2]);
                     g.fillRect(x, y, (int) Float.parseFloat(p[3]) - x, (int) Float.parseFloat(p[4]) - y);
                 }
+                case "sigimg" -> {
+                    try {
+                        BufferedImage sig = ImageIO.read(new ByteArrayInputStream(Base64.getMimeDecoder().decode(p[5])));
+                        if (sig != null) {
+                            float w = Float.parseFloat(p[3]);
+                            float hh = Float.parseFloat(p[4]);
+                            float scale = Math.min(w / sig.getWidth(), hh / sig.getHeight());
+                            g.drawImage(sig, (int) Float.parseFloat(p[1]), (int) Float.parseFloat(p[2]),
+                                Math.max(1, (int) (sig.getWidth() * scale)), Math.max(1, (int) (sig.getHeight() * scale)), null);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
                 case "logo" -> {
                     int x = (int) Float.parseFloat(p[1]);
                     int y = (int) Float.parseFloat(p[2]);

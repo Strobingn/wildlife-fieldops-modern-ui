@@ -552,6 +552,11 @@ fun EstimateScreen(
                         val items = buildEstimateLineItems(pricing, result)
                         val signature = com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules
                             .find(pricing, com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.ESTIMATE)
+                        val estimateTech = com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.resolve(
+                            pricing,
+                            com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.ESTIMATE,
+                            com.strobingn.wildlifefieldops.util.TechnicianSignatureStore.load(context)
+                        )
                         pdfPath = WildlifeWhispererContractPdf.generate(
                             context = context,
                             documentType = ContractDocumentType.ESTIMATE,
@@ -565,7 +570,11 @@ fun EstimateScreen(
                             notes = listOf(pricing.notes, pricing.rationale).filter { it.isNotBlank() }.joinToString("\n"),
                             customerSignature = com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(signature?.pngBase64.orEmpty()),
                             customerSignerName = signature?.signerName.orEmpty(),
-                            customerSignedAtMillis = signature?.signedAt
+                            customerSignedAtMillis = signature?.signedAt,
+                            technicianSignature = com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(estimateTech.pngBase64),
+                            technicianSignerName = estimateTech.name,
+                            technicianSignedAtMillis = estimateTech.signedAt.takeIf { it > 0L },
+                            technicianSignatureCleared = estimateTech.cleared
                         )
                         showPdfShare = true
                     },

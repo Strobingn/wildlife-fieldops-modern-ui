@@ -191,6 +191,12 @@ fun JobBatch5Section(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = {
+                        val custSig = com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.find(job.pricing, com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.INSPECTION)
+                        val techRec = com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.find(job.pricing, com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.INSPECTION)
+                        val techSig = com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.resolve(
+                            techRec,
+                            com.strobingn.wildlifefieldops.util.TechnicianSignatureStore.load(context)
+                        )
                         val path = WildlifeWhispererInspectionReportPdf.generate(
                             context = context,
                             fields = com.strobingn.wildlifefieldops.util.InspectionReportFields(
@@ -203,7 +209,14 @@ fun JobBatch5Section(
                                 notes = job.legalNotes,
                                 recommendations = job.nextStep
                             ),
-                            qr = qr
+                            qr = qr,
+                            customerSignatureBase64 = custSig?.pngBase64.orEmpty(),
+                            customerSignerName = custSig?.signerName.orEmpty(),
+                            customerSignedAtMillis = custSig?.signedAt?.takeIf { it > 0L },
+                            technicianSignatureBase64 = techSig.pngBase64,
+                            technicianSignerName = techSig.name,
+                            technicianSignedAtMillis = techSig.signedAt.takeIf { it > 0L },
+                            technicianSignatureCleared = techSig.cleared
                         )
                         searchVm.saveShareReport(job.id, path)
                         WildlifeWhispererInspectionReportPdf.share(context, path)

@@ -71,6 +71,11 @@ data class StandardJobPacket(
     val signedAtMillis: Long? = null,
     val customerSignatureBase64: String = "",
     val companySignatureBase64: String = "",
+    /** Technician (Sir) signature block, shown beside the customer's. */
+    val technicianSignerName: String = "",
+    val technicianSignedAtMillis: Long? = null,
+    /** Sir cleared the technician box on this document: keep it blank, never refill from Settings. */
+    val technicianSignatureCleared: Boolean = false,
     val includeQr: Boolean = false
 )
 
@@ -501,8 +506,11 @@ object StandardDocuments {
                 imageTag = if (packet.customerSignatureBase64.isNotBlank()) "customer" else ""
             ),
             SignatureSlot(
-                label = "Company Signature",
-                imageTag = if (packet.companySignatureBase64.isNotBlank()) "company" else ""
+                label = "Technician Signature",
+                name = if (packet.technicianSignatureCleared) "" else packet.technicianSignerName,
+                dateText = if (packet.technicianSignatureCleared) "" else
+                    packet.technicianSignedAtMillis?.takeIf { it > 0L }?.let { day(it) }.orEmpty(),
+                imageTag = if (!packet.technicianSignatureCleared && packet.companySignatureBase64.isNotBlank()) "company" else ""
             )
         )
     }
