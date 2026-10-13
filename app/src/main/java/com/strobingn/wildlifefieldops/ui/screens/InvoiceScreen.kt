@@ -512,14 +512,16 @@ fun InvoiceScreen(
             // Action Buttons
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
-                    onClick = { padForTech = false; showSignaturePad = true },
+                    // Sir's own Sign button: always the technician pad (as before 2.9.0).
+                    // The customer signs with "Customer signs" in the Signatures card.
+                    onClick = { padForTech = SignaturePadTarget.SIGN_BUTTON.technician; showSignaturePad = true },
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue, contentColor = OnPrimary),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.Draw, contentDescription = null)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Sign", fontWeight = FontWeight.Bold)
+                    Text(SignaturePadTarget.SIGN_BUTTON.buttonLabel, fontWeight = FontWeight.Bold)
                 }
                 Button(
                     onClick = {
@@ -605,6 +607,7 @@ fun InvoiceScreen(
     // Signature Pad Dialog
     if (showSignaturePad) {
         SignaturePadDialog(
+            title = SignaturePadTarget.of(padForTech).dialogTitle,
             onDismiss = { showSignaturePad = false },
             onSave = { bitmap ->
                 if (padForTech) {
@@ -937,7 +940,7 @@ private fun viewPDF(context: Context, path: String) {
 }
 
 @Composable
-private fun SignaturePadDialog(onDismiss: () -> Unit, onSave: (Bitmap) -> Unit) {
+private fun SignaturePadDialog(title: String = "Sign Here", onDismiss: () -> Unit, onSave: (Bitmap) -> Unit) {
     val density = LocalContext.current.resources.displayMetrics.density
     // Store touch points as line segments: each segment is (x1, y1, x2, y2)
     val lineSegments = remember { mutableStateListOf<android.graphics.PointF>() }
@@ -945,7 +948,7 @@ private fun SignaturePadDialog(onDismiss: () -> Unit, onSave: (Bitmap) -> Unit) 
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Sign Here", color = TextPrimary) },
+        title = { Text(title, color = TextPrimary) },
         text = {
             Box(
                 modifier = Modifier
@@ -1085,4 +1088,21 @@ private fun PdfShareDialog(
         },
         containerColor = BackgroundCard
     )
+}
+
+
+/** Which slot an invoice signature pad writes to. Customer and technician never share one. */
+enum class SignaturePadTarget(val technician: Boolean, val buttonLabel: String, val dialogTitle: String) {
+    TECHNICIAN(true, "Technician signs", "Technician signature"),
+    CUSTOMER(false, "Customer signs", "Customer signature — customer signs here");
+
+    companion object {
+        /** The bottom "Sign" button Sir uses for himself. */
+        val SIGN_BUTTON: SignaturePadTarget = TECHNICIAN
+        fun of(technician: Boolean): SignaturePadTarget = if (technician) TECHNICIAN else CUSTOMER
+
+        /** Route a drawn pad to (customer, technician); the other slot is never touched. */
+        fun <T> route(target: SignaturePadTarget, ink: T, customer: T?, technician: T?): Pair<T?, T?> =
+            if (target.technician) customer to ink else ink to technician
+    }
 }
