@@ -41,6 +41,8 @@ object TechSignatureRules {
             Resolved(saved.pngBase64, saved.name, now, fromSaved = true, cleared = false)
         record == null -> Resolved("", "", 0L, fromSaved = false, cleared = false)
         record.cleared -> Resolved("", "", 0L, fromSaved = false, cleared = true)
+        record.pngBase64.isBlank() && saved.pngBase64.isNotBlank() ->
+            Resolved(saved.pngBase64, record.signerName.ifBlank { saved.name }, now, fromSaved = true, cleared = false)
         else -> Resolved(record.pngBase64, record.signerName, record.signedAt, fromSaved = false, cleared = false)
     }
 

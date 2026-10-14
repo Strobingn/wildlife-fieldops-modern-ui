@@ -698,10 +698,8 @@ object StandardDocumentLayout {
                             y2 = imageHeight,
                             tag = slot.imageTag
                         )
-                    } else if (slot.name.isNotBlank()) {
-                        val lift = if (tight) 4f else 6f
-                        ops += DrawOp("text", fit(slot.name, 12f, colW - 8f), x + 4f, y - lift, size = if (tight) 11f else 12f, italic = true)
                     }
+                    // No ink: leave the area blank. The typed name only prints in the caption line below.
                     rule(x, y + 1f, x + colW, y + 1f, "light", 0.65f)
                     val date = if (slot.dateText.isBlank()) "Date:" else "Date: ${slot.dateText}"
                     val dateW = measure(date, 8.5f, false)
