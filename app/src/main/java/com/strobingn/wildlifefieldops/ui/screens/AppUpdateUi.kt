@@ -369,3 +369,29 @@ private fun downloadLabel(read: Long, total: Long): String {
     fun mb(value: Long) = "%.1f MB".format(value / (1024.0 * 1024.0))
     return if (total > 0L) "${mb(read)} of ${mb(total)}" else mb(read)
 }
+
+
+/** Shown when the cloud has data from a newer FieldOps: uploads are paused until Sir updates. */
+@Composable
+fun DataVersionGateBanner(viewModel: AppUpdateViewModel = hiltViewModel()) {
+    val blocked by com.strobingn.wildlifefieldops.data.repository.DataVersionGate.blocked.collectAsState()
+    if (!blocked) return
+    Card(
+        colors = CardDefaults.cardColors(containerColor = BackgroundCard),
+        shape = RoundedCornerShape(0.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Please update FieldOps", color = TextPrimary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                Text("Uploads paused. Your changes are saved on this phone.", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+            }
+            TextButton(onClick = viewModel::showDialog) { Text("Update", color = PrimaryGreen) }
+        }
+    }
+}

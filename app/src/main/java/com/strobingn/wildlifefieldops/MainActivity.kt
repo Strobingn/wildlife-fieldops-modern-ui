@@ -174,6 +174,7 @@ fun WildlifeFieldOpsNavHost() {
             if (showBottomNav) {
                 Column {
                     AppUpdateBannerBar()
+                    com.strobingn.wildlifefieldops.ui.screens.DataVersionGateBanner()
                     if (showsFloatingSync(currentRoute)) {
                         AutoSyncStatusBar(
                             onClick = { navController.navigate(Screen.SyncStatus.route) { launchSingleTop = true } }

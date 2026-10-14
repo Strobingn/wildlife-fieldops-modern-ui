@@ -319,8 +319,8 @@ private fun AddExpenseDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val amt = amount.toDoubleOrNull() ?: 0.0
-                    val t = tax.toDoubleOrNull() ?: 0.0
+                    val amt = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(amount) ?: 0.0
+                    val t = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(tax) ?: 0.0
                     val mil = mileage.toDoubleOrNull()
                     if (description.isNotBlank() && amt > 0) {
                         onSave(selectedCategory, description, amt, t, System.currentTimeMillis(), vendor, mil, notes)

@@ -127,9 +127,9 @@ fun JobMoneySection(
                 onClick = {
                     moneyVm.saveProfit(
                         job.id,
-                        materialsText.toDoubleOrNull() ?: 0.0,
+                        com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(materialsText) ?: 0.0,
                         laborText.toDoubleOrNull(),
-                        paidText.toDoubleOrNull() ?: 0.0
+                        com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(paidText) ?: 0.0
                     )
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)

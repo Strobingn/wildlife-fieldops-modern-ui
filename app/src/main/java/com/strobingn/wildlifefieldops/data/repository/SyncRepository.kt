@@ -137,6 +137,14 @@ class SyncRepository @Inject constructor(
         var pulledCustomers = 0
         val failures = mutableListOf<SyncItemFailure>()
 
+        // Data written by a newer FieldOps: read only, keep edits queued, ask for the update.
+        val probe = runCatching { client.from("jobs").select().decodeList<RemoteJobDto>() }.getOrNull()
+        if (probe != null && DataVersionGate.observe(probe.map { it.pricing.dataVersion })) {
+            runCatching { mergeCustomers(client.from("customers").select().decodeList<RemoteCustomerDto>()) }
+            val pulled = runCatching { mergeJobs(probe) }.getOrDefault(0)
+            return SyncResult(success = false, message = DataVersionGate.MESSAGE, pulledJobs = pulled)
+        }
+
         pushDeletions(client, DeletedRecord.TYPE_JOB, "jobs", failures)
         pushDeletions(client, DeletedRecord.TYPE_CUSTOMER, "customers", failures)
         pushDeletions(client, DeletedRecord.TYPE_INSPECTION, "inspections", failures)

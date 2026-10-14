@@ -8,8 +8,12 @@ import kotlinx.serialization.Serializable
  * `*Override` values lock the corresponding *computed* field so auto-sum, AI fill,
  * and county tax cannot silently replace what the owner typed.
  */
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Serializable
 data class JobPricing(
+    /** Data/schema version of this pricing JSON (always uploaded). See DataVersionGate. */
+    @kotlinx.serialization.EncodeDefault
+    val dataVersion: Int = 2,
     val laborHours: Double = 0.0,
     val laborRate: Double = 85.0,
     val laborTotalOverride: Double? = null,

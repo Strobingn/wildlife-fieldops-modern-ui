@@ -112,9 +112,9 @@ fun InvoiceScreen(
 
     fun currentForm(): EstimateInvoiceCarry.InvoiceFormState = EstimateInvoiceCarry.InvoiceFormState(
         lineItems = lineItems,
-        taxRate = taxRate.toDoubleOrNull() ?: 0.0,
+        taxRate = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(taxRate) ?: 0.0,
         taxRateManual = taxRateManual,
-        discountPercent = discountPercent.toDoubleOrNull() ?: 0.0,
+        discountPercent = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(discountPercent) ?: 0.0,
         notes = notes,
         terms = terms,
         subtotalOverride = subtotalOverride,
@@ -178,8 +178,8 @@ fun InvoiceScreen(
     val priced = PricingCalculator.computeInvoice(
         InvoicePricingInputs(
             lineItems = lineItems,
-            taxRatePercent = taxRate.toDoubleOrNull() ?: 0.0,
-            discountPercent = discountPercent.toDoubleOrNull() ?: 0.0,
+            taxRatePercent = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(taxRate) ?: 0.0,
+            discountPercent = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(discountPercent) ?: 0.0,
             subtotalOverride = subtotalOverride,
             discountAmountOverride = discountAmountOverride,
             taxAmountOverride = taxAmountOverride,
@@ -447,6 +447,13 @@ fun InvoiceScreen(
             val techSaved = remember { com.strobingn.wildlifefieldops.util.TechnicianSignatureStore.load(context) }
             val techRecord = job?.pricing?.let { com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.find(it, com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.INVOICE) }
             val techResolved = com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.resolve(techRecord, techSaved)
+            // Customer's invoice signature is saved on the job (it used to live only on screen and vanished on leaving).
+            val customerInvoiceRecord = job?.pricing?.let { com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.find(it, com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.INVOICE) }
+            androidx.compose.runtime.LaunchedEffect(job?.id, customerInvoiceRecord) {
+                if (customerInvoiceRecord != null) {
+                    customerSignature = com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(customerInvoiceRecord.pngBase64)
+                }
+            }
             androidx.compose.runtime.LaunchedEffect(job?.id, techRecord) {
                 technicianSignature = com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(techResolved.pngBase64)
             }
@@ -500,6 +507,7 @@ fun InvoiceScreen(
                                             job?.let { j -> jobsViewModel.saveJobExtras(j.id, com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.clear(j.pricing, com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.INVOICE)) }
                                         } else {
                                             customerSignature = null
+                                            job?.let { j -> jobsViewModel.saveJobExtras(j.id, com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.save(j.pricing, com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.INVOICE, "", 0L, "")) }
                                         }
                                     }) { Text("Clear", color = TextPrimary) }
                                 }
@@ -539,17 +547,18 @@ fun InvoiceScreen(
                                 job = currentJob,
                                 lineItems = lineItems,
                                 subtotal = subtotal,
-                                taxRate = taxRate.toDoubleOrNull() ?: 0.0,
+                                taxRate = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(taxRate) ?: 0.0,
                                 taxAmount = taxAmount,
                                 discountAmount = discountAmount,
                                 total = total,
                                 notes = notes,
                                 terms = terms,
                                 technicianSignature = technicianSignature,
+                                // A cleared invoice customer signature stays blank (no refill from the contract).
                                 customerSignature = customerSignature
-                                    ?: com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(contractSig?.pngBase64.orEmpty()),
-                                customerSignerName = contractSig?.signerName.orEmpty(),
-                                customerSignedAtMillis = contractSig?.signedAt,
+                                    ?: if (customerInvoiceRecord == null) com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(contractSig?.pngBase64.orEmpty()) else null,
+                                customerSignerName = customerInvoiceRecord?.signerName ?: contractSig?.signerName.orEmpty(),
+                                customerSignedAtMillis = customerInvoiceRecord?.signedAt?.takeIf { it > 0L } ?: if (customerInvoiceRecord == null) contractSig?.signedAt else null,
                                 technicianSignerName = if (technicianSignature != null) techResolved.name.ifBlank { techSaved.name } else "",
                                 technicianSignedAtMillis = techResolved.signedAt.takeIf { it > 0L && technicianSignature != null },
                                 technicianSignatureCleared = technicianSignature == null && techResolved.cleared,
@@ -628,6 +637,18 @@ fun InvoiceScreen(
                     }
                 } else {
                     customerSignature = bitmap
+                    job?.let { j ->
+                        jobsViewModel.saveJobExtras(
+                            j.id,
+                            com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.save(
+                                j.pricing,
+                                com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.INVOICE,
+                                j.customerName,
+                                System.currentTimeMillis(),
+                                com.strobingn.wildlifefieldops.util.SignatureInk.encodePng(bitmap)
+                            )
+                        )
+                    }
                 }
                 showSignaturePad = false
             }

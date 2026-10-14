@@ -627,7 +627,7 @@ fun JobFormScreen(
                         nextStepDueError = due.error
                         return@Button
                     }
-                    val estVal = estimatedValue.toDoubleOrNull() ?: 0.0
+                    val estVal = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(estimatedValue) ?: 0.0
                     val service = DefaultServiceTypes.display(selectedType)
                     aiLog.recordSaved(
                         aiSession,
@@ -811,7 +811,7 @@ private fun JobPriceLinesEditor(
                 OutlinedTextField(
                     value = if (item.quantity == 0.0) "" else item.quantity.toString().trimEnd('0').trimEnd('.'),
                     onValueChange = { text ->
-                        val qty = text.filter { c -> c.isDigit() || c == '.' }.toDoubleOrNull() ?: 0.0
+                        val qty = (com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(text) ?: 0.0)
                         onChange(index, item.copy(quantity = qty, total = qty * item.unitPrice))
                     },
                     label = { Text("Qty") },
@@ -833,7 +833,7 @@ private fun JobPriceLinesEditor(
                 OutlinedTextField(
                     value = if (item.unitPrice == 0.0) "" else item.unitPrice.toString().trimEnd('0').trimEnd('.'),
                     onValueChange = { text ->
-                        val price = text.filter { c -> c.isDigit() || c == '.' }.toDoubleOrNull() ?: 0.0
+                        val price = (com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(text) ?: 0.0)
                         onChange(index, item.copy(unitPrice = price, total = item.quantity * price))
                     },
                     label = { Text("Unit $") },
