@@ -93,6 +93,18 @@ function completeMessages(payload: AiRequest): Array<{ role: string; content: st
   return messages.length > 0 ? messages : null;
 }
 
+const FAST_XAI_MODEL = "grok-4.20-0309-non-reasoning";
+const SLOW_XAI_MODELS = new Set(["grok-4", "grok-4-latest", "grok-4-0709"]);
+
+// Fast non-reasoning model by default; a configured slow reasoning model is ignored.
+function xaiModel(): string {
+  const configured = (Deno.env.get("XAI_MODEL") || Deno.env.get("LLM_MODEL") || "").trim();
+  if (!configured) return FAST_XAI_MODEL;
+  const lower = configured.toLowerCase();
+  if (SLOW_XAI_MODELS.has(lower) || (lower.includes("reasoning") && !lower.includes("non-reasoning"))) return FAST_XAI_MODEL;
+  return configured;
+}
+
 function provider(): Provider {
   const xaiKey = Deno.env.get("XAI_API_KEY") || Deno.env.get("GROK_API_KEY") || Deno.env.get("LLM_API_KEY");
   if (xaiKey) {
@@ -100,7 +112,7 @@ function provider(): Provider {
       name: "xai",
       key: xaiKey,
       baseUrl: Deno.env.get("XAI_BASE_URL") || "https://api.x.ai/v1",
-      model: Deno.env.get("XAI_MODEL") || Deno.env.get("LLM_MODEL") || "grok-4-latest",
+      model: xaiModel(),
     };
   }
   const openaiKey = Deno.env.get("OPENAI_API_KEY");
