@@ -364,7 +364,7 @@ fun JobExclusionCard(job: Job, onSave: (JobPricing) -> Unit) {
                     material = material,
                     photoPath = photo,
                     photoManual = photo.isBlank(),
-                    unitPrice = priceText.toDoubleOrNull() ?: 0.0
+                    unitPrice = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(priceText) ?: 0.0
                 )
                 val pricing = ExclusionEstimate.pushToEstimate(
                     job.pricing.copy(exclusionPoints = job.pricing.exclusionPoints + point)
@@ -430,7 +430,7 @@ private fun ExclusionEditor(point: ExclusionPointRecord, job: Job, onSave: (JobP
                 val updated = point.copy(
                     description = description,
                     descriptionManual = true,
-                    unitPrice = price.toDoubleOrNull() ?: 0.0
+                    unitPrice = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(price) ?: 0.0
                 )
                 val points = job.pricing.exclusionPoints.map { if (it.id == point.id) updated else it }
                 onSave(ExclusionEstimate.pushToEstimate(job.pricing.copy(exclusionPoints = points)))

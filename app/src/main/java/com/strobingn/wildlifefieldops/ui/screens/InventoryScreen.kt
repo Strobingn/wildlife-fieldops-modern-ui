@@ -307,10 +307,10 @@ private fun AddInventoryDialog(
                         name = name,
                         sku = sku,
                         category = category,
-                        quantityOnHand = qty.toDoubleOrNull() ?: 0.0,
-                        unitCost = unitCost.toDoubleOrNull() ?: 0.0,
-                        unitPrice = unitPrice.toDoubleOrNull() ?: 0.0,
-                        reorderLevel = reorderLevel.toDoubleOrNull() ?: 0.0,
+                        quantityOnHand = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(qty) ?: 0.0,
+                        unitCost = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(unitCost) ?: 0.0,
+                        unitPrice = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(unitPrice) ?: 0.0,
+                        reorderLevel = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(reorderLevel) ?: 0.0,
                         location = location
                     )
                     onSave(item)

@@ -221,7 +221,7 @@ private fun MileageEditorDialog(
                         MileageTaxLog.suggestFromEstimate(
                             jobId = job?.id.orEmpty(),
                             jobTitle = job?.title?.ifBlank { job.customerName }.orEmpty().ifBlank { "No job" },
-                            miles = miles.toDoubleOrNull() ?: 0.0,
+                            miles = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(miles) ?: 0.0,
                             date = day.millis,
                             purpose = purpose
                         ).copy(id = initial?.id ?: java.util.UUID.randomUUID().toString())

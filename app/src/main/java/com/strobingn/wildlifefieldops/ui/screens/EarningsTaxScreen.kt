@@ -296,7 +296,7 @@ private fun AdjustmentDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onSave(kind, amount.toDoubleOrNull() ?: 0.0, county, taxable, notes) },
+                onClick = { onSave(kind, com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(amount) ?: 0.0, county, taxable, notes) },
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
             ) { Text("Save") }
         },
