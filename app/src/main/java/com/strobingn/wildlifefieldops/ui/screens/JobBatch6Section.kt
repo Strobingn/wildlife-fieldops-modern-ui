@@ -448,8 +448,10 @@ internal fun SignatureCanvas(
     onInk: (Bitmap) -> Unit,
     resetKey: Int = 0,
     height: androidx.compose.ui.unit.Dp = 140.dp,
-    tag: String = "signature-pad"
+    tag: String = "signature-pad",
+    savedInk: String = ""
 ) {
+    val savedBitmap = remember(savedInk) { com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(savedInk)?.asImageBitmap() }
     val density = LocalDensity.current.density
     // The drag handler lives across recompositions; always deliver ink to the
     // latest onInk. A stale callback wrote the technician ink into a state the
@@ -482,6 +484,12 @@ internal fun SignatureCanvas(
             }
     ) {
         val paintColor = Color(0xFF1A1A1A)
+        if (strokes.value.isEmpty() && current.isEmpty() && savedBitmap != null) {
+            drawImage(
+                savedBitmap,
+                dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt())
+            )
+        }
         (strokes.value + listOf(current)).forEach { stroke ->
             if (stroke.size > 1) {
                 for (i in 1 until stroke.size) {

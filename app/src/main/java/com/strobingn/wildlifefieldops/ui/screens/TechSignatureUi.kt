@@ -73,6 +73,8 @@ fun JobSignatureCard(
     var techName by remember(job.id, document, techRecord, saved) { mutableStateOf(techResolved.name) }
     var techInk by remember(job.id, document, techRecord, saved) { mutableStateOf(techResolved.pngBase64) }
     var techPad by remember { mutableIntStateOf(0) }
+    var shareWarning by remember { mutableStateOf<List<String>?>(null) }
+    var shareNow by remember { mutableStateOf(false) }
 
     Card(
         colors = CardDefaults.cardColors(containerColor = BackgroundCard),
@@ -101,7 +103,7 @@ fun JobSignatureCard(
                     name = name,
                     onName = { name = it },
                     ink = ink,
-                    padKey = customerPad,
+                    padKey = "$document#$customerPad".hashCode(),
                     onInk = { ink = it },
                     onClear = { ink = ""; customerPad++ },
                     dateText = SignatureRules.formatStamp(record?.signedAt ?: 0L).substringBefore(' '),
@@ -112,7 +114,7 @@ fun JobSignatureCard(
                     name = techName,
                     onName = { techName = it },
                     ink = techInk,
-                    padKey = techPad,
+                    padKey = "$document#$techPad".hashCode(),
                     onInk = { techInk = it },
                     onClear = {
                         techInk = ""
@@ -142,10 +144,30 @@ fun JobSignatureCard(
                     // Adding the technician signature to an already customer-signed document keeps the
                     // customer's ink, name and signed date exactly as they were.
                     val customerUnchanged = record != null && record.signerName == name.trim() && record.pngBase64 == ink
-                    val withCustomer = if (customerUnchanged) job.pricing else SignatureRules.save(job.pricing, document, name, now, ink)
-                    onSave(TechSignatureRules.save(withCustomer, document, techName, now, techInk))
+                    // No ink and nothing saved before: don't stamp a name/date as if the customer signed.
+                    val customerSkip = ink.isBlank() && (record == null || record.pngBase64.isBlank())
+                    val withCustomer = if (customerUnchanged || customerSkip) job.pricing else SignatureRules.save(job.pricing, document, name, now, ink)
+                    val techSkip = techInk.isBlank() && (techRecord == null || techRecord.pngBase64.isBlank())
+                    onSave(if (techSkip) withCustomer else TechSignatureRules.save(withCustomer, document, techName, now, techInk))
                 }) { Text("Save signatures", color = PrimaryGreen) }
                 TextButton(onClick = {
+                    val missing = SignatureShareGuard.missing(customerInk = ink, technicianInk = techInk)
+                    if (missing.isNotEmpty()) { shareWarning = missing; return@TextButton }
+                    shareNow = true
+                }) { Text("Share contract PDF", color = TextPrimary) }
+            }
+            shareWarning?.let { missing ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { shareWarning = null },
+                    title = { Text(missing.joinToString("\n"), color = TextPrimary) },
+                    text = { Text("That signature area will be left blank on the PDF.", color = TextSecondary) },
+                    confirmButton = { TextButton(onClick = { shareWarning = null; shareNow = true }) { Text("Share anyway", color = TextPrimary) } },
+                    dismissButton = { TextButton(onClick = { shareWarning = null }) { Text("Cancel", color = TextPrimary) } }
+                )
+            }
+            if (shareNow) {
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    shareNow = false
                     val pricing = job.pricing
                     val result = com.strobingn.wildlifefieldops.pricing.PricingCalculator.compute(pricing)
                     val items = com.strobingn.wildlifefieldops.pricing.EstimateInvoiceCarry.lineItems(pricing, result)
@@ -161,7 +183,7 @@ fun JobSignatureCard(
                         discountAmount = result.discountAmount.effective,
                         total = result.total.effective,
                         notes = listOf(pricing.notes, pricing.rationale).filter { it.isNotBlank() }.joinToString("\n"),
-                        customerSignature = SignatureInk.decodePng(savedCustomer?.pngBase64?.ifBlank { ink }.orEmpty()),
+                        customerSignature = SignatureInk.decodePng(ink.ifBlank { savedCustomer?.pngBase64.orEmpty() }),
                         customerSignerName = name.ifBlank { savedCustomer?.signerName.orEmpty() },
                         customerSignedAtMillis = savedCustomer?.signedAt,
                         technicianSignature = SignatureInk.decodePng(techInk),
@@ -170,9 +192,9 @@ fun JobSignatureCard(
                         technicianSignatureCleared = techInk.isBlank() && techName.isBlank()
                     )
                     com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf.share(context, path, "Share contract")
-                }) { Text("Share contract PDF", color = TextPrimary) }
+                }
             }
-            val caption = SignatureRules.embedCaption(SignatureRules.find(job.pricing, document))
+            val caption = SignatureShareGuard.caption(SignatureRules.find(job.pricing, document), TechSignatureRules.find(job.pricing, document))
             if (caption.isNotBlank()) {
                 Text("On the PDF: $caption", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
             }
@@ -201,18 +223,10 @@ internal fun SignatureBox(
             onInk = { bmp: Bitmap -> onInk(SignatureInk.encodePng(bmp)) },
             resetKey = padKey,
             height = padHeight,
-            tag = "pad-$title"
+            tag = "pad-$title",
+            // The pad shows exactly the ink that will be saved and printed (one copy, no stale strokes).
+            savedInk = ink
         )
-        if (ink.isNotBlank()) {
-            val preview = remember(ink) { SignatureInk.decodePng(ink) }
-            if (preview != null) {
-                Image(
-                    bitmap = preview.asImageBitmap(),
-                    contentDescription = "$title saved",
-                    modifier = Modifier.fillMaxWidth().height(48.dp).background(PaperWhite)
-                )
-            }
-        }
         OutlinedTextField(
             value = name,
             onValueChange = onName,
@@ -281,4 +295,21 @@ fun TechSignatureSettingsSection(initial: TechnicianSignature? = null) {
             }
         }
     }
+}
+
+
+/** Share checks and the "On the PDF:" line: a person is listed only once their drawn ink is saved. */
+object SignatureShareGuard {
+    fun missing(customerInk: String, technicianInk: String): List<String> = buildList {
+        if (customerInk.isBlank()) add("Customer hasn't signed yet")
+        if (technicianInk.isBlank()) add("Technician hasn't signed yet")
+    }
+
+    fun caption(
+        customer: com.strobingn.wildlifefieldops.pricing.CustomerSignatureRecord?,
+        technician: com.strobingn.wildlifefieldops.pricing.CustomerSignatureRecord?
+    ): String = listOfNotNull(
+        customer?.takeIf { it.pngBase64.isNotBlank() }?.let { listOf("Customer", it.signerName).filter { s -> s.isNotBlank() }.joinToString(" ") + " · ${SignatureRules.formatStamp(it.signedAt)}" },
+        technician?.takeIf { it.pngBase64.isNotBlank() && !it.cleared }?.let { listOf("Technician", it.signerName).filter { s -> s.isNotBlank() }.joinToString(" ") + " · ${SignatureRules.formatStamp(it.signedAt)}" }
+    ).joinToString("; ")
 }

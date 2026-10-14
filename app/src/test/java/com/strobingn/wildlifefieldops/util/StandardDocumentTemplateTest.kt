@@ -216,7 +216,7 @@ class StandardDocumentTemplateTest {
     fun signatureNamesStayBelowTheTermsLine() {
         val page = StandardDocuments.build(DocumentKind.NWCO_LOG, samplePacket()).layout().pages.first()
         val termsBottom = page.ops.filter { it.kind == "text" && it.text.contains("Penal Law") }.maxOf { it.y }
-        val signer = page.ops.first { it.kind == "text" && it.italic && it.text.contains("Strobing") }
+        val signer = page.ops.first { it.kind == "text" && it.text.contains("Signature") && it.text.contains("Strobing") }
         assertTrue("signer y ${signer.y} terms $termsBottom", signer.y >= termsBottom + 8f)
     }
 
