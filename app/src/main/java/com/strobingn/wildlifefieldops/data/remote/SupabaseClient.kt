@@ -87,7 +87,7 @@ class SupabaseService @Inject constructor() {
             }
             true
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e(TAG, "Supabase signIn failed", e)
             false
         }
     }
@@ -100,7 +100,7 @@ class SupabaseService @Inject constructor() {
             }
             true
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e(TAG, "Supabase signUp failed", e)
             false
         }
     }
@@ -109,7 +109,7 @@ class SupabaseService @Inject constructor() {
         try {
             auth?.signOut()
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e(TAG, "Supabase signOut failed", e)
         }
     }
 
@@ -126,8 +126,12 @@ class SupabaseService @Inject constructor() {
             }
             true
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e(TAG, "Supabase signInAnonymous failed", e)
             false
         }
+    }
+
+    companion object {
+        private const val TAG = "SupabaseService"
     }
 }
