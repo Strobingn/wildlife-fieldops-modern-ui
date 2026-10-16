@@ -518,9 +518,16 @@ export function searchJobs(jobs, query) {
   const term = query.toLowerCase().trim();
   if (!term) return jobs;
   const fields = ['title', 'customer', 'address', 'town', 'species', 'scope', 'status', 'phone'];
-  return jobs.filter((j) =>
-    fields.some((f) => String(j?.[f] ?? '').toLowerCase().includes(term))
-  );
+  return jobs.filter((j) => {
+    if (!j) return false;
+    for (let i = 0; i < fields.length; i++) {
+      const val = j[fields[i]];
+      if (val !== undefined && val !== null && String(val).toLowerCase().includes(term)) {
+        return true;
+      }
+    }
+    return false;
+  });
 }
 
 /**
