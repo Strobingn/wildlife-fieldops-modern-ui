@@ -184,6 +184,33 @@ class FieldOpsBackupArchiveTest {
     }
 
     @Test
+    fun applyRejectsUnreadableSqliteHeaderAndKeepsLiveDatabase() {
+        val root = newTempDir()
+        try {
+            val unpacked = File(root, "unpacked")
+            File(unpacked, FieldOpsBackupFormat.dbZipPath()).apply {
+                parentFile!!.mkdirs()
+                writeBytes(ByteArray(200) { 7 })
+            }
+            val destDb = File(root, "databases/wildlife_fieldops.db").apply {
+                parentFile!!.mkdirs()
+                writeText("live")
+            }
+            val failed = runCatching {
+                FieldOpsBackupArchive.applyUnpackedBackup(
+                    unpacked = unpacked,
+                    databaseFile = destDb,
+                    filesDir = File(root, "files").apply { mkdirs() }
+                )
+            }.isFailure
+            assertTrue("A database with no readable SQLite header must be refused", failed)
+            assertEquals("live", destDb.readText())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun currentRoomVersionMatchesAppDatabaseV15() {
         assertEquals(15, FieldOpsBackupFormat.CURRENT_ROOM_VERSION)
         assertEquals(FieldOpsBackupFormat.CURRENT_ROOM_VERSION, com.strobingn.wildlifefieldops.data.local.AppDatabase.VERSION)

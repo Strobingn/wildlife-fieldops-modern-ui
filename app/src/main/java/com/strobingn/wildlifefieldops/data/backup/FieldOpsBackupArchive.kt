@@ -120,11 +120,13 @@ object FieldOpsBackupArchive {
         val dbSrc = File(unpacked, FieldOpsBackupFormat.dbZipPath())
         require(dbSrc.isFile && dbSrc.length() > 0L) { "Unpacked backup is missing the database" }
         val userVersion = FieldOpsBackupFormat.readSqliteUserVersion(dbSrc)
+        // An unreadable header (truncated or not SQLite at all) must be refused too: past this
+        // point the live database is replaced, so nothing unverifiable may get through.
         require(
-            userVersion == null ||
+            userVersion != null &&
                 userVersion in FieldOpsBackupFormat.MIN_MIGRATABLE_ROOM_VERSION..FieldOpsBackupFormat.CURRENT_ROOM_VERSION
         ) {
-            "Backup database version $userVersion cannot be opened by this app"
+            "Backup database is unreadable or its version ($userVersion) cannot be opened by this app"
         }
         databaseFile.parentFile?.mkdirs()
         // Stage every file next to the live DB first, so a failed copy (disk full, I/O error)
