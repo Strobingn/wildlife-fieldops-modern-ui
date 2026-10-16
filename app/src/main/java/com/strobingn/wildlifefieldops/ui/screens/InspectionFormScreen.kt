@@ -104,6 +104,7 @@ fun InspectionFormScreen(
     var showSeverityDropdown by remember { mutableStateOf(false) }
     var scheduledAt by remember { mutableStateOf(defaultAppointmentTime()) }
     var linkedJobId by remember { mutableStateOf(prefilledJobId) }
+    var showDeleteInspectionDialog by remember { mutableStateOf(false) }
 
     val existing by viewModel.getInspectionById(inspectionId.orEmpty())
         .collectAsState(initial = null)
@@ -642,7 +643,35 @@ fun InspectionFormScreen(
         }
     }
 
-
+    val deletable = existing
+    if (showDeleteInspectionDialog && deletable != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteInspectionDialog = false },
+            title = { Text("Delete Inspection?", color = TextPrimary) },
+            text = {
+                Text(
+                    "This removes the inspection from this phone and the cloud. A linked job stays. This action cannot be undone.",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteInspectionDialog = false
+                    stopListeningSession()
+                    viewModel.deleteInspection(deletable)
+                    onBack()
+                }) {
+                    Text("Delete", color = ErrorRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteInspectionDialog = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            },
+            containerColor = BackgroundCard
+        )
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -660,6 +689,13 @@ fun InspectionFormScreen(
                         onBack()
                     }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                    }
+                },
+                actions = {
+                    if (existing != null) {
+                        IconButton(onClick = { showDeleteInspectionDialog = true }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = ErrorRed)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = BackgroundDark)

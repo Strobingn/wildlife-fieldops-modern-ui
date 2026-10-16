@@ -3,6 +3,7 @@ package com.strobingn.wildlifefieldops.sync.work
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.strobingn.wildlifefieldops.ui.viewmodel.offlineModeOn
 import dagger.hilt.android.EntryPointAccessors
 
 /**
@@ -15,6 +16,9 @@ class FieldOpsSyncWorker(
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
+        // Offline Mode pauses cloud sync, same as Sync Now. Rows stay queued in Room and
+        // AutoSync enqueues again when Offline Mode is turned off.
+        if (applicationContext.offlineModeOn()) return Result.success()
         val entry = EntryPointAccessors.fromApplication(
             applicationContext,
             FieldOpsSyncWorkerEntryPoint::class.java

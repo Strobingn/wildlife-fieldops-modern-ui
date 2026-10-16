@@ -114,6 +114,7 @@ fun JobListScreen(
         weatherChips = weatherChips,
         onSearch = viewModel::setSearchQuery,
         onStatus = viewModel::setStatusFilter,
+        onCompleteReminder = viewModel::completeReminder,
         onNavigateToJobDetail = onNavigateToJobDetail,
         onNavigateToJobForm = onNavigateToJobForm,
         onNavigateToDictate = onNavigateToDictate,
@@ -140,6 +141,7 @@ private fun JobListContent(
     weatherChips: Map<String, String> = emptyMap(),
     onSearch: (String) -> Unit,
     onStatus: (JobStatus?) -> Unit,
+    onCompleteReminder: (String) -> Unit = {},
     onNavigateToJobDetail: (String) -> Unit,
     onNavigateToJobForm: () -> Unit,
     onNavigateToDictate: () -> Unit,
@@ -381,7 +383,12 @@ private fun JobListContent(
                     SectionHeader(title = "Reminders")
                 }
                 items(reminders, key = { "rem-${it.id}" }) { reminder ->
-                    ReminderCard(reminder = reminder)
+                    val jobId = reminder.jobId?.takeIf { it.isNotBlank() }
+                    ReminderCard(
+                        reminder = reminder,
+                        onOpen = jobId?.let { id -> { onNavigateToJobDetail(id) } },
+                        onDone = { onCompleteReminder(reminder.id) }
+                    )
                 }
             }
         }

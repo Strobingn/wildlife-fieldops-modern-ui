@@ -34,6 +34,7 @@ fun InventoryScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
     var showLowStock by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<InventoryItem?>(null) }
 
     Scaffold(
         topBar = {
@@ -145,7 +146,7 @@ fun InventoryScreen(
                     }
                 } else {
                     items(items, key = { it.id }) { item ->
-                        InventoryItemCard(item = item)
+                        InventoryItemCard(item = item, onDelete = { pendingDelete = item })
                     }
                 }
                 item { Spacer(modifier = Modifier.height(16.dp)) }
@@ -159,10 +160,32 @@ fun InventoryScreen(
             onSave = { viewModel.addItem(it) }
         )
     }
+
+    pendingDelete?.let { item ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Delete ${item.name.ifBlank { "item" }}?", color = TextPrimary) },
+            text = { Text("This removes the item from the truck inventory. This action cannot be undone.", color = TextSecondary) },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteItem(item)
+                    pendingDelete = null
+                }) {
+                    Text("Delete", color = ErrorRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            },
+            containerColor = BackgroundCard
+        )
+    }
 }
 
 @Composable
-private fun InventoryItemCard(item: InventoryItem) {
+private fun InventoryItemCard(item: InventoryItem, onDelete: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = BackgroundCard),
@@ -201,6 +224,9 @@ private fun InventoryItemCard(item: InventoryItem) {
                     style = MaterialTheme.typography.labelSmall,
                     color = TextTertiary
                 )
+            }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = ErrorRed.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
             }
         }
     }
