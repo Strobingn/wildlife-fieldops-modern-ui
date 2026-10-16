@@ -671,8 +671,12 @@ internal fun DueNextStepCard(job: Job, onClick: () -> Unit) {
 }
 
 @Composable
-internal fun ReminderCard(reminder: com.strobingn.wildlifefieldops.data.model.Reminder) {
-    FieldCard(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
+internal fun ReminderCard(
+    reminder: com.strobingn.wildlifefieldops.data.model.Reminder,
+    onOpen: (() -> Unit)? = null,
+    onDone: (() -> Unit)? = null
+) {
+    FieldCard(onClick = onOpen, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -704,6 +708,11 @@ internal fun ReminderCard(reminder: com.strobingn.wildlifefieldops.data.model.Re
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+            if (onDone != null) {
+                TextButton(onClick = onDone) {
+                    Text("Done")
+                }
             }
         }
     }

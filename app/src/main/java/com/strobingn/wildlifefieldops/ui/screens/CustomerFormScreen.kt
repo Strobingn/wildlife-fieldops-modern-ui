@@ -49,6 +49,8 @@ fun CustomerFormScreen(
     var paymentTerms by remember { mutableStateOf("Net 30") }
     var showTypeDropdown by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
+    var loadedCustomer by remember { mutableStateOf<Customer?>(null) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
     var activeCustomerId by remember(customerId) { mutableStateOf(customerId) }
     var manualKeys by remember { mutableStateOf(setOf<String>()) }
     var importMatches by remember { mutableStateOf(listOf<Customer>()) }
@@ -121,6 +123,7 @@ fun CustomerFormScreen(
             viewModel.getCustomerById(id).collect { customer ->
                 customer?.let {
                     isEditing = true
+                    loadedCustomer = it
                     firstName = it.firstName
                     lastName = it.lastName
                     companyName = it.companyName
@@ -140,6 +143,35 @@ fun CustomerFormScreen(
         }
     }
 
+    val deletable = loadedCustomer
+    if (showDeleteDialog && deletable != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete Customer?", color = TextPrimary) },
+            text = {
+                Text(
+                    "This removes the customer from this phone and the cloud. Their jobs and inspections stay and keep the name. This action cannot be undone.",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteDialog = false
+                    viewModel.deleteCustomer(deletable)
+                    onBack()
+                }) {
+                    Text("Delete", color = ErrorRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            },
+            containerColor = BackgroundCard
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -147,6 +179,13 @@ fun CustomerFormScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                    }
+                },
+                actions = {
+                    if (deletable != null) {
+                        IconButton(onClick = { showDeleteDialog = true }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = ErrorRed)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = BackgroundDark)
