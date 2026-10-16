@@ -8,8 +8,12 @@ import kotlinx.serialization.Serializable
  * `*Override` values lock the corresponding *computed* field so auto-sum, AI fill,
  * and county tax cannot silently replace what the owner typed.
  */
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Serializable
 data class JobPricing(
+    /** Data/schema version of this pricing JSON (always uploaded). See DataVersionGate. */
+    @kotlinx.serialization.EncodeDefault
+    val dataVersion: Int = 2,
     val laborHours: Double = 0.0,
     val laborRate: Double = 85.0,
     val laborTotalOverride: Double? = null,
@@ -78,6 +82,8 @@ data class JobPricing(
     val decNwcoOperator: com.strobingn.wildlifefieldops.ai.fieldops.NwcoOperatorProfile? = null,
     /** Customer ink or typed-name signatures for the estimate and service contract. */
     val customerSignatures: List<CustomerSignatureRecord> = emptyList(),
+    /** Technician signature per document (estimate/contract/invoice/inspection); syncs with pricing. */
+    val technicianSignatures: List<CustomerSignatureRecord> = emptyList(),
     /** Manual payments. Balance due is invoice total minus the sum of these amounts. */
     val payments: List<JobPaymentRecord> = emptyList(),
     /** Exclusion / repair openings. Seal-up lines are copied into [photoLineItems]. */

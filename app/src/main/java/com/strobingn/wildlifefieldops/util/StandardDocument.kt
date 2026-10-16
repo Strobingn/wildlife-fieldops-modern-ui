@@ -639,12 +639,13 @@ object StandardDocumentLayout {
 
         private fun signatures(slots: List<SignatureSlot>) {
             val drawn = slots.ifEmpty {
-                listOf(SignatureSlot("Owner Signature"), SignatureSlot("Company Signature"))
+                listOf(SignatureSlot("Owner Signature"), SignatureSlot("Technician Signature"))
             }
             val floor = pageH - 40f
             val room = floor - y
-            val normal = drawn.sumOf { signatureHeight(it, tight = false).toDouble() }.toFloat()
-            val tight = drawn.sumOf { signatureHeight(it, tight = true).toDouble() }.toFloat()
+            val rows = drawn.chunked(2)
+            val normal = rows.sumOf { rowHeight(it, tight = false).toDouble() }.toFloat()
+            val tight = rows.sumOf { rowHeight(it, tight = true).toDouble() }.toFloat()
             if (room + 0.5f < tight) {
                 closePage()
                 startPage(true)
@@ -655,48 +656,56 @@ object StandardDocumentLayout {
         }
 
         private fun signatureGap(slot: SignatureSlot, tight: Boolean): Float = when {
-            slot.imageTag.isNotBlank() -> if (tight) 22f else 18f
+            slot.imageTag.isNotBlank() -> if (tight) 22f else 40f
             tight && slot.name.isNotBlank() -> 18f
             tight -> 6f
-            else -> 16f
+            else -> 22f
         }
 
         private fun signatureAfter(tight: Boolean): Float = if (tight) 18f else 28f
 
-        private fun signatureHeight(slot: SignatureSlot, tight: Boolean): Float =
-            signatureGap(slot, tight) + signatureAfter(tight)
+        private fun rowHeight(row: List<SignatureSlot>, tight: Boolean): Float =
+            row.maxOf { signatureGap(it, tight) } + signatureAfter(tight)
 
+        private fun fit(text: String, size: Float, width: Float, italic: Boolean = false): String {
+            if (measure(text, size, false) <= width) return text
+            var t = text
+            while (t.length > 1 && measure("$t…", size, false) > width) t = t.dropLast(1)
+            return "$t…"
+        }
+
+        /**
+         * Signature blocks side by side (customer left, technician right):
+         * ink above a full-width line, then label, name and date under it.
+         */
         private fun paintSignatures(slots: List<SignatureSlot>, tight: Boolean) {
-            slots.forEach { slot ->
-                val gap = signatureGap(slot, tight)
+            val colGap = 24f
+            val colW = (contentWidth - colGap) / 2f
+            slots.chunked(2).forEach { row ->
+                val gap = row.maxOf { signatureGap(it, tight) }
                 val after = signatureAfter(tight)
-                if (!tight) ensure(if (slot.imageTag.isNotBlank()) 52f else 44f)
+                if (!tight) ensure(gap + after)
                 y += gap
-                if (slot.imageTag.isNotBlank()) {
-                    val imageHeight = if (tight) 18f else 36f
-                    ops += DrawOp(
-                        "image",
-                        x = margin + 110f,
-                        y = y - imageHeight,
-                        x2 = if (tight) 120f else 160f,
-                        y2 = imageHeight,
-                        tag = slot.imageTag
-                    )
-                }
-                val label = slot.label + ":"
-                ops += DrawOp("text", label, margin, y, size = 9.5f)
-                val start = margin + measure(label, 9.5f, false) + 6f
-                rule(start, y + 1f, start + 200f, y + 1f, "light", 0.65f)
-                if (slot.name.isNotBlank()) {
-                    val lift = if (tight) 11f else 13f
-                    ops += DrawOp("text", slot.name, start + 4f, y - lift, size = if (tight) 11f else 12f, italic = true)
-                }
-                val dateLabelX = start + 214f
-                ops += DrawOp("text", "Date:", dateLabelX, y, size = 9.5f)
-                val dateLine = dateLabelX + measure("Date:", 9.5f, false) + 4f
-                rule(dateLine, y + 1f, dateLine + 80f, y + 1f, "light", 0.65f)
-                if (slot.dateText.isNotBlank()) {
-                    ops += DrawOp("text", slot.dateText, dateLine, y - 8f, size = 8f, color = "muted")
+                row.forEachIndexed { i, slot ->
+                    val x = margin + i * (colW + colGap)
+                    if (slot.imageTag.isNotBlank()) {
+                        val imageHeight = if (tight) 18f else 36f
+                        ops += DrawOp(
+                            "image",
+                            x = x + 4f,
+                            y = y - imageHeight - 2f,
+                            x2 = minOf(if (tight) 120f else 160f, colW - 8f),
+                            y2 = imageHeight,
+                            tag = slot.imageTag
+                        )
+                    }
+                    // No ink: leave the area blank. The typed name only prints in the caption line below.
+                    rule(x, y + 1f, x + colW, y + 1f, "light", 0.65f)
+                    val date = if (slot.dateText.isBlank()) "Date:" else "Date: ${slot.dateText}"
+                    val dateW = measure(date, 8.5f, false)
+                    ops += DrawOp("text", date, x + colW - dateW, y + 11f, size = 8.5f, color = "muted")
+                    val caption = if (slot.name.isNotBlank()) "${slot.label}: ${slot.name}" else slot.label
+                    ops += DrawOp("text", fit(caption, 9f, colW - dateW - 8f), x, y + 11f, size = 9f)
                 }
                 y += after
             }

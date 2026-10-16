@@ -64,7 +64,7 @@ object JobDirections {
     }
 
     fun encode(value: String): String =
-        URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20")
+        URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
     private fun withState(address: String, state: String?): String {
         val street = address.trim()

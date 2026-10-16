@@ -9,7 +9,9 @@ data class CustomerSignatureRecord(
     val signerName: String = "",
     val signedAt: Long = 0L,
     val pngBase64: String = "",
-    val typedOnly: Boolean = false
+    val typedOnly: Boolean = false,
+    /** Technician signatures only: cleared on purpose, stays blank (no Settings auto-fill). */
+    val cleared: Boolean = false
 )
 
 @Serializable

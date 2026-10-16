@@ -194,6 +194,9 @@ fun SettingsScreen(
             BusinessInfoSettingsBlock(viewModel)
 
             Spacer(modifier = Modifier.height(8.dp))
+            TechSignatureSettingsSection()
+
+            Spacer(modifier = Modifier.height(8.dp))
             SettingsSectionTitle("Company Information")
             SettingsCard {
                 SettingPlainField(storedValue = companyName, label = "Company Name", onCommit = viewModel::setCompanyName)

@@ -194,7 +194,7 @@ private fun MileageEditorDialog(
                 OutlinedTextField(
                     value = dateText,
                     onValueChange = { dateText = it; dateError = null },
-                    label = { Text("Date yyyy-MM-dd") },
+                    label = { Text("Date MM/DD/YYYY") },
                     supportingText = { Text(dateError ?: "A bad date is not saved as today.", color = if (dateError != null) StatusUrgent else TextTertiary) },
                     isError = dateError != null,
                     modifier = Modifier.fillMaxWidth(),
@@ -213,7 +213,7 @@ private fun MileageEditorDialog(
                 onClick = {
                     val day = FieldDate.parseDay(dateText)
                     if (!day.ok || day.millis == null) {
-                        dateError = day.error ?: "Enter a date (yyyy-MM-dd)."
+                        dateError = day.error ?: "Enter a date (MM/DD/YYYY)."
                         return@Button
                     }
                     val job = jobs.find { it.id == jobId }
@@ -221,7 +221,7 @@ private fun MileageEditorDialog(
                         MileageTaxLog.suggestFromEstimate(
                             jobId = job?.id.orEmpty(),
                             jobTitle = job?.title?.ifBlank { job.customerName }.orEmpty().ifBlank { "No job" },
-                            miles = miles.toDoubleOrNull() ?: 0.0,
+                            miles = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(miles) ?: 0.0,
                             date = day.millis,
                             purpose = purpose
                         ).copy(id = initial?.id ?: java.util.UUID.randomUUID().toString())

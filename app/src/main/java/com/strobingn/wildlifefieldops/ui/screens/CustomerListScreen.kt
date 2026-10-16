@@ -14,8 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.model.Customer
+import com.strobingn.wildlifefieldops.data.remote.TextImportEntry
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.CustomersViewModel
@@ -32,6 +34,7 @@ fun CustomerListScreen(
     onNavigateToCustomerForm: (String?) -> Unit,
     onBack: () -> Unit,
     showBack: Boolean = true,
+    onImportFromText: () -> Unit = {},
     preview: CustomerListPreview? = null
 ) {
     if (preview != null) {
@@ -41,6 +44,7 @@ fun CustomerListScreen(
             searchQuery = preview.searchQuery,
             onSearch = {},
             onNavigateToCustomerForm = onNavigateToCustomerForm,
+            onImportFromText = onImportFromText,
             onBack = onBack,
             showBack = showBack
         )
@@ -56,6 +60,7 @@ fun CustomerListScreen(
         searchQuery = searchQuery,
         onSearch = viewModel::setSearchQuery,
         onNavigateToCustomerForm = onNavigateToCustomerForm,
+        onImportFromText = onImportFromText,
         onBack = onBack,
         showBack = showBack
     )
@@ -69,6 +74,7 @@ private fun CustomerListContent(
     searchQuery: String,
     onSearch: (String) -> Unit,
     onNavigateToCustomerForm: (String?) -> Unit,
+    onImportFromText: () -> Unit,
     onBack: () -> Unit,
     showBack: Boolean
 ) {
@@ -106,6 +112,30 @@ private fun CustomerListContent(
                     count = customerCount,
                     modifier = Modifier.weight(1f)
                 )
+            }
+
+            // Import from text sits next to add-customer, always visible above the list.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                ImportFromTextButton(onClick = onImportFromText, modifier = Modifier.weight(1.2f))
+                Button(
+                    onClick = { onNavigateToCustomerForm(null) },
+                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    Icon(Icons.Default.PersonAdd, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add customer", fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
             }
 
             FieldSearchBar(

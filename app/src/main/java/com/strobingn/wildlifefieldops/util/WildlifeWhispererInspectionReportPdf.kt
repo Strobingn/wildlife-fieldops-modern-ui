@@ -12,7 +12,14 @@ object WildlifeWhispererInspectionReportPdf {
         context: Context,
         fields: InspectionReportFields,
         qr: Bitmap? = null,
-        profile: BusinessProfile? = null
+        profile: BusinessProfile? = null,
+        customerSignatureBase64: String = "",
+        customerSignerName: String = "",
+        customerSignedAtMillis: Long? = null,
+        technicianSignatureBase64: String = "",
+        technicianSignerName: String = "",
+        technicianSignedAtMillis: Long? = null,
+        technicianSignatureCleared: Boolean = false
     ): String {
         val job = com.strobingn.wildlifefieldops.data.model.Job(
             customerId = fields.customerId,
@@ -34,6 +41,13 @@ object WildlifeWhispererInspectionReportPdf {
             inspection = fields,
             notes = fields.notes,
             includeQr = qr != null,
+            signerName = customerSignerName,
+            signedAtMillis = customerSignedAtMillis,
+            customerSignatureBase64 = customerSignatureBase64,
+            companySignatureBase64 = technicianSignatureBase64,
+            technicianSignerName = technicianSignerName,
+            technicianSignedAtMillis = technicianSignedAtMillis,
+            technicianSignatureCleared = technicianSignatureCleared,
             nowMillis = fields.inspectionDate.takeIf { it > 0L } ?: System.currentTimeMillis()
         ))
         val safe = fields.customerName.replace(Regex("[^A-Za-z0-9_-]"), "_").ifBlank { "inspection" }

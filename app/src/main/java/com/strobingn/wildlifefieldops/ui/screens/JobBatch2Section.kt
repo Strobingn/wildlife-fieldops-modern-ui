@@ -189,7 +189,7 @@ fun JobBatch2Section(
                     followDueText = it
                     followDateError = null
                 },
-                label = { Text("Due date (yyyy-MM-dd)") },
+                label = { Text("Due date (MM/DD/YYYY)") },
                 supportingText = {
                     Text(followDateError ?: "Blank clears the due date.", color = if (followDateError != null) com.strobingn.wildlifefieldops.ui.theme.StatusUrgent else TextTertiary)
                 },

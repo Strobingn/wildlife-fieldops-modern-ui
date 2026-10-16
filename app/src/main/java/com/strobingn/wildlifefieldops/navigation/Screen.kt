@@ -42,6 +42,10 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
         fun createRoute(customerId: String? = null) =
             if (customerId != null) "customer_form?customerId=$customerId" else "customer_form"
     }
+    /** Paste or type a customer's text message, then Read text. */
+    object TextImport : Screen("text_import?target={target}", "Import from text") {
+        fun createRoute(target: String = "job") = "text_import?target=$target"
+    }
 
     // Inspection Screens
     object InspectionDetail : Screen("inspection_detail/{inspectionId}", "Inspection Detail") {
@@ -102,7 +106,8 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     companion object {
         // Lazy so nested objects are finished initializing before the lists read them.
         val bottomNavItems: List<Screen> by lazy {
-            listOf(Dashboard, JobList, InspectionList, CustomerList, More)
+            // Tax is back as a tab (Sir, Oct 11). It also stays in More.
+            listOf(Dashboard, JobList, InspectionList, CustomerList, EarningsTax, More)
         }
         val drawerItems: List<Screen> by lazy {
             listOf(

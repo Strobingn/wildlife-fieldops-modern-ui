@@ -39,6 +39,7 @@ fun JobFormScreen(
     onBack: () -> Unit,
     /** [JobStatus.INSPECTION] when opened from "Schedule inspection". Ignored when editing. */
     initialStatus: JobStatus = JobStatus.SCHEDULED,
+    onImportFromText: (() -> Unit)? = null,
     viewModel: JobsViewModel = hiltViewModel(),
     workspaceViewModel: JobWorkspaceViewModel = hiltViewModel(),
     serviceTypesViewModel: ServiceTypesViewModel = hiltViewModel(),
@@ -261,20 +262,11 @@ fun JobFormScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                if (isEditing) {
-                    "Update any field, then tap Save. Status, photos, and invoices are kept."
-                } else {
-                    "Type every field by hand. Existing-customer lookup is optional. AI is a helper — it is not required to save."
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary
-            )
-
-            if (importQuote.isNotBlank()) {
-                TextImportReviewBanner(importQuote)
-            }
-            PasteFromTextButton(onApply = { fields ->
+            JobFormIntro(
+                isEditing = isEditing,
+                importQuote = importQuote,
+                onImportFromText = onImportFromText,
+                onPasteApply = { fields ->
                 importQuote = fields.sourceText.ifBlank { importQuote }
                 importScope.launch {
                     applyIncoming(fields)
@@ -561,7 +553,7 @@ fun JobFormScreen(
                     nextStepDue = it
                     nextStepDueError = null
                 },
-                label = { Text("Next step due (yyyy-MM-dd)") },
+                label = { Text("Next step due (MM/DD/YYYY)") },
                 supportingText = {
                     Text(nextStepDueError ?: "Blank clears the due date.", color = if (nextStepDueError != null) StatusUrgent else TextTertiary)
                 },
@@ -635,7 +627,7 @@ fun JobFormScreen(
                         nextStepDueError = due.error
                         return@Button
                     }
-                    val estVal = estimatedValue.toDoubleOrNull() ?: 0.0
+                    val estVal = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(estimatedValue) ?: 0.0
                     val service = DefaultServiceTypes.display(selectedType)
                     aiLog.recordSaved(
                         aiSession,
@@ -819,7 +811,7 @@ private fun JobPriceLinesEditor(
                 OutlinedTextField(
                     value = if (item.quantity == 0.0) "" else item.quantity.toString().trimEnd('0').trimEnd('.'),
                     onValueChange = { text ->
-                        val qty = text.filter { c -> c.isDigit() || c == '.' }.toDoubleOrNull() ?: 0.0
+                        val qty = (com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(text) ?: 0.0)
                         onChange(index, item.copy(quantity = qty, total = qty * item.unitPrice))
                     },
                     label = { Text("Qty") },
@@ -841,7 +833,7 @@ private fun JobPriceLinesEditor(
                 OutlinedTextField(
                     value = if (item.unitPrice == 0.0) "" else item.unitPrice.toString().trimEnd('0').trimEnd('.'),
                     onValueChange = { text ->
-                        val price = text.filter { c -> c.isDigit() || c == '.' }.toDoubleOrNull() ?: 0.0
+                        val price = (com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(text) ?: 0.0)
                         onChange(index, item.copy(unitPrice = price, total = item.quantity * price))
                     },
                     label = { Text("Unit $") },
@@ -896,3 +888,32 @@ private fun textImportFieldMap(
     "State" to customer.state,
     "ZIP" to customer.zipCode
 )
+
+/**
+ * Top of the job form: Import from text (new jobs), the manual-entry hint,
+ * the text quote under review, and Paste from text.
+ */
+@Composable
+internal fun JobFormIntro(
+    isEditing: Boolean,
+    importQuote: String,
+    onImportFromText: (() -> Unit)?,
+    onPasteApply: (TextMessageImport.Fields) -> Unit
+) {
+    if (!isEditing && onImportFromText != null) {
+        ImportFromTextButton(onClick = onImportFromText, modifier = Modifier.fillMaxWidth())
+    }
+    Text(
+        if (isEditing) {
+            "Update any field, then tap Save. Status, photos, and invoices are kept."
+        } else {
+            "Type every field by hand. Existing-customer lookup is optional. AI is a helper — it is not required to save."
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = TextSecondary
+    )
+    if (importQuote.isNotBlank()) {
+        TextImportReviewBanner(importQuote)
+    }
+    PasteFromTextButton(onApply = onPasteApply)
+}

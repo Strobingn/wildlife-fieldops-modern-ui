@@ -96,6 +96,7 @@ fun InvoiceScreen(
     var showCopyDialog by remember { mutableStateOf(false) }
     var showNoEstimate by remember { mutableStateOf(false) }
     var technicianSignature by remember { mutableStateOf<Bitmap?>(null) }
+    var padForTech by remember { mutableStateOf(false) }
     var customerSignature by remember { mutableStateOf<Bitmap?>(null) }
 
     fun touch() {
@@ -118,9 +119,9 @@ fun InvoiceScreen(
 
     fun currentForm(): EstimateInvoiceCarry.InvoiceFormState = EstimateInvoiceCarry.InvoiceFormState(
         lineItems = lineItems,
-        taxRate = taxRate.toDoubleOrNull() ?: 0.0,
+        taxRate = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(taxRate) ?: 0.0,
         taxRateManual = taxRateManual,
-        discountPercent = discountPercent.toDoubleOrNull() ?: 0.0,
+        discountPercent = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(discountPercent) ?: 0.0,
         notes = notes,
         terms = terms,
         subtotalOverride = subtotalOverride,
@@ -184,8 +185,8 @@ fun InvoiceScreen(
     val priced = PricingCalculator.computeInvoice(
         InvoicePricingInputs(
             lineItems = lineItems,
-            taxRatePercent = taxRate.toDoubleOrNull() ?: 0.0,
-            discountPercent = discountPercent.toDoubleOrNull() ?: 0.0,
+            taxRatePercent = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(taxRate) ?: 0.0,
+            discountPercent = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(discountPercent) ?: 0.0,
             subtotalOverride = subtotalOverride,
             discountAmountOverride = discountAmountOverride,
             taxAmountOverride = taxAmountOverride,
@@ -449,42 +450,74 @@ fun InvoiceScreen(
                 }
             }
 
-            // Signature Section
-            if (technicianSignature != null || customerSignature != null) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = BackgroundCard),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        technicianSignature?.let {
-                            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("Technician", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+            // Signature Section: customer and technician side by side, always shown.
+            val techSaved = remember { com.strobingn.wildlifefieldops.util.TechnicianSignatureStore.load(context) }
+            val techRecord = job?.pricing?.let { com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.find(it, com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.INVOICE) }
+            val techResolved = com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.resolve(techRecord, techSaved)
+            // Customer's invoice signature is saved on the job (it used to live only on screen and vanished on leaving).
+            val customerInvoiceRecord = job?.pricing?.let { com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.find(it, com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.INVOICE) }
+            androidx.compose.runtime.LaunchedEffect(job?.id, customerInvoiceRecord) {
+                if (customerInvoiceRecord != null) {
+                    customerSignature = com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(customerInvoiceRecord.pngBase64)
+                }
+            }
+            androidx.compose.runtime.LaunchedEffect(job?.id, techRecord) {
+                technicianSignature = com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(techResolved.pngBase64)
+            }
+            Card(
+                colors = CardDefaults.cardColors(containerColor = BackgroundCard),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Signatures", style = MaterialTheme.typography.titleSmall, color = TextPrimary, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        listOf(
+                            Triple("Customer signature", customerSignature, false),
+                            Triple("Technician signature", technicianSignature, true)
+                        ).forEach { (label, bmp, tech) ->
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(label, style = MaterialTheme.typography.labelMedium, color = TextSecondary)
                                 Spacer(modifier = Modifier.height(4.dp))
-                                androidx.compose.foundation.Image(
-                                    bitmap = it.asImageBitmap(),
-                                    contentDescription = "Technician Signature",
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(60.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color.White)
-                                )
-                            }
-                        }
-                        customerSignature?.let {
-                            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("Customer", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                androidx.compose.foundation.Image(
-                                    bitmap = it.asImageBitmap(),
-                                    contentDescription = "Customer Signature",
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(60.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color.White)
-                                )
+                                if (bmp != null) {
+                                    androidx.compose.foundation.Image(
+                                        bitmap = bmp.asImageBitmap(),
+                                        contentDescription = label,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(60.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color.White)
+                                    )
+                                } else {
+                                    Text(
+                                        if (tech && techResolved.cleared) "Cleared" else "Not signed",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary,
+                                        modifier = Modifier.height(60.dp)
+                                    )
+                                }
+                                if (tech) {
+                                    val techLine = listOf(techResolved.name, techResolved.signedAt.takeIf { it > 0L && technicianSignature != null }
+                                        ?.let { com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.formatStamp(it).substringBefore(' ') }.orEmpty())
+                                        .filter { it.isNotBlank() && technicianSignature != null }.joinToString(" · ")
+                                    if (techLine.isNotBlank()) Text(techLine, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                                }
+                                Row {
+                                    TextButton(onClick = { padForTech = tech; showSignaturePad = true }) {
+                                        Text(if (tech) "Technician signs" else "Customer signs", color = TextPrimary)
+                                    }
+                                    TextButton(onClick = {
+                                        if (tech) {
+                                            technicianSignature = null
+                                            job?.let { j -> jobsViewModel.saveJobExtras(j.id, com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.clear(j.pricing, com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.INVOICE)) }
+                                        } else {
+                                            customerSignature = null
+                                            job?.let { j -> jobsViewModel.saveJobExtras(j.id, com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.save(j.pricing, com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.INVOICE, "", 0L, "")) }
+                                        }
+                                    }) { Text("Clear", color = TextPrimary) }
+                                }
                             }
                         }
                     }
@@ -494,14 +527,16 @@ fun InvoiceScreen(
             // Action Buttons
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
-                    onClick = { showSignaturePad = true },
+                    // Sir's own Sign button: always the technician pad (as before 2.9.0).
+                    // The customer signs with "Customer signs" in the Signatures card.
+                    onClick = { padForTech = SignaturePadTarget.SIGN_BUTTON.technician; showSignaturePad = true },
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue, contentColor = OnPrimary),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.Draw, contentDescription = null)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Sign", fontWeight = FontWeight.Bold)
+                    Text(SignaturePadTarget.SIGN_BUTTON.buttonLabel, fontWeight = FontWeight.Bold)
                 }
                 Button(
                     onClick = {
@@ -517,7 +552,7 @@ fun InvoiceScreen(
                             // Copy the editable form state on the main thread: the PDF is built on
                             // another thread and must not see edits made after the tap.
                             val lineItemsSnap = lineItems.toList()
-                            val taxRateSnap = taxRate.toDoubleOrNull() ?: 0.0
+                            val taxRateSnap = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(taxRate) ?: 0.0
                             val notesSnap = notes
                             val termsSnap = terms
                             val technicianSignatureSnap = technicianSignature
@@ -538,10 +573,14 @@ fun InvoiceScreen(
                                         notes = notesSnap,
                                         terms = termsSnap,
                                         technicianSignature = technicianSignatureSnap,
+                                        // A cleared invoice customer signature stays blank (no refill from the contract).
                                         customerSignature = customerSignatureSnap
-                                            ?: com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(contractSig?.pngBase64.orEmpty()),
-                                        customerSignerName = contractSig?.signerName.orEmpty(),
-                                        customerSignedAtMillis = contractSig?.signedAt,
+                                            ?: if (customerInvoiceRecord == null) com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(contractSig?.pngBase64.orEmpty()) else null,
+                                        customerSignerName = customerInvoiceRecord?.signerName ?: contractSig?.signerName.orEmpty(),
+                                        customerSignedAtMillis = customerInvoiceRecord?.signedAt?.takeIf { it > 0L } ?: if (customerInvoiceRecord == null) contractSig?.signedAt else null,
+                                        technicianSignerName = if (technicianSignatureSnap != null) techResolved.name.ifBlank { techSaved.name } else "",
+                                        technicianSignedAtMillis = techResolved.signedAt.takeIf { it > 0L && technicianSignatureSnap != null },
+                                        technicianSignatureCleared = technicianSignatureSnap == null && techResolved.cleared,
                                         balanceDue = com.strobingn.wildlifefieldops.ai.fieldops.PaymentLedger.balanceDue(
                                             total,
                                             currentJob.pricing.payments
@@ -609,12 +648,39 @@ fun InvoiceScreen(
     // Signature Pad Dialog
     if (showSignaturePad) {
         SignaturePadDialog(
+            title = SignaturePadTarget.of(padForTech).dialogTitle,
             onDismiss = { showSignaturePad = false },
             onSave = { bitmap ->
-                if (technicianSignature == null) {
+                if (padForTech) {
                     technicianSignature = bitmap
+                    job?.let { j ->
+                        val saved = com.strobingn.wildlifefieldops.util.TechnicianSignatureStore.load(context)
+                        val prior = com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.resolve(j.pricing, com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.INVOICE, saved)
+                        jobsViewModel.saveJobExtras(
+                            j.id,
+                            com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.save(
+                                j.pricing,
+                                com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.INVOICE,
+                                prior.name.ifBlank { saved.name },
+                                System.currentTimeMillis(),
+                                com.strobingn.wildlifefieldops.util.SignatureInk.encodePng(bitmap)
+                            )
+                        )
+                    }
                 } else {
                     customerSignature = bitmap
+                    job?.let { j ->
+                        jobsViewModel.saveJobExtras(
+                            j.id,
+                            com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.save(
+                                j.pricing,
+                                com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.INVOICE,
+                                j.customerName,
+                                System.currentTimeMillis(),
+                                com.strobingn.wildlifefieldops.util.SignatureInk.encodePng(bitmap)
+                            )
+                        )
+                    }
                 }
                 showSignaturePad = false
             }
@@ -878,6 +944,9 @@ private fun generateInvoicePDF(
     customerSignature: Bitmap?,
     customerSignerName: String = "",
     customerSignedAtMillis: Long? = null,
+    technicianSignerName: String = "",
+    technicianSignedAtMillis: Long? = null,
+    technicianSignatureCleared: Boolean = false,
     balanceDue: Double? = null,
     documentNumber: String = "",
     dueDateMillis: Long? = null,
@@ -902,6 +971,9 @@ private fun generateInvoicePDF(
         customerSignature = customerSignature,
         customerSignerName = customerSignerName,
         customerSignedAtMillis = customerSignedAtMillis,
+        technicianSignerName = technicianSignerName,
+        technicianSignedAtMillis = technicianSignedAtMillis,
+        technicianSignatureCleared = technicianSignatureCleared,
         balanceDue = balanceDue,
         documentNumber = documentNumber,
         dueDateMillis = dueDateMillis,
@@ -921,7 +993,7 @@ private fun viewPDF(context: Context, path: String) {
 }
 
 @Composable
-private fun SignaturePadDialog(onDismiss: () -> Unit, onSave: (Bitmap) -> Unit) {
+private fun SignaturePadDialog(title: String = "Sign Here", onDismiss: () -> Unit, onSave: (Bitmap) -> Unit) {
     val density = LocalContext.current.resources.displayMetrics.density
     // Store touch points as line segments: each segment is (x1, y1, x2, y2)
     val lineSegments = remember { mutableStateListOf<android.graphics.PointF>() }
@@ -929,7 +1001,7 @@ private fun SignaturePadDialog(onDismiss: () -> Unit, onSave: (Bitmap) -> Unit) 
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Sign Here", color = TextPrimary) },
+        title = { Text(title, color = TextPrimary) },
         text = {
             Box(
                 modifier = Modifier
@@ -1069,4 +1141,21 @@ private fun PdfShareDialog(
         },
         containerColor = BackgroundCard
     )
+}
+
+
+/** Which slot an invoice signature pad writes to. Customer and technician never share one. */
+enum class SignaturePadTarget(val technician: Boolean, val buttonLabel: String, val dialogTitle: String) {
+    TECHNICIAN(true, "Technician signs", "Technician signature"),
+    CUSTOMER(false, "Customer signs", "Customer signature — customer signs here");
+
+    companion object {
+        /** The bottom "Sign" button Sir uses for himself. */
+        val SIGN_BUTTON: SignaturePadTarget = TECHNICIAN
+        fun of(technician: Boolean): SignaturePadTarget = if (technician) TECHNICIAN else CUSTOMER
+
+        /** Route a drawn pad to (customer, technician); the other slot is never touched. */
+        fun <T> route(target: SignaturePadTarget, ink: T, customer: T?, technician: T?): Pair<T?, T?> =
+            if (target.technician) customer to ink else ink to technician
+    }
 }

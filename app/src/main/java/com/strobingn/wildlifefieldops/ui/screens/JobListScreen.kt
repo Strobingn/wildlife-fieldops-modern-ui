@@ -45,6 +45,7 @@ fun JobListScreen(
     onNavigateToJobDetail: (String) -> Unit,
     onNavigateToJobForm: () -> Unit,
     onNavigateToDictate: () -> Unit = {},
+    onImportFromText: () -> Unit = {},
     onBack: () -> Unit,
     showBack: Boolean = true,
     requestOpenJobs: Boolean = false,
@@ -70,6 +71,7 @@ fun JobListScreen(
             onNavigateToJobDetail = onNavigateToJobDetail,
             onNavigateToJobForm = onNavigateToJobForm,
             onNavigateToDictate = onNavigateToDictate,
+            onImportFromText = onImportFromText,
             onBack = onBack,
             showBack = showBack
         )
@@ -115,6 +117,7 @@ fun JobListScreen(
         onNavigateToJobDetail = onNavigateToJobDetail,
         onNavigateToJobForm = onNavigateToJobForm,
         onNavigateToDictate = onNavigateToDictate,
+        onImportFromText = onImportFromText,
         onBack = onBack,
         showBack = showBack
     )
@@ -140,6 +143,7 @@ private fun JobListContent(
     onNavigateToJobDetail: (String) -> Unit,
     onNavigateToJobForm: () -> Unit,
     onNavigateToDictate: () -> Unit,
+    onImportFromText: () -> Unit,
     onBack: () -> Unit,
     showBack: Boolean
 ) {
@@ -252,6 +256,7 @@ private fun JobListContent(
                 )
             }
             item(key = "create") {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -278,6 +283,8 @@ private fun JobListContent(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(ManualJobEntry.ACTION_LABEL, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
+            }
+            ImportFromTextButton(onClick = onImportFromText, modifier = Modifier.fillMaxWidth())
             }
             }
 

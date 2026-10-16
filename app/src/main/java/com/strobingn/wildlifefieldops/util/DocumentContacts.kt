@@ -34,7 +34,8 @@ object DocumentContacts {
     }
 
     fun fill(context: Context, packet: StandardJobPacket): StandardJobPacket {
-        if (packet.customerPhone.isNotBlank() && packet.customerEmail.isNotBlank()) return packet
-        return JobContactFallback.apply(packet, customerFor(context, packet.job.customerId))
+        val signed = TechSignatureDefaults.apply(packet, TechnicianSignatureStore.load(context))
+        if (signed.customerPhone.isNotBlank() && signed.customerEmail.isNotBlank()) return signed
+        return JobContactFallback.apply(signed, customerFor(context, signed.job.customerId))
     }
 }

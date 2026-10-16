@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -225,6 +226,7 @@ fun JobPaymentsCard(job: Job, onSave: (JobPricing) -> Unit) {
     var amountText by remember(job.id) { mutableStateOf("") }
     var dateText by remember(job.id) { mutableStateOf(PaymentLedger.formatDay(System.currentTimeMillis())) }
     var note by remember(job.id) { mutableStateOf("") }
+    var amountError by remember(job.id) { mutableStateOf(false) }
     BatchCard(title = "Payments") {
         Text(
             "Paid ${Money.formatUsd(PaymentLedger.totalPaid(job.pricing.payments))} · Balance due ${Money.formatUsd(PaymentLedger.balanceDue(total, job.pricing.payments))}",
@@ -266,8 +268,12 @@ fun JobPaymentsCard(job: Job, onSave: (JobPricing) -> Unit) {
         )
         OutlinedTextField(
             value = amountText,
-            onValueChange = { amountText = it },
+            onValueChange = { amountText = it; amountError = false },
             label = { Text("Amount") },
+            isError = amountError,
+            supportingText = if (amountError) {
+                { Text("Enter an amount like 500 or \$1,250.50", color = TextPrimary) }
+            } else null,
             modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             singleLine = true
@@ -275,7 +281,7 @@ fun JobPaymentsCard(job: Job, onSave: (JobPricing) -> Unit) {
         OutlinedTextField(
             value = dateText,
             onValueChange = { dateText = it },
-            label = { Text("Date (yyyy-MM-dd)") },
+            label = { Text("Date (MM/DD/YYYY)") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
@@ -288,11 +294,16 @@ fun JobPaymentsCard(job: Job, onSave: (JobPricing) -> Unit) {
         )
         Button(
             onClick = {
+                val amount = PaymentLedger.parseAmount(amountText)
+                if (amount == null) {
+                    amountError = true
+                    return@Button
+                }
                 val row = JobPaymentRecord(
                     id = UUID.randomUUID().toString(),
                     method = method,
                     checkNumber = checkNumber,
-                    amount = amountText.toDoubleOrNull() ?: 0.0,
+                    amount = amount,
                     paidAt = PaymentLedger.parseDay(dateText),
                     note = note
                 )
@@ -353,7 +364,7 @@ fun JobExclusionCard(job: Job, onSave: (JobPricing) -> Unit) {
                     material = material,
                     photoPath = photo,
                     photoManual = photo.isBlank(),
-                    unitPrice = priceText.toDoubleOrNull() ?: 0.0
+                    unitPrice = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(priceText) ?: 0.0
                 )
                 val pricing = ExclusionEstimate.pushToEstimate(
                     job.pricing.copy(exclusionPoints = job.pricing.exclusionPoints + point)
@@ -419,7 +430,7 @@ private fun ExclusionEditor(point: ExclusionPointRecord, job: Job, onSave: (JobP
                 val updated = point.copy(
                     description = description,
                     descriptionManual = true,
-                    unitPrice = price.toDoubleOrNull() ?: 0.0
+                    unitPrice = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(price) ?: 0.0
                 )
                 val points = job.pricing.exclusionPoints.map { if (it.id == point.id) updated else it }
                 onSave(ExclusionEstimate.pushToEstimate(job.pricing.copy(exclusionPoints = points)))
@@ -433,122 +444,35 @@ private fun ExclusionEditor(point: ExclusionPointRecord, job: Job, onSave: (JobP
 }
 
 @Composable
-fun JobSignatureCard(job: Job, customerName: String, onSave: (JobPricing) -> Unit) {
-    val context = LocalContext.current
-    var document by remember(job.id) { mutableStateOf(SignatureRules.ESTIMATE) }
-    val record = SignatureRules.find(job.pricing, document)
-    val manual = job.pricing.isManual(SignatureRules.manualKey(document))
-    var name by remember(job.id, document, record?.signerName, manual) {
-        mutableStateOf(SignatureRules.editorName(record, customerName, manual))
-    }
-    var ink by remember(job.id, document, record?.pngBase64) { mutableStateOf(record?.pngBase64.orEmpty()) }
-    BatchCard(title = "Customer signature") {
-        Text(
-            "Draw on the pad or type a name. The name, ink, and time are embedded in the estimate or contract PDF.",
-            color = TextSecondary,
-            style = MaterialTheme.typography.bodySmall
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = document == SignatureRules.ESTIMATE,
-                onClick = { document = SignatureRules.ESTIMATE },
-                label = { Text("Estimate") }
-            )
-            FilterChip(
-                selected = document == SignatureRules.CONTRACT,
-                onClick = { document = SignatureRules.CONTRACT },
-                label = { Text("Contract") }
-            )
-        }
-        OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text("Signer name") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-        SignatureCanvas(
-            onInk = { bitmap -> ink = SignatureInk.encodePng(bitmap) }
-        )
-        if (ink.isNotBlank()) {
-            val preview = remember(ink) { SignatureInk.decodePng(ink) }
-            if (preview != null) {
-                Image(
-                    bitmap = preview.asImageBitmap(),
-                    contentDescription = "Saved signature",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(72.dp)
-                        .background(PaperWhite)
-                )
-            }
-        }
-        Row {
-            TextButton(onClick = { ink = "" }) { Text("Clear ink", color = TextSecondary) }
-            TextButton(onClick = {
-                val saved = SignatureRules.save(
-                    pricing = job.pricing,
-                    document = document,
-                    signerName = name,
-                    signedAt = System.currentTimeMillis(),
-                    pngBase64 = ink
-                )
-                onSave(saved)
-            }) { Text("Save signature", color = PrimaryGreen) }
-            TextButton(onClick = {
-                val pricing = job.pricing
-                val result = com.strobingn.wildlifefieldops.pricing.PricingCalculator.compute(pricing)
-                val items = com.strobingn.wildlifefieldops.pricing.EstimateInvoiceCarry.lineItems(pricing, result)
-                val saved = com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.find(pricing, document)
-                val path = com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf.generate(
-                    context = context,
-                    documentType = com.strobingn.wildlifefieldops.util.ContractDocumentType.CONTRACT,
-                    job = job,
-                    lineItems = items,
-                    subtotal = result.subtotal.effective,
-                    taxRate = pricing.taxRatePercent,
-                    taxAmount = result.taxAmount.effective,
-                    discountAmount = result.discountAmount.effective,
-                    total = result.total.effective,
-                    notes = listOf(pricing.notes, pricing.rationale).filter { it.isNotBlank() }.joinToString("\n"),
-                    customerSignature = com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(
-                        saved?.pngBase64?.ifBlank { ink }.orEmpty()
-                    ),
-                    customerSignerName = name.ifBlank { saved?.signerName.orEmpty() },
-                    customerSignedAtMillis = saved?.signedAt
-                )
-                com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf.share(
-                    context,
-                    path,
-                    "Share contract"
-                )
-            }) { Text("Share contract PDF", color = TextPrimary) }
-        }
-        val caption = SignatureRules.embedCaption(SignatureRules.find(job.pricing, document))
-        if (caption.isNotBlank()) {
-            Text("On the PDF: $caption", color = TextTertiary, style = MaterialTheme.typography.bodySmall)
-        }
-    }
-}
-
-@Composable
-private fun SignatureCanvas(onInk: (Bitmap) -> Unit) {
+internal fun SignatureCanvas(
+    onInk: (Bitmap) -> Unit,
+    resetKey: Int = 0,
+    height: androidx.compose.ui.unit.Dp = 140.dp,
+    tag: String = "signature-pad",
+    savedInk: String = ""
+) {
+    val savedBitmap = remember(savedInk) { com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(savedInk)?.asImageBitmap() }
     val density = LocalDensity.current.density
-    val strokes = remember { mutableStateOf(listOf<List<Offset>>()) }
-    var current by remember { mutableStateOf(listOf<Offset>()) }
+    // The drag handler lives across recompositions; always deliver ink to the
+    // latest onInk. A stale callback wrote the technician ink into a state the
+    // card had already replaced (after Save, Clear or a chip change), so it never stuck.
+    val latestOnInk by androidx.compose.runtime.rememberUpdatedState(onInk)
+    val strokes = remember(resetKey) { mutableStateOf(listOf<List<Offset>>()) }
+    var current by remember(resetKey) { mutableStateOf(listOf<Offset>()) }
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
-            .height(140.dp)
+            .height(height)
             .background(PaperWhite, RoundedCornerShape(8.dp))
             .border(1.dp, BorderDark, RoundedCornerShape(8.dp))
-            .pointerInput(Unit) {
+            .testTag(tag)
+            .pointerInput(resetKey) {
                 detectDragGestures(
                     onDragStart = { offset -> current = listOf(offset) },
                     onDragEnd = {
                         if (current.size > 1) {
                             strokes.value = strokes.value + listOf(current)
-                            onInk(renderSignature(strokes.value, size.width, size.height, density))
+                            latestOnInk(renderSignature(strokes.value, size.width, size.height, density))
                         }
                         current = emptyList()
                     },
@@ -560,6 +484,12 @@ private fun SignatureCanvas(onInk: (Bitmap) -> Unit) {
             }
     ) {
         val paintColor = Color(0xFF1A1A1A)
+        if (strokes.value.isEmpty() && current.isEmpty() && savedBitmap != null) {
+            drawImage(
+                savedBitmap,
+                dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt())
+            )
+        }
         (strokes.value + listOf(current)).forEach { stroke ->
             if (stroke.size > 1) {
                 for (i in 1 until stroke.size) {
@@ -570,7 +500,7 @@ private fun SignatureCanvas(onInk: (Bitmap) -> Unit) {
     }
 }
 
-private fun renderSignature(strokes: List<List<Offset>>, width: Int, height: Int, density: Float): Bitmap {
+internal fun renderSignature(strokes: List<List<Offset>>, width: Int, height: Int, density: Float): Bitmap {
     val bitmap = Bitmap.createBitmap(width.coerceAtLeast(1), height.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     canvas.drawColor(android.graphics.Color.WHITE)

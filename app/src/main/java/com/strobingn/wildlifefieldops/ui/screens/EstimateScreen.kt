@@ -367,7 +367,7 @@ fun EstimateScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             DecimalField("Qty", formatNum(item.quantity), {
-                                val qty = it.toDoubleOrNull() ?: 0.0
+                                val qty = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(it) ?: 0.0
                                 applyPricing(pricing.copy(photoLineItems = pricing.photoLineItems.toMutableList().also { list ->
                                     list[index] = item.copy(quantity = qty, total = qty * item.unitPrice)
                                 }))
@@ -385,7 +385,7 @@ fun EstimateScreen(
                                 singleLine = true
                             )
                             DecimalField("Unit $", formatNum(item.unitPrice), {
-                                val price = it.toDoubleOrNull() ?: 0.0
+                                val price = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(it) ?: 0.0
                                 applyPricing(pricing.copy(photoLineItems = pricing.photoLineItems.toMutableList().also { list ->
                                     list[index] = item.copy(unitPrice = price, total = item.quantity * price)
                                 }))
@@ -416,11 +416,11 @@ fun EstimateScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     DecimalField("Hours", laborHoursText, {
                         laborHoursText = it
-                        applyPricing(pricing.copy(laborHours = it.toDoubleOrNull() ?: 0.0))
+                        applyPricing(pricing.copy(laborHours = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(it) ?: 0.0))
                     }, Modifier.weight(1f))
                     DecimalField("Rate/hr", laborRateText, {
                         laborRateText = it
-                        applyPricing(pricing.copy(laborRate = it.toDoubleOrNull() ?: 0.0))
+                        applyPricing(pricing.copy(laborRate = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(it) ?: 0.0))
                     }, Modifier.weight(1f))
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -435,11 +435,11 @@ fun EstimateScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     DecimalField("Qty", materialsQtyText, {
                         materialsQtyText = it
-                        applyPricing(pricing.copy(materialsQty = it.toDoubleOrNull() ?: 0.0))
+                        applyPricing(pricing.copy(materialsQty = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(it) ?: 0.0))
                     }, Modifier.weight(1f))
                     DecimalField("Unit price", materialsPriceText, {
                         materialsPriceText = it
-                        applyPricing(pricing.copy(materialsPrice = it.toDoubleOrNull() ?: 0.0))
+                        applyPricing(pricing.copy(materialsPrice = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(it) ?: 0.0))
                     }, Modifier.weight(1f))
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -454,28 +454,28 @@ fun EstimateScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     DecimalField("Equipment", equipmentText, {
                         equipmentText = it
-                        applyPricing(pricing.copy(equipmentCost = it.toDoubleOrNull() ?: 0.0))
+                        applyPricing(pricing.copy(equipmentCost = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(it) ?: 0.0))
                     }, Modifier.weight(1f))
                     DecimalField("Permits", permitText, {
                         permitText = it
-                        applyPricing(pricing.copy(permitCost = it.toDoubleOrNull() ?: 0.0))
+                        applyPricing(pricing.copy(permitCost = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(it) ?: 0.0))
                     }, Modifier.weight(1f))
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 DecimalField("Disposal", disposalText, {
                     disposalText = it
-                    applyPricing(pricing.copy(disposalCost = it.toDoubleOrNull() ?: 0.0))
+                    applyPricing(pricing.copy(disposalCost = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(it) ?: 0.0))
                 }, Modifier.fillMaxWidth())
             }
             EstimateSection("Mileage") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     DecimalField("Miles", mileageText, {
                         mileageText = it
-                        applyPricing(pricing.copy(mileage = it.toDoubleOrNull() ?: 0.0))
+                        applyPricing(pricing.copy(mileage = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(it) ?: 0.0))
                     }, Modifier.weight(1f))
                     DecimalField("Rate/mi", mileageRateText, {
                         mileageRateText = it
-                        applyPricing(pricing.copy(mileageRate = it.toDoubleOrNull() ?: 0.0))
+                        applyPricing(pricing.copy(mileageRate = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(it) ?: 0.0))
                     }, Modifier.weight(1f))
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -492,14 +492,14 @@ fun EstimateScreen(
                         taxRateText = it
                         applyPricing(
                             pricing.copy(
-                                taxRatePercent = it.toDoubleOrNull() ?: 0.0,
+                                taxRatePercent = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(it) ?: 0.0,
                                 taxRateManual = true
                             )
                         )
                     }, Modifier.weight(1f))
                     DecimalField("Discount %", discountPercentText, {
                         discountPercentText = it
-                        applyPricing(pricing.copy(discountPercent = it.toDoubleOrNull() ?: 0.0))
+                        applyPricing(pricing.copy(discountPercent = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(it) ?: 0.0))
                     }, Modifier.weight(1f))
                 }
                 val county = countyTaxState
@@ -574,6 +574,11 @@ fun EstimateScreen(
                             val items = buildEstimateLineItems(pricing, result)
                             val signature = com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules
                                 .find(pricing, com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.ESTIMATE)
+                            val estimateTech = com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.resolve(
+                                pricing,
+                                com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.ESTIMATE,
+                                com.strobingn.wildlifefieldops.util.TechnicianSignatureStore.load(context)
+                            )
                             val pricingNow = pricing
                             val resultNow = result
                             // PDF drawing and file writes stay off the main thread.
@@ -594,7 +599,11 @@ fun EstimateScreen(
                                             notes = listOf(pricingNow.notes, pricingNow.rationale).filter { it.isNotBlank() }.joinToString("\n"),
                                             customerSignature = com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(signature?.pngBase64.orEmpty()),
                                             customerSignerName = signature?.signerName.orEmpty(),
-                                            customerSignedAtMillis = signature?.signedAt
+                                            customerSignedAtMillis = signature?.signedAt,
+                                            technicianSignature = com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(estimateTech.pngBase64),
+                                            technicianSignerName = estimateTech.name,
+                                            technicianSignedAtMillis = estimateTech.signedAt.takeIf { it > 0L },
+                                            technicianSignatureCleared = estimateTech.cleared
                                         )
                                     }
                                     showPdfShare = true

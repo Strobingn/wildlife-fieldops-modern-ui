@@ -95,6 +95,7 @@ object FieldNav {
         Screen.VoiceLog,
         Screen.CustomerList,
         Screen.CustomerForm,
+        Screen.TextImport,
         Screen.InspectionDetail,
         Screen.InspectionForm,
         Screen.Map,
@@ -177,6 +178,7 @@ object FieldNav {
         Screen.JobDictate -> "Home → Dictate job"
         Screen.VoiceLog -> "More → Voice Log"
         Screen.CustomerForm -> "Customers → a customer"
+        Screen.TextImport -> "Jobs → Import from text"
         Screen.InspectionDetail -> "Inspections → an inspection"
         Screen.InspectionForm -> "Inspections → New inspection"
         Screen.Map -> "More → Property Map"

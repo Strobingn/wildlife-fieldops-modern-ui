@@ -527,7 +527,7 @@ fun JobDetailScreen(
                             nextStepDueText = it
                             fieldError = null
                         },
-                        label = { Text("Due date (yyyy-MM-dd)") },
+                        label = { Text("Due date (MM/DD/YYYY)") },
                         supportingText = { Text("Blank clears the due date. A bad date is not saved.", color = TextTertiary) },
                         isError = fieldError != null,
                         colors = OutlinedTextFieldDefaults.colors(
