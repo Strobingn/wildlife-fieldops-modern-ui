@@ -168,7 +168,7 @@ fun SettingsScreen(
             SettingsSectionTitle("AI Command Center")
             SettingsCard {
                 Text(
-                    "20 individually launchable AI tools plus 65 live intelligence modules for scheduling, pricing, compliance, safety, revenue, customers, inventory, field quality, and data health.",
+                    "40 individually launchable AI tools plus 85 live intelligence modules for scheduling, pricing, compliance, safety, revenue, customers, inventory, field quality, and data health.",
                     color = TextSecondary,
                     style = MaterialTheme.typography.bodySmall
                 )

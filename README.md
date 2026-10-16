@@ -163,3 +163,4 @@ Voice job intake and AI report paths prefer the **on-device LLM** when downloade
 - See [docs/FIELD_OPPS_V2_5_FEATURE_ROADMAP.md](docs/FIELD_OPPS_V2_5_FEATURE_ROADMAP.md) for the next ten feature proposals.
 - See [docs/FIELD_OPPS_V2_5_FEATURE_ROADMAP_20.md](docs/FIELD_OPPS_V2_5_FEATURE_ROADMAP_20.md) for the 20-feature expansion backlog.
 - See [docs/cpu-model-admission-baseline.md](docs/cpu-model-admission-baseline.md) for the production CPU TFLite graph / delegate admission baseline (`wildlife_evidence.tflite`).
+- See [README-V3.9.md](README-V3.9.md) for the V3.9 fixes branch: AI modules and tools added, CI changes, verification status, and known issues.
