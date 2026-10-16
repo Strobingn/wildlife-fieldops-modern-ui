@@ -107,6 +107,7 @@ The inspection work from `Claude-V-3.9` was therefore dropped rather than ported
 
 - **Room migrations.** Version 15 with a complete chain `MIGRATION_3_4` through `MIGRATION_14_15` in `data/local/Migrations.kt`. No `fallbackToDestructiveMigration`, by policy (`di/AppModule.kt`).
 - **Secrets.** A pattern scan of tracked files (xAI, OpenAI-style, Google API, and JWT-shaped keys) found none.
+- **Cloud AI key.** Not in the APK. `app/build.gradle.kts` does not put the xAI key in `BuildConfig`; cloud Grok calls go through the Supabase `ai-assistant` edge function (`AiEdgeGateway`). `build-android.yml` unsets `XAI_API_KEY` / `LLM_API_KEY` before building and greps the APK to prove neither is present.
 - **Write-back workflows.** `apply-polish.yml` runs only on pushes that touch specific `tools/polish-chunks` paths. `restore-livecapture-screen.yml` runs only on `feat/capture-clock-soak`. Neither loops on `main`.
 - **Latest APK build.** Run `38624977136` on `ac25a59` passed.
 
@@ -130,10 +131,11 @@ The inspection work from `Claude-V-3.9` was therefore dropped rather than ported
 
 ## 8. Known issues (found, not fixed here)
 
-1. **The AI key ships inside the APK.** `app/build.gradle.kts` reads `XAI_API_KEY` / `LLM_API_KEY` into `BuildConfig`, and CI passes it in. Anyone with the APK can extract it. The fix is to route AI calls through the existing Supabase edge function (`supabase/functions/ai-assistant`) and remove the client-side key. This is an architecture change, so it is not made here.
-2. **Silence detection is a stub.** `observation-core` `TranscriptValidator.isSilentAudio` always returns `false`. That is fail-closed by design (silent-looking audio is never accepted as empty), but the TODO for a real energy classifier is still open.
-3. **No migration path from Room versions 1 and 2.** `Migrations.ALL` starts at 3→4. A device still holding a version 1 or 2 database would fail to open it. Probably no such installs remain, but this is unverified.
-4. **Node 20 deprecation warnings.** `checkout`, `upload-artifact`, and `setup-android` are forced onto Node 24. This is a warning, not a failure.
+An earlier version of this list said the xAI key ships inside the APK. That was wrong; see "Cloud AI key" in section 6.
+
+1. **Silence detection is a stub.** `observation-core` `TranscriptValidator.isSilentAudio` always returns `false`. That is fail-closed by design (silent-looking audio is never accepted as empty), but the TODO for a real energy classifier is still open.
+2. **No migration path from Room versions 1 and 2.** `Migrations.ALL` starts at 3→4. A device still holding a version 1 or 2 database would fail to open it. Probably no such installs remain, but this is unverified.
+3. **Node 20 deprecation warnings.** `checkout`, `upload-artifact`, and `setup-android` are forced onto Node 24. This is a warning, not a failure.
 
 ---
 
