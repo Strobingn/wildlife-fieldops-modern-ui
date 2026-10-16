@@ -69,7 +69,7 @@ fun AIOperationsScreen(
                 }
             }
 
-            Text("20 Individual AI Tools", style = MaterialTheme.typography.titleLarge, color = TextPrimary, fontWeight = FontWeight.Bold)
+            Text("${IndividualAIToolCatalog.tools.size} Individual AI Tools", style = MaterialTheme.typography.titleLarge, color = TextPrimary, fontWeight = FontWeight.Bold)
             Text("Each card opens a live job-data tool with score, recommended action, and a field checklist.", color = TextSecondary)
             IndividualAIToolCatalog.tools.forEachIndexed { index, tool ->
                 LaunchableToolCard(index = index + 1, title = tool.title, subtitle = tool.purpose) {
