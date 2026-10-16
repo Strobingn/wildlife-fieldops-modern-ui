@@ -32,6 +32,6 @@ object JobTimer {
         val totalMin = (ms / 60_000L).coerceAtLeast(0L)
         val hours = totalMin / 60
         val minutes = totalMin % 60
-        return "%d:%02d".format(hours, minutes)
+        return String.format(java.util.Locale.US, "%d:%02d", hours, minutes)
     }
 }

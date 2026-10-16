@@ -24,7 +24,9 @@ object EarningsRollup {
         cal.set(Calendar.SECOND, 0)
         cal.set(Calendar.MILLISECOND, 0)
         val start = cal.timeInMillis
-        return start to start + 86_400_000L
+        // add(DATE) follows the wall clock; start + 24h is wrong on the 23h/25h DST days.
+        cal.add(Calendar.DATE, 1)
+        return start to cal.timeInMillis
     }
 
     fun weekBounds(now: Long): Pair<Long, Long> {
@@ -36,7 +38,8 @@ object EarningsRollup {
         cal.set(Calendar.SECOND, 0)
         cal.set(Calendar.MILLISECOND, 0)
         val start = cal.timeInMillis
-        return start to start + 7 * 86_400_000L
+        cal.add(Calendar.DATE, 7)
+        return start to cal.timeInMillis
     }
 
     fun summarize(

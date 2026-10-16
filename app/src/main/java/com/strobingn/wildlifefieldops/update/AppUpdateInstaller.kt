@@ -48,18 +48,24 @@ class AppUpdateInstaller @javax.inject.Inject constructor() {
             params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
         }
         val sessionId = installer.createSession(params)
-        installer.openSession(sessionId).use { session ->
-            session.openWrite("package", 0, apk.length()).use { dest ->
-                apk.inputStream().use { input -> input.copyTo(dest) }
-                session.fsync(dest)
+        try {
+            installer.openSession(sessionId).use { session ->
+                session.openWrite("package", 0, apk.length()).use { dest ->
+                    apk.inputStream().use { input -> input.copyTo(dest) }
+                    session.fsync(dest)
+                }
+                val callback = Intent(context, UpdateInstallReceiver::class.java).apply {
+                    action = UpdateInstallReceiver.ACTION
+                    setPackage(context.packageName)
+                }
+                val flags = PendingIntent.FLAG_UPDATE_CURRENT or mutableFlag()
+                val pending = PendingIntent.getBroadcast(context, sessionId, callback, flags)
+                session.commit(pending.intentSender)
             }
-            val callback = Intent(context, UpdateInstallReceiver::class.java).apply {
-                action = UpdateInstallReceiver.ACTION
-                setPackage(context.packageName)
-            }
-            val flags = PendingIntent.FLAG_UPDATE_CURRENT or mutableFlag()
-            val pending = PendingIntent.getBroadcast(context, sessionId, callback, flags)
-            session.commit(pending.intentSender)
+        } catch (t: Throwable) {
+            // A half-written session would otherwise leak (and PackageInstaller caps open sessions).
+            runCatching { installer.abandonSession(sessionId) }
+            throw t
         }
     }
 

@@ -187,6 +187,9 @@ data class InvoicePricingInputs(
 
 object PricingCalculator {
 
+    /** A typed 150% discount must not produce a negative taxable base, tax and total. */
+    private const val MAX_DISCOUNT_PERCENT = 100.0
+
     fun starterWorksheet(): JobPricing = JobPricing(
         laborHours = 2.0,
         laborRate = 85.0,
@@ -243,7 +246,7 @@ object PricingCalculator {
         )
         val subtotal = MoneyField(subtotalCalc, pricing.subtotalOverride?.let { Money.round(it) })
 
-        val discountCalc = Money.percentOf(subtotal.effective, pricing.discountPercent)
+        val discountCalc = Money.percentOf(subtotal.effective, pricing.discountPercent.coerceAtMost(MAX_DISCOUNT_PERCENT))
         val discount = MoneyField(discountCalc, pricing.discountAmountOverride?.let { Money.round(it) })
 
         val taxable = Money.minus(subtotal.effective, discount.effective)
@@ -272,7 +275,7 @@ object PricingCalculator {
         val subtotalCalc = lineTotals.fold(0.0) { acc, v -> Money.plus(acc, v) }
         val subtotal = MoneyField(subtotalCalc, inputs.subtotalOverride?.let { Money.round(it) })
 
-        val discountCalc = Money.percentOf(subtotal.effective, inputs.discountPercent)
+        val discountCalc = Money.percentOf(subtotal.effective, inputs.discountPercent.coerceAtMost(MAX_DISCOUNT_PERCENT))
         val discount = MoneyField(discountCalc, inputs.discountAmountOverride?.let { Money.round(it) })
 
         val taxable = Money.minus(subtotal.effective, discount.effective)

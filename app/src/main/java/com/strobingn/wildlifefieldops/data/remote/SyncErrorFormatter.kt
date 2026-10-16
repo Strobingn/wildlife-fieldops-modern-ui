@@ -22,9 +22,9 @@ object SyncErrorFormatter {
                 "Cloud rejected a required empty field. $text"
             "23503" in lower || "foreign key" in lower ->
                 "Related row is not on the server yet (job/customer). Will retry. $text"
-            "23505" in lower || "duplicate" in lower || "409" in lower ->
+            hasCode(lower, "23505") || "duplicate" in lower || hasCode(lower, "409") ->
                 "Already on server. $text"
-            "42501" in lower || "permission denied" in lower || "row-level security" in lower || "rls" in lower ->
+            "42501" in lower || "permission denied" in lower || "row-level security" in lower || hasCode(lower, "rls") ->
                 "Cloud permission denied (RLS/grant). $text"
             "jwtexpired" in lower || "invalid jwt" in lower ->
                 "Cloud key rejected. Rebuild the APK with current Supabase secrets. $text"
@@ -42,8 +42,8 @@ object SyncErrorFormatter {
         }.lowercase()
         return "duplicate" in text ||
             "already exists" in text ||
-            "23505" in text ||
-            "409" in text
+            hasCode(text, "23505") ||
+            hasCode(text, "409")
     }
 
     fun isTransient(error: Throwable): Boolean {
@@ -54,8 +54,17 @@ object SyncErrorFormatter {
             "unable to resolve host" in text ||
             "failed to connect" in text ||
             "connection reset" in text ||
-            "503" in text ||
-            "502" in text ||
-            "429" in text
+            hasCode(text, "503") ||
+            hasCode(text, "502") ||
+            hasCode(text, "504") ||
+            hasCode(text, "429")
     }
+
+    /**
+     * True when [code] stands alone in lower-cased [text]. A bare substring test matched ids
+     * and paths (a UUID containing "409" made an unrelated failure look like a duplicate, so
+     * an event that was never inserted was marked synced).
+     */
+    internal fun hasCode(text: String, code: String): Boolean =
+        Regex("(?<![0-9a-z])" + Regex.escape(code) + "(?![0-9a-z])").containsMatchIn(text)
 }

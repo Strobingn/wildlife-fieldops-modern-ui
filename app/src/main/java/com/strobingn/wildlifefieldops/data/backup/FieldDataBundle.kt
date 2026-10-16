@@ -124,7 +124,11 @@ data class InspectionSnapshot(
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
     val aiNarrativeDraft: String = "",
-    val aiDraftSource: String = ""
+    val aiDraftSource: String = "",
+    val weatherConditions: String = "",
+    val temperature: Float? = null,
+    val humidity: Int? = null,
+    val windSpeed: Float? = null
 )
 
 @Serializable
@@ -193,6 +197,36 @@ object FieldDataCodec {
     fun mergePhotos(local: List<PhotoSnapshot>, incoming: List<PhotoSnapshot>): List<PhotoSnapshot> =
         mergeSnapshots(local, incoming, { it.id }, { it.takenAt })
 
+    /**
+     * Rows from [merged] that came from the incoming file (not the untouched local rows).
+     * Only these may be written: re-inserting a local winner through its snapshot would
+     * drop columns the snapshot does not carry (upload state, sync errors).
+     */
+    fun <T> incomingWinners(local: List<T>, merged: List<T>): List<T> {
+        val localRows = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<T, Boolean>())
+        localRows.addAll(local)
+        return merged.filter { it !in localRows }
+    }
+
+    /**
+     * Drops incoming rows the user deleted on this phone (tombstones in `deleted_records`),
+     * and photos that belong to a deleted job or inspection, so an import cannot resurrect them.
+     */
+    fun dropDeleted(
+        incoming: FieldDataBundle,
+        deletedJobIds: Set<String>,
+        deletedCustomerIds: Set<String>,
+        deletedInspectionIds: Set<String>
+    ): FieldDataBundle = incoming.copy(
+        jobs = incoming.jobs.filter { it.id !in deletedJobIds },
+        customers = incoming.customers.filter { it.id !in deletedCustomerIds },
+        inspections = incoming.inspections.filter { it.id !in deletedInspectionIds },
+        photos = incoming.photos.filter { photo ->
+            (photo.jobId == null || photo.jobId !in deletedJobIds) &&
+                (photo.inspectionId == null || photo.inspectionId !in deletedInspectionIds)
+        }
+    )
+
     private fun <T> mergeSnapshots(
         local: List<T>,
         incoming: List<T>,
@@ -203,7 +237,9 @@ object FieldDataCodec {
         val incomingRecords = incoming.map { FieldRecord(id(it), updatedAt(it), id(it)) }
         val chosen = FieldDataExchange.mergeById(localRecords, incomingRecords)
         val localById = local.associateBy { id(it) }
-        val incomingById = incoming.associateBy { id(it) }
+        // Duplicate ids inside one file: keep the newest, matching FieldDataExchange.mergeById.
+        val incomingById = incoming.groupBy { id(it) }
+            .mapValues { (_, rows) -> rows.maxByOrNull(updatedAt) ?: rows.first() }
         return chosen.mapNotNull { winner ->
             val localRow = localById[winner.id]
             val incomingRow = incomingById[winner.id]
@@ -375,7 +411,11 @@ fun Inspection.toSnapshot(): InspectionSnapshot = InspectionSnapshot(
     createdAt = createdAt,
     updatedAt = updatedAt,
     aiNarrativeDraft = aiNarrativeDraft,
-    aiDraftSource = aiDraftSource
+    aiDraftSource = aiDraftSource,
+    weatherConditions = weatherConditions,
+    temperature = temperature,
+    humidity = humidity,
+    windSpeed = windSpeed
 )
 
 fun InspectionSnapshot.toInspection(): Inspection = Inspection(
@@ -402,7 +442,11 @@ fun InspectionSnapshot.toInspection(): Inspection = Inspection(
     updatedAt = updatedAt,
     isSynced = false,
     aiNarrativeDraft = aiNarrativeDraft,
-    aiDraftSource = aiDraftSource
+    aiDraftSource = aiDraftSource,
+    weatherConditions = weatherConditions,
+    temperature = temperature,
+    humidity = humidity,
+    windSpeed = windSpeed
 )
 
 fun Photo.toSnapshot(): PhotoSnapshot = PhotoSnapshot(

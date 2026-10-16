@@ -48,7 +48,10 @@ class WeatherService @Inject constructor() {
             val condition = weather0.getString("main")
             val description = weather0.getString("description")
             val humidity = main.optInt("humidity", -1).takeIf { it >= 0 }
-            val windMph = wind?.optDouble("speed")?.toFloat()
+            // optDouble() returns NaN when "speed" is absent; don't surface that as a wind reading.
+            val windMph = wind?.optDouble("speed", Double.NaN)
+                ?.takeIf { !it.isNaN() }
+                ?.toFloat()
             WeatherSnapshot(
                 tempF = temp,
                 condition = condition,

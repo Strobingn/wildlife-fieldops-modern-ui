@@ -117,9 +117,14 @@ fun VoiceFirstLogScreen(
 
     val audioCapture = remember { VoiceAudioCapture(context.filesDir) }
     val speechRecognizer = remember {
-        if (SpeechRecognizer.isRecognitionAvailable(context)) {
-            SpeechRecognizer.createSpeechRecognizer(context)
-        } else {
+        try {
+            if (SpeechRecognizer.isRecognitionAvailable(context)) {
+                SpeechRecognizer.createSpeechRecognizer(context)
+            } else {
+                null
+            }
+        } catch (_: Throwable) {
+            // Some devices throw when no recognition service is bound; audio is still retained.
             null
         }
     }
@@ -128,6 +133,10 @@ fun VoiceFirstLogScreen(
         onDispose {
             try {
                 audioCapture.cancel()
+            } catch (_: Exception) {
+            }
+            try {
+                speechRecognizer?.cancel()
             } catch (_: Exception) {
             }
             try {
@@ -145,6 +154,9 @@ fun VoiceFirstLogScreen(
     }
 
     fun stopSession() {
+        // The final onResults arrives after stopListening(), so the last phrase is still only a
+        // partial result here; keep it or the end of the dictation is lost from the transcript.
+        val trailingPartial = livePartial.trim()
         isListening = false
         livePartial = ""
         try {
@@ -164,7 +176,9 @@ fun VoiceFirstLogScreen(
             uri = captured.uri,
             sha256 = captured.sha256,
             durationMs = captured.durationMs,
-            capturedText = liveFinal,
+            capturedText = listOf(liveFinal.trim(), trailingPartial)
+                .filter { it.isNotBlank() }
+                .joinToString(" "),
         )
     }
 
@@ -206,6 +220,13 @@ fun VoiceFirstLogScreen(
                 }
                 if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
                     captureError = "Microphone permission required"
+                } else if (isListening &&
+                    error != SpeechRecognizer.ERROR_NO_MATCH &&
+                    error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT &&
+                    error != SpeechRecognizer.ERROR_CLIENT
+                ) {
+                    // Otherwise the screen keeps saying "listening" while transcription silently died.
+                    captureError = "Speech recognizer stopped (error $error) — audio is still being recorded"
                 }
             }
 
@@ -613,8 +634,9 @@ private fun FiledNoteRow(note: VoiceObservation) {
 }
 
 private fun playAudio(path: String) {
+    val player = MediaPlayer()
     try {
-        MediaPlayer().apply {
+        player.apply {
             setDataSource(path)
             setOnCompletionListener { release() }
             setOnErrorListener { _, _, _ ->
@@ -625,5 +647,10 @@ private fun playAudio(path: String) {
             start()
         }
     } catch (_: Exception) {
+        // A failed setDataSource/prepare leaves a native player allocated unless released here.
+        try {
+            player.release()
+        } catch (_: Exception) {
+        }
     }
 }

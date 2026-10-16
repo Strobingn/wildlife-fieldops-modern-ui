@@ -268,7 +268,7 @@ object EstimateInvoiceCarry {
             totalOverride = form.totalOverride,
             taxRateManual = form.taxRateManual,
             amountPaid = paid,
-            balanceDue = (total - paid).coerceAtLeast(0.0),
+            balanceDue = Money.minus(total, paid).coerceAtLeast(0.0),
             lineItems = lines,
             notes = form.notes,
             terms = form.terms,

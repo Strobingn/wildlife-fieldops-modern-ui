@@ -1,5 +1,6 @@
 package com.strobingn.wildlifefieldops.ai.fieldops
 
+import com.strobingn.wildlifefieldops.pricing.Money
 import kotlinx.serialization.Serializable
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -16,7 +17,8 @@ data class MileageLogEntry(
     val jobTitle: String = "",
     val rate: Double = 0.65
 ) {
-    val amount: Double get() = miles * rate
+    /** Whole cents, so a year total equals the sum of the rounded rows printed on the log. */
+    val amount: Double get() = Money.times(miles, rate)
 }
 
 object MileageTaxLog {
@@ -37,7 +39,7 @@ object MileageTaxLog {
 
     fun totalMiles(entries: List<MileageLogEntry>): Double = entries.sumOf { it.miles }
 
-    fun totalAmount(entries: List<MileageLogEntry>): Double = entries.sumOf { it.amount }
+    fun totalAmount(entries: List<MileageLogEntry>): Double = Money.plus(*entries.map { it.amount }.toDoubleArray())
 
     fun toCsv(entries: List<MileageLogEntry>): String {
         val header = "Date,Miles,Purpose,Job,Rate,Amount"

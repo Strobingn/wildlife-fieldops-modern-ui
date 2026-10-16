@@ -20,6 +20,8 @@ object FieldOpsBackupFormat {
     const val PENDING_ZIP = "pending_restore.zip"
     /** Matches [com.strobingn.wildlifefieldops.data.local.AppDatabase.VERSION]. */
     const val CURRENT_ROOM_VERSION = 15
+    /** Oldest Room version with a registered migration path (Migrations.ALL starts at 3->4). */
+    const val MIN_MIGRATABLE_ROOM_VERSION = 3
     private const val SQLITE_USER_VERSION_OFFSET = 60
 
     private val gson = Gson()

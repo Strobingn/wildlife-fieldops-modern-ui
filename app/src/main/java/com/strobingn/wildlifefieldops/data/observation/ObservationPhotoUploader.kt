@@ -5,6 +5,9 @@ import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.storage.storage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -28,7 +31,7 @@ class ObservationPhotoUploader @Inject constructor(
         observationId: String,
         localPath: String
     ): ObservationPhotoUpload {
-        val bytes = readBytes(localPath)
+        val bytes = withContext(Dispatchers.IO) { readBytes(localPath) }
             ?: error("Local observation photo missing: $localPath")
         require(bytes.isNotEmpty()) { "Local observation photo is empty: $localPath" }
         require(bytes.size <= ObservationPhotoPaths.MAX_BYTES) {
@@ -45,7 +48,7 @@ class ObservationPhotoUploader @Inject constructor(
         eventId: String,
         mediaUri: String
     ): ObservationPhotoUpload {
-        val bytes = readBytes(mediaUri)
+        val bytes = withContext(Dispatchers.IO) { readBytes(mediaUri) }
             ?: error("Local event media missing: $mediaUri")
         require(bytes.isNotEmpty()) { "Local event media is empty: $mediaUri" }
         require(bytes.size <= ObservationPhotoPaths.MAX_BYTES) {
@@ -63,11 +66,19 @@ class ObservationPhotoUploader @Inject constructor(
         bytes: ByteArray
     ): ObservationPhotoUpload {
         val bucket = client.storage.from(ObservationPhotoPaths.BUCKET)
-        bucket.upload(path, bytes, upsert = true)
+        // A stalled connection must surface as a recorded sync error, not hang the queue.
+        // (withTimeoutOrNull + error keeps this a normal failure, not a CancellationException.)
+        withTimeoutOrNull(UPLOAD_TIMEOUT_MS) {
+            bucket.upload(path, bytes, upsert = true)
+        } ?: error("Upload timed out after ${UPLOAD_TIMEOUT_MS / 1000}s: $path")
         return ObservationPhotoUpload(
             storagePath = path,
             publicUrl = bucket.publicUrl(path)
         )
+    }
+
+    private companion object {
+        const val UPLOAD_TIMEOUT_MS = 180_000L
     }
 
     fun readBytes(pathOrUri: String): ByteArray? = readFirstAvailable(listOf(pathOrUri))

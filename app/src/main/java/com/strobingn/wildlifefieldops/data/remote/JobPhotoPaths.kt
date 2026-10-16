@@ -16,6 +16,14 @@ object JobPhotoPaths {
     fun sourceCandidates(localPath: String, filePath: String): List<String> =
         listOf(localPath, filePath).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
 
+    /**
+     * Job a photo belongs to on the server. An inspection photo (category INSPECTION) is
+     * saved with an inspectionId and often no jobId; when that inspection is linked to a job,
+     * the photo follows it so it does not upload as "unassigned". The photo's own jobId wins.
+     */
+    fun resolveJobId(photoJobId: String?, inspectionJobId: String?): String? =
+        photoJobId?.takeIf { it.isNotBlank() } ?: inspectionJobId?.takeIf { it.isNotBlank() }
+
     fun objectPath(jobId: String?, photoId: String, localPath: String): String {
         val folder = jobId?.takeIf { it.isNotBlank() }?.let { ObservationPhotoPaths.sanitizeSegment(it) }
             ?: "unassigned"

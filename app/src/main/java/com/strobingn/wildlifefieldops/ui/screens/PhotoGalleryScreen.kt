@@ -35,6 +35,7 @@ import com.strobingn.wildlifefieldops.data.model.PhotoCategory
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.PhotosViewModel
+import com.strobingn.wildlifefieldops.ui.viewmodel.photoMatchesGalleryTab
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -52,6 +53,7 @@ fun PhotoGalleryScreen(
     var selectedTab by remember { mutableStateOf(0) }
     var tagFilter by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<Photo?>(null) }
+    var pendingDelete by remember { mutableStateOf<Photo?>(null) }
     val tabs = listOf("All" to null, "Inspections" to PhotoCategory.INSPECTION, "Jobs" to PhotoCategory.JOB_SITE,
         "Evidence" to PhotoCategory.EVIDENCE, "Docs" to PhotoCategory.DOCUMENT)
 
@@ -74,13 +76,17 @@ fun PhotoGalleryScreen(
         }
     }
 
-    val filteredPhotos = photos.filter { photo ->
-        val categoryOk = selectedTab == 0 || photo.category == tabs[selectedTab].second
-        val jobTags = jobs.firstOrNull { it.id == photo.jobId }?.pricing?.photoAutoTags.orEmpty()
-            .firstOrNull { it.photoId == photo.id }
-        val tagHay = listOf(photo.description, jobTags?.asDescription().orEmpty()).joinToString(" ")
-        val tagOk = tagFilter.isBlank() || tagHay.contains(tagFilter, ignoreCase = true)
-        categoryOk && tagOk
+    // Filtered once per change, with jobs indexed by id, not rescanned for every photo on every recomposition.
+    val filteredPhotos = remember(photos, jobs, selectedTab, tagFilter) {
+        val jobsById = jobs.associateBy { it.id }
+        photos.filter { photo ->
+            val categoryOk = photoMatchesGalleryTab(photo, tabs[selectedTab].second)
+            val jobTags = photo.jobId?.let { jobsById[it] }?.pricing?.photoAutoTags.orEmpty()
+                .firstOrNull { it.photoId == photo.id }
+            val tagHay = listOf(photo.description, jobTags?.asDescription().orEmpty()).joinToString(" ")
+            val tagOk = tagFilter.isBlank() || tagHay.contains(tagFilter, ignoreCase = true)
+            categoryOk && tagOk
+        }
     }
 
     Scaffold(
@@ -195,7 +201,7 @@ fun PhotoGalleryScreen(
                         FadeSlideIn {
                             PhotoGridItem(
                                 photo = photo,
-                                onDelete = { viewModel.deletePhoto(photo) },
+                                onDelete = { pendingDelete = photo },
                                 onClick = { editing = photo }
                             )
                         }
@@ -204,11 +210,27 @@ fun PhotoGalleryScreen(
             }
         }
     }
+    pendingDelete?.let { photo ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Delete this photo?") },
+            text = { Text("The photo file is removed from this phone. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deletePhoto(photo)
+                    pendingDelete = null
+                }) { Text("Delete", color = ErrorRed) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("Cancel") }
+            }
+        )
+    }
     editing?.let { photo ->
         val jobPricing = jobs.firstOrNull { it.id == photo.jobId }?.pricing
         PhotoTagDialog(
             photo = photo,
-            jobPhotos = photos.filter { it.jobId == photo.jobId && it.id != photo.id },
+            jobPhotos = if (photo.jobId.isNullOrBlank()) emptyList() else photos.filter { it.jobId == photo.jobId && it.id != photo.id },
             existing = jobPricing?.photoAutoTags?.firstOrNull { it.photoId == photo.id },
             pairs = jobPricing?.photoPairs?.filter { it.beforeId == photo.id || it.afterId == photo.id }.orEmpty(),
             onDismiss = { editing = null },
@@ -386,7 +408,10 @@ private fun PhotoGridItem(photo: Photo, onDelete: () -> Unit, onClick: () -> Uni
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             // Actual photo or placeholder
-            if (photo.localPath.isNotBlank() && File(photo.localPath).exists()) {
+            val localExists = remember(photo.localPath) {
+                photo.localPath.isNotBlank() && File(photo.localPath).exists()
+            }
+            if (localExists) {
                 AsyncImage(
                     model = File(photo.localPath),
                     contentDescription = photo.description,

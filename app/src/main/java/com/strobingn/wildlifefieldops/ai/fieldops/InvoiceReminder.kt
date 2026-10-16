@@ -2,6 +2,7 @@ package com.strobingn.wildlifefieldops.ai.fieldops
 
 import com.strobingn.wildlifefieldops.data.model.Invoice
 import com.strobingn.wildlifefieldops.data.model.InvoiceStatus
+import com.strobingn.wildlifefieldops.pricing.Money
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -41,7 +42,7 @@ object InvoiceReminder {
     fun withStatus(invoice: Invoice, status: InvoiceStatus, now: Long = System.currentTimeMillis()): Invoice {
         val paid = status == InvoiceStatus.PAID
         val amountPaid = if (paid && invoice.amountPaid <= 0.0) invoice.totalAmount else invoice.amountPaid
-        val balance = if (paid) 0.0 else (invoice.totalAmount - amountPaid).coerceAtLeast(0.0)
+        val balance = if (paid) 0.0 else Money.minus(invoice.totalAmount, amountPaid).coerceAtLeast(0.0)
         return invoice.copy(
             status = status,
             amountPaid = amountPaid,

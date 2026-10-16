@@ -9,6 +9,11 @@ import androidx.camera.core.ImageProxy
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
+import java.util.concurrent.Executor
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ThreadFactory
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
@@ -43,6 +48,16 @@ class LiveCameraAnalyzer(
     )
 
     private val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
+
+    /**
+     * Runs ML Kit task listeners off the main thread. Zero core threads + keep-alive means no thread
+     * lingers after the screen is left, and it is never shut down so a task that completes after
+     * [close] cannot hit a RejectedExecutionException.
+     */
+    private val callbackExecutor: Executor = ThreadPoolExecutor(
+        0, 1, 5L, TimeUnit.SECONDS, LinkedBlockingQueue<Runnable>(),
+        ThreadFactory { r -> Thread(r, "live-analyzer-callback").apply { isDaemon = true } }
+    )
 
     @Volatile var lastResultAgeMs: Long = -1L
         private set
@@ -120,10 +135,15 @@ class LiveCameraAnalyzer(
             val lumaSignals = LumaQualityProbe.probe(image)
 
             // Snapshot a downscaled RGB bitmap for TFLite before ImageProxy is closed.
-            val tfliteBitmap = try {
-                scaleForModel(image.toBitmap())
-            } catch (t: Throwable) {
-                Log.d(TAG, "bitmap extract skipped frame=$frameId: ${t.message}")
+            // Skip the per-frame YUV→RGB conversion entirely when no custom model ships in assets.
+            val tfliteBitmap = if (CustomEvidenceModel.isAssetPresent(appContext)) {
+                try {
+                    scaleForModel(image.toBitmap())
+                } catch (t: Throwable) {
+                    Log.d(TAG, "bitmap extract skipped frame=$frameId: ${t.message}")
+                    null
+                }
+            } else {
                 null
             }
 
@@ -146,8 +166,12 @@ class LiveCameraAnalyzer(
                 return
             }
 
+            // Listeners run on [callbackExecutor], not the main thread: TFLite inference (and first-use
+            // model load) in the success path must never block the UI. An exception thrown from a
+            // Tasks listener is fatal, so every listener body is guarded.
             labeler.process(input)
-            .addOnSuccessListener { labels ->
+            .addOnSuccessListener(callbackExecutor) { labels ->
+                try {
                 val analysisEnd = SystemClock.elapsedRealtimeNanos()
                 val custom = try {
                     CustomEvidenceModel.tryInfer(
@@ -226,8 +250,15 @@ class LiveCameraAnalyzer(
                         sourceToArrivalMs = srcToArrival
                     )
                 )
+                } catch (t: Throwable) {
+                    Log.w(TAG, "live analyze result handling failed frame=$frameId", t)
+                    recycleQuietly(tfliteBitmap)
+                    lastDropReason = "ANALYZE_THROW"
+                    framesDropped++
+                }
             }
-            .addOnFailureListener { e ->
+            .addOnFailureListener(callbackExecutor) { e ->
+                try {
                 Log.w(TAG, "live analyze failed frame=$frameId", e)
                 recycleQuietly(tfliteBitmap)
                 // Still coach from luma so the HUD stays useful offline
@@ -264,10 +295,16 @@ class LiveCameraAnalyzer(
                         sourceToArrivalMs = srcToArrival
                     )
                 )
+                } catch (t: Throwable) {
+                    Log.w(TAG, "live analyze failure handling failed frame=$frameId", t)
+                }
             }
-            .addOnCompleteListener {
+            .addOnCompleteListener(callbackExecutor) {
                 busy.set(false)
-                image.close()
+                try {
+                    image.close()
+                } catch (_: Throwable) {
+                }
             }
         } catch (t: Throwable) {
             Log.w(TAG, "analyze crashed frame=$frameId", t)

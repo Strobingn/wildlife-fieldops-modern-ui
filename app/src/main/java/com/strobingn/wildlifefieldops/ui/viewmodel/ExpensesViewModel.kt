@@ -21,7 +21,7 @@ class ExpensesViewModel @Inject constructor(
     val totalThisMonth = expenseDao.getAll()
         .map { list ->
             val now = System.currentTimeMillis()
-            val monthStart = now - (now % (30L * 86400000L))
+            val monthStart = LocalPeriods.monthStart(now)
             list.filter { it.expenseDate >= monthStart }
                 .sumOf { it.totalAmount }
         }

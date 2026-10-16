@@ -10,8 +10,10 @@ import com.strobingn.wildlifefieldops.data.local.JobDao
 import com.strobingn.wildlifefieldops.data.local.TrapLogDao
 import com.strobingn.wildlifefieldops.data.model.Job
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.ZoneId
@@ -31,8 +33,9 @@ class TodayRouteViewModel @Inject constructor(
 
     val stops = combine(jobs, traps) { jobList, trapList ->
         val day = TodayRouteEngine.dayKey(System.currentTimeMillis(), ZoneId.systemDefault())
+        val jobsById = jobList.associateBy { it.id }
         val fromLogs = trapList.map { trap ->
-            val parent = jobList.firstOrNull { it.id == trap.jobId }
+            val parent = jobsById[trap.jobId]
             RouteTrap(
                 id = trap.id,
                 jobId = trap.jobId,
@@ -60,7 +63,7 @@ class TodayRouteViewModel @Inject constructor(
         }
         val dayStops = TodayRouteEngine.collect(jobList, (fromLogs + fromPricing).distinctBy { it.id }, day)
         TodayRouteEngine.order(dayStops, null, null)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun ordered(originLat: Double?, originLng: Double?, manual: List<RouteStop>?): List<RouteStop> {
         if (manual != null) return manual

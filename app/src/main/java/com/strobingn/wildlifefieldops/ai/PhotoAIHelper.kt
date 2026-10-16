@@ -14,9 +14,12 @@ import com.google.mlkit.vision.objects.ObjectDetection
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 import com.strobingn.wildlifefieldops.ai.camera.CustomEvidenceModel
 import com.strobingn.wildlifefieldops.ai.camera.WildlifeEvidenceDetector
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.resumeWithException
 
 data class AiAnalysisResult(
@@ -47,6 +50,8 @@ data class AiAnalysisResult(
 
 object PhotoAIHelper {
     private const val TAG = "PhotoAIHelper"
+    /** The custom model input is 224px; keep the short side at or above this when sub-sampling. */
+    private const val MODEL_DECODE_MIN_SIDE = 448
 
     private val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
     private val objectDetector = ObjectDetection.getClient(
@@ -57,7 +62,28 @@ object PhotoAIHelper {
             .build()
     )
 
-    suspend fun analyzePhotoForFormFilling(context: Context, imageUri: Uri): AiAnalysisResult {
+    /**
+     * Safe to call concurrently (the inspection draft analyzes several photos in parallel):
+     * the ML Kit clients are thread-safe, [CustomEvidenceModel] serializes interpreter access, and
+     * all decoding/inference runs on [Dispatchers.IO] rather than the caller's thread.
+     */
+    suspend fun analyzePhotoForFormFilling(context: Context, imageUri: Uri): AiAnalysisResult =
+        withContext(Dispatchers.IO) { analyzeOnIo(context, imageUri) }
+
+    /** Decode for the 224px TFLite input without holding a full-resolution copy per parallel photo. */
+    private fun decodeForModel(context: Context, imageUri: Uri): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(imageUri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        val shortSide = minOf(bounds.outWidth, bounds.outHeight)
+        var sample = 1
+        while (shortSide > 0 && shortSide / (sample * 2) >= MODEL_DECODE_MIN_SIDE) sample *= 2
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        return context.contentResolver.openInputStream(imageUri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, opts)
+        }
+    }
+
+    private suspend fun analyzeOnIo(context: Context, imageUri: Uri): AiAnalysisResult {
         val startedAt = SystemClock.elapsedRealtime()
         return try {
             val image = InputImage.fromFilePath(context, imageUri)
@@ -67,9 +93,7 @@ object PhotoAIHelper {
                 labelsDeferred.await() to objectsDeferred.await()
             }
             val stillBitmap = try {
-                context.contentResolver.openInputStream(imageUri)?.use { stream ->
-                    BitmapFactory.decodeStream(stream)
-                }
+                decodeForModel(context, imageUri)
             } catch (_: Throwable) {
                 null
             }
@@ -150,6 +174,9 @@ object PhotoAIHelper {
                 entryTypes = entries,
                 equipmentTypes = equipment
             )
+        } catch (e: CancellationException) {
+            // Timeouts/cancellation from the caller must propagate, not become a fake "result".
+            throw e
         } catch (e: Throwable) {
             val durationMs = SystemClock.elapsedRealtime() - startedAt
             Log.w(TAG, "still-photo analysis failed after ${durationMs}ms", e)

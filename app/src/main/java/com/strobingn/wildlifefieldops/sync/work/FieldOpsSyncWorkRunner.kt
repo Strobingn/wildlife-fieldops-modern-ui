@@ -37,6 +37,9 @@ class FieldOpsSyncWorkRunner(
 
         val result = try {
             gateway.syncAll()
+        } catch (c: kotlinx.coroutines.CancellationException) {
+            // Stopped by WorkManager / replaced work: not a sync failure. Pending stays in Room.
+            throw c
         } catch (_: Throwable) {
             return failRetryable(boundId, workRequestId, generation, nowMs)
         }

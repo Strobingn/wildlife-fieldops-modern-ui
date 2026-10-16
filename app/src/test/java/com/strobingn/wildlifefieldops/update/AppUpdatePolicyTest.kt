@@ -170,6 +170,46 @@ class AppUpdatePolicyTest {
         assertFalse(AppUpdatePolicy.resumeDownloadAfterPermission(hasPendingApk = true))
     }
 
+    @Test
+    fun ciVersionCodesOutrankLocalBuildCodes() {
+        // CI builds are 1_000_000 + run number; local builds use small numbers.
+        assertTrue(AppUpdatePolicy.isNewerVersion(1_000_001, 60))
+        assertFalse(AppUpdatePolicy.isNewerVersion(60, 1_000_001))
+    }
+
+    @Test
+    fun signatureMismatchIsExplained() {
+        val raw = "INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package com.strobingn.wildlifefieldops " +
+            "signatures do not match newer version; ignoring!"
+        val message = AppUpdatePolicy.installFailureMessage(7, raw)
+        assertTrue(message.contains("different key"))
+        assertTrue(message.contains("local data is intact"))
+    }
+
+    @Test
+    fun installFailureMessagesCoverCommonStatuses() {
+        assertTrue(AppUpdatePolicy.installFailureMessage(6, null).contains("storage"))
+        assertTrue(AppUpdatePolicy.installFailureMessage(2, "").contains("blocked"))
+        assertTrue(AppUpdatePolicy.installFailureMessage(4, null).contains("invalid"))
+        assertTrue(
+            AppUpdatePolicy.installFailureMessage(7, "INSTALL_FAILED_VERSION_DOWNGRADE")
+                .contains("not newer")
+        )
+        assertEquals("Something odd", AppUpdatePolicy.installFailureMessage(1, " Something odd "))
+        assertEquals(
+            "Android could not install the update.",
+            AppUpdatePolicy.installFailureMessage(1, null)
+        )
+    }
+
+    @Test
+    fun truncatedDownloadsAreDetected() {
+        assertTrue(UpdateDownloadCheck.isComplete(read = 1_000L, total = 1_000L))
+        assertTrue(UpdateDownloadCheck.isComplete(read = 1_000L, total = -1L))
+        assertFalse(UpdateDownloadCheck.isComplete(read = 999L, total = 1_000L))
+        assertFalse(UpdateDownloadCheck.isComplete(read = 0L, total = -1L))
+    }
+
     private fun sampleManifest() = AppUpdateManifest(
         channel = "main",
         tag = "debug-latest",

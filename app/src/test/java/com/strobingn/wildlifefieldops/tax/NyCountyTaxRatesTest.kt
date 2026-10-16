@@ -140,4 +140,20 @@ class NyCountyTaxRatesTest {
     fun `displayName works for Westchester`() {
         assertEquals("Westchester County", NyCountyTaxRates.displayName("WESTCHESTER"))
     }
+
+    // ── counties whose names end in "ny" ──────────────────────────────────────────
+
+    @Test
+    fun `normalizeCountyName keeps the ny at the end of Albany and Allegany`() {
+        assertEquals("albany", NyCountyTaxRates.normalizeCountyName("Albany"))
+        assertEquals("albany", NyCountyTaxRates.normalizeCountyName("Albany County, NY"))
+        assertEquals("allegany", NyCountyTaxRates.normalizeCountyName("Allegany"))
+        assertEquals("orange", NyCountyTaxRates.normalizeCountyName("Orange NY"))
+    }
+
+    @Test
+    fun `displayName does not chop Albany into Alba`() {
+        assertEquals("Albany County", NyCountyTaxRates.displayName("Albany"))
+        assertEquals("Allegany County", NyCountyTaxRates.displayName("allegany county"))
+    }
 }

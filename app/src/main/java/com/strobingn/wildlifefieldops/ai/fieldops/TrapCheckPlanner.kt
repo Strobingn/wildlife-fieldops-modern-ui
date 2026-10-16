@@ -31,7 +31,12 @@ object TrapCheckPlanner {
         return cal.timeInMillis
     }
 
-    fun dayEnd(now: Long): Long = dayStart(now) + DAY_MS
+    /** Next local midnight. Not start + 24h: that is wrong on the 23h/25h DST days. */
+    fun dayEnd(now: Long): Long {
+        val cal = Calendar.getInstance().apply { timeInMillis = dayStart(now) }
+        cal.add(Calendar.DATE, 1)
+        return cal.timeInMillis
+    }
 
     /** Operator-facing label. The stored due state is unchanged. */
     fun dueLabel(state: TrapDueState): String = when (state) {
@@ -44,7 +49,7 @@ object TrapCheckPlanner {
     fun dueState(nextCheckDate: Long?, now: Long): TrapDueState {
         if (nextCheckDate == null) return TrapDueState.UNSET
         val start = dayStart(now)
-        val end = start + DAY_MS
+        val end = dayEnd(now)
         return when {
             nextCheckDate < start -> TrapDueState.DUE_NOW
             nextCheckDate < end -> TrapDueState.DUE_TODAY

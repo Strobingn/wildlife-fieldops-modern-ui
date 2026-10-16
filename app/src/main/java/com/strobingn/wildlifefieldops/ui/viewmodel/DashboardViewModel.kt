@@ -6,6 +6,7 @@ import com.strobingn.wildlifefieldops.data.local.*
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.ui.screens.OpenHomeJobs
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 
@@ -32,16 +33,20 @@ class DashboardViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(true)
     val isLoading = _isLoading.asStateFlow()
 
+    // One shared jobs query for every card below instead of six separate full-table queries.
+    private val allJobsFlow = jobDao.getAll()
+        .shareIn(viewModelScope, SharingStarted.WhileSubscribed(5000), replay = 1)
+
     val stats: StateFlow<DashboardStats> = combine(
-        jobDao.getAll(),
+        allJobsFlow,
         customerDao.getAll(),
         inspectionDao.getAll(),
         reminderDao.getPending()
     ) { allJobs, customers, inspections, reminders ->
         val jobs = allJobs.filterNot { com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger.isLedger(it) }
         val now = System.currentTimeMillis()
-        val dayStart = now - (now % 86400000L)
-        val dayEnd = dayStart + 86400000L
+        val dayStart = LocalPeriods.dayStart(now)
+        val dayEnd = LocalPeriods.nextDayStart(now)
 
         DashboardStats(
             totalJobs = jobs.size,
@@ -58,37 +63,41 @@ class DashboardViewModel @Inject constructor(
             totalInspections = inspections.size,
             followUpRequired = inspections.count { it.followUpRequired },
             todayJobs = jobs.count {
-                it.scheduledDate != null && it.scheduledDate in dayStart..dayEnd
+                it.scheduledDate != null && it.scheduledDate in dayStart until dayEnd
             }
         )
-    }.onEach { _isLoading.value = false }
+    }.flowOn(Dispatchers.Default)
+    .onEach { _isLoading.value = false }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardStats())
 
-    val openJobs = jobDao.getAll()
+    val openJobs = allJobsFlow
         .map { OpenHomeJobs.list(it) }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val todayOnSchedule = jobDao.getAll()
+    val todayOnSchedule = allJobsFlow
         .map { list ->
             val jobs = list.filterNot { com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger.isLedger(it) }
             val now = System.currentTimeMillis()
-            val dayStart = now - (now % 86400000L)
-            val dayEnd = dayStart + 86400000L
+            val dayStart = LocalPeriods.dayStart(now)
+            val dayEnd = LocalPeriods.nextDayStart(now)
             jobs.filter {
-                it.scheduledDate != null && it.scheduledDate in dayStart..dayEnd
+                it.scheduledDate != null && it.scheduledDate in dayStart until dayEnd
             }
         }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val recentJobs = jobDao.getAll()
+    val recentJobs = allJobsFlow
         .map { list -> list.filterNot { com.strobingn.wildlifefieldops.ai.fieldops.OpsLedger.isLedger(it) }.take(5) }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val pendingReminders = reminderDao.getPending()
         .map { it.take(5) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val dueNextSteps = jobDao.getAll()
+    val dueNextSteps = allJobsFlow
         .map { jobs ->
             val now = System.currentTimeMillis()
             jobs.filter { it.nextStep.isNotBlank() }
@@ -99,12 +108,14 @@ class DashboardViewModel @Inject constructor(
                 }
                 .take(5)
         }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val dueTrapChecks = combine(trapLogDao.getAll(), jobDao.getAll()) { traps, jobs ->
+    val dueTrapChecks = combine(trapLogDao.getAll(), allJobsFlow) { traps, jobs ->
         val titles = jobs.associate { it.id to it.title.ifBlank { it.customerName } }
         com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckPlanner.todaysList(traps)
             .map { item -> item.copy(jobTitle = titles[item.trap.jobId].orEmpty()) }
             .take(5)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.flowOn(Dispatchers.Default)
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 }

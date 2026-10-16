@@ -30,12 +30,18 @@ object EstimateLineSuggester {
             context.photoNotes.joinToString(" ")
         ).joinToString(" ").lowercase()
 
+        // "bat" and "rat" are substrings of bath, combat, rate, separate, operation...
+        // so those two match whole words only.
+        val words = blob.split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }.toSet()
+        val hasBat = "bat" in words || "bats" in words
+        val hasRat = "rat" in words || "rats" in words || "mice" in words
+
         val lines = mutableListOf<InvoiceLineItem>()
         lines += line("Site inspection & activity confirmation", 1.0, "ea", 125.0)
 
         val species = context.species.ifBlank { context.jobType }
         when {
-            blob.contains("bat") -> {
+            hasBat -> {
                 lines += line("Bat one-way exclusion cone / valve", 1.0, "ea", 85.0)
                 lines += line("Vent / ridge-cap screening (hardware cloth)", 8.0, "lf", 18.0)
                 lines += line("Guano cleanup / drop cloth containment", 1.0, "ea", 175.0)
@@ -58,7 +64,7 @@ object EstimateLineSuggester {
                 lines += line("Groundhog trap set", 1.0, "ea", 90.0)
                 lines += line("Burrow fill + hardware-cloth apron", 12.0, "lf", 14.0)
             }
-            blob.contains("rat") || blob.contains("mouse") || blob.contains("rodent") -> {
+            hasRat || blob.contains("mouse") || blob.contains("rodent") -> {
                 lines += line("Rodent snap stations (customer-approved)", 6.0, "ea", 12.0)
                 lines += line("Gap seal (steel wool + metal)", 10.0, "ea", 8.0)
             }

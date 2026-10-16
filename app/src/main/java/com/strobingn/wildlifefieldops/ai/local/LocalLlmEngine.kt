@@ -6,7 +6,9 @@ import android.content.Context
 import dev.ffmpegkit.llama.Llama
 import dev.ffmpegkit.llama.LlamaConfig
 import dev.ffmpegkit.llama.LlamaModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -126,9 +128,15 @@ class LocalLlmEngine @Inject constructor(
                     Result.success(text)
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "generate failed", e)
             Result.failure(e)
+        } catch (e: LinkageError) {
+            // Missing/mismatched llama.cpp native library must not crash the capture flow.
+            Log.e(TAG, "generate failed (native)", e)
+            Result.failure(RuntimeException("On-device AI runtime unavailable: ${e.message}", e))
         } finally {
             generating.set(false)
         }
@@ -147,11 +155,17 @@ class LocalLlmEngine @Inject constructor(
                 topP = 0.9f,
                 topK = 40
             )
-            model = Llama.loadModel(modelPath = path, config = config)
+            // Reading a multi-GB GGUF is blocking disk IO: never do it on the caller's (possibly Main) thread.
+            // NonCancellable: if the caller gives up while the native load blocks, the loaded
+            // model must still be stored (and released by close()), not leaked.
+            model = withContext(Dispatchers.IO + NonCancellable) { Llama.loadModel(modelPath = path, config = config) }
             loadedPath = path
             Log.i(TAG, "Loaded abliterated GGUF from $path (pkg=${context.packageName}, threads=$threads)")
             Result.success(Unit)
-        } catch (e: Exception) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            // Includes UnsatisfiedLinkError / OutOfMemoryError from the native loader.
             Log.e(TAG, "Failed to load GGUF", e)
             model = null
             loadedPath = null

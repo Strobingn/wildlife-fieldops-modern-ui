@@ -6,6 +6,12 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
+/** Pure check so truncated downloads can be unit tested. */
+object UpdateDownloadCheck {
+    /** [total] is -1 when the server did not send a usable Content-Length. */
+    fun isComplete(read: Long, total: Long): Boolean = read > 0L && (total <= 0L || read == total)
+}
+
 class UrlConnectionTransport @javax.inject.Inject constructor() : AppUpdateTransport {
     private val userAgent: String = "WildlifeFieldOps-Android/${BuildConfig.VERSION_NAME}"
 
@@ -31,6 +37,7 @@ class UrlConnectionTransport @javax.inject.Inject constructor() : AppUpdateTrans
         val partial = File(dest.parentFile, "${dest.name}.part")
         if (partial.exists()) partial.delete()
         val connection = open(url, accept = "application/vnd.android.package-archive,application/octet-stream,*/*")
+        var completed = false
         try {
             connection.connect()
             val code = connection.responseCode
@@ -59,13 +66,19 @@ class UrlConnectionTransport @javax.inject.Inject constructor() : AppUpdateTrans
                     output.flush()
                 }
             }
+            if (!UpdateDownloadCheck.isComplete(read, total)) {
+                throw java.io.IOException("The download was cut off ($read of $total bytes). Try again.")
+            }
             if (dest.exists()) dest.delete()
             if (!partial.renameTo(dest)) {
                 partial.copyTo(dest, overwrite = true)
                 partial.delete()
             }
+            completed = true
         } finally {
             connection.disconnect()
+            // Never leave a half-written .part (tens of MB) behind after a failed or aborted download.
+            if (!completed) partial.delete()
         }
     }
 

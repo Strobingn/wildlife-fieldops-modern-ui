@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,7 +42,7 @@ fun JobVoiceIntakePanel(
     onApplyDraft: (JobIntakeDraft) -> Unit
 ) {
     val context = LocalContext.current
-    var dictationNotes by remember { mutableStateOf("") }
+    var dictationNotes by rememberSaveable { mutableStateOf("") }
     var isListening by remember { mutableStateOf(false) }
     var dictationError by remember { mutableStateOf<String?>(null) }
     var speechPartial by remember { mutableStateOf("") }

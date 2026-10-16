@@ -40,6 +40,15 @@ class JobPhotoPathsTest {
     }
 
     @Test
+    fun inspectionPhotoWithoutJobFollowsLinkedInspectionJob() {
+        assertEquals("job-1", JobPhotoPaths.resolveJobId(null, "job-1"))
+        assertEquals("job-1", JobPhotoPaths.resolveJobId("", "job-1"))
+        assertEquals("job-2", JobPhotoPaths.resolveJobId("job-2", "job-1"))
+        assertEquals(null, JobPhotoPaths.resolveJobId(null, ""))
+        assertEquals(null, JobPhotoPaths.resolveJobId(null, null))
+    }
+
+    @Test
     fun backlogSummaryCountsPendingWithoutClearing() {
         val snap = com.strobingn.wildlifefieldops.data.repository.SyncBacklogSnapshot(
             pendingJobs = 3,

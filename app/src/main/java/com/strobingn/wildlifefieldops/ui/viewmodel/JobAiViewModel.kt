@@ -20,6 +20,7 @@ import com.strobingn.wildlifefieldops.data.remote.DistanceService
 import com.strobingn.wildlifefieldops.data.remote.EstimateDraft
 import com.strobingn.wildlifefieldops.data.remote.GeocodingService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,6 +31,21 @@ import kotlin.math.cos
 import kotlin.math.round
 import kotlin.math.sin
 import kotlin.math.sqrt
+
+/** Tells a real AI summary apart from the error/hint text AiService.summarizeJob returns on failure. */
+object JobAiSummary {
+    /** Real summaries start with the on-device phone marker or the cloud marker (U+2601). */
+    fun isGenerated(text: String): Boolean {
+        val t = text.trimStart()
+        val marked = t.startsWith("📱") || t.startsWith("☁")
+        return marked && t.contains(':') && t.substringAfter(':').isNotBlank()
+    }
+
+    fun failureMessage(text: String): String {
+        val firstLine = text.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }.orEmpty()
+        return "AI summary unavailable: ${firstLine.ifBlank { "no model answered" }.take(160)}"
+    }
+}
 
 @HiltViewModel
 class JobAiViewModel @Inject constructor(
@@ -79,8 +95,23 @@ class JobAiViewModel @Inject constructor(
         _summaryLoading.value = true
         _message.value = null
         viewModelScope.launch {
-            _summary.value = aiService.summarizeJob(job)
-            _summaryLoading.value = false
+            try {
+                val text = aiService.summarizeJob(job)
+                if (JobAiSummary.isGenerated(text)) {
+                    _summary.value = text
+                } else {
+                    // AiService hands back its error text as a string. Showing it as the summary
+                    // (with a Save-to-notes button) would paste an error into the job notes.
+                    _summary.value = null
+                    _message.value = JobAiSummary.failureMessage(text)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                _message.value = "AI summary failed: ${t.message?.take(120) ?: t::class.java.simpleName}. Try again."
+            } finally {
+                _summaryLoading.value = false
+            }
         }
     }
 
@@ -89,6 +120,7 @@ class JobAiViewModel @Inject constructor(
         _estimateLoading.value = true
         _message.value = null
         viewModelScope.launch {
+          try {
             val shop = shopSettings.address()
             val tax = shopSettings.taxPercent()
             val dest = job.address.trim()
@@ -137,11 +169,21 @@ class JobAiViewModel @Inject constructor(
                 distanceNote = noteForAi
             )
             _estimateDraft.value = draft
-            _estimateLoading.value = false
-            _message.value = uiMessage.ifBlank {
-                if (miles != null) "AI draft ready — review mileage and tax."
-                else "AI draft ready — review mileage and tax before quoting."
+            _message.value = when {
+                !draft.fromAi && miles != null ->
+                    "No AI model answered. Only the measured mileage was filled in. Enter the rest by hand or try again."
+                !draft.fromAi -> "No AI model answered, so nothing was filled in. Enter your lines by hand or try again."
+                uiMessage.isNotBlank() -> uiMessage
+                miles != null -> "AI draft ready — review mileage and tax."
+                else -> "AI draft ready — review mileage and tax before quoting."
             }
+          } catch (e: CancellationException) {
+            throw e
+          } catch (t: Throwable) {
+            _message.value = "AI estimate draft failed: ${t.message?.take(120) ?: t::class.java.simpleName}. Try again."
+          } finally {
+            _estimateLoading.value = false
+          }
         }
     }
 
@@ -177,6 +219,7 @@ class JobAiViewModel @Inject constructor(
         if (_photoLinesLoading.value) return
         _photoLinesLoading.value = true
         viewModelScope.launch {
+            try {
             val inspections = inspectionDao.getByJobOnce(job.id)
             val photos = (
                 photoDao.getByJobOnce(job.id) +
@@ -195,8 +238,14 @@ class JobAiViewModel @Inject constructor(
                 )
             )
             _suggestedLines.value = lines
-            _photoLinesLoading.value = false
             _message.value = "Suggested ${lines.size} line items from photos/notes (${runtimeStatus.label}). Edit any price."
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                _message.value = "Could not suggest line items: ${t.message?.take(120) ?: t::class.java.simpleName}"
+            } finally {
+                _photoLinesLoading.value = false
+            }
         }
     }
 

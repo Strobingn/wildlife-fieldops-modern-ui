@@ -93,12 +93,17 @@ fun LiveCaptureScreen(
                 PackageManager.PERMISSION_GRANTED
         )
     }
+    var dictationError by remember { mutableStateOf<String?>(null) }
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted -> hasCamera = granted }
     val micPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted -> hasMic = granted }
+    ) { granted ->
+        hasMic = granted
+        // Without this the mic button silently does nothing after a denial.
+        dictationError = if (granted) null else "Microphone permission denied — enable it in Settings to dictate"
+    }
 
     LaunchedEffect(Unit) {
         if (!hasCamera) cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
@@ -119,7 +124,6 @@ fun LiveCaptureScreen(
     var showArMeasure by remember { mutableStateOf(false) }
     var isListening by remember { mutableStateOf(false) }
     var partialVoice by remember { mutableStateOf("") }
-    var dictationError by remember { mutableStateOf<String?>(null) }
 
     val smartCapture by viewModel.smartCapture.collectAsState()
     val checklistEnabled by viewModel.checklistEnabled.collectAsState()
@@ -317,13 +321,17 @@ fun LiveCaptureScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            try {
-                analyzer.close()
-            } catch (_: Throwable) {
-            }
-            try {
-                analysisExecutor.shutdown()
-            } catch (_: Throwable) {
+            // Unbind the camera first, then release the analyzer/executor: closing them while frames
+            // are still being delivered makes CameraX hit a closed labeler / rejected executor.
+            fun releaseAnalysis() {
+                try {
+                    analyzer.close()
+                } catch (_: Throwable) {
+                }
+                try {
+                    analysisExecutor.shutdown()
+                } catch (_: Throwable) {
+                }
             }
             try {
                 val future = ProcessCameraProvider.getInstance(context)
@@ -332,8 +340,10 @@ fun LiveCaptureScreen(
                         future.get().unbindAll()
                     } catch (_: Throwable) {
                     }
+                    releaseAnalysis()
                 }, ContextCompat.getMainExecutor(context))
             } catch (_: Throwable) {
+                releaseAnalysis()
             }
         }
     }

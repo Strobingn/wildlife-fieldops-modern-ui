@@ -52,10 +52,21 @@ class VoiceAudioCapture(
             return false
         }
         pcm.reset()
+        // startRecording() throws IllegalStateException (and may silently not record) when the mic is
+        // held by another app or the permission was revoked; report failure instead of crashing.
+        try {
+            record.startRecording()
+        } catch (_: Exception) {
+            record.release()
+            return false
+        }
+        if (record.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
+            record.release()
+            return false
+        }
         recorder = record
         startedAtMs = System.currentTimeMillis()
         running.set(true)
-        record.startRecording()
         worker = Thread({
             val buf = ByteArray(minBuf)
             while (running.get()) {
@@ -66,6 +77,9 @@ class VoiceAudioCapture(
                 }
                 if (n > 0) {
                     synchronized(pcm) { pcm.write(buf, 0, n) }
+                } else if (n < 0) {
+                    // Dead/stopped recorder: stop spinning; stop() still saves what was captured.
+                    break
                 }
             }
         }, "voice-audio-capture").also { it.start() }

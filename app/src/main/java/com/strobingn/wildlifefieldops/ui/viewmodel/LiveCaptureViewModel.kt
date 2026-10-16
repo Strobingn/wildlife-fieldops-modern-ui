@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -385,7 +386,10 @@ class LiveCaptureViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 _smartCapture.value = SmartCaptureState.Capturing
-                val (uri, file) = takeStill(imageCapture, executor)
+                // takePicture never calls back if the camera is unbound mid-capture (AR measure, flip,
+                // leaving the screen); without a limit the UI would sit on "Saving…" forever.
+                val (uri, file) = withTimeoutOrNull(TAKE_STILL_TIMEOUT_MS) { takeStill(imageCapture, executor) }
+                    ?: throw IllegalStateException("The camera did not return a photo in ${TAKE_STILL_TIMEOUT_MS / 1000}s — try again")
                 val photo = Photo(
                     filePath = uri.toString(),
                     localPath = file.absolutePath,
@@ -573,6 +577,11 @@ class LiveCaptureViewModel @Inject constructor(
             executor,
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                    if (!cont.isActive) {
+                        // The caller timed out and gave up; nobody will record this file.
+                        file.delete()
+                        return
+                    }
                     try {
                         val uri = FileProvider.getUriForFile(
                             appContext,
@@ -586,6 +595,7 @@ class LiveCaptureViewModel @Inject constructor(
                 }
 
                 override fun onError(exception: ImageCaptureException) {
+                    file.delete()
                     cont.resumeWithException(exception)
                 }
             }
@@ -626,5 +636,6 @@ class LiveCaptureViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "LiveCaptureVM"
+        private const val TAKE_STILL_TIMEOUT_MS = 15_000L
     }
 }
