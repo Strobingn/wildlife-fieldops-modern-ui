@@ -23,7 +23,39 @@ function estimateJob(j) {
   return Math.round(base * 1.35);
 }
 
-function scoreJob(j, visits, repairs, photos, signatures) {
+// Helper to pre-compute metric maps for O(1) job card metric lookups
+function buildJobMetricMaps(visits = [], repairs = [], photos = [], signatures = []) {
+  const visitCounts = new Map();
+  for (let i = 0; i < visits.length; i++) {
+    const id = visits[i]?.job_id;
+    if (id) visitCounts.set(id, (visitCounts.get(id) || 0) + 1);
+  }
+  const repairCounts = new Map();
+  for (let i = 0; i < repairs.length; i++) {
+    const id = repairs[i]?.job_id;
+    if (id) repairCounts.set(id, (repairCounts.get(id) || 0) + 1);
+  }
+  const photoCounts = new Map();
+  for (let i = 0; i < photos.length; i++) {
+    const id = photos[i]?.job_id;
+    if (id) photoCounts.set(id, (photoCounts.get(id) || 0) + 1);
+  }
+  const sigSet = new Set();
+  for (let i = 0; i < signatures.length; i++) {
+    const id = signatures[i]?.job_id;
+    if (id) sigSet.add(id);
+  }
+  return { visits: visitCounts, repairs: repairCounts, photos: photoCounts, signatures: sigSet };
+}
+
+function scoreJob(j, visits, repairs, photos, signatures, maps) {
+  if (maps) {
+    const v = (maps.visits.get(j.id) || 0) > 0;
+    const p = (maps.photos.get(j.id) || 0) > 0;
+    const r = (maps.repairs.get(j.id) || 0) > 0;
+    const sig = maps.signatures.has(j.id);
+    return Math.min(100, (v ? 25 : 0) + (p ? 25 : 0) + (r ? 25 : 0) + (sig ? 25 : 0));
+  }
   const v = visits.some((x) => x.job_id === j.id);
   const p = photos.some((x) => x.job_id === j.id);
   const rr = repairs.filter((x) => x.job_id === j.id);
@@ -64,6 +96,10 @@ export const JobList = {
     // Unique towns and techs for filter dropdowns
     const towns = [...new Set(jobs.map((j) => j.town).filter(Boolean))].sort();
     const techs = [...new Set(jobs.map((j) => j.assigned_tech).filter(Boolean))].sort();
+
+    // Performance optimization: Build O(1) lookup maps once per render pass
+    // to replace O(K * (V + R + P + S)) array iterations in job cards.
+    const maps = buildJobMetricMaps(visits, repairs, photos, signatures);
 
     return /* html */ `
       <!-- Search -->
@@ -115,7 +151,7 @@ export const JobList = {
       <!-- Job List -->
       <div id="jobList">
         ${pageJobs.length
-          ? pageJobs.map((j) => this._jobCard(j, visits, repairs, photos, signatures)).join("")
+          ? pageJobs.map((j) => this._jobCard(j, visits, repairs, photos, signatures, maps)).join("")
           : `<div class="empty-state">
               <div class="empty-icon" aria-hidden="true">🔍</div>
               <h4>${this._searchQuery || this._filters.status || this._filters.species ? "No matching jobs" : "No jobs yet"}</h4>
@@ -289,13 +325,13 @@ export const JobList = {
     return sorted;
   },
 
-  _jobCard(j, visits, repairs, photos, signatures) {
+  _jobCard(j, visits, repairs, photos, signatures, maps) {
     const icon = SPECIES_ICONS[j.species] || "🐾";
     const sc = STATUS_STYLES[j.status] || "active";
-    const v = visits.filter((x) => x.job_id === j.id).length;
-    const r = repairs.filter((x) => x.job_id === j.id).length;
-    const p = photos.filter((x) => x.job_id === j.id).length;
-    const s = scoreJob(j, visits, repairs, photos, signatures);
+    const v = maps ? (maps.visits.get(j.id) || 0) : visits.filter((x) => x.job_id === j.id).length;
+    const r = maps ? (maps.repairs.get(j.id) || 0) : repairs.filter((x) => x.job_id === j.id).length;
+    const p = maps ? (maps.photos.get(j.id) || 0) : photos.filter((x) => x.job_id === j.id).length;
+    const s = scoreJob(j, visits, repairs, photos, signatures, maps);
     const est = estimateJob(j);
 
     return /* html */ `
