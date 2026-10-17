@@ -95,10 +95,22 @@ export function formatDateShort(date) {
   const d = typeof date === 'string' ? new Date(date) : date;
   if (Number.isNaN(d.getTime())) return '—';
   const now = new Date();
-  const isToday = d.toDateString() === now.toDateString();
-  const isTomorrow = new Date(now.getTime() + 86400000).toDateString() === d.toDateString();
+  const dYear = d.getFullYear();
+  const dMonth = d.getMonth();
+  const dDate = d.getDate();
+  const nowYear = now.getFullYear();
+  const nowMonth = now.getMonth();
+  const nowDate = now.getDate();
+
+  // Performance optimization: Direct numeric comparison of year, month, and date
+  // avoids costly toDateString() formatting and intermediate Date object allocation.
+  const isToday = dYear === nowYear && dMonth === nowMonth && dDate === nowDate;
   if (isToday) return `Today ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+
+  const tomorrow = new Date(nowYear, nowMonth, nowDate + 1);
+  const isTomorrow = dYear === tomorrow.getFullYear() && dMonth === tomorrow.getMonth() && dDate === tomorrow.getDate();
   if (isTomorrow) return `Tomorrow ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
