@@ -401,16 +401,56 @@ function O(arr, selected = '') {
 }
 
 /**
+ * Pre-build count maps and presence sets for job sub-collections.
+ * Optimization: Reduces repeated array scans during list rendering from O(N * (V + R + P + S)) down to O(N + V + R + P + S).
+ * @param {Object} state
+ * @returns {{ visits: Map<string, number>, repairs: Map<string, number>, photos: Map<string, number>, signatures: Set<string> }}
+ */
+function buildJobSubCollectionMaps(state) {
+  const visits = new Map();
+  const repairs = new Map();
+  const photos = new Map();
+  const signatures = new Set();
+
+  for (const v of state?.visits || []) {
+    const id = v.jobId || v.job_id;
+    if (id) visits.set(id, (visits.get(id) || 0) + 1);
+  }
+  for (const r of state?.repairs || []) {
+    const id = r.jobId || r.job_id;
+    if (id) repairs.set(id, (repairs.get(id) || 0) + 1);
+  }
+  for (const p of state?.photos || []) {
+    const id = p.jobId || p.job_id;
+    if (id) photos.set(id, (photos.get(id) || 0) + 1);
+  }
+  for (const sig of state?.signatures || []) {
+    const id = sig.jobId || sig.job_id;
+    if (id) signatures.add(id);
+  }
+
+  return { visits, repairs, photos, signatures };
+}
+
+/**
  * Calculate job completeness score (0-100).
  * @param {string} jobId
+ * @param {Object} [mapsOrState] - Pre-computed sub-collection maps or store state
  * @returns {number}
  */
-function jobScore(jobId) {
-  const s = store.getState();
-  const hasVisits = s.visits.some((v) => v.jobId === jobId || v.job_id === jobId);
-  const hasPhotos = s.photos.some((p) => p.jobId === jobId || p.job_id === jobId);
-  const hasRepairs = s.repairs.some((r) => r.jobId === jobId || r.job_id === jobId);
-  const hasSig = s.signatures.some((sig) => sig.jobId === jobId || sig.job_id === jobId);
+function jobScore(jobId, mapsOrState) {
+  if (mapsOrState && mapsOrState.signatures instanceof Set) {
+    const v = mapsOrState.visits.get(jobId) || 0;
+    const p = mapsOrState.photos.get(jobId) || 0;
+    const r = mapsOrState.repairs.get(jobId) || 0;
+    const sig = mapsOrState.signatures.has(jobId);
+    return Math.min(100, (v ? 25 : 0) + (p ? 25 : 0) + (r ? 25 : 0) + (sig ? 25 : 0));
+  }
+  const s = mapsOrState || store.getState();
+  const hasVisits = (s.visits || []).some((v) => v.jobId === jobId || v.job_id === jobId);
+  const hasPhotos = (s.photos || []).some((p) => p.jobId === jobId || p.job_id === jobId);
+  const hasRepairs = (s.repairs || []).some((r) => r.jobId === jobId || r.job_id === jobId);
+  const hasSig = (s.signatures || []).some((sig) => sig.jobId === jobId || sig.job_id === jobId);
   return Math.min(100,
     (hasVisits ? 25 : 0) +
     (hasPhotos ? 25 : 0) +
@@ -550,7 +590,10 @@ const Dashboard = {
         <!-- Recent Jobs -->
         <h2 class="section-title">${q ? 'Search Results' : 'Recent Jobs'}</h2>
         <div class="job-list">
-          ${recentJobs.length ? recentJobs.map((j) => this._jobCard(j, state)).join('')
+          ${recentJobs.length ? (() => {
+            const maps = buildJobSubCollectionMaps(state);
+            return recentJobs.map((j) => this._jobCard(j, state, maps)).join('');
+          })()
             : '<div class="card empty">No jobs yet.</div>'}
         </div>
 
@@ -601,13 +644,14 @@ const Dashboard = {
     `;
   },
 
-  _jobCard(j, state) {
-    const s = jobScore(j.id);
+  _jobCard(j, state, maps) {
+    const mapsObj = maps || buildJobSubCollectionMaps(state);
+    const s = jobScore(j.id, mapsObj);
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
-    const vCount = (state.visits || []).filter((v) => (v.jobId || v.job_id) === j.id).length;
-    const rCount = (state.repairs || []).filter((r) => (r.jobId || r.job_id) === j.id).length;
-    const pCount = (state.photos || []).filter((p) => (p.jobId || p.job_id) === j.id).length;
+    const vCount = mapsObj.visits.get(j.id) || 0;
+    const rCount = mapsObj.repairs.get(j.id) || 0;
+    const pCount = mapsObj.photos.get(j.id) || 0;
     return `
       <div class="card job-card" data-job-id="${E(j.id)}">
         <div class="job-header">
@@ -721,15 +765,19 @@ const JobList = {
           <button class="btn primary" data-action="new-job">➕ New Job</button>
         </div>
         <div class="job-list">
-          ${jobs.length ? jobs.map((j) => this._jobCard(j, state)).join('')
+          ${jobs.length ? (() => {
+            const maps = buildJobSubCollectionMaps(state);
+            return jobs.map((j) => this._jobCard(j, state, maps)).join('');
+          })()
             : `<div class="card empty">${q ? 'No matching jobs.' : 'No jobs yet.'}</div>`}
         </div>
       </div>
     `;
   },
 
-  _jobCard(j, state) {
-    const s = jobScore(j.id);
+  _jobCard(j, state, maps) {
+    const mapsObj = maps || buildJobSubCollectionMaps(state);
+    const s = jobScore(j.id, mapsObj);
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
     return `
