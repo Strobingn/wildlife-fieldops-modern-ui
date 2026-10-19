@@ -65,10 +65,12 @@ import com.strobingn.wildlifefieldops.ai.fieldops.FieldDate
 import com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckItem
 import com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckPlanner
 import com.strobingn.wildlifefieldops.ai.fieldops.TrapDueState
+import com.strobingn.wildlifefieldops.ai.fieldops.toPreciseSpot
 import com.strobingn.wildlifefieldops.data.model.CatchType
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.TrapLog
 import com.strobingn.wildlifefieldops.data.model.TrapStatus
+import com.strobingn.wildlifefieldops.location.PreciseGpsMath
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundCard
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundDark
 import com.strobingn.wildlifefieldops.ui.theme.BorderDark
@@ -269,8 +271,8 @@ fun TrapCheckScreen(
         TrapCheckedDialog(
             trap = trap,
             onDismiss = { checking = null },
-            onSave = { outcome, species, count, note ->
-                viewModel.markChecked(trap, outcome, species, count, note)
+            onSave = { outcome, species, count, note, spot ->
+                viewModel.markChecked(trap, outcome, species, count, note, spot)
                 checking = null
             }
         )
@@ -413,8 +415,10 @@ fun TrapEditorDialog(
     var disposition by remember { mutableStateOf(initial?.disposition.orEmpty()) }
     var method by remember { mutableStateOf(initial?.method.orEmpty().ifBlank { "Live cage trap" }) }
     var notes by remember { mutableStateOf(initial?.conditionNotes.orEmpty()) }
-    var lat by remember { mutableStateOf(initial?.latitude?.toString().orEmpty()) }
-    var lng by remember { mutableStateOf(initial?.longitude?.toString().orEmpty()) }
+    var lat by remember { mutableStateOf(initial?.latitude?.let { PreciseGpsMath.formatCoordinate(it) }.orEmpty()) }
+    var lng by remember { mutableStateOf(initial?.longitude?.let { PreciseGpsMath.formatCoordinate(it) }.orEmpty()) }
+    var capturedSpot by remember { mutableStateOf(initial?.toPreciseSpot()) }
+    var gpsMessage by remember { mutableStateOf<String?>(null) }
     val prefill = remember {
         TrapCheckPlanner.editorDates(initial?.status ?: TrapStatus.SET)
     }
@@ -480,9 +484,30 @@ fun TrapEditorDialog(
                 }) { Text("Suggest next check") }
                 if (dateError != null) Text(dateError!!, color = StatusUrgent)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = lat, onValueChange = { lat = it }, label = { Text("Lat") }, modifier = Modifier.weight(1f), colors = fieldColors())
-                    OutlinedTextField(value = lng, onValueChange = { lng = it }, label = { Text("Lng") }, modifier = Modifier.weight(1f), colors = fieldColors())
+                    OutlinedTextField(value = lat, onValueChange = { lat = it; gpsMessage = null }, label = { Text("Lat") }, modifier = Modifier.weight(1f), colors = fieldColors())
+                    OutlinedTextField(value = lng, onValueChange = { lng = it; gpsMessage = null }, label = { Text("Lng") }, modifier = Modifier.weight(1f), colors = fieldColors())
                 }
+                val shownSpot = PreciseGpsMath.retainedSpot(lat, lng, capturedSpot)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    PreciseGpsCaptureButton(
+                        onSpot = { spot ->
+                            capturedSpot = spot
+                            lat = PreciseGpsMath.formatCoordinate(spot.latitude)
+                            lng = PreciseGpsMath.formatCoordinate(spot.longitude)
+                            gpsMessage = null
+                        },
+                        onMessage = { gpsMessage = it }
+                    )
+                    TrapSpotDirectionsButton(lat.toDoubleOrNull(), lng.toDoubleOrNull())
+                }
+                if (shownSpot != null) {
+                    Text(
+                        "${PreciseGpsMath.formatMeters(shownSpot.accuracyMeters)} · ${shownSpot.sampleCount} samples · ${PreciseGpsMath.formatCapturedDay(shownSpot.capturedAtMillis)}",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                if (gpsMessage != null) Text(gpsMessage!!, color = StatusUrgent, style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = {
@@ -495,6 +520,7 @@ fun TrapEditorDialog(
                         return@Button
                     }
                     val now = System.currentTimeMillis()
+                    val kept = PreciseGpsMath.retainedSpot(lat, lng, capturedSpot)
                     val next = (initial ?: TrapLog()).copy(
                         trapId = trapId.trim(),
                         trapLocation = location.trim(),
@@ -506,8 +532,11 @@ fun TrapEditorDialog(
                         disposition = disposition.trim(),
                         method = method.trim(),
                         conditionNotes = notes.trim(),
-                        latitude = lat.toDoubleOrNull(),
-                        longitude = lng.toDoubleOrNull(),
+                        latitude = kept?.latitude ?: lat.toDoubleOrNull(),
+                        longitude = kept?.longitude ?: lng.toDoubleOrNull(),
+                        locationAccuracyM = kept?.accuracyMeters,
+                        locationSampleCount = kept?.sampleCount,
+                        locationCapturedAt = kept?.capturedAtMillis,
                         checkDate = check.millis ?: 0L,
                         nextCheckDate = nextCheck.millis,
                         checkIntervalHours = intervalText.toIntOrNull()?.takeIf { it > 0 },

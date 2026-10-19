@@ -61,10 +61,11 @@ class TrapCheckViewModel @Inject constructor(
         outcome: com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckOutcome,
         species: CatchType,
         count: Int,
-        note: String
+        note: String,
+        spot: com.strobingn.wildlifefieldops.location.PreciseSpot? = null
     ) = viewModelScope.launch {
         val now = System.currentTimeMillis()
-        val updated = com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckRecorder.checked(
+        val checked = com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckRecorder.checked(
             trap = trap,
             outcome = outcome,
             species = species,
@@ -73,7 +74,14 @@ class TrapCheckViewModel @Inject constructor(
             now = now,
             intervalHours = intervalFor(trap)
         )
-        trapFieldOpsStore.saveTrap(updated)
+        val updated = if (spot == null) checked else checked.copy(
+            latitude = spot.latitude,
+            longitude = spot.longitude,
+            locationAccuracyM = spot.accuracyMeters,
+            locationSampleCount = spot.sampleCount,
+            locationCapturedAt = spot.capturedAtMillis
+        )
+        if (!saveQuietly(updated)) return@launch
         reminderScheduler.checkSoon()
         val next = com.strobingn.wildlifefieldops.ai.fieldops.TrapReminders.dueText(updated.nextCheckDate, now)
         _message.value = "Checked. Next check: ${next.removePrefix("Due ")}."
@@ -83,9 +91,8 @@ class TrapCheckViewModel @Inject constructor(
     }
 
     fun markPulled(trap: TrapLog) = viewModelScope.launch {
-        trapFieldOpsStore.saveTrap(
-            com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckRecorder.pulled(trap, System.currentTimeMillis())
-        )
+        val pulled = com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckRecorder.pulled(trap, System.currentTimeMillis())
+        if (!saveQuietly(pulled)) return@launch
         reminderScheduler.checkSoon()
         _message.value = "Trap pulled. No more reminders for it."
     }
@@ -141,9 +148,19 @@ class TrapCheckViewModel @Inject constructor(
     fun trapsForJob(jobId: String): List<TrapLog> = traps.value.filter { it.jobId == jobId }
 
     fun saveTrap(trap: TrapLog) = viewModelScope.launch {
-        trapFieldOpsStore.saveTrap(trap)
+        if (!saveQuietly(trap)) return@launch
         reminderScheduler.checkSoon()
         _message.value = "Trap saved — pending cloud sync on the job."
+    }
+
+    private suspend fun saveQuietly(trap: TrapLog): Boolean = try {
+        trapFieldOpsStore.saveTrap(trap)
+        true
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        _message.value = com.strobingn.wildlifefieldops.location.PreciseGpsMath.SAVE_FAILED
+        false
     }
 
     fun deleteTrap(trap: TrapLog) = viewModelScope.launch {
@@ -164,21 +181,20 @@ class TrapCheckViewModel @Inject constructor(
         nextCheckDate: Long?
     ) = viewModelScope.launch {
         val now = System.currentTimeMillis()
-        trapFieldOpsStore.saveTrap(
-            trap.copy(
-                status = status,
-                catchType = catchType,
-                catchCount = catchCount,
-                baitType = baitType,
-                disposition = disposition,
-                method = method,
-                conditionNotes = notes,
-                checkDate = now,
-                nextCheckDate = nextCheckDate ?: TrapCheckPlanner.nextCheckAfter(status, now),
-                isSynced = false,
-                updatedAt = now
-            )
+        val logged = trap.copy(
+            status = status,
+            catchType = catchType,
+            catchCount = catchCount,
+            baitType = baitType,
+            disposition = disposition,
+            method = method,
+            conditionNotes = notes,
+            checkDate = now,
+            nextCheckDate = nextCheckDate ?: TrapCheckPlanner.nextCheckAfter(status, now),
+            isSynced = false,
+            updatedAt = now
         )
+        if (!saveQuietly(logged)) return@launch
         reminderScheduler.checkSoon()
         _message.value = "Check logged."
     }

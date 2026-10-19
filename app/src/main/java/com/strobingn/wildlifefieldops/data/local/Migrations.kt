@@ -220,7 +220,19 @@ object Migrations {
         }
     }
 
-    /** Ordered 3→15. Restored backups may be older than VERSION 15; Room must migrate, never wipe. */
+    /**
+     * MIGRATION_15_16 adds nullable precise-GPS columns on trap_logs.
+     * Null means the coordinates were typed, tapped, or saved by an older build.
+     */
+    val MIGRATION_15_16 = object : Migration(15, 16) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE trap_logs ADD COLUMN locationAccuracyM REAL")
+            db.execSQL("ALTER TABLE trap_logs ADD COLUMN locationSampleCount INTEGER")
+            db.execSQL("ALTER TABLE trap_logs ADD COLUMN locationCapturedAt INTEGER")
+        }
+    }
+
+    /** Ordered 3→16. Restored backups may be older than VERSION 16; Room must migrate, never wipe. */
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_3_4,
         MIGRATION_4_5,
@@ -234,5 +246,6 @@ object Migrations {
         MIGRATION_12_13,
         MIGRATION_13_14,
         MIGRATION_14_15,
+        MIGRATION_15_16,
     )
 }

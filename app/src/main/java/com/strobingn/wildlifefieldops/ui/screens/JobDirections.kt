@@ -22,6 +22,12 @@ object JobDirections {
         val address: String = ""
     )
 
+    /** Navigation target for a trap's saved coordinates. Coordinates win over any label. */
+    fun fromTrap(latitude: Double?, longitude: Double?): Target = Target(
+        latitude = latitude,
+        longitude = longitude
+    )
+
     fun fromJob(job: Job, fullAddress: String = ""): Target {
         val address = fullAddress.trim().ifBlank { withState(job.address, job.state) }
         return Target(

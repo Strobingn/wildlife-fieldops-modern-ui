@@ -13,7 +13,10 @@ import com.strobingn.wildlifefieldops.data.model.ReminderType
 import com.strobingn.wildlifefieldops.data.model.TrapLog
 import com.strobingn.wildlifefieldops.data.model.TrapStatus
 import com.strobingn.wildlifefieldops.data.model.Visit
+import com.strobingn.wildlifefieldops.location.PreciseGpsMath
+import com.strobingn.wildlifefieldops.location.PreciseSpot
 import com.strobingn.wildlifefieldops.pricing.SyncedTrapRecord
+import com.strobingn.wildlifefieldops.pricing.hasPreciseGps
 import com.strobingn.wildlifefieldops.pricing.markManual
 import java.util.UUID
 import javax.inject.Inject
@@ -40,14 +43,41 @@ class TrapFieldOpsStore @Inject constructor(
 
     suspend fun saveTrap(trap: TrapLog) {
         val now = System.currentTimeMillis()
-        trapLogDao.insert(
-            trap.copy(
-                updatedAt = now,
-                isSynced = false,
-                createdAt = trap.createdAt.takeIf { it > 0L } ?: now
+        val previous = trapLogDao.getById(trap.id)
+        val saved = trap.copy(
+            updatedAt = now,
+            isSynced = false,
+            createdAt = trap.createdAt.takeIf { it > 0L } ?: now
+        )
+        trapLogDao.insert(saved)
+        embedTrapsOnJob(saved.jobId)
+        publishPreciseSpot(previous, saved)
+    }
+
+    /**
+     * The job Directions button reads the job's coordinates. A new precise
+     * capture is copied there so that button navigates to the trap spot.
+     * Typed coordinates and a re-save of the same spot leave the job pin alone.
+     */
+    private suspend fun publishPreciseSpot(previous: TrapLog?, saved: TrapLog) {
+        if (saved.jobId.isBlank()) return
+        val spot = saved.toPreciseSpot()
+        val publish = PreciseGpsMath.shouldPublishToJob(
+            previousCapturedAt = previous?.locationCapturedAt,
+            previousLat = previous?.latitude,
+            previousLng = previous?.longitude,
+            saved = spot
+        )
+        if (!publish || spot == null) return
+        val job = jobDao.getById(saved.jobId) ?: return
+        jobDao.insert(
+            job.copy(
+                latitude = spot.latitude,
+                longitude = spot.longitude,
+                updatedAt = System.currentTimeMillis(),
+                isSynced = false
             )
         )
-        embedTrapsOnJob(trap.jobId)
     }
 
     suspend fun deleteTrap(trap: TrapLog) {
@@ -59,13 +89,21 @@ class TrapFieldOpsStore @Inject constructor(
         if (jobId.isBlank()) return
         val job = jobDao.getById(jobId) ?: return
         val traps = trapLogDao.getByJobOnce(jobId)
+        val records = traps.map { it.toSynced() }
         val extras = JobFieldOpsCodec.extract(job.pricing).copy(
-            trapRecords = traps.map { it.toSynced() }
+            trapRecords = records
+        )
+        val embedded = JobFieldOpsCodec.embed(job.pricing, extras)
+        val stamped = embedded.copy(
+            dataVersion = PreciseGpsMath.stampedDataVersion(
+                embedded.dataVersion,
+                records.any { it.hasPreciseGps() } || embedded.trapRecords.any { it.hasPreciseGps() }
+            )
         )
         jobDao.insert(
             JobFieldOpsCodec.mergeForSave(
                 job.copy(
-                    pricing = JobFieldOpsCodec.embed(job.pricing, extras),
+                    pricing = stamped,
                     updatedAt = System.currentTimeMillis(),
                     isSynced = false
                 )
@@ -248,6 +286,9 @@ fun TrapLog.toSynced(): SyncedTrapRecord = SyncedTrapRecord(
     trapLocation = trapLocation,
     latitude = latitude,
     longitude = longitude,
+    locationAccuracyM = locationAccuracyM,
+    locationSampleCount = locationSampleCount,
+    locationCapturedAt = locationCapturedAt,
     technicianName = technicianName,
     checkDate = checkDate,
     status = status.name,
@@ -274,6 +315,9 @@ fun SyncedTrapRecord.toTrapLog(): TrapLog = TrapLog(
     trapLocation = trapLocation,
     latitude = latitude,
     longitude = longitude,
+    locationAccuracyM = locationAccuracyM,
+    locationSampleCount = locationSampleCount,
+    locationCapturedAt = locationCapturedAt,
     technicianName = technicianName,
     checkDate = checkDate,
     status = runCatching { TrapStatus.valueOf(status) }.getOrDefault(TrapStatus.SET),
@@ -293,3 +337,19 @@ fun SyncedTrapRecord.toTrapLog(): TrapLog = TrapLog(
     updatedAt = updatedAt,
     isSynced = false
 )
+
+fun TrapLog.toPreciseSpot(): PreciseSpot? {
+    val lat = latitude ?: return null
+    val lng = longitude ?: return null
+    val accuracy = locationAccuracyM ?: return null
+    val samples = locationSampleCount ?: return null
+    val capturedAt = locationCapturedAt ?: return null
+    if (!lat.isFinite() || !lng.isFinite() || !accuracy.isFinite() || samples <= 0) return null
+    return PreciseSpot(
+        latitude = lat,
+        longitude = lng,
+        accuracyMeters = accuracy,
+        sampleCount = samples,
+        capturedAtMillis = capturedAt
+    )
+}

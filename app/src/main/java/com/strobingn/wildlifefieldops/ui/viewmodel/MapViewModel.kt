@@ -279,31 +279,47 @@ class MapViewModel @Inject constructor(
         jobId: String,
         trapId: String,
         location: String,
-        existingId: String? = null
+        existingId: String? = null,
+        spot: com.strobingn.wildlifefieldops.location.PreciseSpot? = null
     ) {
         viewModelScope.launch {
-            val pin = _pendingTrapPin.value ?: return@launch
-            val now = System.currentTimeMillis()
-            val existing = existingId?.let { trapLogDao.getById(it) }
-            trapFieldOpsStore.saveTrap(
-                (existing ?: TrapLog()).copy(
-                    id = existing?.id ?: java.util.UUID.randomUUID().toString(),
-                    jobId = jobId,
-                    trapId = trapId.ifBlank { existing?.trapId.orEmpty().ifBlank { "Trap" } },
-                    trapLocation = location,
-                    latitude = pin.latitude,
-                    longitude = pin.longitude,
-                    status = existing?.status ?: TrapStatus.SET,
-                    nextCheckDate = existing?.nextCheckDate ?: now + 86_400_000L,
-                    checkDate = existing?.checkDate ?: now,
-                    createdAt = existing?.createdAt ?: now,
-                    updatedAt = now,
-                    isSynced = false
+            try {
+                val pin = _pendingTrapPin.value
+                val lat = spot?.latitude ?: pin?.latitude
+                val lng = spot?.longitude ?: pin?.longitude
+                if (lat == null || lng == null) {
+                    _cacheMessage.value = com.strobingn.wildlifefieldops.location.PreciseGpsMath.SAVE_FAILED
+                    return@launch
+                }
+                val now = System.currentTimeMillis()
+                val existing = existingId?.let { trapLogDao.getById(it) }
+                trapFieldOpsStore.saveTrap(
+                    (existing ?: TrapLog()).copy(
+                        id = existing?.id ?: java.util.UUID.randomUUID().toString(),
+                        jobId = jobId,
+                        trapId = trapId.ifBlank { existing?.trapId.orEmpty().ifBlank { "Trap" } },
+                        trapLocation = location,
+                        latitude = lat,
+                        longitude = lng,
+                        locationAccuracyM = spot?.accuracyMeters,
+                        locationSampleCount = spot?.sampleCount,
+                        locationCapturedAt = spot?.capturedAtMillis,
+                        status = existing?.status ?: TrapStatus.SET,
+                        nextCheckDate = existing?.nextCheckDate ?: now + 86_400_000L,
+                        checkDate = existing?.checkDate ?: now,
+                        createdAt = existing?.createdAt ?: now,
+                        updatedAt = now,
+                        isSynced = false
+                    )
                 )
-            )
-            _pendingTrapPin.value = null
-            _isPlacingTrap.value = false
-            _cacheMessage.value = "Trap pin saved on the job — pending cloud sync."
+                _pendingTrapPin.value = null
+                _isPlacingTrap.value = false
+                _cacheMessage.value = "Trap pin saved on the job — pending cloud sync."
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _cacheMessage.value = com.strobingn.wildlifefieldops.location.PreciseGpsMath.SAVE_FAILED
+            }
         }
     }
 
