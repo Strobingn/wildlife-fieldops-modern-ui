@@ -80,24 +80,30 @@ class SigFollowupsTest {
 
     private fun reload(p: JobPricing): JobPricing = PricingJson.decode(upload.encodeToString(p))
 
-    @Test fun autoFilledTechStampIsKeptAcrossReloads() {
+    @Test fun autoFilledTechStampIsKeptAcrossReloadsAndSave() {
         val saved = TechnicianSignature(pngBase64 = wideSignature(), name = "Austin Luker", savedAt = 5L)
         val t0 = 1_791_990_604_511L // Oct 14, 2026 11:10 AM ET
-        // Existing record with a name/date but no ink (the 2.9.5 bug): keeps its own first stamp.
-        val typed = TechSignatureRules.save(JobPricing(), SignatureRules.CONTRACT, "Austin Luker", t0, "")
-        assertEquals(t0, TechSignatureRules.resolve(typed, SignatureRules.CONTRACT, saved, now = t0 + 99_000).signedAt)
-        val persisted = reload(TechSignatureRules.persistAutoFill(typed, SignatureRules.CONTRACT, saved, now = t0 + 99_000)!!)
+        // Existing record with a name/date but no ink (the 2.9.5 bug): keeps its own first stamp on every reload.
+        val typed = reload(TechSignatureRules.save(JobPricing(), SignatureRules.CONTRACT, "Austin Luker", t0, ""))
+        val r1 = TechSignatureRules.resolve(typed, SignatureRules.CONTRACT, saved, now = t0 + 99_000)
+        val r2 = TechSignatureRules.resolve(reload(typed), SignatureRules.CONTRACT, saved, now = t0 + 999_000)
+        assertEquals(t0, r1.signedAt); assertEquals(t0, r2.signedAt)
+        // Save persists it once with that same stamp (not now), even with no prior refresh of job.pricing.
+        val stamp = r1.signedAt.takeIf { r1.fromSaved }
+        val persisted = reload(SignatureCardSave.pending(typed, SignatureRules.CONTRACT, "", "", r1.name, r1.pngBase64, now = t0 + 5_000_000, techStamp = stamp))
         val rec = TechSignatureRules.find(persisted, SignatureRules.CONTRACT)!!
         assertEquals(t0, rec.signedAt); assertEquals(saved.pngBase64, rec.pngBase64)
-        // Persisted once: nothing more to persist, and later reloads keep the same time.
-        assertEquals(null, TechSignatureRules.persistAutoFill(persisted, SignatureRules.CONTRACT, saved, now = t0 + 999_000))
-        assertEquals(t0, TechSignatureRules.resolve(reload(persisted), SignatureRules.CONTRACT, saved, now = t0 + 999_000).signedAt)
-        // A never-stamped record gets now() once, then keeps it.
-        val unstamped = JobPricing(technicianSignatures = listOf(CustomerSignatureRecord(document = "contract", signerName = "Austin Luker", signedAt = 0L, pngBase64 = "")))
-        val once = reload(TechSignatureRules.persistAutoFill(unstamped, "contract", saved, now = 777L)!!)
-        assertEquals(777L, TechSignatureRules.resolve(once, "contract", saved, now = 888L).signedAt)
-        // Cleared stays cleared.
-        assertEquals(null, TechSignatureRules.persistAutoFill(TechSignatureRules.clear(JobPricing(), "contract"), "contract", saved))
+        // Saving again unchanged keeps it; later reloads keep it.
+        val again = reload(SignatureCardSave.pending(persisted, SignatureRules.CONTRACT, "", "", rec.signerName, rec.pngBase64, now = t0 + 9_000_000))
+        assertEquals(t0, TechSignatureRules.find(again, SignatureRules.CONTRACT)!!.signedAt)
+        assertEquals(t0, TechSignatureRules.resolve(again, SignatureRules.CONTRACT, saved, now = t0 + 999_000).signedAt)
+        // Re-signing by hand gets a fresh stamp.
+        val resigned = SignatureCardSave.pending(again, SignatureRules.CONTRACT, "", "", "Austin Luker", "NEWINK", now = t0 + 7L)
+        assertEquals(t0 + 7L, TechSignatureRules.find(resigned, SignatureRules.CONTRACT)!!.signedAt)
+        // Typed-only customer record keeps its date on the PDF (area stays blank).
+        val cTyped = SignatureRules.save(JobPricing(), SignatureRules.CONTRACT, "Malky Unger", 1_791_908_752_169L, "")
+        val pdf = SignatureCardSave.forPdf(cTyped, SignatureRules.CONTRACT, TechnicianSignature())
+        assertEquals("", pdf.customerInk); assertEquals("Malky Unger", pdf.customerName); assertEquals(1_791_908_752_169L, pdf.customerSignedAt)
     }
 
     @Test fun fitKeepsAspectAndCenters() {
@@ -140,9 +146,9 @@ class SigFollowupsTest {
             }
         }
         composeRule.onNodeWithText("Contract").performClick(); composeRule.waitForIdle()
-        // Opening Contract persisted the auto-filled tech signature once, with its first stamp.
-        val tech = TechSignatureRules.find(job.pricing, SignatureRules.CONTRACT)!!
-        assertEquals(t0, tech.signedAt); assertEquals(saved.pngBase64, tech.pngBase64)
+        // Opening Contract writes nothing; the auto-filled tech signature shows its first stamp.
+        assertEquals(0, saves)
+        composeRule.onNodeWithText("Date: 10/14/2026").assertExists()
         save("contract-reloaded-tech-fit")
         // Customer signs but does NOT tap Save; Share must save that ink first.
         val before = System.currentTimeMillis()
@@ -156,8 +162,9 @@ class SigFollowupsTest {
         val cust = SignatureRules.find(job.pricing, SignatureRules.CONTRACT)!!
         assertTrue("customer ink saved by Share", cust.pngBase64.isNotBlank())
         assertTrue("customer date is the share time", cust.signedAt >= before)
-        // Tech date unchanged by the share save.
-        assertEquals(t0, TechSignatureRules.find(job.pricing, SignatureRules.CONTRACT)!!.signedAt)
+        // Share persisted the auto-filled tech signature with its first stamp, not now().
+        val tech = TechSignatureRules.find(job.pricing, SignatureRules.CONTRACT)!!
+        assertEquals(t0, tech.signedAt); assertEquals(saved.pngBase64, tech.pngBase64)
         save("contract-after-share")
 
         // Real reload -> PDF data: ink and dates from the same saved records.

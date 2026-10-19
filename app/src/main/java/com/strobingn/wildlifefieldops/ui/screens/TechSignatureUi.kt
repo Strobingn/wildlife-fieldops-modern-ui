@@ -76,16 +76,13 @@ fun JobSignatureCard(
     var shareWarning by remember { mutableStateOf<List<String>?>(null) }
     var sharePricing by remember { mutableStateOf<JobPricing?>(null) }
 
-    // A stored tech record with no ink, auto-filled from Settings, is persisted once so its
-    // date stays the first stamped time instead of changing to now() on every reload.
-    androidx.compose.runtime.LaunchedEffect(job.id, document, techRecord, saved) {
-        TechSignatureRules.persistAutoFill(job.pricing, document, saved)?.let(onSave)
-    }
     fun pending(): JobPricing = SignatureCardSave.pending(
         pricing = job.pricing, document = document,
         customerName = name, customerInk = ink,
         techName = techName, techInk = techInk,
-        now = System.currentTimeMillis()
+        now = System.currentTimeMillis(),
+        // An auto-filled Settings signature on an existing record keeps that record's first stamp.
+        techStamp = techResolved.signedAt.takeIf { techResolved.fromSaved && techRecord != null && it > 0L && techInk == techResolved.pngBase64 }
     )
     /** Share saves pending ink first, so the PDF's ink and dates come from the same saved records. */
     fun startShare() {
@@ -334,7 +331,8 @@ object SignatureCardSave {
         customerInk: String,
         techName: String,
         techInk: String,
-        now: Long
+        now: Long,
+        techStamp: Long? = null
     ): JobPricing {
         val record = SignatureRules.find(pricing, document)
         val techRecord = TechSignatureRules.find(pricing, document)
@@ -346,7 +344,7 @@ object SignatureCardSave {
         val withCustomer = if (customerUnchanged || customerSkip) pricing else SignatureRules.save(pricing, document, customerName, now, customerInk)
         val techUnchanged = techRecord != null && !techRecord.cleared && techRecord.signerName == techName.trim() && techRecord.pngBase64 == techInk
         val techSkip = techInk.isBlank() && (techRecord == null || techRecord.pngBase64.isBlank())
-        return if (techSkip || techUnchanged) withCustomer else TechSignatureRules.save(withCustomer, document, techName, now, techInk)
+        return if (techSkip || techUnchanged) withCustomer else TechSignatureRules.save(withCustomer, document, techName, techStamp ?: now, techInk)
     }
 
     data class PdfSignatures(
@@ -361,7 +359,8 @@ object SignatureCardSave {
 
     /** Ink and date always come from the same saved record. */
     fun forPdf(pricing: JobPricing, document: String, saved: TechnicianSignature, now: Long = System.currentTimeMillis()): PdfSignatures {
-        val c = SignatureRules.find(pricing, document)?.takeIf { it.pngBase64.isNotBlank() }
+        // Typed-only records keep their name and date; their area just has no ink.
+        val c = SignatureRules.find(pricing, document)
         val t = TechSignatureRules.resolve(pricing, document, saved, now)
         return PdfSignatures(
             customerInk = c?.pngBase64.orEmpty(),
@@ -369,7 +368,7 @@ object SignatureCardSave {
             customerSignedAt = c?.signedAt?.takeIf { it > 0L },
             techInk = t.pngBase64,
             techName = t.name,
-            techSignedAt = t.signedAt.takeIf { it > 0L && t.hasInk },
+            techSignedAt = t.signedAt.takeIf { it > 0L && !t.cleared },
             techCleared = t.cleared || (!t.hasInk && t.name.isBlank())
         )
     }
