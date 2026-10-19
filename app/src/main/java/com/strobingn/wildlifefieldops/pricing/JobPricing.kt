@@ -386,6 +386,10 @@ data class SyncedTrapRecord(
     val trapLocation: String = "",
     val latitude: Double? = null,
     val longitude: Double? = null,
+    /** Precise GPS only. Null on typed coordinates and on rows written by older builds. */
+    val locationAccuracyM: Double? = null,
+    val locationSampleCount: Int? = null,
+    val locationCapturedAt: Long? = null,
     val technicianName: String = "",
     val checkDate: Long = 0L,
     val status: String = "SET",
@@ -404,6 +408,9 @@ data class SyncedTrapRecord(
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L
 )
+
+fun SyncedTrapRecord.hasPreciseGps(): Boolean =
+    locationAccuracyM != null || locationSampleCount != null || locationCapturedAt != null
 
 @Serializable
 data class SyncedInvoiceRecord(

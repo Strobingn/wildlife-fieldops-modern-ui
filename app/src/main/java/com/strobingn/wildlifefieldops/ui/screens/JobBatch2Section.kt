@@ -88,8 +88,11 @@ fun JobBatch2Section(
             } else {
                 traps.forEach { trap ->
                     TextButton(onClick = { editing = trap }) {
+                        val accuracy = trap.locationAccuracyM?.let {
+                            " · ${com.strobingn.wildlifefieldops.location.PreciseGpsMath.formatMeters(it)}"
+                        }.orEmpty()
                         Text(
-                            "${trap.trapId.ifBlank { "Trap" }} · ${trap.status.name.replace('_', ' ')} · ${trap.trapLocation.ifBlank { "no location" }}",
+                            "${trap.trapId.ifBlank { "Trap" }} · ${trap.status.name.replace('_', ' ')} · ${trap.trapLocation.ifBlank { "no location" }}$accuracy",
                             color = TextSecondary
                         )
                     }

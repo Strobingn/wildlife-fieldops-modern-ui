@@ -10,6 +10,13 @@ import org.junit.Test
 class JobDirectionsTest {
 
     @Test
+    fun savedTrapSpotIsTheNavigationTarget() {
+        val target = JobDirections.fromTrap(41.4401234, -74.0123456)
+        assertEquals("41.4401234,-74.0123456", JobDirections.query(target))
+        assertEquals("google.navigation:q=41.4401234,-74.0123456", JobDirections.navigationUri(target))
+    }
+
+    @Test
     fun coordinatesWinOverTheAddress() {
         val target = JobDirections.Target(
             latitude = 41.4459,

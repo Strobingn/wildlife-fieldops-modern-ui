@@ -41,6 +41,12 @@ data class TrapLog(
     val method: String = "",
     /** Hours between checks for this trap. Null uses the Settings default (24 hours). */
     val checkIntervalHours: Int? = null,
+    /** 1-sigma meters of the accuracy-weighted GPS average. Null when coordinates were typed or tapped. */
+    val locationAccuracyM: Double? = null,
+    /** Accepted fixes (accuracy ≤ 15 m) that went into [locationAccuracyM]. */
+    val locationSampleCount: Int? = null,
+    /** Wall-clock millis when Precise GPS saved this spot. */
+    val locationCapturedAt: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val isSynced: Boolean = false

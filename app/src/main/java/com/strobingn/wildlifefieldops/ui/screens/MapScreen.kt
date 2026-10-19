@@ -365,7 +365,13 @@ fun MapScreen(
                         Marker(
                             state = MarkerState(position = LatLng(trap.latitude!!, trap.longitude!!)),
                             title = trap.trapId.ifBlank { "Trap" } + " · " + trap.status.name.replace('_', ' '),
-                            snippet = trap.trapLocation.ifBlank { "Trap pin" },
+                            snippet = buildString {
+                                append(trap.trapLocation.ifBlank { "Trap pin" })
+                                trap.locationAccuracyM?.let {
+                                    append(" · ")
+                                    append(com.strobingn.wildlifefieldops.location.PreciseGpsMath.formatMeters(it))
+                                }
+                            },
                             icon = remember(trap.id, overdue) { createTrapMarkerIcon(overdue) },
                             onClick = {
                                 if (trap.jobId.isNotBlank()) onNavigateToJobDetail(trap.jobId)
@@ -681,8 +687,8 @@ fun MapScreen(
                         .zIndex(3f),
                     jobs = jobsForTrap,
                     onCancel = { viewModel.cancelPendingTrap() },
-                    onSave = { jobId, trapId, location ->
-                        viewModel.saveTrapPin(jobId, trapId, location)
+                    onSave = { jobId, trapId, location, spot ->
+                        viewModel.saveTrapPin(jobId, trapId, location, spot = spot)
                     }
                 )
             }
@@ -958,12 +964,14 @@ private fun TrapPinComposerCard(
     modifier: Modifier = Modifier,
     jobs: List<com.strobingn.wildlifefieldops.data.model.Job>,
     onCancel: () -> Unit,
-    onSave: (jobId: String, trapId: String, location: String) -> Unit
+    onSave: (jobId: String, trapId: String, location: String, spot: com.strobingn.wildlifefieldops.location.PreciseSpot?) -> Unit
 ) {
     var jobId by remember { mutableStateOf(jobs.firstOrNull()?.id.orEmpty()) }
     var trapId by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
     var jobOpen by remember { mutableStateOf(false) }
+    var spot by remember { mutableStateOf<com.strobingn.wildlifefieldops.location.PreciseSpot?>(null) }
+    var gpsMessage by remember { mutableStateOf<String?>(null) }
     val selected = jobs.find { it.id == jobId }
     Card(
         modifier = modifier,
@@ -1026,10 +1034,27 @@ private fun TrapPinComposerCard(
                     unfocusedTextColor = TextPrimary
                 )
             )
+            PreciseGpsCaptureButton(
+                onSpot = {
+                    spot = it
+                    gpsMessage = null
+                },
+                onMessage = { gpsMessage = it }
+            )
+            spot?.let {
+                Text(
+                    "${com.strobingn.wildlifefieldops.location.PreciseGpsMath.formatMeters(it.accuracyMeters)} · ${it.sampleCount} samples · ${com.strobingn.wildlifefieldops.ai.fieldops.FieldDate.formatDay(it.capturedAtMillis)}",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (gpsMessage != null) {
+                Text(gpsMessage!!, color = com.strobingn.wildlifefieldops.ui.theme.StatusUrgent, style = MaterialTheme.typography.bodySmall)
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Cancel") }
                 Button(
-                    onClick = { onSave(jobId, trapId, location) },
+                    onClick = { onSave(jobId, trapId, location, spot) },
                     enabled = jobId.isNotBlank(),
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)

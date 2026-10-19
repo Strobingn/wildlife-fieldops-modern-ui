@@ -49,8 +49,11 @@ import com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckOutcome
 import com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckPlanner
 import com.strobingn.wildlifefieldops.ai.fieldops.TrapCheckRecorder
 import com.strobingn.wildlifefieldops.ai.fieldops.TrapReminders
+import com.strobingn.wildlifefieldops.ai.fieldops.toPreciseSpot
 import com.strobingn.wildlifefieldops.data.model.CatchType
 import com.strobingn.wildlifefieldops.data.model.TrapLog
+import com.strobingn.wildlifefieldops.location.PreciseGpsMath
+import com.strobingn.wildlifefieldops.location.PreciseSpot
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundCard
 import com.strobingn.wildlifefieldops.ui.theme.BorderDark
 import com.strobingn.wildlifefieldops.ui.theme.OnPrimary
@@ -120,8 +123,25 @@ internal fun TrapCheckCard(
                 )
             }
             if (item.jobTitle.isNotBlank()) Text(item.jobTitle, color = TextSecondary)
-            if (item.trap.trapLocation.isNotBlank()) {
-                Text(item.trap.trapLocation, color = TextTertiary, style = MaterialTheme.typography.bodySmall)
+            val spotBits = listOfNotNull(
+                item.trap.trapLocation.takeIf { it.isNotBlank() },
+                item.trap.locationAccuracyM?.let { PreciseGpsMath.formatMeters(it) }
+            )
+            val hasCoordinates = item.trap.latitude != null && item.trap.longitude != null
+            if (spotBits.isNotEmpty() || hasCoordinates) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (spotBits.isNotEmpty()) {
+                        Text(
+                            spotBits.joinToString(" · "),
+                            color = TextSecondary,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (hasCoordinates) {
+                        TrapSpotDirectionsButton(item.trap.latitude, item.trap.longitude)
+                    }
+                }
             }
             val interval = TrapReminders.intervalHours(item.trap, defaultIntervalHours)
             val lastCheck = item.trap.checkDate.takeIf { it > 0L }?.let {
@@ -169,17 +189,37 @@ internal fun TrapCheckCard(
 internal fun TrapCheckedDialog(
     trap: TrapLog,
     onDismiss: () -> Unit,
-    onSave: (outcome: TrapCheckOutcome, species: CatchType, count: Int, note: String) -> Unit
+    onSave: (outcome: TrapCheckOutcome, species: CatchType, count: Int, note: String, spot: PreciseSpot?) -> Unit
 ) {
     var outcome by remember { mutableStateOf(TrapCheckOutcome.NONE) }
     var species by remember { mutableStateOf(CatchType.NONE) }
     var count by remember { mutableStateOf("1") }
     var note by remember { mutableStateOf("") }
+    var spot by remember { mutableStateOf(trap.toPreciseSpot()) }
+    var gpsMessage by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = BackgroundCard,
         title = { Text("Checked ${trap.trapId.ifBlank { "trap" }}", color = TextPrimary) },
         text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            PreciseGpsCaptureButton(
+                onSpot = {
+                    spot = it
+                    gpsMessage = null
+                },
+                onMessage = { gpsMessage = it }
+            )
+            spot?.let {
+                Text(
+                    "${PreciseGpsMath.formatMeters(it.accuracyMeters)} · ${it.sampleCount} samples · ${PreciseGpsMath.formatCapturedDay(it.capturedAtMillis)}",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (gpsMessage != null) {
+                Text(gpsMessage!!, color = StatusUrgent, style = MaterialTheme.typography.bodySmall)
+            }
             TrapCheckedForm(
                 outcome = outcome,
                 onOutcome = { outcome = it },
@@ -193,12 +233,13 @@ internal fun TrapCheckedDialog(
                     .heightIn(max = 460.dp)
                     .verticalScroll(rememberScrollState())
             )
+            }
         },
         confirmButton = {
             Button(
                 onClick = {
                     val chosen = if (outcome == TrapCheckOutcome.CAUGHT && species == CatchType.NONE) CatchType.RACCOON else species
-                    onSave(outcome, chosen, count.toIntOrNull() ?: 1, note)
+                    onSave(outcome, chosen, count.toIntOrNull() ?: 1, note, spot)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
             ) { Text("Save check") }

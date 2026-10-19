@@ -26,15 +26,18 @@ class AuditRegressionTest {
     @Test fun dataVersionAlwaysUploadedAndOldJsonStillReads() {
         val keys = upload.parseToJsonElement(upload.encodeToString(JobPricing())).jsonObject.keys
         assertTrue("dataVersion in upload: $keys", "dataVersion" in keys)
-        assertEquals(DataVersionGate.CURRENT, PricingJson.decode("""{"laborHours":2.0}""").dataVersion)
-        assertEquals(DataVersionGate.CURRENT, JobPricing().dataVersion)
+        // Jobs without a precise trap spot stay at 2 so older builds keep uploading them.
+        assertEquals(2, PricingJson.decode("""{"laborHours":2.0}""").dataVersion)
+        assertEquals(2, JobPricing().dataVersion)
+        assertEquals(DataVersionGate.TRAP_GPS, DataVersionGate.CURRENT)
+        assertFalse(DataVersionGate.isNewer(JobPricing().dataVersion))
     }
 
     @Test fun newerDataPausesUploadsOlderDoesNot() {
-        assertFalse(DataVersionGate.observe(listOf(1, 2)))
-        assertTrue(DataVersionGate.observe(listOf(2, 3)))
+        assertFalse(DataVersionGate.observe(listOf(1, DataVersionGate.CURRENT)))
+        assertTrue(DataVersionGate.observe(listOf(DataVersionGate.CURRENT, DataVersionGate.CURRENT + 1)))
         assertTrue(DataVersionGate.blocked.value)
-        assertFalse(DataVersionGate.observe(listOf(2)))
+        assertFalse(DataVersionGate.observe(listOf(DataVersionGate.CURRENT)))
         assertFalse(DataVersionGate.blocked.value)
     }
 

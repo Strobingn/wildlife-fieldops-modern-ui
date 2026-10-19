@@ -8,6 +8,7 @@ import com.strobingn.wildlifefieldops.pricing.JobPricing
 import com.strobingn.wildlifefieldops.pricing.PricingJson
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Calendar
@@ -120,6 +121,9 @@ class TrapFieldOpsEnginesTest {
             trapLocation = "Under deck",
             latitude = 41.44,
             longitude = -74.01,
+            locationAccuracyM = 2.4,
+            locationSampleCount = 6,
+            locationCapturedAt = noon,
             status = TrapStatus.SET,
             disposition = "Still set",
             method = "Live cage trap",
@@ -129,6 +133,12 @@ class TrapFieldOpsEnginesTest {
         val decoded = PricingJson.decode(PricingJson.encode(pricing))
         assertEquals(1, decoded.trapRecords.size)
         assertEquals("Deck-1", decoded.trapRecords[0].trapId)
+        assertEquals(2.4, decoded.trapRecords[0].locationAccuracyM!!, 0.0)
+        assertEquals(6, decoded.trapRecords[0].locationSampleCount)
+        assertEquals(noon, decoded.trapRecords[0].locationCapturedAt)
+        val legacy = PricingJson.decode("""{"dataVersion":2,"trapRecords":[{"id":"old","latitude":1.0,"longitude":2.0}]}""")
+        assertEquals(2, legacy.dataVersion)
+        assertNull(legacy.trapRecords[0].locationAccuracyM)
         assertEquals("Check after the rain", decoded.weatherTrapAdvice)
         assertTrue(decoded.isEmptyWorksheet())
         assertFalse("confirmed_species" == "trap_logs")
