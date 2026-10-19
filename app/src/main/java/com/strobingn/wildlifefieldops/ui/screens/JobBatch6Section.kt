@@ -485,9 +485,12 @@ internal fun SignatureCanvas(
     ) {
         val paintColor = Color(0xFF1A1A1A)
         if (strokes.value.isEmpty() && current.isEmpty() && savedBitmap != null) {
+            // Scale to fit, keeping the ink's aspect ratio, centered in the pad (never stretched).
+            val fit = SignatureFit.fit(savedBitmap.width, savedBitmap.height, size.width, size.height)
             drawImage(
                 savedBitmap,
-                dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt())
+                dstOffset = androidx.compose.ui.unit.IntOffset(fit.left, fit.top),
+                dstSize = androidx.compose.ui.unit.IntSize(fit.width, fit.height)
             )
         }
         (strokes.value + listOf(current)).forEach { stroke ->
@@ -546,5 +549,19 @@ private fun openSmsDraft(context: Context, phone: String, body: String) {
     try {
         context.startActivity(intent)
     } catch (_: ActivityNotFoundException) {
+    }
+}
+
+
+/** Aspect-preserving, centered fit of a saved signature image inside a pad. */
+internal object SignatureFit {
+    data class Box(val left: Int, val top: Int, val width: Int, val height: Int)
+
+    fun fit(srcW: Int, srcH: Int, dstW: Float, dstH: Float): Box {
+        if (srcW <= 0 || srcH <= 0 || dstW <= 0f || dstH <= 0f) return Box(0, 0, dstW.toInt().coerceAtLeast(0), dstH.toInt().coerceAtLeast(0))
+        val scale = minOf(dstW / srcW, dstH / srcH)
+        val w = (srcW * scale).toInt().coerceAtLeast(1)
+        val h = (srcH * scale).toInt().coerceAtLeast(1)
+        return Box(((dstW - w) / 2f).toInt(), ((dstH - h) / 2f).toInt(), w, h)
     }
 }

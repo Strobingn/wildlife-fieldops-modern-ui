@@ -42,7 +42,8 @@ object TechSignatureRules {
         record == null -> Resolved("", "", 0L, fromSaved = false, cleared = false)
         record.cleared -> Resolved("", "", 0L, fromSaved = false, cleared = true)
         record.pngBase64.isBlank() && saved.pngBase64.isNotBlank() ->
-            Resolved(saved.pngBase64, record.signerName.ifBlank { saved.name }, now, fromSaved = true, cleared = false)
+            // Keep the record's first stamped time; only a never-stamped record gets now().
+            Resolved(saved.pngBase64, record.signerName.ifBlank { saved.name }, record.signedAt.takeIf { it > 0L } ?: now, fromSaved = true, cleared = false)
         else -> Resolved(record.pngBase64, record.signerName, record.signedAt, fromSaved = false, cleared = false)
     }
 

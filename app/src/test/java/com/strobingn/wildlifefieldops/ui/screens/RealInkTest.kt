@@ -141,6 +141,8 @@ class RealInkTest {
     }
 
     private fun render(packet: StandardJobPacket) {
+        // Preview render needs tools/ and a JDK javac; without them skip the render, not the assertions.
+        if (!RenderTools.available()) { println("RealInkTest: tools/ or javac missing, PDF preview render skipped"); return }
         val doc = StandardDocuments.build(DocumentKind.CONTRACT, packet)
         val out = File(dir, "pdf").apply { mkdirs() }
         val images = mapOf("customer" to packet.customerSignatureBase64, "company" to packet.companySignatureBase64)
@@ -161,18 +163,7 @@ class RealInkTest {
             }
         }.joinToString("\n"))
         val logo = listOf(File("app/src/main/assets/wildlife_whisperer_logo.png.b64"), File("../app/src/main/assets/wildlife_whisperer_logo.png.b64"), File("src/main/assets/wildlife_whisperer_logo.png.b64")).firstOrNull { it.exists() } ?: File("x")
-        fun tool(n: String) = listOf(File("tools/$n"), File("../tools/$n")).first { it.exists() }
-        val classes = File(out, "classes").apply { mkdirs() }
-        val home = System.getProperty("java.home")
-        run("$home/bin/javac", "-d", classes.absolutePath, tool("render-standard-document-pages.java").absolutePath, tool("render-standard-document-pdf.java").absolutePath)
-        run("$home/bin/java", "-cp", classes.absolutePath, "render_standard_document_pdf", dump.absolutePath, logo.absolutePath, out.absolutePath)
-        run("$home/bin/java", "-cp", classes.absolutePath, "render_standard_document_pages", dump.absolutePath, logo.absolutePath, out.absolutePath)
-    }
-
-    private fun run(vararg cmd: String) {
-        val p = ProcessBuilder(*cmd).redirectErrorStream(true).start()
-        val t = p.inputStream.bufferedReader().readText()
-        check(p.waitFor() == 0) { t }
+        RenderTools.render(dump, logo, out)
     }
 
     private fun save(name: String) {
@@ -186,4 +177,28 @@ private fun View.findRealInkCompose(): View? {
     if (javaClass.name.contains("AndroidComposeView")) return this
     if (this is ViewGroup) for (i in 0 until childCount) getChildAt(i).findRealInkCompose()?.let { return it }
     return null
+}
+
+/** Runs the tools/ preview renderers; [available] is false when tools/ or javac is missing (CI-safe). */
+internal object RenderTools {
+    private fun tool(n: String) = listOf(File("tools/$n"), File("../tools/$n")).firstOrNull { it.exists() }
+    private val home: String get() = System.getProperty("java.home").orEmpty()
+    private fun bin(n: String) = File(home, "bin/$n")
+
+    fun available(): Boolean =
+        tool("render-standard-document-pages.java") != null && tool("render-standard-document-pdf.java") != null &&
+            bin("javac").canExecute() && bin("java").canExecute()
+
+    fun render(dump: File, logo: File, out: File) {
+        val classes = File(out, "classes").apply { mkdirs() }
+        run(bin("javac").path, "-d", classes.absolutePath, tool("render-standard-document-pages.java")!!.absolutePath, tool("render-standard-document-pdf.java")!!.absolutePath)
+        run(bin("java").path, "-cp", classes.absolutePath, "render_standard_document_pdf", dump.absolutePath, logo.absolutePath, out.absolutePath)
+        run(bin("java").path, "-cp", classes.absolutePath, "render_standard_document_pages", dump.absolutePath, logo.absolutePath, out.absolutePath)
+    }
+
+    private fun run(vararg cmd: String) {
+        val p = ProcessBuilder(*cmd).redirectErrorStream(true).start()
+        val t = p.inputStream.bufferedReader().readText()
+        check(p.waitFor() == 0) { t }
+    }
 }
