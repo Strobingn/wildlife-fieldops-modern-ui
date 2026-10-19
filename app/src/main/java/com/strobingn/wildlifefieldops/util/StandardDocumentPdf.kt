@@ -189,11 +189,13 @@ object StandardDocumentPdf {
         }
     }
 
-    private fun drawTagged(canvas: Canvas, page: PageLayout, tag: String, bitmap: Bitmap) {
+    internal fun drawTagged(canvas: Canvas, page: PageLayout, tag: String, bitmap: Bitmap) {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
         page.ops.filter { it.kind == "image" && it.tag == tag }.forEach { op ->
-            val w = op.x2.toInt().coerceAtLeast(1)
-            val h = op.y2.toInt().coerceAtLeast(1)
+            // Fit inside the box keeping the aspect ratio (same as the preview tools), never stretched.
+            val scale = minOf(op.x2 / bitmap.width.coerceAtLeast(1), op.y2 / bitmap.height.coerceAtLeast(1))
+            val w = (bitmap.width * scale).toInt().coerceAtLeast(1)
+            val h = (bitmap.height * scale).toInt().coerceAtLeast(1)
             val scaled = Bitmap.createScaledBitmap(bitmap, w, h, true)
             canvas.drawBitmap(scaled, op.x, op.y, paint)
             if (scaled !== bitmap) scaled.recycle()

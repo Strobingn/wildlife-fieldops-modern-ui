@@ -42,12 +42,25 @@ object TechSignatureRules {
         record == null -> Resolved("", "", 0L, fromSaved = false, cleared = false)
         record.cleared -> Resolved("", "", 0L, fromSaved = false, cleared = true)
         record.pngBase64.isBlank() && saved.pngBase64.isNotBlank() ->
-            Resolved(saved.pngBase64, record.signerName.ifBlank { saved.name }, now, fromSaved = true, cleared = false)
+            // Keep the record's first stamped time; only a never-stamped record gets now().
+            Resolved(saved.pngBase64, record.signerName.ifBlank { saved.name }, record.signedAt.takeIf { it > 0L } ?: now, fromSaved = true, cleared = false)
         else -> Resolved(record.pngBase64, record.signerName, record.signedAt, fromSaved = false, cleared = false)
     }
 
     fun resolve(pricing: JobPricing, document: String, saved: TechnicianSignature, now: Long = System.currentTimeMillis()): Resolved =
         resolve(find(pricing, document), saved, now)
+
+    /**
+     * A stored record with no ink that is auto-filled from the Settings signature is persisted
+     * once (ink + first stamped time), so later reloads show the same date instead of now().
+     * Returns null when nothing needs persisting.
+     */
+    fun persistAutoFill(pricing: JobPricing, document: String, saved: TechnicianSignature, now: Long = System.currentTimeMillis()): JobPricing? {
+        val record = find(pricing, document) ?: return null
+        if (record.cleared || record.pngBase64.isNotBlank() || saved.pngBase64.isBlank()) return null
+        val r = resolve(record, saved, now)
+        return save(pricing, document, r.name, r.signedAt, r.pngBase64)
+    }
 
     /** Blank name and ink = cleared (stays blank). */
     fun save(pricing: JobPricing, document: String, name: String, signedAt: Long, pngBase64: String): JobPricing {

@@ -74,7 +74,25 @@ fun JobSignatureCard(
     var techInk by remember(job.id, document, techRecord, saved) { mutableStateOf(techResolved.pngBase64) }
     var techPad by remember { mutableIntStateOf(0) }
     var shareWarning by remember { mutableStateOf<List<String>?>(null) }
-    var shareNow by remember { mutableStateOf(false) }
+    var sharePricing by remember { mutableStateOf<JobPricing?>(null) }
+
+    // A stored tech record with no ink, auto-filled from Settings, is persisted once so its
+    // date stays the first stamped time instead of changing to now() on every reload.
+    androidx.compose.runtime.LaunchedEffect(job.id, document, techRecord, saved) {
+        TechSignatureRules.persistAutoFill(job.pricing, document, saved)?.let(onSave)
+    }
+    fun pending(): JobPricing = SignatureCardSave.pending(
+        pricing = job.pricing, document = document,
+        customerName = name, customerInk = ink,
+        techName = techName, techInk = techInk,
+        now = System.currentTimeMillis()
+    )
+    /** Share saves pending ink first, so the PDF's ink and dates come from the same saved records. */
+    fun startShare() {
+        val next = pending()
+        if (next != job.pricing) onSave(next)
+        sharePricing = next
+    }
 
     Card(
         colors = CardDefaults.cardColors(containerColor = BackgroundCard),
@@ -139,21 +157,11 @@ fun JobSignatureCard(
                 )
             }
             Row {
-                TextButton(onClick = {
-                    val now = System.currentTimeMillis()
-                    // Adding the technician signature to an already customer-signed document keeps the
-                    // customer's ink, name and signed date exactly as they were.
-                    val customerUnchanged = record != null && record.signerName == name.trim() && record.pngBase64 == ink
-                    // No ink and nothing saved before: don't stamp a name/date as if the customer signed.
-                    val customerSkip = ink.isBlank() && (record == null || record.pngBase64.isBlank())
-                    val withCustomer = if (customerUnchanged || customerSkip) job.pricing else SignatureRules.save(job.pricing, document, name, now, ink)
-                    val techSkip = techInk.isBlank() && (techRecord == null || techRecord.pngBase64.isBlank())
-                    onSave(if (techSkip) withCustomer else TechSignatureRules.save(withCustomer, document, techName, now, techInk))
-                }) { Text("Save signatures", color = PrimaryGreen) }
+                TextButton(onClick = { onSave(pending()) }) { Text("Save signatures", color = PrimaryGreen) }
                 TextButton(onClick = {
                     val missing = SignatureShareGuard.missing(customerInk = ink, technicianInk = techInk)
                     if (missing.isNotEmpty()) { shareWarning = missing; return@TextButton }
-                    shareNow = true
+                    startShare()
                 }) { Text("Share contract PDF", color = TextPrimary) }
             }
             shareWarning?.let { missing ->
@@ -161,37 +169,40 @@ fun JobSignatureCard(
                     onDismissRequest = { shareWarning = null },
                     title = { Text(missing.joinToString("\n"), color = TextPrimary) },
                     text = { Text("That signature area will be left blank on the PDF.", color = TextSecondary) },
-                    confirmButton = { TextButton(onClick = { shareWarning = null; shareNow = true }) { Text("Share anyway", color = TextPrimary) } },
+                    confirmButton = { TextButton(onClick = { shareWarning = null; startShare() }) { Text("Share anyway", color = TextPrimary) } },
                     dismissButton = { TextButton(onClick = { shareWarning = null }) { Text("Cancel", color = TextPrimary) } }
                 )
             }
-            if (shareNow) {
-                androidx.compose.runtime.LaunchedEffect(Unit) {
-                    shareNow = false
-                    val pricing = job.pricing
+            sharePricing?.let { pricing ->
+                androidx.compose.runtime.LaunchedEffect(pricing) {
+                    sharePricing = null
                     val result = com.strobingn.wildlifefieldops.pricing.PricingCalculator.compute(pricing)
                     val items = com.strobingn.wildlifefieldops.pricing.EstimateInvoiceCarry.lineItems(pricing, result)
-                    val savedCustomer = SignatureRules.find(pricing, document)
-                    val path = com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf.generate(
-                        context = context,
-                        documentType = com.strobingn.wildlifefieldops.util.ContractDocumentType.CONTRACT,
-                        job = job,
-                        lineItems = items,
-                        subtotal = result.subtotal.effective,
-                        taxRate = pricing.taxRatePercent,
-                        taxAmount = result.taxAmount.effective,
-                        discountAmount = result.discountAmount.effective,
-                        total = result.total.effective,
-                        notes = listOf(pricing.notes, pricing.rationale).filter { it.isNotBlank() }.joinToString("\n"),
-                        customerSignature = SignatureInk.decodePng(ink.ifBlank { savedCustomer?.pngBase64.orEmpty() }),
-                        customerSignerName = name.ifBlank { savedCustomer?.signerName.orEmpty() },
-                        customerSignedAtMillis = savedCustomer?.signedAt,
-                        technicianSignature = SignatureInk.decodePng(techInk),
-                        technicianSignerName = techName,
-                        technicianSignedAtMillis = techResolved.signedAt.takeIf { it > 0L },
-                        technicianSignatureCleared = techInk.isBlank() && techName.isBlank()
-                    )
-                    com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf.share(context, path, "Share contract")
+                    val sig = SignatureCardSave.forPdf(pricing, document, saved)
+                    runCatching {
+                        val path = com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf.generate(
+                            context = context,
+                            documentType = com.strobingn.wildlifefieldops.util.ContractDocumentType.CONTRACT,
+                            job = job.copy(pricing = pricing),
+                            lineItems = items,
+                            subtotal = result.subtotal.effective,
+                            taxRate = pricing.taxRatePercent,
+                            taxAmount = result.taxAmount.effective,
+                            discountAmount = result.discountAmount.effective,
+                            total = result.total.effective,
+                            notes = listOf(pricing.notes, pricing.rationale).filter { it.isNotBlank() }.joinToString("\n"),
+                            customerSignature = SignatureInk.decodePng(sig.customerInk),
+                            customerSignerName = sig.customerName.ifBlank { name },
+                            customerSignedAtMillis = sig.customerSignedAt,
+                            technicianSignature = SignatureInk.decodePng(sig.techInk),
+                            technicianSignerName = sig.techName,
+                            technicianSignedAtMillis = sig.techSignedAt,
+                            technicianSignatureCleared = sig.techCleared
+                        )
+                        com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf.share(context, path, "Share contract")
+                    }.onFailure {
+                        android.widget.Toast.makeText(context, "Couldn't create the PDF: ${it.message.orEmpty()}", android.widget.Toast.LENGTH_LONG).show()
+                    }
                 }
             }
             val caption = SignatureShareGuard.caption(SignatureRules.find(job.pricing, document), TechSignatureRules.find(job.pricing, document))
@@ -312,4 +323,54 @@ object SignatureShareGuard {
         customer?.takeIf { it.pngBase64.isNotBlank() }?.let { listOf("Customer", it.signerName).filter { s -> s.isNotBlank() }.joinToString(" ") + " · ${SignatureRules.formatStamp(it.signedAt)}" },
         technician?.takeIf { it.pngBase64.isNotBlank() && !it.cleared }?.let { listOf("Technician", it.signerName).filter { s -> s.isNotBlank() }.joinToString(" ") + " · ${SignatureRules.formatStamp(it.signedAt)}" }
     ).joinToString("; ")
+}
+
+/** Save and Share use the same rules, so the shared PDF always matches what was saved. */
+object SignatureCardSave {
+    fun pending(
+        pricing: JobPricing,
+        document: String,
+        customerName: String,
+        customerInk: String,
+        techName: String,
+        techInk: String,
+        now: Long
+    ): JobPricing {
+        val record = SignatureRules.find(pricing, document)
+        val techRecord = TechSignatureRules.find(pricing, document)
+        // Adding the technician signature to an already customer-signed document keeps the
+        // customer's ink, name and signed date exactly as they were.
+        val customerUnchanged = record != null && record.signerName == customerName.trim() && record.pngBase64 == customerInk
+        // No ink and nothing saved before: don't stamp a name/date as if the customer signed.
+        val customerSkip = customerInk.isBlank() && (record == null || record.pngBase64.isBlank())
+        val withCustomer = if (customerUnchanged || customerSkip) pricing else SignatureRules.save(pricing, document, customerName, now, customerInk)
+        val techUnchanged = techRecord != null && !techRecord.cleared && techRecord.signerName == techName.trim() && techRecord.pngBase64 == techInk
+        val techSkip = techInk.isBlank() && (techRecord == null || techRecord.pngBase64.isBlank())
+        return if (techSkip || techUnchanged) withCustomer else TechSignatureRules.save(withCustomer, document, techName, now, techInk)
+    }
+
+    data class PdfSignatures(
+        val customerInk: String,
+        val customerName: String,
+        val customerSignedAt: Long?,
+        val techInk: String,
+        val techName: String,
+        val techSignedAt: Long?,
+        val techCleared: Boolean
+    )
+
+    /** Ink and date always come from the same saved record. */
+    fun forPdf(pricing: JobPricing, document: String, saved: TechnicianSignature, now: Long = System.currentTimeMillis()): PdfSignatures {
+        val c = SignatureRules.find(pricing, document)?.takeIf { it.pngBase64.isNotBlank() }
+        val t = TechSignatureRules.resolve(pricing, document, saved, now)
+        return PdfSignatures(
+            customerInk = c?.pngBase64.orEmpty(),
+            customerName = c?.signerName.orEmpty(),
+            customerSignedAt = c?.signedAt?.takeIf { it > 0L },
+            techInk = t.pngBase64,
+            techName = t.name,
+            techSignedAt = t.signedAt.takeIf { it > 0L && t.hasInk },
+            techCleared = t.cleared || (!t.hasInk && t.name.isBlank())
+        )
+    }
 }
