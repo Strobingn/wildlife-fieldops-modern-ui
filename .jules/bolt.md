@@ -5,3 +5,7 @@
 ## 2025-05-18 - Algorithmic Optimization of Collection Merging in Data Sync
 **Learning:** `mergeArrays` previously used `findIndex` inside a loop over incoming server items, causing O(N * M) runtime complexity (~107ms for 2000 items). Using a `Map` of key -> index turns this into O(N + M) runtime complexity (~3.4ms for 2000 items), achieving a 30x (~97%) performance improvement during offline sync.
 **Action:** Always pre-build key-to-index `Map` lookups when merging or joining collections instead of performing repeated `findIndex` calls inside array loops.
+
+## 2025-05-18 - Pre-computing State Relation Counts for UI Item Cards
+**Learning:** Repeatedly running `Array.prototype.filter` inside list item render loops (such as counting visits, repairs, and photos for each job card in `Dashboard._jobCard`) results in $O(N \times M)$ runtime overhead (~686ms for 500 iterations over 50 jobs with 500 related items each). Pre-building a relational count `Map` once before mapping over items converts this to $O(N + M)$ linear time (~65ms for 500 iterations), yielding a ~10x speedup during Dashboard re-renders.
+**Action:** Pre-compute lookup maps or counts indexed by parent entity ID before rendering components that summarize related collections.
