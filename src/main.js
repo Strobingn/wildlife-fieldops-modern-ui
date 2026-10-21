@@ -550,8 +550,22 @@ const Dashboard = {
         <!-- Recent Jobs -->
         <h2 class="section-title">${q ? 'Search Results' : 'Recent Jobs'}</h2>
         <div class="job-list">
-          ${recentJobs.length ? recentJobs.map((j) => this._jobCard(j, state)).join('')
-            : '<div class="card empty">No jobs yet.</div>'}
+          ${recentJobs.length ? (() => {
+            // Performance optimization: Pre-compute counts for visits, repairs, and photos
+            // across all jobs once in O(N) time instead of O(N * M) repeated filter traversals.
+            const countsMap = new Map();
+            const incCount = (jobId, type) => {
+              if (!jobId) return;
+              let c = countsMap.get(jobId);
+              if (!c) { c = { visits: 0, repairs: 0, photos: 0 }; countsMap.set(jobId, c); }
+              c[type]++;
+            };
+            (state.visits || []).forEach((v) => incCount(v.jobId || v.job_id, 'visits'));
+            (state.repairs || []).forEach((r) => incCount(r.jobId || r.job_id, 'repairs'));
+            (state.photos || []).forEach((p) => incCount(p.jobId || p.job_id, 'photos'));
+
+            return recentJobs.map((j) => this._jobCard(j, state, countsMap)).join('');
+          })() : '<div class="card empty">No jobs yet.</div>'}
         </div>
 
         <!-- Top Towns -->
@@ -601,13 +615,14 @@ const Dashboard = {
     `;
   },
 
-  _jobCard(j, state) {
+  _jobCard(j, state, countsMap = null) {
     const s = jobScore(j.id);
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
-    const vCount = (state.visits || []).filter((v) => (v.jobId || v.job_id) === j.id).length;
-    const rCount = (state.repairs || []).filter((r) => (r.jobId || r.job_id) === j.id).length;
-    const pCount = (state.photos || []).filter((p) => (p.jobId || p.job_id) === j.id).length;
+    const jobCounts = countsMap ? (countsMap.get(j.id) || { visits: 0, repairs: 0, photos: 0 }) : null;
+    const vCount = jobCounts ? jobCounts.visits : (state.visits || []).filter((v) => (v.jobId || v.job_id) === j.id).length;
+    const rCount = jobCounts ? jobCounts.repairs : (state.repairs || []).filter((r) => (r.jobId || r.job_id) === j.id).length;
+    const pCount = jobCounts ? jobCounts.photos : (state.photos || []).filter((p) => (p.jobId || p.job_id) === j.id).length;
     return `
       <div class="card job-card" data-job-id="${E(j.id)}">
         <div class="job-header">
