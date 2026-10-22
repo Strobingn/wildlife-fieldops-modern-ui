@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeArrays, filterJobs } from './utils.js';
+import { mergeArrays, filterJobs, buildJobRelationCounts } from './utils.js';
 
 describe('mergeArrays', () => {
   it('returns copy of local array if server array is invalid or empty', () => {
@@ -72,5 +72,50 @@ describe('filterJobs', () => {
 
   it('handles non-array inputs gracefully', () => {
     expect(filterJobs(null, { status: 'active' })).toEqual([]);
+  });
+});
+
+describe('buildJobRelationCounts', () => {
+  it('handles empty state gracefully', () => {
+    const counts = buildJobRelationCounts(null);
+    expect(counts.visitCounts.size).toBe(0);
+    expect(counts.repairCounts.size).toBe(0);
+    expect(counts.photoCounts.size).toBe(0);
+    expect(counts.signatureSet.size).toBe(0);
+  });
+
+  it('correctly aggregates counts and sets across relations with both jobId and job_id fields', () => {
+    const state = {
+      visits: [
+        { id: 'v1', jobId: 'job-1' },
+        { id: 'v2', job_id: 'job-1' },
+        { id: 'v3', jobId: 'job-2' },
+      ],
+      repairs: [
+        { id: 'r1', jobId: 'job-1' },
+      ],
+      photos: [
+        { id: 'p1', job_id: 'job-2' },
+        { id: 'p2', job_id: 'job-2' },
+      ],
+      signatures: [
+        { id: 'sig1', jobId: 'job-1' },
+        { id: 'sig2', job_id: 'job-1' },
+      ]
+    };
+
+    const counts = buildJobRelationCounts(state);
+
+    expect(counts.visitCounts.get('job-1')).toBe(2);
+    expect(counts.visitCounts.get('job-2')).toBe(1);
+    expect(counts.visitCounts.get('job-3')).toBeUndefined();
+
+    expect(counts.repairCounts.get('job-1')).toBe(1);
+    expect(counts.repairCounts.get('job-2')).toBeUndefined();
+
+    expect(counts.photoCounts.get('job-2')).toBe(2);
+
+    expect(counts.signatureSet.has('job-1')).toBe(true);
+    expect(counts.signatureSet.has('job-2')).toBe(false);
   });
 });
