@@ -30,7 +30,7 @@ import {
   compressImage, generatePDF, deepClone,
   debounce, throttle, groupBy, sortBy,
   searchJobs, filterJobs, calculateEstimate, mergeArrays,
-  formatDateShort,
+  formatDateShort, buildJobRelationCounts,
 } from './utils.js';
 import {
   SPECIES, SERVICES, SPECIES_ICONS, SPECIES_HINTS,
@@ -402,15 +402,31 @@ function O(arr, selected = '') {
 
 /**
  * Calculate job completeness score (0-100).
+ * Performance optimization: Accepts optional pre-computed relation counts/maps
+ * to avoid O(N * M) array scans across visits, photos, repairs, and signatures.
  * @param {string} jobId
+ * @param {Record<string, any>|{ visitCounts: Map<string, number>, repairCounts: Map<string, number>, photoCounts: Map<string, number>, signatureSet: Set<string> }} [countsOrState]
  * @returns {number}
  */
-function jobScore(jobId) {
-  const s = store.getState();
-  const hasVisits = s.visits.some((v) => v.jobId === jobId || v.job_id === jobId);
-  const hasPhotos = s.photos.some((p) => p.jobId === jobId || p.job_id === jobId);
-  const hasRepairs = s.repairs.some((r) => r.jobId === jobId || r.job_id === jobId);
-  const hasSig = s.signatures.some((sig) => sig.jobId === jobId || sig.job_id === jobId);
+function jobScore(jobId, countsOrState) {
+  if (countsOrState?.visitCounts) {
+    const counts = countsOrState;
+    const hasVisits = (counts.visitCounts.get(jobId) || 0) > 0;
+    const hasPhotos = (counts.photoCounts.get(jobId) || 0) > 0;
+    const hasRepairs = (counts.repairCounts.get(jobId) || 0) > 0;
+    const hasSig = counts.signatureSet ? counts.signatureSet.has(jobId) : false;
+    return Math.min(100,
+      (hasVisits ? 25 : 0) +
+      (hasPhotos ? 25 : 0) +
+      (hasRepairs ? 25 : 0) +
+      (hasSig ? 25 : 0)
+    );
+  }
+  const s = countsOrState && !countsOrState.visitCounts ? countsOrState : store.getState();
+  const hasVisits = (s.visits || []).some((v) => v.jobId === jobId || v.job_id === jobId);
+  const hasPhotos = (s.photos || []).some((p) => p.jobId === jobId || p.job_id === jobId);
+  const hasRepairs = (s.repairs || []).some((r) => r.jobId === jobId || r.job_id === jobId);
+  const hasSig = (s.signatures || []).some((sig) => sig.jobId === jobId || sig.job_id === jobId);
   return Math.min(100,
     (hasVisits ? 25 : 0) +
     (hasPhotos ? 25 : 0) +
@@ -487,6 +503,7 @@ const Dashboard = {
 
   render(state) {
     const jobs = state.jobs || [];
+    const counts = buildJobRelationCounts(state);
     const openJobs = jobs.filter((j) => j.status !== 'Closed' && j.status !== 'Cancelled');
     const totalEstimate = openJobs.reduce((sum, j) => sum + (j.grand_total || j.estimate || calculateEstimate(j.species, j.severity) || 0), 0);
     const q = (state.searchQuery || '').toLowerCase();
@@ -550,7 +567,7 @@ const Dashboard = {
         <!-- Recent Jobs -->
         <h2 class="section-title">${q ? 'Search Results' : 'Recent Jobs'}</h2>
         <div class="job-list">
-          ${recentJobs.length ? recentJobs.map((j) => this._jobCard(j, state)).join('')
+          ${recentJobs.length ? recentJobs.map((j) => this._jobCard(j, state, counts)).join('')
             : '<div class="card empty">No jobs yet.</div>'}
         </div>
 
@@ -601,13 +618,13 @@ const Dashboard = {
     `;
   },
 
-  _jobCard(j, state) {
-    const s = jobScore(j.id);
+  _jobCard(j, state, counts) {
+    const s = jobScore(j.id, counts);
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
-    const vCount = (state.visits || []).filter((v) => (v.jobId || v.job_id) === j.id).length;
-    const rCount = (state.repairs || []).filter((r) => (r.jobId || r.job_id) === j.id).length;
-    const pCount = (state.photos || []).filter((p) => (p.jobId || p.job_id) === j.id).length;
+    const vCount = counts ? (counts.visitCounts.get(j.id) || 0) : (state.visits || []).filter((v) => (v.jobId || v.job_id) === j.id).length;
+    const rCount = counts ? (counts.repairCounts.get(j.id) || 0) : (state.repairs || []).filter((r) => (r.jobId || r.job_id) === j.id).length;
+    const pCount = counts ? (counts.photoCounts.get(j.id) || 0) : (state.photos || []).filter((p) => (p.jobId || p.job_id) === j.id).length;
     return `
       <div class="card job-card" data-job-id="${E(j.id)}">
         <div class="job-header">
@@ -704,6 +721,7 @@ const JobList = {
     let jobs = q ? searchJobs(state.jobs, q) : [...state.jobs];
     jobs = filterJobs(jobs, state.filters);
     jobs = sortBy(jobs, 'updated_at', 'desc');
+    const counts = buildJobRelationCounts(state);
 
     return `
       <div class="page job-list-page">
@@ -721,15 +739,15 @@ const JobList = {
           <button class="btn primary" data-action="new-job">➕ New Job</button>
         </div>
         <div class="job-list">
-          ${jobs.length ? jobs.map((j) => this._jobCard(j, state)).join('')
+          ${jobs.length ? jobs.map((j) => this._jobCard(j, state, counts)).join('')
             : `<div class="card empty">${q ? 'No matching jobs.' : 'No jobs yet.'}</div>`}
         </div>
       </div>
     `;
   },
 
-  _jobCard(j, state) {
-    const s = jobScore(j.id);
+  _jobCard(j, state, counts) {
+    const s = jobScore(j.id, counts);
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
     return `

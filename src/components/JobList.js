@@ -9,6 +9,7 @@ import {
   SPECIES_ICONS,
   STATUS_STYLES
 } from "../constants.js";
+import { buildJobRelationCounts } from "../utils.js";
 
 function E(s) {
   return String(s || "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[m]));
@@ -23,11 +24,18 @@ function estimateJob(j) {
   return Math.round(base * 1.35);
 }
 
-function scoreJob(j, visits, repairs, photos, signatures) {
-  const v = visits.some((x) => x.job_id === j.id);
-  const p = photos.some((x) => x.job_id === j.id);
-  const rr = repairs.filter((x) => x.job_id === j.id);
-  const sig = signatures.some((x) => x.job_id === j.id);
+function scoreJob(j, visits, repairs, photos, signatures, counts) {
+  if (counts) {
+    const hasVisits = (counts.visitCounts.get(j.id) || 0) > 0;
+    const hasPhotos = (counts.photoCounts.get(j.id) || 0) > 0;
+    const hasRepairs = (counts.repairCounts.get(j.id) || 0) > 0;
+    const hasSig = counts.signatureSet ? counts.signatureSet.has(j.id) : false;
+    return Math.min(100, (hasVisits ? 25 : 0) + (hasPhotos ? 25 : 0) + (hasRepairs ? 25 : 0) + (hasSig ? 25 : 0));
+  }
+  const v = visits.some((x) => x.job_id === j.id || x.jobId === j.id);
+  const p = photos.some((x) => x.job_id === j.id || x.jobId === j.id);
+  const rr = repairs.filter((x) => x.job_id === j.id || x.jobId === j.id);
+  const sig = signatures.some((x) => x.job_id === j.id || x.jobId === j.id);
   return Math.min(100, (v ? 25 : 0) + (p ? 25 : 0) + (rr.length ? 25 : 0) + (sig ? 25 : 0));
 }
 
@@ -60,6 +68,7 @@ export const JobList = {
     const startIdx = 0;
     const endIdx = Math.min(this._page * PAGE_SIZE, filtered.length);
     const pageJobs = filtered.slice(startIdx, endIdx);
+    const counts = buildJobRelationCounts(state);
 
     // Unique towns and techs for filter dropdowns
     const towns = [...new Set(jobs.map((j) => j.town).filter(Boolean))].sort();
@@ -115,7 +124,7 @@ export const JobList = {
       <!-- Job List -->
       <div id="jobList">
         ${pageJobs.length
-          ? pageJobs.map((j) => this._jobCard(j, visits, repairs, photos, signatures)).join("")
+          ? pageJobs.map((j) => this._jobCard(j, visits, repairs, photos, signatures, counts)).join("")
           : `<div class="empty-state">
               <div class="empty-icon" aria-hidden="true">🔍</div>
               <h4>${this._searchQuery || this._filters.status || this._filters.species ? "No matching jobs" : "No jobs yet"}</h4>
@@ -289,13 +298,13 @@ export const JobList = {
     return sorted;
   },
 
-  _jobCard(j, visits, repairs, photos, signatures) {
+  _jobCard(j, visits, repairs, photos, signatures, counts) {
     const icon = SPECIES_ICONS[j.species] || "🐾";
     const sc = STATUS_STYLES[j.status] || "active";
-    const v = visits.filter((x) => x.job_id === j.id).length;
-    const r = repairs.filter((x) => x.job_id === j.id).length;
-    const p = photos.filter((x) => x.job_id === j.id).length;
-    const s = scoreJob(j, visits, repairs, photos, signatures);
+    const v = counts ? (counts.visitCounts.get(j.id) || 0) : visits.filter((x) => x.job_id === j.id).length;
+    const r = counts ? (counts.repairCounts.get(j.id) || 0) : repairs.filter((x) => x.job_id === j.id).length;
+    const p = counts ? (counts.photoCounts.get(j.id) || 0) : photos.filter((x) => x.job_id === j.id).length;
+    const s = scoreJob(j, visits, repairs, photos, signatures, counts);
     const est = estimateJob(j);
 
     return /* html */ `

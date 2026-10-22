@@ -553,3 +553,33 @@ export function filterJobs(jobs, filters) {
     return true;
   });
 }
+
+/**
+ * Build Map and Set lookups for job relations (visits, repairs, photos, signatures).
+ * Replaces O(N * M) nested array iterations during job list rendering with O(N + M) Map lookups.
+ * @param {Record<string, any>} state - State object containing visits, repairs, photos, signatures
+ * @returns {{ visitCounts: Map<string, number>, repairCounts: Map<string, number>, photoCounts: Map<string, number>, signatureSet: Set<string> }}
+ */
+export function buildJobRelationCounts(state) {
+  const visitCounts = new Map();
+  for (const v of state?.visits || []) {
+    const k = v.jobId || v.job_id;
+    if (k) visitCounts.set(k, (visitCounts.get(k) || 0) + 1);
+  }
+  const repairCounts = new Map();
+  for (const r of state?.repairs || []) {
+    const k = r.jobId || r.job_id;
+    if (k) repairCounts.set(k, (repairCounts.get(k) || 0) + 1);
+  }
+  const photoCounts = new Map();
+  for (const p of state?.photos || []) {
+    const k = p.jobId || p.job_id;
+    if (k) photoCounts.set(k, (photoCounts.get(k) || 0) + 1);
+  }
+  const signatureSet = new Set();
+  for (const sig of state?.signatures || []) {
+    const k = sig.jobId || sig.job_id;
+    if (k) signatureSet.add(k);
+  }
+  return { visitCounts, repairCounts, photoCounts, signatureSet };
+}
