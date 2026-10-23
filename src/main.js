@@ -401,11 +401,65 @@ function O(arr, selected = '') {
 }
 
 /**
+ * Performance optimization: Pre-build count maps for job-related collections
+ * (visits, repairs, photos, signatures) in a single pass O(N) per collection.
+ * This avoids doing 7 full array scans per job card on every render pass.
+ * @param {import('./types').AppState} state
+ * @returns {{ visits: Map<string, number>, repairs: Map<string, number>, photos: Map<string, number>, signatures: Map<string, number> }}
+ */
+function buildJobCounts(state) {
+  const visits = new Map();
+  const repairs = new Map();
+  const photos = new Map();
+  const signatures = new Map();
+
+  if (Array.isArray(state?.visits)) {
+    for (let i = 0; i < state.visits.length; i++) {
+      const id = state.visits[i]?.jobId || state.visits[i]?.job_id;
+      if (id) visits.set(id, (visits.get(id) || 0) + 1);
+    }
+  }
+  if (Array.isArray(state?.repairs)) {
+    for (let i = 0; i < state.repairs.length; i++) {
+      const id = state.repairs[i]?.jobId || state.repairs[i]?.job_id;
+      if (id) repairs.set(id, (repairs.get(id) || 0) + 1);
+    }
+  }
+  if (Array.isArray(state?.photos)) {
+    for (let i = 0; i < state.photos.length; i++) {
+      const id = state.photos[i]?.jobId || state.photos[i]?.job_id;
+      if (id) photos.set(id, (photos.get(id) || 0) + 1);
+    }
+  }
+  if (Array.isArray(state?.signatures)) {
+    for (let i = 0; i < state.signatures.length; i++) {
+      const id = state.signatures[i]?.jobId || state.signatures[i]?.job_id;
+      if (id) signatures.set(id, (signatures.get(id) || 0) + 1);
+    }
+  }
+
+  return { visits, repairs, photos, signatures };
+}
+
+/**
  * Calculate job completeness score (0-100).
  * @param {string} jobId
+ * @param {ReturnType<typeof buildJobCounts>} [counts] - Optional pre-computed count maps for O(1) lookup
  * @returns {number}
  */
-function jobScore(jobId) {
+function jobScore(jobId, counts) {
+  if (counts) {
+    const hasVisits = Boolean(counts.visits.get(jobId));
+    const hasPhotos = Boolean(counts.photos.get(jobId));
+    const hasRepairs = Boolean(counts.repairs.get(jobId));
+    const hasSig = Boolean(counts.signatures.get(jobId));
+    return Math.min(100,
+      (hasVisits ? 25 : 0) +
+      (hasPhotos ? 25 : 0) +
+      (hasRepairs ? 25 : 0) +
+      (hasSig ? 25 : 0)
+    );
+  }
   const s = store.getState();
   const hasVisits = s.visits.some((v) => v.jobId === jobId || v.job_id === jobId);
   const hasPhotos = s.photos.some((p) => p.jobId === jobId || p.job_id === jobId);
@@ -499,6 +553,9 @@ const Dashboard = {
       .sort((a, b) => b[1].length - a[1].length)
       .slice(0, 5);
 
+    // Performance optimization: Pre-build count maps once for all rendered job cards
+    const counts = buildJobCounts(state);
+
     return `
       <div class="page dashboard-page">
         <!-- Metrics Cards -->
@@ -550,7 +607,7 @@ const Dashboard = {
         <!-- Recent Jobs -->
         <h2 class="section-title">${q ? 'Search Results' : 'Recent Jobs'}</h2>
         <div class="job-list">
-          ${recentJobs.length ? recentJobs.map((j) => this._jobCard(j, state)).join('')
+          ${recentJobs.length ? recentJobs.map((j) => this._jobCard(j, state, counts)).join('')
             : '<div class="card empty">No jobs yet.</div>'}
         </div>
 
@@ -601,13 +658,13 @@ const Dashboard = {
     `;
   },
 
-  _jobCard(j, state) {
-    const s = jobScore(j.id);
+  _jobCard(j, state, counts) {
+    const s = jobScore(j.id, counts);
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
-    const vCount = (state.visits || []).filter((v) => (v.jobId || v.job_id) === j.id).length;
-    const rCount = (state.repairs || []).filter((r) => (r.jobId || r.job_id) === j.id).length;
-    const pCount = (state.photos || []).filter((p) => (p.jobId || p.job_id) === j.id).length;
+    const vCount = counts ? (counts.visits.get(j.id) || 0) : (state.visits || []).filter((v) => (v.jobId || v.job_id) === j.id).length;
+    const rCount = counts ? (counts.repairs.get(j.id) || 0) : (state.repairs || []).filter((r) => (r.jobId || r.job_id) === j.id).length;
+    const pCount = counts ? (counts.photos.get(j.id) || 0) : (state.photos || []).filter((p) => (p.jobId || p.job_id) === j.id).length;
     return `
       <div class="card job-card" data-job-id="${E(j.id)}">
         <div class="job-header">
@@ -705,6 +762,9 @@ const JobList = {
     jobs = filterJobs(jobs, state.filters);
     jobs = sortBy(jobs, 'updated_at', 'desc');
 
+    // Performance optimization: Pre-build count maps once for all rendered job cards
+    const counts = buildJobCounts(state);
+
     return `
       <div class="page job-list-page">
         <div class="list-toolbar">
@@ -721,15 +781,15 @@ const JobList = {
           <button class="btn primary" data-action="new-job">➕ New Job</button>
         </div>
         <div class="job-list">
-          ${jobs.length ? jobs.map((j) => this._jobCard(j, state)).join('')
+          ${jobs.length ? jobs.map((j) => this._jobCard(j, state, counts)).join('')
             : `<div class="card empty">${q ? 'No matching jobs.' : 'No jobs yet.'}</div>`}
         </div>
       </div>
     `;
   },
 
-  _jobCard(j, state) {
-    const s = jobScore(j.id);
+  _jobCard(j, state, counts) {
+    const s = jobScore(j.id, counts);
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
     return `
@@ -2762,27 +2822,31 @@ function haversine(lat1, lng1, lat2, lng2) {
  */
 function calculateOptimalRoute(jobs, startGPS) {
   if (!jobs.length) return [];
-  const unvisited = [...jobs];
+  // Performance optimization: Pre-parse lat/lng floats once to avoid repetitive parseFloat inside loop
+  const unvisited = jobs.map((job) => ({
+    job,
+    lat: parseFloat(job.latitude || job.lat),
+    lng: parseFloat(job.longitude || job.lng),
+  }));
   const route = [];
-  let currentLat = startGPS?.lat || parseFloat(unvisited[0].latitude || unvisited[0].lat);
-  let currentLng = startGPS?.lng || parseFloat(unvisited[0].longitude || unvisited[0].lng);
+  let currentLat = startGPS?.lat || unvisited[0].lat;
+  let currentLng = startGPS?.lng || unvisited[0].lng;
 
   while (unvisited.length > 0) {
     let nearestIdx = 0;
     let nearestDist = Infinity;
-    unvisited.forEach((job, idx) => {
-      const jLat = parseFloat(job.latitude || job.lat);
-      const jLng = parseFloat(job.longitude || job.lng);
-      const dist = haversine(currentLat, currentLng, jLat, jLng);
+    for (let idx = 0; idx < unvisited.length; idx++) {
+      const item = unvisited[idx];
+      const dist = haversine(currentLat, currentLng, item.lat, item.lng);
       if (dist < nearestDist) {
         nearestDist = dist;
         nearestIdx = idx;
       }
-    });
+    }
     const nearest = unvisited.splice(nearestIdx, 1)[0];
-    route.push({ job: nearest, distance: nearestDist === Infinity ? 0 : nearestDist });
-    currentLat = parseFloat(nearest.latitude || nearest.lat);
-    currentLng = parseFloat(nearest.longitude || nearest.lng);
+    route.push({ job: nearest.job, distance: nearestDist === Infinity ? 0 : nearestDist });
+    currentLat = nearest.lat;
+    currentLng = nearest.lng;
   }
   return route;
 }
