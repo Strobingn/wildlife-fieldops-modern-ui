@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeArrays, filterJobs } from './utils.js';
+import { mergeArrays, filterJobs, formatDateShort } from './utils.js';
 
 describe('mergeArrays', () => {
   it('returns copy of local array if server array is invalid or empty', () => {
@@ -72,5 +72,34 @@ describe('filterJobs', () => {
 
   it('handles non-array inputs gracefully', () => {
     expect(filterJobs(null, { status: 'active' })).toEqual([]);
+  });
+});
+
+describe('formatDateShort', () => {
+  it('returns — for null, undefined, or empty date', () => {
+    expect(formatDateShort(null)).toBe('—');
+    expect(formatDateShort(undefined)).toBe('—');
+    expect(formatDateShort('')).toBe('—');
+    expect(formatDateShort('invalid-date')).toBe('—');
+  });
+
+  it('formats today date with Today prefix', () => {
+    const now = new Date();
+    const result = formatDateShort(now);
+    expect(result).toMatch(/^Today\s+/);
+  });
+
+  it('formats tomorrow date with Tomorrow prefix', () => {
+    const now = new Date();
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 10, 30);
+    const result = formatDateShort(tomorrow);
+    expect(result).toMatch(/^Tomorrow\s+/);
+  });
+
+  it('formats other dates with short month and day', () => {
+    const pastDate = new Date(2020, 4, 15, 14, 0); // May 15, 2020 2:00 PM
+    const result = formatDateShort(pastDate);
+    expect(result).toContain('May');
+    expect(result).toContain('15');
   });
 });
