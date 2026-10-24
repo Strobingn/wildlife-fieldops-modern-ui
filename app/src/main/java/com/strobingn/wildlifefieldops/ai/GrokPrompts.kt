@@ -1,7 +1,7 @@
 package com.strobingn.wildlifefieldops.ai
 
 object GrokPrompts {
-    const val SYSTEM = "You are an expert wildlife removal technician and field ops AI. Always return valid JSON only. Be precise, use realistic pricing for New York / New Jersey wildlife jobs in 2026. Prioritize safety, compliance (rabies, permits), insurance documentation, and customer satisfaction."
+    const val SYSTEM = "You are an expert wildlife removal technician and field ops AI. Be precise, use realistic pricing for New York / New Jersey wildlife jobs in 2026. Prioritize safety, compliance (rabies, permits), insurance documentation, and customer satisfaction."
 
     fun photoToFormFill(
         speciesTags: List<String>,

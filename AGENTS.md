@@ -4,6 +4,14 @@ Native Android app (Kotlin + Jetpack Compose). The product path is Gradle `:app`
 Leftover Vite / Capacitor files may exist in the tree; do not treat `npm` or
 Capacitor as the default workflow.
 
+## Branches and app identity
+
+Do all work on a new branch created from `main`, and open a pull request for
+it. Never commit or push to `main` directly.
+
+Keep `applicationId` (`com.strobingn.wildlifefieldops`) unchanged in
+`app/build.gradle.kts`, so new builds install as updates over the existing app.
+
 ## Cursor Cloud specific instructions
 
 Source the durable SDK/JDK exports written by `.cursor/install-android-sdk.sh`.
