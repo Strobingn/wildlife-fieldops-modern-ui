@@ -22,11 +22,20 @@ function estimateJob(j) {
   return Math.round(base * 1.35);
 }
 
+// Performance optimization: Support Map/Set lookups in scoreJob for O(1) evaluation
+// when pre-indexed maps are passed, avoiding repeated O(N) array scans.
 function scoreJob(j, visits, repairs, photos, signatures) {
-  const v = visits.some((x) => x.job_id === j.id);
-  const p = photos.some((x) => x.job_id === j.id);
-  const rr = repairs.filter((x) => x.job_id === j.id);
-  const sig = signatures.some((x) => x.job_id === j.id);
+  if (visits instanceof Map) {
+    const v = (visits.get(j.id) || 0) > 0;
+    const p = (photos instanceof Map ? (photos.get(j.id) || 0) : 0) > 0;
+    const r = (repairs instanceof Map ? (repairs.get(j.id) || 0) : 0) > 0;
+    const sig = signatures instanceof Set ? signatures.has(j.id) : false;
+    return Math.min(100, (v ? 25 : 0) + (p ? 25 : 0) + (r ? 25 : 0) + (sig ? 25 : 0));
+  }
+  const v = Array.isArray(visits) && visits.some((x) => x.job_id === j.id);
+  const p = Array.isArray(photos) && photos.some((x) => x.job_id === j.id);
+  const rr = Array.isArray(repairs) ? repairs.filter((x) => x.job_id === j.id) : [];
+  const sig = Array.isArray(signatures) && signatures.some((x) => x.job_id === j.id);
   return Math.min(100, (v ? 25 : 0) + (p ? 25 : 0) + (rr.length ? 25 : 0) + (sig ? 25 : 0));
 }
 
@@ -50,6 +59,31 @@ export const Dashboard = {
     const photoCount = photos.length;
     const greeting = this._getGreeting();
     const userName = state.currentUser?.name || "Tech";
+
+    // Performance optimization: Pre-index associated collections by job_id into Map/Set lookups ONCE per render.
+    const visitCounts = new Map();
+    for (let i = 0; i < visits.length; i++) {
+      const id = visits[i]?.job_id;
+      if (id) visitCounts.set(id, (visitCounts.get(id) || 0) + 1);
+    }
+
+    const repairCounts = new Map();
+    for (let i = 0; i < repairs.length; i++) {
+      const id = repairs[i]?.job_id;
+      if (id) repairCounts.set(id, (repairCounts.get(id) || 0) + 1);
+    }
+
+    const photoCounts = new Map();
+    for (let i = 0; i < photos.length; i++) {
+      const id = photos[i]?.job_id;
+      if (id) photoCounts.set(id, (photoCounts.get(id) || 0) + 1);
+    }
+
+    const signatureSet = new Set();
+    for (let i = 0; i < signatures.length; i++) {
+      const id = signatures[i]?.job_id;
+      if (id) signatureSet.add(id);
+    }
 
     // Weather from first GPS job if available
     const weatherWidget = state.weather ? this._renderWeather(state.weather) : "";
@@ -118,7 +152,7 @@ export const Dashboard = {
       <div class="section-title reveal">Recent Jobs</div>
       <div id="recentJobs" class="reveal delay-2">
         ${jobs.slice(0, 5).length
-          ? jobs.slice(0, 5).map((j) => this._jobCard(j, visits, repairs, photos, signatures)).join("")
+          ? jobs.slice(0, 5).map((j) => this._jobCard(j, visitCounts, repairCounts, photoCounts, signatureSet)).join("")
           : `<div class="empty-state">
               <div class="empty-icon" aria-hidden="true">🦝</div>
               <h4>No jobs yet</h4>
@@ -212,9 +246,9 @@ export const Dashboard = {
   _jobCard(j, visits, repairs, photos, signatures) {
     const icon = SPECIES_ICONS[j.species] || "🐾";
     const sc = STATUS_STYLES[j.status] || "active";
-    const v = visits.filter((x) => x.job_id === j.id).length;
-    const r = repairs.filter((x) => x.job_id === j.id).length;
-    const p = photos.filter((x) => x.job_id === j.id).length;
+    const v = visits instanceof Map ? (visits.get(j.id) || 0) : (Array.isArray(visits) ? visits.filter((x) => x.job_id === j.id).length : 0);
+    const r = repairs instanceof Map ? (repairs.get(j.id) || 0) : (Array.isArray(repairs) ? repairs.filter((x) => x.job_id === j.id).length : 0);
+    const p = photos instanceof Map ? (photos.get(j.id) || 0) : (Array.isArray(photos) ? photos.filter((x) => x.job_id === j.id).length : 0);
     const s = scoreJob(j, visits, repairs, photos, signatures);
     const est = estimateJob(j);
 
