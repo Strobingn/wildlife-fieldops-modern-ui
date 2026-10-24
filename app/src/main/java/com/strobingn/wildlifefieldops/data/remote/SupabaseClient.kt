@@ -117,13 +117,18 @@ class SupabaseService @Inject constructor() {
         return auth?.currentUserOrNull() != null
     }
 
+    /**
+     * Anonymous session via Supabase native anonymous sign-in. No email or password is
+     * created, so nothing derivable is ever stored. (Previously this signed up
+     * anon_<uuid>@wildlifefieldops.local with the same uuid as the password; that path
+     * had no callers and no such accounts exist, so no migration is needed.)
+     * Requires "Allow anonymous sign-ins" in the Supabase Auth settings; returns false otherwise.
+     */
     suspend fun signInAnonymous(): Boolean {
         return try {
-            val uuid = java.util.UUID.randomUUID().toString()
-            auth?.signUpWith(Email) {
-                this.email = "anon_${uuid}@wildlifefieldops.local"
-                this.password = uuid
-            }
+            if (auth?.currentUserOrNull() != null) return true
+            val a = auth ?: return false
+            a.signInAnonymously()
             true
         } catch (e: Exception) {
             e.printStackTrace()
