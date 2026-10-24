@@ -1,8 +1,11 @@
 package com.strobingn.wildlifefieldops.trapreminders
 
+import android.content.Context
 import com.strobingn.wildlifefieldops.ai.fieldops.TrapReminders
 import com.strobingn.wildlifefieldops.data.local.JobDao
 import com.strobingn.wildlifefieldops.data.local.TrapLogDao
+import com.strobingn.wildlifefieldops.ui.viewmodel.notificationsAllowed
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
@@ -14,6 +17,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class TrapReminderRunner @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val trapLogDao: TrapLogDao,
     private val jobDao: JobDao,
     private val settingsStore: TrapReminderSettingsStore,
@@ -25,7 +29,7 @@ class TrapReminderRunner @Inject constructor(
     suspend fun run(now: Long = System.currentTimeMillis()): Long? = mutex.withLock {
         val settings = settingsStore.current()
         val traps = trapLogDao.getAllOnce()
-        if (!settings.notificationsEnabled) return@withLock null
+        if (!settings.notificationsEnabled || !context.notificationsAllowed()) return@withLock null
         val due = TrapReminders.dueNow(traps, now, settings.leadMinutes, settings.sentKeys)
         if (due.isNotEmpty()) {
             val titles = jobDao.getAllOnce().associate { it.id to it.title.ifBlank { it.customerName } }

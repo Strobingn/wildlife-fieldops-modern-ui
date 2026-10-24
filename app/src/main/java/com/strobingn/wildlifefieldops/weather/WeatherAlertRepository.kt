@@ -6,6 +6,7 @@ import com.strobingn.wildlifefieldops.ai.fieldops.JobStatusPipeline
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.data.remote.GeoPoint
+import com.strobingn.wildlifefieldops.ui.viewmodel.notificationsAllowed
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,7 +22,7 @@ import javax.inject.Singleton
 
 @Singleton
 class WeatherAlertRepository @Inject constructor(
-    @ApplicationContext context: Context,
+    @ApplicationContext private val context: Context,
     private val client: WeatherForecastClient,
     private val locations: WeatherLocationResolver,
     private val settingsStore: WeatherAlertSettingsStore,
@@ -176,7 +177,7 @@ class WeatherAlertRepository @Inject constructor(
 
     private suspend fun publishNewAlerts() {
         val settings = settingsStore.current()
-        if (!settings.notificationsEnabled) return
+        if (!settings.notificationsEnabled || !context.notificationsAllowed()) return
         val place = cache.current().primaryPlace() ?: return
         val alerts = WeatherAlertEngine.evaluate(place.hourly, place.nws, settings, System.currentTimeMillis())
         val fresh = WeatherAlertEngine.unseen(alerts, settings.notifiedKeys)

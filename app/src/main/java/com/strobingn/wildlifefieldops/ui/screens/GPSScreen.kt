@@ -24,7 +24,9 @@ import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.ui.theme.*
+import com.strobingn.wildlifefieldops.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.delay
 import com.google.maps.android.compose.MapType
 
@@ -35,6 +37,8 @@ fun GPSScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val settingsVm: SettingsViewModel = hiltViewModel()
+    val highAccuracyGps by settingsVm.highAccuracyGps.collectAsState(initial = true)
     var hasLocationPermission by remember { mutableStateOf(false) }
     var currentLocation by remember { mutableStateOf<LatLng?>(null) }
     var trackingEnabled by remember { mutableStateOf(false) }
@@ -51,7 +55,7 @@ fun GPSScreen(
     }
 
     // Location updates using Android LocationManager
-    DisposableEffect(trackingEnabled) {
+    DisposableEffect(trackingEnabled, highAccuracyGps) {
         var locationManager: LocationManager? = null
         var listener: LocationListener? = null
 
@@ -77,10 +81,14 @@ fun GPSScreen(
                     override fun onProviderEnabled(provider: String) {}
                     override fun onProviderDisabled(provider: String) {}
                 }
+                // Settings → High Accuracy GPS. Off uses network location when the phone has it,
+                // which saves battery on long days; otherwise fall back to GPS so tracking still works.
+                val useNetwork = !highAccuracyGps &&
+                    locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
                 locationManager.requestLocationUpdates(
-                    LocationManager.GPS_PROVIDER,
-                    1000L,
-                    1f,
+                    if (useNetwork) LocationManager.NETWORK_PROVIDER else LocationManager.GPS_PROVIDER,
+                    if (useNetwork) 5000L else 1000L,
+                    if (useNetwork) 10f else 1f,
                     listener,
                     Looper.getMainLooper()
                 )

@@ -10,6 +10,7 @@ import com.strobingn.wildlifefieldops.data.model.DeletedRecord
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobCustomerDraft
 import com.strobingn.wildlifefieldops.data.model.JobStatus
+import com.strobingn.wildlifefieldops.data.model.ReminderStatus
 import com.strobingn.wildlifefieldops.data.remote.AiService
 import com.strobingn.wildlifefieldops.data.remote.GeocodingService
 import com.strobingn.wildlifefieldops.data.remote.JobIntakeDraft
@@ -247,6 +248,19 @@ class JobsViewModel @Inject constructor(
         visitDao.deletePendingForJob(job.id)
         jobDao.delete(job)
         syncRepository.tryRemoteDelete(DeletedRecord.TYPE_JOB, job.id)
+    }
+
+    /** Done on a Jobs-tab reminder. Leaves the row so stores that re-save a reminder by id still find it. */
+    fun completeReminder(reminderId: String) = viewModelScope.launch {
+        val reminder = reminderDao.getById(reminderId) ?: return@launch
+        val now = System.currentTimeMillis()
+        reminderDao.update(
+            reminder.copy(
+                status = ReminderStatus.COMPLETED,
+                completedDate = now,
+                updatedAt = now
+            )
+        )
     }
 
     fun deleteJobById(id: String) = viewModelScope.launch {

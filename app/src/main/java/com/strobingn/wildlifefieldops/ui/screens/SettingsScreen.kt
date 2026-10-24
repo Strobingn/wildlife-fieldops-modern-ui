@@ -36,7 +36,6 @@ fun SettingsScreen(
 ) {
     val themePreference by viewModel.themePreference.collectAsState(initial = ThemePreference.SYSTEM)
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsState(initial = true)
-    val autoSync by viewModel.autoSync.collectAsState(initial = true)
     val companyName by viewModel.companyName.collectAsState(initial = "Wildlife Whisperer LLC")
     val companyAddress by viewModel.companyAddress.collectAsState(initial = "")
     val technicianName by viewModel.technicianName.collectAsState(initial = "")
@@ -353,9 +352,10 @@ fun SettingsScreen(
                     color = TextTertiary,
                     style = MaterialTheme.typography.bodySmall
                 )
-                SettingsSwitchItem("Auto Sync", "Automatically sync with cloud", Icons.Default.Sync, autoSync, viewModel::setAutoSync)
-                SettingsSwitchItem("Offline Mode", "Work without internet connection", Icons.Default.CloudOff, offlineMode, viewModel::setOfflineMode)
-                SettingsSwitchItem("High Accuracy GPS", "Use GPS for precise location", Icons.Default.GpsFixed, highAccuracyGps, viewModel::setHighAccuracyGps)
+                // Auto sync is always on by design (PR #60); Offline Mode is the pause.
+                SettingsInfoItem("Auto Sync", "Always on. Every save uploads when online. Use Offline Mode to pause.", Icons.Default.Sync)
+                SettingsSwitchItem("Offline Mode", "Pause cloud sync. Work stays on this phone until you turn it off.", Icons.Default.CloudOff, offlineMode, viewModel::setOfflineMode)
+                SettingsSwitchItem("High Accuracy GPS", "GPS tracker: on uses satellites, off uses network location to save battery", Icons.Default.GpsFixed, highAccuracyGps, viewModel::setHighAccuracyGps)
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = { viewModel.triggerManualSync() },
@@ -535,6 +535,23 @@ private fun SettingsSwitchItem(
             }
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange, colors = SwitchDefaults.colors(checkedThumbColor = PrimaryGreen, checkedTrackColor = PrimaryGreen.copy(alpha = 0.5f)))
+    }
+}
+
+/** A settings row that states how the app behaves; no switch because there is nothing to toggle. */
+@Composable
+private fun SettingsInfoItem(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(22.dp))
+        Spacer(modifier = Modifier.width(16.dp))
+        Column {
+            Text(title, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+        }
     }
 }
 
