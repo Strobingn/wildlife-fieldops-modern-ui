@@ -80,16 +80,29 @@ export const MetricsPage = {
     const maxMonthCount = Math.max(...Object.values(monthCounts));
 
     // ─── Response time (days from job creation to first visit) ───
+    // Performance optimization: Group visits by job_id into a Map in O(V) time
+    // to eliminate O(N * V) array iteration in visits.filter.
+    const jobVisitsMap = new Map();
+    for (let i = 0; i < visits.length; i++) {
+      const v = visits[i];
+      if (v?.job_id) {
+        let list = jobVisitsMap.get(v.job_id);
+        if (!list) { list = []; jobVisitsMap.set(v.job_id, list); }
+        list.push(v);
+      }
+    }
+
     const responseTimes = [];
-    jobs.forEach((j) => {
-      const jobVisits = visits.filter((v) => v.job_id === j.id);
-      if (jobVisits.length) {
+    for (let i = 0; i < jobs.length; i++) {
+      const j = jobs[i];
+      const jobVisits = jobVisitsMap.get(j.id);
+      if (jobVisits && jobVisits.length > 0) {
         const jobDate = new Date(j.created_at || j.created);
         const firstVisit = new Date(jobVisits[0].date || jobVisits[0].created_at);
         const days = Math.round((firstVisit - jobDate) / (1000 * 60 * 60 * 24));
         if (days >= 0) responseTimes.push(days);
       }
-    });
+    }
     const avgResponse = responseTimes.length ? (responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length).toFixed(1) : "N/A";
 
     // ─── Total expenses ───
