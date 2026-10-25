@@ -529,6 +529,69 @@ export function searchJobs(jobs, query) {
  * @param {Record<string, string>} filters
  * @returns {Array<Record<string, any>>}
  */
+/**
+ * Pre-build index Maps/Sets for fast O(1) lookups of visits, repairs, photos, and signatures per job.
+ * Avoids O(N * M) repeated array scans during list rendering.
+ * @param {object} state
+ * @returns {{visitCounts: Map<string, number>, repairCounts: Map<string, number>, photoCounts: Map<string, number>, signatureSet: Set<string>}}
+ */
+export function buildJobCounts(state) {
+  const visitCounts = new Map();
+  for (const v of state?.visits || []) {
+    const jId = v.jobId || v.job_id;
+    if (jId) visitCounts.set(jId, (visitCounts.get(jId) || 0) + 1);
+  }
+  const repairCounts = new Map();
+  for (const r of state?.repairs || []) {
+    const jId = r.jobId || r.job_id;
+    if (jId) repairCounts.set(jId, (repairCounts.get(jId) || 0) + 1);
+  }
+  const photoCounts = new Map();
+  for (const p of state?.photos || []) {
+    const jId = p.jobId || p.job_id;
+    if (jId) photoCounts.set(jId, (photoCounts.get(jId) || 0) + 1);
+  }
+  const signatureSet = new Set();
+  for (const sig of state?.signatures || []) {
+    const jId = sig.jobId || sig.job_id;
+    if (jId) signatureSet.add(jId);
+  }
+  return { visitCounts, repairCounts, photoCounts, signatureSet };
+}
+
+/**
+ * Calculate job completeness score (0-100).
+ * @param {string} jobId
+ * @param {object} [state] - Full app state (optional if counts provided)
+ * @param {object} [counts] - Optional pre-built counts object for O(1) lookups
+ * @returns {number}
+ */
+export function jobScore(jobId, state, counts) {
+  if (counts) {
+    const hasVisits = (counts.visitCounts?.get(jobId) || 0) > 0;
+    const hasPhotos = (counts.photoCounts?.get(jobId) || 0) > 0;
+    const hasRepairs = (counts.repairCounts?.get(jobId) || 0) > 0;
+    const hasSig = counts.signatureSet ? counts.signatureSet.has(jobId) : false;
+    return Math.min(100,
+      (hasVisits ? 25 : 0) +
+      (hasPhotos ? 25 : 0) +
+      (hasRepairs ? 25 : 0) +
+      (hasSig ? 25 : 0)
+    );
+  }
+  const s = state || {};
+  const hasVisits = (s.visits || []).some((v) => v.jobId === jobId || v.job_id === jobId);
+  const hasPhotos = (s.photos || []).some((p) => p.jobId === jobId || p.job_id === jobId);
+  const hasRepairs = (s.repairs || []).some((r) => r.jobId === jobId || r.job_id === jobId);
+  const hasSig = (s.signatures || []).some((sig) => sig.jobId === jobId || sig.job_id === jobId);
+  return Math.min(100,
+    (hasVisits ? 25 : 0) +
+    (hasPhotos ? 25 : 0) +
+    (hasRepairs ? 25 : 0) +
+    (hasSig ? 25 : 0)
+  );
+}
+
 export function filterJobs(jobs, filters) {
   if (!Array.isArray(jobs)) return [];
   if (!filters || typeof filters !== 'object') return jobs;

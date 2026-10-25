@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeArrays, filterJobs } from './utils.js';
+import { mergeArrays, filterJobs, buildJobCounts, jobScore } from './utils.js';
 
 describe('mergeArrays', () => {
   it('returns copy of local array if server array is invalid or empty', () => {
@@ -72,5 +72,59 @@ describe('filterJobs', () => {
 
   it('handles non-array inputs gracefully', () => {
     expect(filterJobs(null, { status: 'active' })).toEqual([]);
+  });
+});
+
+describe('buildJobCounts and jobScore', () => {
+  const sampleState = {
+    visits: [
+      { jobId: 'job-1' },
+      { job_id: 'job-1' },
+      { jobId: 'job-2' },
+    ],
+    repairs: [
+      { job_id: 'job-1' },
+    ],
+    photos: [
+      { jobId: 'job-1' },
+      { jobId: 'job-3' },
+    ],
+    signatures: [
+      { jobId: 'job-1' },
+    ],
+  };
+
+  it('accurately indexes visit, repair, photo counts and signature presence', () => {
+    const counts = buildJobCounts(sampleState);
+    expect(counts.visitCounts.get('job-1')).toBe(2);
+    expect(counts.visitCounts.get('job-2')).toBe(1);
+    expect(counts.repairCounts.get('job-1')).toBe(1);
+    expect(counts.photoCounts.get('job-1')).toBe(1);
+    expect(counts.photoCounts.get('job-3')).toBe(1);
+    expect(counts.signatureSet.has('job-1')).toBe(true);
+    expect(counts.signatureSet.has('job-2')).toBe(false);
+  });
+
+  it('calculates jobScore correctly using pre-built counts', () => {
+    const counts = buildJobCounts(sampleState);
+
+    // job-1 has visits, repairs, photos, signature -> 100
+    expect(jobScore('job-1', sampleState, counts)).toBe(100);
+
+    // job-2 has visits -> 25
+    expect(jobScore('job-2', sampleState, counts)).toBe(25);
+
+    // job-3 has photos -> 25
+    expect(jobScore('job-3', sampleState, counts)).toBe(25);
+
+    // job-4 has nothing -> 0
+    expect(jobScore('job-4', sampleState, counts)).toBe(0);
+  });
+
+  it('calculates jobScore correctly without counts fallback', () => {
+    expect(jobScore('job-1', sampleState)).toBe(100);
+    expect(jobScore('job-2', sampleState)).toBe(25);
+    expect(jobScore('job-3', sampleState)).toBe(25);
+    expect(jobScore('job-4', sampleState)).toBe(0);
   });
 });
