@@ -18,6 +18,21 @@ data class WildlifeEvidenceHit(
     enum class Kind { SPECIES, ENTRY, DAMAGE, ACTIVITY, EQUIPMENT, OTHER }
 }
 
+data class RegionBox(
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int,
+)
+
+data class RegionCrop(
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int,
+    val fullFrame: Boolean,
+)
+
 data class WildlifeEvidenceResult(
     val species: List<WildlifeEvidenceHit>,
     val entries: List<WildlifeEvidenceHit>,
@@ -201,6 +216,48 @@ object WildlifeEvidenceDetector {
     /** Merge hits from multiple frames (walkthrough) into one ranked result. */
     fun aggregateHits(hits: List<WildlifeEvidenceHit>): WildlifeEvidenceResult =
         fromHits(hits, hits.map { it.label.lowercase() })
+
+    /**
+     * Largest in-frame subject box, otherwise the full frame.
+     * Out-of-frame and tiny boxes are ignored so a bad detector rect cannot
+     * replace the authoritative frame.
+     */
+    fun selectRegion(
+        frameWidth: Int,
+        frameHeight: Int,
+        boxes: List<RegionBox>,
+    ): RegionCrop? {
+        if (frameWidth <= 0 || frameHeight <= 0) return null
+        val inside = boxes.filter { box ->
+            box.left >= 0 && box.top >= 0 &&
+                box.right <= frameWidth && box.bottom <= frameHeight &&
+                box.right - box.left >= 32 && box.bottom - box.top >= 32
+        }
+        val best = inside.maxByOrNull { (it.right - it.left) * (it.bottom - it.top) }
+        return if (best != null) {
+            RegionCrop(best.left, best.top, best.right, best.bottom, fullFrame = false)
+        } else {
+            RegionCrop(0, 0, frameWidth, frameHeight, fullFrame = true)
+        }
+    }
+
+    /** Species (and generic animal) labels only. Equipment such as "bat cone" is not a count. */
+    fun isCountableAnimalLabel(label: String): Boolean {
+        val text = label.lowercase().trim()
+        if (text.length < 3) return false
+        val equipmentHit = equipmentLexicon.values.flatten().any { key -> text.contains(key) }
+        if (equipmentHit) return false
+        if (text == "animal" || text == "mammal" || text == "wildlife") return true
+        return speciesLexicon.any { (_, keys) ->
+            keys.any { key ->
+                if (key.length <= 3) {
+                    text == key || text.contains(" $key") || text.endsWith(" $key") || text.startsWith("$key ")
+                } else {
+                    text.contains(key)
+                }
+            }
+        }
+    }
 
     private fun fromHits(
         adjusted: List<WildlifeEvidenceHit>,

@@ -178,10 +178,12 @@ class JobAiViewModel @Inject constructor(
         _photoLinesLoading.value = true
         viewModelScope.launch {
             val inspections = inspectionDao.getByJobOnce(job.id)
-            val photos = (
-                photoDao.getByJobOnce(job.id) +
-                    inspections.flatMap { photoDao.getByInspectionOnce(it.id) }
-                ).distinctBy { it.id }
+            val photos = PhotoEvidence.evidentiaryPhotos(
+                (
+                    photoDao.getByJobOnce(job.id) +
+                        inspections.flatMap { photoDao.getByInspectionOnce(it.id) }
+                    ).distinctBy { it.id }
+            )
             val latest = inspections.maxByOrNull { it.inspectionDate }
             val lines = EstimateLineSuggester.suggest(
                 com.strobingn.wildlifefieldops.ai.fieldops.EstimateLineContext(

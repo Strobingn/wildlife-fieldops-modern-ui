@@ -10,6 +10,12 @@ package com.strobingn.wildlifefieldops.ai.admission
  *
  * Only [AdmissionLabel.EXPLANATION] may use "because" language in product UI.
  * Failed faithfulness → [AdmissionLabel.REVIEW_OVERLAY] (or reject the build).
+ *
+ * On-device context length is a separate gate. [ContextMemoryAdmission] budgets
+ * field-task context (default cap 2048) against KV, model weights, CameraX /
+ * ARCore / Maps residency, and a 20% system-memory headroom floor before
+ * llama.cpp context is initialized or expanded. Passing this explanation gate
+ * does not admit a larger context.
  */
 
 enum class UiClaimKind {

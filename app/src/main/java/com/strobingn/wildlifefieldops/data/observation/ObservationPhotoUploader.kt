@@ -1,6 +1,7 @@
 package com.strobingn.wildlifefieldops.data.observation
 
 import android.content.Context
+import com.strobingn.wildlifefieldops.ai.fieldops.PhotoEvidence
 import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.jan.supabase.SupabaseClient
@@ -28,6 +29,9 @@ class ObservationPhotoUploader @Inject constructor(
         observationId: String,
         localPath: String
     ): ObservationPhotoUpload {
+        require(!PhotoEvidence.isDerivedEvidencePath(localPath)) {
+            "Derived preview excluded from evidentiary export: $localPath"
+        }
         val bytes = readBytes(localPath)
             ?: error("Local observation photo missing: $localPath")
         require(bytes.isNotEmpty()) { "Local observation photo is empty: $localPath" }
@@ -45,6 +49,9 @@ class ObservationPhotoUploader @Inject constructor(
         eventId: String,
         mediaUri: String
     ): ObservationPhotoUpload {
+        require(!PhotoEvidence.isDerivedEvidencePath(mediaUri)) {
+            "Derived preview excluded from evidentiary export: $mediaUri"
+        }
         val bytes = readBytes(mediaUri)
             ?: error("Local event media missing: $mediaUri")
         require(bytes.isNotEmpty()) { "Local event media is empty: $mediaUri" }

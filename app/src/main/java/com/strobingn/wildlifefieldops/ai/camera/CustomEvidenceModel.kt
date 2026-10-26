@@ -29,6 +29,10 @@ object CustomEvidenceModel {
     private const val TAG = "CustomEvidenceModel"
     const val ASSET_PATH = "models/wildlife_evidence.tflite"
     const val LABELS_ASSET = "models/labels.txt"
+    private const val META_ASSET = "models/model_meta.json"
+    private const val SIDECAR_NAME = "wildlife_evidence.model_meta.json"
+    private const val LEDGER_NAME = "model_pack_ledger.jsonl"
+    private const val PACK_DIR = "model_packs"
     private const val INPUT_SIZE = 224
     private const val NUM_CHANNELS = 3
     private const val MIN_SCORE = 0.18f
@@ -157,19 +161,153 @@ object CustomEvidenceModel {
         }
     }
 
-    private fun loadModelFile(context: Context): MappedByteBuffer {
-        // Prefer cached copy in filesDir for mmap; refresh if missing/empty.
-        val dest = File(context.filesDir, "wildlife_evidence.tflite")
-        if (!dest.exists() || dest.length() == 0L) {
-            context.assets.open(ASSET_PATH).use { input ->
-                FileOutputStream(dest).use { output -> input.copyTo(output) }
+    /**
+     * Append-only rollback to the previous valid pack. A newer download timestamp
+     * cannot undo this; the ledger row is the record.
+     */
+    fun rollbackToPriorValid(context: Context): String? {
+        return try {
+            val bundled = readBundledMeta(context) ?: return null
+            val ledgerFile = ledgerFile(context)
+            val ledger = ModelPackLineage.readLedger(
+                if (ledgerFile.isFile) ledgerFile.readText() else ""
+            )
+            val available = mutableListOf(bundled)
+            val packDir = File(context.filesDir, PACK_DIR)
+            packDir.listFiles()?.forEach { file ->
+                if (file.extension == "json") {
+                    runCatching { ModelPackLineage.parse(file.readText()) }.getOrNull()?.let { available += it }
+                }
             }
+            val plan = ModelPackLineage.rollback(ledger, available, System.currentTimeMillis())
+            if (!plan.changed) return plan.activeDigest.ifBlank { null }
+            writeLedger(ledgerFile, plan.ledger)
+            val dest = weightCache(context)
+            val saved = File(packDir, ModelPackLineage.fileToken(plan.activeDigest) + ".tflite")
+            if (saved.isFile && saved.length() > 0L) {
+                saved.copyTo(dest, overwrite = true)
+            } else if (plan.activeDigest == bundled.buildDigest) {
+                copyAssetModel(context, dest)
+            }
+            close()
+            plan.activeDigest
+        } catch (t: Throwable) {
+            Log.w(TAG, "rollback failed: ${t.message}")
+            null
         }
+    }
+
+    private fun loadModelFile(context: Context): MappedByteBuffer {
+        val dest = resolveWeightFile(context)
         FileInputStream(dest).use { fis ->
             val channel = fis.channel
             return channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size())
         }
     }
+
+    /**
+     * Picks bundled vs downloaded weights using lineage, not file mtime.
+     * Falls back to the existing cache-or-asset copy if the sidecar cannot be read.
+     */
+    private fun resolveWeightFile(context: Context): File {
+        val dest = weightCache(context)
+        try {
+            val bundled = readBundledMeta(context) ?: return ensureCache(context, dest)
+            val sidecar = File(context.filesDir, SIDECAR_NAME)
+            val downloaded = if (sidecar.isFile && sidecar.length() > 0L) {
+                runCatching { ModelPackLineage.parse(sidecar.readText()) }.getOrNull()
+            } else {
+                null
+            }
+            val ledgerFile = ledgerFile(context)
+            val ledger = ModelPackLineage.readLedger(
+                if (ledgerFile.isFile) ledgerFile.readText() else ""
+            )
+            val plan = ModelPackLineage.plan(
+                bundled = bundled,
+                downloaded = downloaded,
+                downloadedFileTimestampMs = when {
+                    sidecar.isFile -> sidecar.lastModified()
+                    dest.isFile -> dest.lastModified()
+                    else -> 0L
+                },
+                ledger = ledger,
+                nowMs = System.currentTimeMillis(),
+                cachedWeightBytes = if (dest.isFile) dest.length() else 0L,
+            )
+            if (plan.changed) writeLedger(ledgerFile, plan.ledger)
+            when (plan.weightSource) {
+                WeightSource.CACHED_DOWNLOAD -> {
+                    if (!dest.exists() || dest.length() == 0L) copyAssetModel(context, dest)
+                    archivePack(context, plan.activeDigest, dest, sidecar)
+                }
+                WeightSource.SAVED_PACK -> {
+                    val saved = File(
+                        context.filesDir,
+                        "$PACK_DIR/${ModelPackLineage.fileToken(plan.activeDigest)}.tflite"
+                    )
+                    if (saved.isFile && saved.length() > 0L) {
+                        saved.copyTo(dest, overwrite = true)
+                    } else if (plan.activeDigest == bundled.buildDigest || !dest.exists() || dest.length() == 0L) {
+                        copyAssetModel(context, dest)
+                    }
+                }
+                WeightSource.BUNDLED -> {
+                    val rejectedDownload = downloaded != null && !plan.useCandidate
+                    if (!dest.exists() || dest.length() == 0L || rejectedDownload) {
+                        copyAssetModel(context, dest)
+                    }
+                }
+            }
+            return dest
+        } catch (t: Throwable) {
+            Log.w(TAG, "model lineage gate skipped: ${t.message}")
+            return ensureCache(context, dest)
+        }
+    }
+
+    private fun ensureCache(context: Context, dest: File): File {
+        if (!dest.exists() || dest.length() == 0L) copyAssetModel(context, dest)
+        return dest
+    }
+
+    private fun copyAssetModel(context: Context, dest: File) {
+        dest.parentFile?.mkdirs()
+        context.assets.open(ASSET_PATH).use { input ->
+            FileOutputStream(dest).use { output -> input.copyTo(output) }
+        }
+    }
+
+    private fun archivePack(context: Context, digest: String, weights: File, sidecar: File) {
+        if (digest.isBlank() || !weights.isFile || weights.length() == 0L) return
+        val dir = File(context.filesDir, PACK_DIR)
+        dir.mkdirs()
+        val token = ModelPackLineage.fileToken(digest)
+        weights.copyTo(File(dir, "$token.tflite"), overwrite = true)
+        if (sidecar.isFile) sidecar.copyTo(File(dir, "$token.json"), overwrite = true)
+    }
+
+    private fun readBundledMeta(context: Context): ModelPackMeta? = try {
+        val json = context.assets.open(META_ASSET).bufferedReader().use { it.readText() }
+        val meta = ModelPackLineage.parse(json)
+        meta.takeIf { it.complete }
+    } catch (_: Throwable) {
+        null
+    }
+
+    private fun writeLedger(file: File, entries: List<LedgerEntry>) {
+        file.parentFile?.mkdirs()
+        val tmp = File(file.parentFile, file.name + ".tmp")
+        tmp.writeText(ModelPackLineage.writeLedger(entries))
+        if (!tmp.renameTo(file)) {
+            file.writeText(ModelPackLineage.writeLedger(entries))
+            tmp.delete()
+        }
+    }
+
+    private fun weightCache(context: Context) = File(context.filesDir, "wildlife_evidence.tflite")
+
+    private fun ledgerFile(context: Context) = File(context.filesDir, LEDGER_NAME)
 
     private fun loadLabels(context: Context, interp: Interpreter): List<LabelEntry> {
         val fromAsset = try {

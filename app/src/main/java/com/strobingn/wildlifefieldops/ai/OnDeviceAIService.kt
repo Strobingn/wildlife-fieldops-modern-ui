@@ -1,5 +1,9 @@
 package com.strobingn.wildlifefieldops.ai
 
+import com.strobingn.wildlifefieldops.ai.admission.ContextAdmissionAction
+import com.strobingn.wildlifefieldops.ai.admission.ContextAdmissionDecision
+import com.strobingn.wildlifefieldops.ai.admission.ContextMemoryAdmission
+import com.strobingn.wildlifefieldops.ai.admission.StructuredFieldState
 import com.strobingn.wildlifefieldops.ai.local.LocalLlmEngine
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.remote.AiService
@@ -35,37 +39,35 @@ class OnDeviceAIService @Inject constructor(
         recentJobs: List<Job> = emptyList()
     ): FormSuggestions {
         val speciesStr = analysis.species.joinToString(", ")
-        val prompt = buildString {
-            appendLine("Photo / ML analysis:")
-            appendLine("Species tags: $speciesStr")
-            appendLine("Damage: ${analysis.damageTypes.joinToString()}")
-            appendLine("Suggested service (vision heuristic): ${analysis.suggestedServiceType}")
-            appendLine("Suggested priority: ${analysis.suggestedPriority}")
-            appendLine("Vision notes: ${analysis.suggestedNotes}")
-            if (recentJobs.isNotEmpty()) {
-                appendLine("Recent job types: ${recentJobs.take(5).joinToString { it.type }}")
-            }
-            appendLine()
-            appendLine("Return plain text with:")
-            appendLine("SPECIES: ...")
-            appendLine("SERVICE: ...")
-            appendLine("PRIORITY: LOW|MEDIUM|HIGH|URGENT")
-            appendLine("NOTES: ...")
-            appendLine("ACTIONS:")
-            appendLine("- action 1")
-            appendLine("- action 2")
+        val prompt = ContextMemoryAdmission.compact(
+            StructuredFieldState(
+                species = speciesStr,
+                serviceType = analysis.suggestedServiceType,
+                priority = analysis.suggestedPriority,
+                damage = analysis.damageTypes,
+                entries = analysis.entryTypes,
+                notes = analysis.suggestedNotes,
+                observationSummary = analysis.evidenceSummary,
+                recentJobTypes = recentJobs.map { it.type },
+            )
+        ) + "\nReturn SPECIES, SERVICE, PRIORITY, NOTES, and ACTIONS from this field state."
+        val decision = contextDecision()
+        val generated = if (decision.admitted) {
+            localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
+        } else {
+            null
         }
-        val generated = localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
         if (generated != null) {
             return parseFormSuggestions(generated, analysis)
         }
+        val headroom = if (decision.admitted) "" else "\n" + decision.reasons.joinToString("; ")
         return FormSuggestions(
             species = speciesStr,
             serviceType = analysis.suggestedServiceType.ifBlank { "Wildlife Inspection & Removal" },
             priority = analysis.suggestedPriority,
             notes = analysis.suggestedNotes.ifBlank {
                 "Vision labels only. Download the on-device LLM for generative form fill."
-            },
+            } + headroom,
             recommendedActions = listOf(
                 "Download on-device LLM in AI Assistant for generative recommendations"
             )
@@ -76,16 +78,21 @@ class OnDeviceAIService @Inject constructor(
         analysis: AiAnalysisResult,
         photosCount: Int = 1
     ): List<EstimateSuggestion> {
-        val prompt = buildString {
-            appendLine("Create Good/Better/Best wildlife-removal estimate tiers.")
-            appendLine("Species: ${analysis.species.joinToString()}")
-            appendLine("Service: ${analysis.suggestedServiceType}")
-            appendLine("Damage: ${analysis.damageTypes.joinToString()}")
-            appendLine("Vision price hint: ${analysis.estimatedPriceRange}")
-            appendLine("Photos: $photosCount")
-            appendLine("Return three tiers with line items and low/high totals as plain text.")
+        val prompt = ContextMemoryAdmission.compact(
+            StructuredFieldState(
+                species = analysis.species.joinToString(", "),
+                serviceType = analysis.suggestedServiceType,
+                damage = analysis.damageTypes,
+                notes = "Photos: $photosCount. Price hint: ${analysis.estimatedPriceRange}. " +
+                    "Return Good/Better/Best tiers with line items and low/high totals.",
+                observationSummary = analysis.evidenceSummary,
+            )
+        )
+        val generated = if (contextDecision().admitted) {
+            localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
+        } else {
+            null
         }
-        val generated = localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
         if (generated != null) {
             return listOf(
                 EstimateSuggestion(
@@ -101,8 +108,19 @@ class OnDeviceAIService @Inject constructor(
     }
 
     suspend fun analyzeFormForCompliance(formText: String, serviceType: String): List<String> {
-        val prompt = "Service type: $serviceType\n\nForm text:\n$formText\n\nList compliance gaps as bullets."
-        val generated = localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
+        val prompt = ContextMemoryAdmission.compact(
+            state = StructuredFieldState(
+                serviceType = serviceType,
+                notes = formText,
+                observationSummary = "List compliance gaps as bullets.",
+            ),
+            notesLimit = 1200,
+        )
+        val generated = if (contextDecision().admitted) {
+            localLlm.generate(AiService.WILDLIFE_SYSTEM_PROMPT, prompt).getOrNull()
+        } else {
+            null
+        }
         if (generated != null) {
             return generated.lines()
                 .map { it.trim().removePrefix("-").removePrefix("•").trim() }
@@ -110,6 +128,19 @@ class OnDeviceAIService @Inject constructor(
         }
         return listOf(
             "On-device LLM not ready — cannot run generative compliance analysis. Download the model in AI Assistant."
+        )
+    }
+
+    private fun contextDecision(): ContextAdmissionDecision = runCatching {
+        localLlm.peekContextAdmission()
+    }.getOrElse {
+        ContextAdmissionDecision(
+            action = ContextAdmissionAction.DENY,
+            grantedContextTokens = 0,
+            requestedContextTokens = ContextMemoryAdmission.FIELD_TASK_CONTEXT_CAP,
+            estimatedBytes = 0L,
+            headroomFraction = 0.0,
+            reasons = listOf("system memory snapshot unavailable"),
         )
     }
 

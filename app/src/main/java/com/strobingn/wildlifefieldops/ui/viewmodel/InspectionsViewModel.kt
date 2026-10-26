@@ -250,10 +250,12 @@ class InspectionsViewModel @Inject constructor(
         _reportError.value = null
         _reportSource.value = null
         viewModelScope.launch {
-            val photos = (
-                (if (jobId.isBlank()) emptyList() else photoDao.getByJobOnce(jobId)) +
-                    (if (inspectionId.isBlank()) emptyList() else photoDao.getByInspectionOnce(inspectionId))
-                ).distinctBy { it.id }
+            val photos = PhotoEvidence.evidentiaryPhotos(
+                (
+                    (if (jobId.isBlank()) emptyList() else photoDao.getByJobOnce(jobId)) +
+                        (if (inspectionId.isBlank()) emptyList() else photoDao.getByInspectionOnce(inspectionId))
+                    ).distinctBy { it.id }
+            )
             val job = if (jobId.isBlank()) null else jobDao.getById(jobId)
             val (mlTags, mlNotes) = analyzePhotosForEvidence(appContext, photos)
             val evidence = InspectionEvidence(
