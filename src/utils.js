@@ -553,3 +553,62 @@ export function filterJobs(jobs, filters) {
     return true;
   });
 }
+
+/**
+ * Pre-index job stats (visits, repairs, photos, signatures) by job_id in O(V + R + P + S) time
+ * to allow O(1) stats lookups and score calculations during card rendering.
+ *
+ * @param {Array<Record<string, any>>} [visits=[]]
+ * @param {Array<Record<string, any>>} [repairs=[]]
+ * @param {Array<Record<string, any>>} [photos=[]]
+ * @param {Array<Record<string, any>>} [signatures=[]]
+ * @returns {Map<string, { visits: number, repairs: number, photos: number, hasSig: boolean, score: number }>}
+ */
+export function buildJobStatsMap(visits = [], repairs = [], photos = [], signatures = []) {
+  const map = new Map();
+  const getOrCreate = (id) => {
+    let stat = map.get(id);
+    if (!stat) {
+      stat = { visits: 0, repairs: 0, photos: 0, hasSig: false, score: 0 };
+      map.set(id, stat);
+    }
+    return stat;
+  };
+
+  if (Array.isArray(visits)) {
+    for (let i = 0; i < visits.length; i++) {
+      const jobId = visits[i]?.job_id || visits[i]?.jobId;
+      if (jobId) getOrCreate(jobId).visits++;
+    }
+  }
+
+  if (Array.isArray(repairs)) {
+    for (let i = 0; i < repairs.length; i++) {
+      const jobId = repairs[i]?.job_id || repairs[i]?.jobId;
+      if (jobId) getOrCreate(jobId).repairs++;
+    }
+  }
+
+  if (Array.isArray(photos)) {
+    for (let i = 0; i < photos.length; i++) {
+      const jobId = photos[i]?.job_id || photos[i]?.jobId;
+      if (jobId) getOrCreate(jobId).photos++;
+    }
+  }
+
+  if (Array.isArray(signatures)) {
+    for (let i = 0; i < signatures.length; i++) {
+      const jobId = signatures[i]?.job_id || signatures[i]?.jobId;
+      if (jobId) getOrCreate(jobId).hasSig = true;
+    }
+  }
+
+  for (const stat of map.values()) {
+    stat.score = Math.min(
+      100,
+      (stat.visits ? 25 : 0) + (stat.photos ? 25 : 0) + (stat.repairs ? 25 : 0) + (stat.hasSig ? 25 : 0)
+    );
+  }
+
+  return map;
+}

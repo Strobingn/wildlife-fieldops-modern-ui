@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeArrays, filterJobs } from './utils.js';
+import { mergeArrays, filterJobs, buildJobStatsMap } from './utils.js';
 
 describe('mergeArrays', () => {
   it('returns copy of local array if server array is invalid or empty', () => {
@@ -72,5 +72,51 @@ describe('filterJobs', () => {
 
   it('handles non-array inputs gracefully', () => {
     expect(filterJobs(null, { status: 'active' })).toEqual([]);
+  });
+});
+
+describe('buildJobStatsMap', () => {
+  it('returns empty Map for empty inputs', () => {
+    const map = buildJobStatsMap();
+    expect(map.size).toBe(0);
+  });
+
+  it('correctly aggregates counts and calculates score per job_id', () => {
+    const visits = [{ job_id: 'j1' }, { job_id: 'j1' }, { jobId: 'j2' }];
+    const repairs = [{ job_id: 'j1' }];
+    const photos = [{ jobId: 'j2' }];
+    const signatures = [{ job_id: 'j1' }];
+
+    const map = buildJobStatsMap(visits, repairs, photos, signatures);
+
+    expect(map.size).toBe(2);
+
+    const j1 = map.get('j1');
+    expect(j1).toEqual({
+      visits: 2,
+      repairs: 1,
+      photos: 0,
+      hasSig: true,
+      score: 75, // 25 (visits) + 25 (repairs) + 25 (sig)
+    });
+
+    const j2 = map.get('j2');
+    expect(j2).toEqual({
+      visits: 1,
+      repairs: 0,
+      photos: 1,
+      hasSig: false,
+      score: 50, // 25 (visits) + 25 (photos)
+    });
+  });
+
+  it('caps job completeness score at 100', () => {
+    const visits = [{ job_id: 'j1' }];
+    const repairs = [{ job_id: 'j1' }];
+    const photos = [{ job_id: 'j1' }];
+    const signatures = [{ job_id: 'j1' }];
+
+    const map = buildJobStatsMap(visits, repairs, photos, signatures);
+    expect(map.get('j1').score).toBe(100);
   });
 });

@@ -8,6 +8,7 @@ import {
   STATUS_STYLES,
   APP_VERSION
 } from "../constants.js";
+import { buildJobStatsMap } from "../utils.js";
 
 function E(s) {
   return String(s || "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[m]));
@@ -20,14 +21,6 @@ function money(n) {
 function estimateJob(j) {
   const base = { Bat: 950, Raccoon: 650, "Grey Squirrel": 550, "Red Squirrel": 575, "Flying Squirrel": 750, Skunk: 450, Groundhog: 450, "Carpenter Bee": 350 }[j.species] || 500;
   return Math.round(base * 1.35);
-}
-
-function scoreJob(j, visits, repairs, photos, signatures) {
-  const v = visits.some((x) => x.job_id === j.id);
-  const p = photos.some((x) => x.job_id === j.id);
-  const rr = repairs.filter((x) => x.job_id === j.id);
-  const sig = signatures.some((x) => x.job_id === j.id);
-  return Math.min(100, (v ? 25 : 0) + (p ? 25 : 0) + (rr.length ? 25 : 0) + (sig ? 25 : 0));
 }
 
 function tel(p) {
@@ -51,11 +44,14 @@ export const Dashboard = {
     const greeting = this._getGreeting();
     const userName = state.currentUser?.name || "Tech";
 
+    // Pre-build indexed job stats map for O(1) lookups
+    const jobStats = buildJobStatsMap(visits, repairs, photos, signatures);
+
     // Weather from first GPS job if available
     const weatherWidget = state.weather ? this._renderWeather(state.weather) : "";
 
     // Alerts
-    const alerts = this._renderAlerts(state, activeJobs);
+    const alerts = this._renderAlerts(state, activeJobs, jobStats);
 
     return /* html */ `
       <!-- Hero Section -->
@@ -118,7 +114,7 @@ export const Dashboard = {
       <div class="section-title reveal">Recent Jobs</div>
       <div id="recentJobs" class="reveal delay-2">
         ${jobs.slice(0, 5).length
-          ? jobs.slice(0, 5).map((j) => this._jobCard(j, visits, repairs, photos, signatures)).join("")
+          ? jobs.slice(0, 5).map((j) => this._jobCard(j, jobStats)).join("")
           : `<div class="empty-state">
               <div class="empty-icon" aria-hidden="true">🦝</div>
               <h4>No jobs yet</h4>
@@ -209,13 +205,14 @@ export const Dashboard = {
   },
 
   // ─── Job Card (compact for dashboard) ───
-  _jobCard(j, visits, repairs, photos, signatures) {
+  _jobCard(j, jobStats) {
     const icon = SPECIES_ICONS[j.species] || "🐾";
     const sc = STATUS_STYLES[j.status] || "active";
-    const v = visits.filter((x) => x.job_id === j.id).length;
-    const r = repairs.filter((x) => x.job_id === j.id).length;
-    const p = photos.filter((x) => x.job_id === j.id).length;
-    const s = scoreJob(j, visits, repairs, photos, signatures);
+    const st = jobStats.get(j.id) || { visits: 0, repairs: 0, photos: 0, score: 0 };
+    const v = st.visits;
+    const r = st.repairs;
+    const p = st.photos;
+    const s = st.score;
     const est = estimateJob(j);
 
     return /* html */ `
@@ -261,13 +258,14 @@ export const Dashboard = {
     `;
   },
 
-  _renderAlerts(state, activeJobs) {
+  _renderAlerts(state, activeJobs, jobStats) {
     const alerts = [];
 
     // Low completion score alert
     const lowScoreJobs = activeJobs.filter((j) => {
-      const v = (state.visits || []).some((x) => x.job_id === j.id);
-      const p = (state.photos || []).some((x) => x.job_id === j.id);
+      const st = jobStats?.get(j.id);
+      const v = st ? st.visits > 0 : false;
+      const p = st ? st.photos > 0 : false;
       return !v || !p;
     });
     if (lowScoreJobs.length > 0) {

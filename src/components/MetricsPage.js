@@ -80,10 +80,23 @@ export const MetricsPage = {
     const maxMonthCount = Math.max(...Object.values(monthCounts));
 
     // ─── Response time (days from job creation to first visit) ───
+    const visitsByJob = new Map();
+    if (Array.isArray(visits)) {
+      for (let i = 0; i < visits.length; i++) {
+        const v = visits[i];
+        const jobId = v?.job_id || v?.jobId;
+        if (jobId) {
+          let list = visitsByJob.get(jobId);
+          if (!list) { list = []; visitsByJob.set(jobId, list); }
+          list.push(v);
+        }
+      }
+    }
+
     const responseTimes = [];
     jobs.forEach((j) => {
-      const jobVisits = visits.filter((v) => v.job_id === j.id);
-      if (jobVisits.length) {
+      const jobVisits = visitsByJob.get(j.id);
+      if (jobVisits && jobVisits.length) {
         const jobDate = new Date(j.created_at || j.created);
         const firstVisit = new Date(jobVisits[0].date || jobVisits[0].created_at);
         const days = Math.round((firstVisit - jobDate) / (1000 * 60 * 60 * 24));

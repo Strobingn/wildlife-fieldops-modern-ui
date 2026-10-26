@@ -30,7 +30,7 @@ import {
   compressImage, generatePDF, deepClone,
   debounce, throttle, groupBy, sortBy,
   searchJobs, filterJobs, calculateEstimate, mergeArrays,
-  formatDateShort,
+  formatDateShort, buildJobStatsMap,
 } from './utils.js';
 import {
   SPECIES, SERVICES, SPECIES_ICONS, SPECIES_HINTS,
@@ -403,20 +403,14 @@ function O(arr, selected = '') {
 /**
  * Calculate job completeness score (0-100).
  * @param {string} jobId
+ * @param {Map<string, any>} [statsMap]
  * @returns {number}
  */
-function jobScore(jobId) {
+function jobScore(jobId, statsMap) {
+  if (statsMap) return statsMap.get(jobId)?.score || 0;
   const s = store.getState();
-  const hasVisits = s.visits.some((v) => v.jobId === jobId || v.job_id === jobId);
-  const hasPhotos = s.photos.some((p) => p.jobId === jobId || p.job_id === jobId);
-  const hasRepairs = s.repairs.some((r) => r.jobId === jobId || r.job_id === jobId);
-  const hasSig = s.signatures.some((sig) => sig.jobId === jobId || sig.job_id === jobId);
-  return Math.min(100,
-    (hasVisits ? 25 : 0) +
-    (hasPhotos ? 25 : 0) +
-    (hasRepairs ? 25 : 0) +
-    (hasSig ? 25 : 0)
-  );
+  const stats = buildJobStatsMap(s.visits, s.repairs, s.photos, s.signatures);
+  return stats.get(jobId)?.score || 0;
 }
 
 /**
@@ -494,6 +488,8 @@ const Dashboard = {
       ? searchJobs(jobs, q).slice(0, 5)
       : jobs.slice(0, 5);
 
+    const jobStats = buildJobStatsMap(state.visits, state.repairs, state.photos, state.signatures);
+
     const townCounts = groupBy(jobs, 'town');
     const topTowns = Object.entries(townCounts)
       .sort((a, b) => b[1].length - a[1].length)
@@ -550,7 +546,7 @@ const Dashboard = {
         <!-- Recent Jobs -->
         <h2 class="section-title">${q ? 'Search Results' : 'Recent Jobs'}</h2>
         <div class="job-list">
-          ${recentJobs.length ? recentJobs.map((j) => this._jobCard(j, state)).join('')
+          ${recentJobs.length ? recentJobs.map((j) => this._jobCard(j, state, jobStats)).join('')
             : '<div class="card empty">No jobs yet.</div>'}
         </div>
 
@@ -601,13 +597,14 @@ const Dashboard = {
     `;
   },
 
-  _jobCard(j, state) {
-    const s = jobScore(j.id);
+  _jobCard(j, state, jobStats) {
+    const st = jobStats?.get(j.id) || { visits: 0, repairs: 0, photos: 0, score: 0 };
+    const s = st.score;
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
-    const vCount = (state.visits || []).filter((v) => (v.jobId || v.job_id) === j.id).length;
-    const rCount = (state.repairs || []).filter((r) => (r.jobId || r.job_id) === j.id).length;
-    const pCount = (state.photos || []).filter((p) => (p.jobId || p.job_id) === j.id).length;
+    const vCount = st.visits;
+    const rCount = st.repairs;
+    const pCount = st.photos;
     return `
       <div class="card job-card" data-job-id="${E(j.id)}">
         <div class="job-header">
@@ -704,6 +701,7 @@ const JobList = {
     let jobs = q ? searchJobs(state.jobs, q) : [...state.jobs];
     jobs = filterJobs(jobs, state.filters);
     jobs = sortBy(jobs, 'updated_at', 'desc');
+    const jobStats = buildJobStatsMap(state.visits, state.repairs, state.photos, state.signatures);
 
     return `
       <div class="page job-list-page">
@@ -721,15 +719,16 @@ const JobList = {
           <button class="btn primary" data-action="new-job">➕ New Job</button>
         </div>
         <div class="job-list">
-          ${jobs.length ? jobs.map((j) => this._jobCard(j, state)).join('')
+          ${jobs.length ? jobs.map((j) => this._jobCard(j, state, jobStats)).join('')
             : `<div class="card empty">${q ? 'No matching jobs.' : 'No jobs yet.'}</div>`}
         </div>
       </div>
     `;
   },
 
-  _jobCard(j, state) {
-    const s = jobScore(j.id);
+  _jobCard(j, state, jobStats) {
+    const st = jobStats?.get(j.id) || { score: 0 };
+    const s = st.score;
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
     return `
