@@ -13,6 +13,8 @@ import com.google.ar.core.Pose
 import com.google.ar.core.Session
 import com.google.ar.core.TrackingState
 import com.strobingn.wildlifefieldops.ai.ARMeasurementHelper
+import com.strobingn.wildlifefieldops.ai.admission.FieldSubsystem
+import com.strobingn.wildlifefieldops.ai.admission.FieldSubsystemPresence
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -52,6 +54,7 @@ class ArTwoTapSurfaceView(
     @Volatile private var sessionHeld: Session? = null
     @Volatile private var installFailed = false
     @Volatile private var textureReady = false
+    private var arBudgetHeld = false
 
     init {
         preserveEGLContextOnPause = true
@@ -65,6 +68,10 @@ class ArTwoTapSurfaceView(
                 post { onFatal("ARCore unavailable on this device") }
             } else {
                 sessionHeld = session
+                if (!arBudgetHeld) {
+                    FieldSubsystemPresence.acquire(FieldSubsystem.ARCORE)
+                    arBudgetHeld = true
+                }
             }
         } catch (t: Throwable) {
             installFailed = true
@@ -112,6 +119,10 @@ class ArTwoTapSurfaceView(
     }
 
     fun destroySession() {
+        if (arBudgetHeld) {
+            FieldSubsystemPresence.release(FieldSubsystem.ARCORE)
+            arBudgetHeld = false
+        }
         try {
             pauseSession()
         } catch (_: Throwable) {

@@ -8,6 +8,15 @@ import kotlinx.coroutines.withTimeoutOrNull
 import android.content.Context
 import android.net.Uri
 import com.google.gson.Gson
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import com.strobingn.wildlifefieldops.ai.camera.WildlifeEvidenceDetector
+import com.strobingn.wildlifefieldops.ai.fieldops.EvidenceStatus
+import com.strobingn.wildlifefieldops.ai.fieldops.FieldSource
+import com.strobingn.wildlifefieldops.ai.fieldops.PhotoEvidence
+import com.strobingn.wildlifefieldops.ai.fieldops.PhotoEvidenceSessions
+import com.strobingn.wildlifefieldops.ai.fieldops.PhotoReviewQueueHub
+import com.strobingn.wildlifefieldops.ai.fieldops.VlmRecovery
 import com.strobingn.wildlifefieldops.ai.local.LocalLlmEngine
 import com.strobingn.wildlifefieldops.data.remote.AiEdgeGateway
 import com.strobingn.wildlifefieldops.data.remote.AiService
@@ -75,6 +84,10 @@ class HybridAIService @Inject constructor(
             equipmentTags = equipmentTags,
             repairScope = repairScope
         )
+
+        if (vision.evidenceStatus.isNotBlank()) {
+            return contractedEvidenceFill(context, vision, prompt)
+        }
 
         if (edge.isConfigured) {
             runCatching {
@@ -219,6 +232,147 @@ class HybridAIService @Inject constructor(
             else -> "We documented conditions during the inspection and will follow up with recommendations."
         }
         return CaptureNarration(techNotes = tech, customerSummary = cust, source = source)
+    }
+
+    /**
+     * Entry and exterior-damage stills: VLM only when the contract says REVIEW
+     * and the device can reach it. Offline reviews stay queued.
+     */
+    private suspend fun contractedEvidenceFill(
+        context: Context,
+        vision: AiAnalysisResult,
+        prompt: String,
+    ): AiAnalysisResult {
+        val hash = vision.authoritativeFrameHash
+        val screening = PhotoEvidenceSessions.recall(hash)
+            ?: return vision.copy(
+                suggestedNotes = vision.suggestedNotes +
+                    "\nEvidence ${vision.evidenceStatus}. Manual entry available.",
+            )
+        if (!screening.vlmEligible || screening.status != EvidenceStatus.REVIEW) {
+            return vision.copy(
+                evidenceStatus = screening.status.name,
+                evidenceReasons = screening.reasons.map { it.name },
+                vlmEligible = false,
+                suggestedNotes = vision.suggestedNotes +
+                    "\nEvidence ${screening.status.name}: " +
+                    screening.reasons.joinToString { it.name } +
+                    ". Manual entry available.",
+            )
+        }
+        val online = edge.isConfigured && networkAvailable(context)
+        if (!online) {
+            val queued = PhotoReviewQueueHub.shared.enqueue(
+                id = hash.ifBlank { "review-${vision.evidenceSummary.hashCode()}" },
+                screening = screening,
+                nowMs = System.currentTimeMillis(),
+            )
+            val queueId = queued?.id ?: hash
+            return vision.copy(
+                evidenceStatus = EvidenceStatus.REVIEW.name,
+                evidenceReasons = queued?.screening?.reasons?.map { it.name }
+                    ?: screening.reasons.map { it.name },
+                vlmEligible = true,
+                source = "offline_ml",
+                suggestedNotes = vision.suggestedNotes +
+                    "\nEvidence REVIEW queued offline ($queueId). Not completed. Manual entry available.",
+            )
+        }
+        val form = runCatching { callGrokForForm(prompt) }.getOrNull()
+        if (form == null) {
+            val queued = PhotoReviewQueueHub.shared.enqueue(
+                id = hash.ifBlank { "review-${vision.evidenceSummary.hashCode()}" },
+                screening = screening,
+                nowMs = System.currentTimeMillis(),
+            )
+            return vision.copy(
+                evidenceStatus = EvidenceStatus.REVIEW.name,
+                evidenceReasons = (screening.reasons.map { it.name } + "OFFLINE_DEFERRED").distinct(),
+                vlmEligible = true,
+                source = "offline_ml",
+                suggestedNotes = vision.suggestedNotes +
+                    "\nVLM unavailable; REVIEW stays queued (${queued?.id ?: hash}). Manual entry available.",
+            )
+        }
+        val parsed = WildlifeEvidenceDetector.detectFromText(
+            listOf(form.species, form.notes, form.serviceType).joinToString("\n")
+        )
+        val recovered = buildList {
+            if (vision.entryTypes.isEmpty()) {
+                parsed.entries.firstOrNull()?.let { hit ->
+                    add(VlmRecovery("entry", hit.label, hit.score.coerceIn(0f, 1f)))
+                }
+            }
+            if (vision.damageTypes.isEmpty()) {
+                parsed.damage.firstOrNull()?.let { hit ->
+                    add(VlmRecovery("damage", hit.label, hit.score.coerceIn(0f, 1f)))
+                }
+            }
+            if (vision.species.isEmpty()) {
+                parsed.species.firstOrNull()?.let { hit ->
+                    add(VlmRecovery("species", hit.label, hit.score.coerceIn(0f, 1f)))
+                }
+            }
+            if (Regex("""\d+(\.\d+)?\s*(in|inch|ft|feet|cm|mm)\b""", RegexOption.IGNORE_CASE)
+                    .containsMatchIn(form.notes)
+            ) {
+                add(VlmRecovery("extent", "measured", 0.7f))
+            }
+        }
+        val after = PhotoEvidence.applyVlm(
+            screening = screening,
+            recovered = recovered,
+            offline = false,
+        )
+        if (hash.isNotBlank()) PhotoEvidenceSessions.replace(hash, after)
+        if (after.status == EvidenceStatus.ACCEPT) {
+            PhotoReviewQueueHub.shared.complete(hash, after)
+            val vlmFields = after.evidence.fields.filterValues { it.source == FieldSource.VLM && it.value.isNotBlank() }
+            val provenance = if (vlmFields.isEmpty()) {
+                ""
+            } else {
+                "\nVLM recovered " + vlmFields.entries.joinToString { (key, field) ->
+                    "$key=${field.value} (${field.source.name} ${"%.2f".format(field.confidence)})"
+                } + ". Revalidated."
+            }
+            return vision.copy(
+                species = vision.species.ifEmpty {
+                    vlmFields.filterKeys { it == "species" || it.startsWith("species:") }.values.map { it.value }
+                },
+                damageTypes = vision.damageTypes.ifEmpty {
+                    vlmFields.filterKeys { it == "damage" || it.startsWith("damage:") }.values.map { it.value }
+                },
+                entryTypes = vision.entryTypes.ifEmpty {
+                    vlmFields.filterKeys { it == "entry" || it.startsWith("entry:") }.values.map { it.value }
+                },
+                suggestedServiceType = vision.suggestedServiceType.ifBlank { form.serviceType },
+                suggestedPriority = vision.suggestedPriority.ifBlank { form.priority },
+                suggestedNotes = vision.suggestedNotes + provenance,
+                evidenceStatus = after.status.name,
+                evidenceReasons = after.reasons.map { it.name },
+                vlmEligible = false,
+                source = "grok",
+            )
+        }
+        return vision.copy(
+            evidenceStatus = after.status.name,
+            evidenceReasons = after.reasons.map { it.name },
+            vlmEligible = after.vlmEligible,
+            suggestedNotes = vision.suggestedNotes +
+                "\nEvidence ${after.status.name}: " +
+                after.reasons.joinToString { it.name } +
+                ". VLM fields were not kept. Manual entry available.",
+        )
+    }
+
+    private fun networkAvailable(context: Context): Boolean = try {
+        val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return false
+        val network = manager.activeNetwork ?: return false
+        val caps = manager.getNetworkCapabilities(network) ?: return false
+        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    } catch (_: Throwable) {
+        false
     }
 
     private fun enrich(vision: AiAnalysisResult, form: GrokFormResponse, source: String): AiAnalysisResult {

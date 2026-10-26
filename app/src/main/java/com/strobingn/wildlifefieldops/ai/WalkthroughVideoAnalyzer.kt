@@ -10,9 +10,14 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.android.gms.tasks.Task
 import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
+import com.google.mlkit.vision.objects.ObjectDetection
+import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 import com.strobingn.wildlifefieldops.ai.camera.CustomEvidenceModel
 import com.strobingn.wildlifefieldops.ai.camera.WildlifeEvidenceDetector
 import com.strobingn.wildlifefieldops.ai.camera.WildlifeEvidenceHit
+import com.strobingn.wildlifefieldops.ai.fieldops.AnimalCount
+import com.strobingn.wildlifefieldops.ai.fieldops.AnimalCountGuard
+import com.strobingn.wildlifefieldops.ai.fieldops.DetectionBox
 import com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins
 import com.strobingn.wildlifefieldops.data.remote.InspectionReportDraft
 import kotlinx.coroutines.Dispatchers
@@ -45,7 +50,10 @@ object WalkthroughVideoAnalyzer {
         val evidenceSummary: String,
         val sourceLabel: String,
         val guidanceHint: String,
-        val offline: Boolean
+        val offline: Boolean,
+        val animalCountSummary: String = "",
+        val animalCountLow: Int = -1,
+        val animalCountHigh: Int = -1,
     )
 
     suspend fun analyze(
@@ -68,7 +76,15 @@ object WalkthroughVideoAnalyzer {
                 else -> TARGET_FRAMES
             }
             val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
+            val objectDetector = ObjectDetection.getClient(
+                ObjectDetectorOptions.Builder()
+                    .setDetectorMode(ObjectDetectorOptions.SINGLE_IMAGE_MODE)
+                    .enableMultipleObjects()
+                    .enableClassification()
+                    .build()
+            )
             val allHits = mutableListOf<WildlifeEvidenceHit>()
+            val animalBoxes = mutableListOf<DetectionBox>()
             val rawLabels = mutableListOf<String>()
             var framesOk = 0
             try {
@@ -90,9 +106,29 @@ object WalkthroughVideoAnalyzer {
                             Log.w(TAG, "label frame $i failed: ${t.message}")
                             emptyList()
                         }
+                        val detected = try {
+                            awaitTask(objectDetector.process(image))
+                        } catch (t: Throwable) {
+                            Log.w(TAG, "objects frame $i failed: ${t.message}")
+                            emptyList()
+                        }
+                        detected.forEach { obj ->
+                            val top = obj.labels.maxByOrNull { it.confidence } ?: return@forEach
+                            if (!WildlifeEvidenceDetector.isCountableAnimalLabel(top.text)) return@forEach
+                            val bounds = obj.boundingBox
+                            animalBoxes += DetectionBox(
+                                frameIndex = i,
+                                left = bounds.left.toFloat(),
+                                top = bounds.top.toFloat(),
+                                right = bounds.right.toFloat(),
+                                bottom = bounds.bottom.toFloat(),
+                                label = top.text,
+                                score = top.confidence,
+                            )
+                        }
                         val evidence = WildlifeEvidenceDetector.detect(
                             labels = labels,
-                            objects = emptyList(),
+                            objects = detected,
                             checklistHint = "walkthrough",
                             customHits = custom
                         )
@@ -108,6 +144,7 @@ object WalkthroughVideoAnalyzer {
                 }
             } finally {
                 try { labeler.close() } catch (_: Throwable) {}
+                try { objectDetector.close() } catch (_: Throwable) {}
             }
 
             val aggregated = WildlifeEvidenceDetector.aggregateHits(allHits)
@@ -118,13 +155,18 @@ object WalkthroughVideoAnalyzer {
                 aggregated = aggregated,
                 rawLabels = rawLabels.distinct().take(20)
             )
-            val offlineDraft = lexiconDraft(aggregated, transcript)
+            val animalCount = if (animalBoxes.isEmpty()) {
+                AnimalCountGuard.withheld()
+            } else {
+                AnimalCountGuard.estimate(animalBoxes)
+            }
+            val offlineDraft = lexiconDraft(aggregated, transcript, animalCount, animalBoxes.isNotEmpty())
             var usedAi = false
             val draft = try {
                 val enriched = enrichWithAi?.invoke(transcript)
                 if (enriched != null) {
                     usedAi = true
-                    mergeDrafts(offlineDraft, enriched)
+                    guardCounts(mergeDrafts(offlineDraft, guardCounts(enriched, animalCount)), animalCount)
                 } else offlineDraft
             } catch (t: Throwable) {
                 Log.w(TAG, "AI enrich failed, using offline draft: ${t.message}")
@@ -150,7 +192,14 @@ object WalkthroughVideoAnalyzer {
                 evidenceSummary = aggregated.topSummary,
                 sourceLabel = if (usedAi) "walkthrough+ai" else "walkthrough_offline_ml",
                 guidanceHint = guidance,
-                offline = !usedAi
+                offline = !usedAi,
+                animalCountSummary = if (animalBoxes.isEmpty() && aggregated.species.isEmpty()) {
+                    ""
+                } else {
+                    AnimalCountGuard.display(animalCount)
+                },
+                animalCountLow = if (animalCount.withheld) -1 else animalCount.low,
+                animalCountHigh = if (animalCount.withheld) -1 else animalCount.high,
             )
         } catch (t: Throwable) {
             Log.w(TAG, "walkthrough failed: ${t.message}", t)
@@ -210,7 +259,9 @@ object WalkthroughVideoAnalyzer {
 
     private fun lexiconDraft(
         aggregated: com.strobingn.wildlifefieldops.ai.camera.WildlifeEvidenceResult,
-        transcript: String
+        transcript: String,
+        animalCount: AnimalCount,
+        hadBoxes: Boolean,
     ): InspectionReportDraft {
         val species = aggregated.species.joinToString { it.label }
         val entries = aggregated.entries.joinToString { it.label }
@@ -248,10 +299,31 @@ object WalkthroughVideoAnalyzer {
             entryPoints = entries,
             damageAssessment = damage.ifBlank { "See walkthrough frames / stills." },
             severity = severity,
-            notes = "Offline walkthrough draft. $transcript".take(1200),
+            notes = buildString {
+                append("Offline walkthrough draft. ")
+                append(transcript)
+                if (hadBoxes || aggregated.species.isNotEmpty()) {
+                    append("\nAnimal count: ")
+                    append(AnimalCountGuard.display(animalCount))
+                    append(".")
+                }
+            }.take(1200),
             summary = "Walkthrough evidence: ${aggregated.topSummary}"
         )
     }
+
+    private fun guardCounts(
+        draft: InspectionReportDraft,
+        animalCount: AnimalCount,
+    ): InspectionReportDraft = draft.copy(
+        findings = AnimalCountGuard.guardText(animalCount, draft.findings),
+        recommendations = AnimalCountGuard.guardText(animalCount, draft.recommendations),
+        speciesIdentified = AnimalCountGuard.guardText(animalCount, draft.speciesIdentified),
+        entryPoints = AnimalCountGuard.guardText(animalCount, draft.entryPoints),
+        damageAssessment = AnimalCountGuard.guardText(animalCount, draft.damageAssessment),
+        notes = AnimalCountGuard.guardText(animalCount, draft.notes),
+        summary = AnimalCountGuard.guardText(animalCount, draft.summary),
+    )
 
     private fun mergeDrafts(base: InspectionReportDraft, ai: InspectionReportDraft): InspectionReportDraft =
         InspectionReportDraft(

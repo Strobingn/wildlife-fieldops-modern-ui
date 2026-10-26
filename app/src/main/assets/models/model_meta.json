@@ -154,5 +154,10 @@
     }
   },
   "source": "Wikimedia Commons photos (maximized search) + minimal synthetic fill; tools/wildlife_tflite/train_and_export.py",
-  "retrain": "2.3.3-wildlife-retrain"
+  "retrain": "2.3.3-wildlife-retrain",
+  "parentModelDigest": "mobilenetv2-imagenet-tf2",
+  "sourceDataCutoff": "2026-09-12",
+  "reviewVersion": "2.3.3-wildlife-retrain",
+  "buildDigest": "sha256:cabf6387a3f70f67d42cfadb5b3ce49e5f49fb0b6eba07da1de1eaba751bcb98",
+  "inheritedLagHours": 0
 }

@@ -39,6 +39,8 @@ import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.*
 import com.strobingn.wildlifefieldops.BuildConfig
+import com.strobingn.wildlifefieldops.ai.admission.FieldSubsystem
+import com.strobingn.wildlifefieldops.ai.admission.FieldSubsystemPresence
 import com.strobingn.wildlifefieldops.R
 import com.strobingn.wildlifefieldops.data.model.JobStatus
 import com.strobingn.wildlifefieldops.ui.theme.*
@@ -145,6 +147,11 @@ fun MapScreen(
                 LatLng(cam.latitude, cam.longitude), cam.zoom
             )
         }
+    }
+
+    DisposableEffect(Unit) {
+        FieldSubsystemPresence.acquire(FieldSubsystem.MAPS)
+        onDispose { FieldSubsystemPresence.release(FieldSubsystem.MAPS) }
     }
 
     LaunchedEffect(Unit) {

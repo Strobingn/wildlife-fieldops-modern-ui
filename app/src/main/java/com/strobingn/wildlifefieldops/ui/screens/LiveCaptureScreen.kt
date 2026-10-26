@@ -50,6 +50,8 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.strobingn.wildlifefieldops.ai.ARMeasurementHelper
+import com.strobingn.wildlifefieldops.ai.admission.FieldSubsystem
+import com.strobingn.wildlifefieldops.ai.admission.FieldSubsystemPresence
 import com.strobingn.wildlifefieldops.ai.camera.CaptureGuidance
 import com.strobingn.wildlifefieldops.ai.camera.CaptureGuidanceAction
 import com.strobingn.wildlifefieldops.ai.camera.CaptureSoakStats
@@ -316,7 +318,9 @@ fun LiveCaptureScreen(
     }
 
     DisposableEffect(Unit) {
+        FieldSubsystemPresence.acquire(FieldSubsystem.CAMERAX)
         onDispose {
+            FieldSubsystemPresence.release(FieldSubsystem.CAMERAX)
             try {
                 analyzer.close()
             } catch (_: Throwable) {

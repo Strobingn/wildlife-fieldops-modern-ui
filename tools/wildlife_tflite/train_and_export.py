@@ -11,6 +11,8 @@ Produces:
 """
 from __future__ import annotations
 
+import datetime
+import hashlib
 import io
 import json
 import os
@@ -821,6 +823,20 @@ def export_tflite(model: keras.Model, metrics: dict, summary: dict):
             "tools/wildlife_tflite/train_and_export.py"
         ),
         "retrain": "2.3.3-wildlife-retrain",
+        "parentModelDigest": "mobilenetv2-imagenet-tf2",
+        "sourceDataCutoff": "2026-09-12",
+        "reviewVersion": "2.3.3-wildlife-retrain",
+        "buildDigest": "sha256:" + hashlib.sha256(tflite_model).hexdigest(),
+        "inheritedLagHours": max(
+            0,
+            int(
+                (
+                    datetime.datetime.now(datetime.timezone.utc)
+                    - datetime.datetime(2026, 9, 12, tzinfo=datetime.timezone.utc)
+                ).total_seconds()
+                // 3600
+            ),
+        ),
     }
     (ASSETS / "model_meta.json").write_text(json.dumps(meta, indent=2))
     (WORK / "export_meta.json").write_text(json.dumps(meta, indent=2))

@@ -1,8 +1,14 @@
 package com.strobingn.wildlifefieldops.ai.local
 
-import android.util.Log
-import dagger.hilt.android.qualifiers.ApplicationContext
+import android.app.ActivityManager
 import android.content.Context
+import android.util.Log
+import com.strobingn.wildlifefieldops.ai.admission.ContextAdmissionAction
+import com.strobingn.wildlifefieldops.ai.admission.ContextAdmissionDecision
+import com.strobingn.wildlifefieldops.ai.admission.ContextMemoryAdmission
+import com.strobingn.wildlifefieldops.ai.admission.FieldSubsystemPresence
+import com.strobingn.wildlifefieldops.ai.admission.MemorySnapshot
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.ffmpegkit.llama.Llama
 import dev.ffmpegkit.llama.LlamaConfig
 import dev.ffmpegkit.llama.LlamaModel
@@ -30,6 +36,10 @@ class LocalLlmEngine @Inject constructor(
     private val generating = java.util.concurrent.atomic.AtomicBoolean(false)
     @Volatile private var model: LlamaModel? = null
     @Volatile private var loadedPath: String? = null
+    @Volatile private var residentContextTokens: Int = 0
+
+    /** Tokens of the llama.cpp context currently resident, or 0 when unloaded. */
+    val loadedContextTokens: Int get() = residentContextTokens
 
     /** True while a generation is running, including one whose caller already gave up on it. */
     val isBusy: Boolean get() = generating.get()
@@ -76,6 +86,14 @@ class LocalLlmEngine @Inject constructor(
             Result.success(Unit)
         }
     }
+
+    /**
+     * Memory-headroom check for a field-task context. Does not load weights.
+     * Callers skip generation when [ContextAdmissionDecision.admitted] is false.
+     */
+    fun peekContextAdmission(
+        requestedTokens: Int = ContextMemoryAdmission.FIELD_TASK_CONTEXT_CAP,
+    ): ContextAdmissionDecision = admissionFor(modelManager.modelFile().absolutePath, requestedTokens)
 
     suspend fun generate(
         systemPrompt: String,
@@ -135,12 +153,26 @@ class LocalLlmEngine @Inject constructor(
     }
 
     private suspend fun openUnlocked(path: String): Result<Unit> {
-        if (model != null && loadedPath == path) return Result.success(Unit)
+        val decision = admissionFor(path, ContextMemoryAdmission.FIELD_TASK_CONTEXT_CAP)
+        val sameWeights = model != null && loadedPath == path
+        if (!decision.admitted) {
+            Log.w(TAG, "context admission denied: ${decision.reasons.joinToString("; ")}")
+            return Result.failure(IllegalStateException(decision.reasons.joinToString("; ")))
+        }
+        if (sameWeights && decision.action != ContextAdmissionAction.EXPAND &&
+            decision.grantedContextTokens <= residentContextTokens
+        ) {
+            return Result.success(Unit)
+        }
         closeUnlocked()
         return try {
             val threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 6)
+            val granted = decision.grantedContextTokens.coerceIn(
+                ContextMemoryAdmission.MIN_CONTEXT_TOKENS,
+                ContextMemoryAdmission.FIELD_TASK_CONTEXT_CAP,
+            )
             val config = LlamaConfig(
-                contextSize = 2048,
+                contextSize = granted,
                 threads = threads,
                 gpuLayers = 0,
                 temperature = 0.7f,
@@ -149,14 +181,46 @@ class LocalLlmEngine @Inject constructor(
             )
             model = Llama.loadModel(modelPath = path, config = config)
             loadedPath = path
-            Log.i(TAG, "Loaded abliterated GGUF from $path (pkg=${context.packageName}, threads=$threads)")
+            residentContextTokens = granted
+            Log.i(
+                TAG,
+                "Loaded abliterated GGUF from $path (pkg=${context.packageName}, threads=$threads, ctx=$granted)"
+            )
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load GGUF", e)
             model = null
             loadedPath = null
+            residentContextTokens = 0
             Result.failure(e)
         }
+    }
+
+    private fun admissionFor(path: String, requestedTokens: Int): ContextAdmissionDecision {
+        val memory = try {
+            val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val info = ActivityManager.MemoryInfo()
+            manager.getMemoryInfo(info)
+            MemorySnapshot(totalBytes = info.totalMem, availableBytes = info.availMem)
+        } catch (t: Throwable) {
+            return ContextAdmissionDecision(
+                action = ContextAdmissionAction.DENY,
+                grantedContextTokens = 0,
+                requestedContextTokens = requestedTokens,
+                estimatedBytes = 0L,
+                headroomFraction = 0.0,
+                reasons = listOf("system memory snapshot failed: ${t.javaClass.simpleName}"),
+            )
+        }
+        val sameWeights = model != null && loadedPath == path
+        return ContextMemoryAdmission.evaluate(
+            requestedContextTokens = requestedTokens,
+            residentContextTokens = if (sameWeights) residentContextTokens else 0,
+            memory = memory,
+            modelWeightBytes = java.io.File(path).length(),
+            modelWeightsResident = sameWeights && residentContextTokens > 0,
+            activeSubsystems = FieldSubsystemPresence.active(),
+        )
     }
 
     fun close() {
@@ -167,6 +231,7 @@ class LocalLlmEngine @Inject constructor(
         val current = model
         model = null
         loadedPath = null
+        residentContextTokens = 0
         if (current != null) {
             try {
                 Llama.releaseModel(current)

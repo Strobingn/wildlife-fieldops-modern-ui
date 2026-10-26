@@ -1,5 +1,6 @@
 package com.strobingn.wildlifefieldops.data.remote
 
+import com.strobingn.wildlifefieldops.ai.fieldops.PhotoEvidence
 import com.strobingn.wildlifefieldops.data.model.Photo
 import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoPaths
 import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoUploader
@@ -22,8 +23,9 @@ class JobPhotoUploader @Inject constructor(
     private val observationPhotoUploader: ObservationPhotoUploader
 ) {
     suspend fun upload(client: SupabaseClient, photo: Photo): JobPhotoUpload {
-        val sources = JobPhotoPaths.sourceCandidates(photo.localPath, photo.filePath)
-        val local = sources.firstOrNull().orEmpty()
+        val local = PhotoEvidence.evidentiarySourcePath(photo)
+            ?: error("Derived preview excluded from evidentiary export (${photo.id})")
+        val sources = listOf(local)
         val bytes = observationPhotoUploader.readFirstAvailable(sources)
             ?: error("Local job photo missing: $local")
         require(bytes.isNotEmpty()) { "Local job photo is empty: $local" }
