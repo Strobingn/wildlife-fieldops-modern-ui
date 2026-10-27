@@ -30,7 +30,7 @@ import {
   compressImage, generatePDF, deepClone,
   debounce, throttle, groupBy, sortBy,
   searchJobs, filterJobs, calculateEstimate, mergeArrays,
-  formatDateShort,
+  formatDateShort, buildJobRelationCounts, jobCompletenessScore, pageDataChanged,
 } from './utils.js';
 import {
   SPECIES, SERVICES, SPECIES_ICONS, SPECIES_HINTS,
@@ -405,12 +405,13 @@ function O(arr, selected = '') {
  * @param {string} jobId
  * @returns {number}
  */
-function jobScore(jobId) {
+function jobScore(jobId, counts) {
+  if (counts) return jobCompletenessScore(jobId, counts);
   const s = store.getState();
-  const hasVisits = s.visits.some((v) => v.jobId === jobId || v.job_id === jobId);
-  const hasPhotos = s.photos.some((p) => p.jobId === jobId || p.job_id === jobId);
-  const hasRepairs = s.repairs.some((r) => r.jobId === jobId || r.job_id === jobId);
-  const hasSig = s.signatures.some((sig) => sig.jobId === jobId || sig.job_id === jobId);
+  const hasVisits = (s.visits || []).some((v) => v.jobId === jobId || v.job_id === jobId);
+  const hasPhotos = (s.photos || []).some((p) => p.jobId === jobId || p.job_id === jobId);
+  const hasRepairs = (s.repairs || []).some((r) => r.jobId === jobId || r.job_id === jobId);
+  const hasSig = (s.signatures || []).some((sig) => sig.jobId === jobId || sig.job_id === jobId);
   return Math.min(100,
     (hasVisits ? 25 : 0) +
     (hasPhotos ? 25 : 0) +
@@ -487,6 +488,7 @@ const Dashboard = {
 
   render(state) {
     const jobs = state.jobs || [];
+    const counts = buildJobRelationCounts(state);
     const openJobs = jobs.filter((j) => j.status !== 'Closed' && j.status !== 'Cancelled');
     const totalEstimate = openJobs.reduce((sum, j) => sum + (j.grand_total || j.estimate || calculateEstimate(j.species, j.severity) || 0), 0);
     const q = (state.searchQuery || '').toLowerCase();
@@ -550,7 +552,7 @@ const Dashboard = {
         <!-- Recent Jobs -->
         <h2 class="section-title">${q ? 'Search Results' : 'Recent Jobs'}</h2>
         <div class="job-list">
-          ${recentJobs.length ? recentJobs.map((j) => this._jobCard(j, state)).join('')
+          ${recentJobs.length ? recentJobs.map((j) => this._jobCard(j, counts)).join('')
             : '<div class="card empty">No jobs yet.</div>'}
         </div>
 
@@ -601,13 +603,13 @@ const Dashboard = {
     `;
   },
 
-  _jobCard(j, state) {
-    const s = jobScore(j.id);
+  _jobCard(j, counts) {
+    const s = jobScore(j.id, counts);
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
-    const vCount = (state.visits || []).filter((v) => (v.jobId || v.job_id) === j.id).length;
-    const rCount = (state.repairs || []).filter((r) => (r.jobId || r.job_id) === j.id).length;
-    const pCount = (state.photos || []).filter((p) => (p.jobId || p.job_id) === j.id).length;
+    const vCount = counts.visitCounts.get(j.id) || 0;
+    const rCount = counts.repairCounts.get(j.id) || 0;
+    const pCount = counts.photoCounts.get(j.id) || 0;
     return `
       <div class="card job-card" data-job-id="${E(j.id)}">
         <div class="job-header">
@@ -704,6 +706,7 @@ const JobList = {
     let jobs = q ? searchJobs(state.jobs, q) : [...state.jobs];
     jobs = filterJobs(jobs, state.filters);
     jobs = sortBy(jobs, 'updated_at', 'desc');
+    const counts = buildJobRelationCounts(state);
 
     return `
       <div class="page job-list-page">
@@ -721,15 +724,15 @@ const JobList = {
           <button class="btn primary" data-action="new-job">➕ New Job</button>
         </div>
         <div class="job-list">
-          ${jobs.length ? jobs.map((j) => this._jobCard(j, state)).join('')
+          ${jobs.length ? jobs.map((j) => this._jobCard(j, counts)).join('')
             : `<div class="card empty">${q ? 'No matching jobs.' : 'No jobs yet.'}</div>`}
         </div>
       </div>
     `;
   },
 
-  _jobCard(j, state) {
-    const s = jobScore(j.id);
+  _jobCard(j, counts) {
+    const s = jobScore(j.id, counts);
     const icon = SPECIES_ICONS[j.species] || '🐾';
     const sc = STATUS_STYLES[j.status] || 'active';
     return `
@@ -4016,46 +4019,48 @@ function handleWipeData() {
 
 /** @type {Function|null} Current page unmount function */
 let currentUnmount = null;
+/** @type {Record<string, any>|null} Last state that rebuilt #app */
+let prevPageState = null;
 
 /**
  * Main render function. Subscribes to store changes
  * and renders the active page component.
+ * Drawer, toast, loading, and the sync chip update without rebuilding the page.
  */
 function renderApp() {
   store.subscribe((state) => {
-    const pageKey = state.page;
-    const page = pages[pageKey];
     const appEl = $('#app');
     if (!appEl) return;
 
-    // ── Unmount previous page ──
-    if (currentUnmount) {
-      try { currentUnmount(); } catch (e) { console.error('Unmount error:', e); }
-      currentUnmount = null;
-    }
+    if (pageDataChanged(prevPageState, state)) {
+      prevPageState = state;
+      const pageKey = state.page;
+      const page = pages[pageKey];
 
-    // ── Render new page ──
-    if (page) {
-      appEl.innerHTML = page.render(state);
-
-      // ── Update shell UI ──
-      updateBottomNav(pageKey);
-      updatePageLabel(pageKey);
-      updateSyncIndicator(state.syncStatus);
-
-      // ── Post-render initialization ──
-      if (page.afterRender) {
-        // Use requestAnimationFrame for DOM to settle
-        requestAnimationFrame(() => {
-          try { page.afterRender(state); } catch (e) { console.error('afterRender error:', e); }
-        });
+      if (currentUnmount) {
+        try { currentUnmount(); } catch (e) { console.error('Unmount error:', e); }
+        currentUnmount = null;
       }
 
-      // ── Store unmount reference ──
-      currentUnmount = page.unmount ? () => page.unmount() : null;
-    } else {
-      appEl.innerHTML = `<div class="page"><div class="card empty">Page "${E(pageKey)}" not found.</div></div>`;
+      if (page) {
+        appEl.innerHTML = page.render(state);
+
+        updateBottomNav(pageKey);
+        updatePageLabel(pageKey);
+
+        if (page.afterRender) {
+          requestAnimationFrame(() => {
+            try { page.afterRender(state); } catch (e) { console.error('afterRender error:', e); }
+          });
+        }
+
+        currentUnmount = page.unmount ? () => page.unmount() : null;
+      } else {
+        appEl.innerHTML = `<div class="page"><div class="card empty">Page "${E(pageKey)}" not found.</div></div>`;
+      }
     }
+
+    updateSyncIndicator(state.syncStatus);
 
     // ── Sync drawer state ──
     const drawer = $('#drawer');
@@ -4264,6 +4269,7 @@ export function destroyApp() {
     try { currentUnmount(); } catch (e) { /* ignore */ }
     currentUnmount = null;
   }
+  prevPageState = null;
 
   // Run all cleanup functions
   cleanupFns.forEach((fn) => { try { fn(); } catch (e) { /* ignore */ } });
