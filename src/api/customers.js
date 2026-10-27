@@ -6,6 +6,7 @@
 
 import { supabase } from './supabaseClient.js';
 import { syncQueue } from './sync.js';
+import { detectDuplicateCustomers } from './customerDuplicates.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -457,39 +458,7 @@ export async function mergeCustomers(fromId, toId) {
  */
 export async function findDuplicateCustomers() {
   const customers = await getCustomers();
-  const duplicates = [];
-
-  for (let i = 0; i < customers.length; i++) {
-    const c = customers[i];
-    const potentials = [];
-
-    for (let j = 0; j < customers.length; j++) {
-      if (i === j) continue;
-      const other = customers[j];
-
-      // Match by phone (exact)
-      if (c.phone && other.phone && normalizePhone(c.phone) === normalizePhone(other.phone)) {
-        potentials.push({ customer: other, reason: 'Same phone' });
-        continue;
-      }
-      // Match by email (exact, case-insensitive)
-      if (c.email && other.email && c.email.toLowerCase() === other.email.toLowerCase()) {
-        potentials.push({ customer: other, reason: 'Same email' });
-        continue;
-      }
-      // Match by address similarity
-      if (c.address && other.address && addressSimilarity(c.address, other.address) > 0.8) {
-        potentials.push({ customer: other, reason: 'Similar address' });
-        continue;
-      }
-    }
-
-    if (potentials.length > 0) {
-      duplicates.push({ customer: c, potentialDuplicates: potentials });
-    }
-  }
-
-  return duplicates;
+  return detectDuplicateCustomers(customers);
 }
 
 // ─── Local Helpers ───────────────────────────────────────────────────────────
@@ -535,19 +504,3 @@ function buildTimeline(jobs) {
   return events.sort((a, b) => new Date(b.date) - new Date(a.date));
 }
 
-function normalizePhone(phone) {
-  return phone.replace(/\D/g, '');
-}
-
-function addressSimilarity(a, b) {
-  const normA = a.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const normB = b.toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (normA === normB) return 1;
-  // Simple substring similarity
-  let matches = 0;
-  const minLen = Math.min(normA.length, normB.length);
-  for (let i = 0; i < minLen; i++) {
-    if (normA[i] === normB[i]) matches++;
-  }
-  return matches / Math.max(normA.length, normB.length);
-}

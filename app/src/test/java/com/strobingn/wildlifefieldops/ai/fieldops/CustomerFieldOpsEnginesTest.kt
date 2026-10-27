@@ -75,6 +75,11 @@ class CustomerFieldOpsEnginesTest {
         assertEquals("pat@example.com", merged.email)
         assertEquals("a", merged.id)
         assertFalse(merged.isSynced)
+        val inactive = b.copy(id = "c", isActive = false)
+        val withInactive = DuplicateCustomer.findPairs(listOf(a, inactive, b))
+        assertEquals(1, withInactive.size)
+        assertEquals("a", withInactive.first().left.id)
+        assertEquals("b", withInactive.first().right.id)
     }
 
     @Test

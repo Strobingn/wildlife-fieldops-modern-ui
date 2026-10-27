@@ -34,6 +34,26 @@ export function E(str) {
   return s.replace(/[&<>"']/g, (ch) => map[ch]);
 }
 
+// One formatter for every money() call. toLocaleString() builds a new
+// Intl.NumberFormat on each invocation (~60x slower on long lists).
+const CURRENCY_FORMATTER = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+});
+
+const SHORT_TIME_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  hour: 'numeric',
+  minute: '2-digit',
+});
+
+const SHORT_STAMP_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+});
+
 /**
  * Format a number as US currency string.
  * @param {number|null|undefined} amount
@@ -42,11 +62,7 @@ export function E(str) {
 export function money(amount) {
   const n = Number(amount ?? 0);
   if (Number.isNaN(n)) return '$0.00';
-  return n.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-  });
+  return CURRENCY_FORMATTER.format(n);
 }
 
 /**
@@ -90,16 +106,23 @@ export function formatDate(date) {
   });
 }
 
+function sameCalendarDay(a, b) {
+  return a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate();
+}
+
 export function formatDateShort(date) {
   if (!date) return '—';
   const d = typeof date === 'string' ? new Date(date) : date;
   if (Number.isNaN(d.getTime())) return '—';
   const now = new Date();
-  const isToday = d.toDateString() === now.toDateString();
-  const isTomorrow = new Date(now.getTime() + 86400000).toDateString() === d.toDateString();
-  if (isToday) return `Today ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
-  if (isTomorrow) return `Tomorrow ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  // Same "tomorrow" as the previous +24h toDateString check, without
+  // allocating locale date strings just to compare the calendar day.
+  const tomorrow = new Date(now.getTime() + 86400000);
+  if (sameCalendarDay(d, now)) return `Today ${SHORT_TIME_FORMATTER.format(d)}`;
+  if (sameCalendarDay(d, tomorrow)) return `Tomorrow ${SHORT_TIME_FORMATTER.format(d)}`;
+  return SHORT_STAMP_FORMATTER.format(d);
 }
 
 /**
@@ -339,6 +362,101 @@ export function mergeArrays(local, server, key) {
     }
   }
   return merged;
+}
+
+/**
+ * Parent id used by job cards. Rows in this app use either jobId or job_id.
+ * @param {Record<string, any>|null|undefined} item
+ * @returns {string|number|null}
+ */
+function relationJobId(item) {
+  if (!item) return null;
+  const id = item.jobId || item.job_id;
+  if (id === undefined || id === null || id === '') return null;
+  return id;
+}
+
+/**
+ * Count visits, repairs, and photos per job, and record which jobs have a signature.
+ * One pass over each collection so list rendering is O(jobs + relations) instead of
+ * O(jobs × relations).
+ * @param {Record<string, any>|null|undefined} state
+ */
+export function buildJobRelationCounts(state) {
+  const visitCounts = new Map();
+  const repairCounts = new Map();
+  const photoCounts = new Map();
+  const signatureSet = new Set();
+  const bump = (map, item) => {
+    const id = relationJobId(item);
+    if (id == null) return;
+    map.set(id, (map.get(id) || 0) + 1);
+  };
+  const visits = state?.visits || [];
+  const repairs = state?.repairs || [];
+  const photos = state?.photos || [];
+  const signatures = state?.signatures || [];
+  for (let i = 0; i < visits.length; i++) bump(visitCounts, visits[i]);
+  for (let i = 0; i < repairs.length; i++) bump(repairCounts, repairs[i]);
+  for (let i = 0; i < photos.length; i++) bump(photoCounts, photos[i]);
+  for (let i = 0; i < signatures.length; i++) {
+    const id = relationJobId(signatures[i]);
+    if (id != null) signatureSet.add(id);
+  }
+  return { visitCounts, repairCounts, photoCounts, signatureSet };
+}
+
+/**
+ * Job completeness score (0–100), 25 points each for a visit, photo, repair, and signature.
+ * @param {string|number} jobId
+ * @param {{ visitCounts: Map<any, number>, repairCounts: Map<any, number>, photoCounts: Map<any, number>, signatureSet: Set<any> }} counts
+ * @returns {number}
+ */
+export function jobCompletenessScore(jobId, counts) {
+  const hasVisits = (counts.visitCounts.get(jobId) || 0) > 0;
+  const hasPhotos = (counts.photoCounts.get(jobId) || 0) > 0;
+  const hasRepairs = (counts.repairCounts.get(jobId) || 0) > 0;
+  const hasSig = counts.signatureSet.has(jobId);
+  return Math.min(100, (hasVisits ? 25 : 0) + (hasPhotos ? 25 : 0) + (hasRepairs ? 25 : 0) + (hasSig ? 25 : 0));
+}
+
+/**
+ * Store fields that only paint the shell (drawer, toast, overlay, sync chip).
+ * Changing one of these must not tear down and re-parse the current page.
+ */
+export const PAGE_SHELL_KEYS = new Set([
+  'drawerOpen',
+  'toast',
+  'loading',
+  'syncStatus',
+  'isOnline',
+  'lastSyncAt',
+]);
+
+/**
+ * True when a store update changes anything the page HTML reads.
+ * Compares collection references, so in-place mutation of a frozen array is not detected.
+ * @param {Record<string, any>|null|undefined} prev
+ * @param {Record<string, any>|null|undefined} next
+ * @returns {boolean}
+ */
+export function pageDataChanged(prev, next) {
+  if (!prev || !next) return true;
+  const prevKeys = Object.keys(prev);
+  const nextKeys = Object.keys(next);
+  const seen = new Set();
+  for (let i = 0; i < prevKeys.length; i++) {
+    const key = prevKeys[i];
+    seen.add(key);
+    if (PAGE_SHELL_KEYS.has(key)) continue;
+    if (prev[key] !== next[key]) return true;
+  }
+  for (let i = 0; i < nextKeys.length; i++) {
+    const key = nextKeys[i];
+    if (seen.has(key) || PAGE_SHELL_KEYS.has(key)) continue;
+    if (prev[key] !== next[key]) return true;
+  }
+  return false;
 }
 
 // ═══════════════════════════════════════════════════

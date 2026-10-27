@@ -22,35 +22,58 @@ data class CustomerMergeUndo(
 )
 
 object DuplicateCustomer {
+    private val multiSpace = Regex("\\s+")
+
     fun digits(phone: String): String = phone.filter { it.isDigit() }
 
-    fun normalize(text: String): String = text.trim().lowercase().replace(Regex("\\s+"), " ")
+    fun normalize(text: String): String = text.trim().lowercase().replace(multiSpace, " ")
 
     fun findPairs(customers: List<Customer>): List<DuplicateMatch> {
-        val active = customers.filter { it.isActive }
+        val prepared = customers.mapNotNull { customer ->
+            if (!customer.isActive) null else prepare(customer)
+        }
         val out = mutableListOf<DuplicateMatch>()
-        for (i in active.indices) {
-            for (j in i + 1 until active.size) {
-                val reasons = reasons(active[i], active[j])
-                if (reasons.isNotEmpty()) out += DuplicateMatch(active[i], active[j], reasons)
+        for (i in prepared.indices) {
+            for (j in i + 1 until prepared.size) {
+                val reasons = matchReasons(prepared[i], prepared[j])
+                if (reasons.isNotEmpty()) {
+                    out += DuplicateMatch(prepared[i].customer, prepared[j].customer, reasons)
+                }
             }
         }
         return out
     }
 
-    fun reasons(a: Customer, b: Customer): List<String> {
+    fun reasons(a: Customer, b: Customer): List<String> = matchReasons(prepare(a), prepare(b))
+
+    private fun prepare(customer: Customer): Prepared {
+        val address = normalize(
+            listOf(customer.address, customer.city, customer.zipCode)
+                .filter { it.isNotBlank() }
+                .joinToString(" ")
+        )
+        return Prepared(
+            customer = customer,
+            phone = digits(customer.phone),
+            address = address,
+            name = normalize(customer.fullName)
+        )
+    }
+
+    private fun matchReasons(a: Prepared, b: Prepared): List<String> {
         val why = mutableListOf<String>()
-        val pa = digits(a.phone)
-        val pb = digits(b.phone)
-        if (pa.length >= 10 && pa == pb) why += "same phone"
-        val addrA = normalize(listOf(a.address, a.city, a.zipCode).filter { it.isNotBlank() }.joinToString(" "))
-        val addrB = normalize(listOf(b.address, b.city, b.zipCode).filter { it.isNotBlank() }.joinToString(" "))
-        if (addrA.length >= 8 && addrA == addrB) why += "same address"
-        val nameA = normalize(a.fullName)
-        val nameB = normalize(b.fullName)
-        if (nameA.length >= 4 && nameA == nameB) why += "same name"
+        if (a.phone.length >= 10 && a.phone == b.phone) why += "same phone"
+        if (a.address.length >= 8 && a.address == b.address) why += "same address"
+        if (a.name.length >= 4 && a.name == b.name) why += "same name"
         return why
     }
+
+    private data class Prepared(
+        val customer: Customer,
+        val phone: String,
+        val address: String,
+        val name: String
+    )
 
     fun mergeKeepLeft(keep: Customer, drop: Customer): Customer = keep.copy(
         email = keep.email.ifBlank { drop.email },
