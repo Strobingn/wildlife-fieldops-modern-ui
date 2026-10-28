@@ -69,7 +69,9 @@ export function detectDuplicateCustomers(customers) {
       if (!arr) emailMap.set(p.normEmail, (arr = []));
       arr.push(i);
     }
-    if (p.normAddress !== null && p.addrLen > 0) {
+    // Length 0 is the punctuation-only case ("---", "???"). Identical empty
+    // normalizations score 1, so they stay in the length-0 bucket.
+    if (p.normAddress !== null) {
       let arr = lenBuckets.get(p.addrLen);
       if (!arr) lenBuckets.set(p.addrLen, (arr = []));
       arr.push(i);
@@ -106,8 +108,9 @@ export function detectDuplicateCustomers(customers) {
       }
     }
 
-    // 3. Address bucket candidate search (only length ratios >= 0.8)
-    if (c.normAddress !== null && c.addrLen > 0) {
+    // 3. Address bucket candidate search (only length ratios >= 0.8).
+    // Length 0 only overlaps the length-0 bucket (empty === empty).
+    if (c.normAddress !== null) {
       const minL = Math.ceil(c.addrLen * 0.8);
       const maxL = Math.floor(c.addrLen / 0.8);
       for (let l = minL; l <= maxL; l++) {

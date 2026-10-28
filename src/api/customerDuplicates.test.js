@@ -38,6 +38,21 @@ describe('detectDuplicateCustomers', () => {
     expect(first.potentialDuplicates[0].reason).toBe('Similar address');
   });
 
+  it('treats punctuation-only addresses as equal, matching the old loop', () => {
+    expect(normalizedAddressSimilarity('', '')).toBe(1);
+    const customers = [
+      { id: '1', address: '---' },
+      { id: '2', address: '???' },
+      { id: '3', address: '' },
+    ];
+    const found = detectDuplicateCustomers(customers);
+    const first = found.find((row) => row.customer.id === '1');
+    expect(first.potentialDuplicates).toEqual([
+      { customer: customers[1], reason: 'Similar address' },
+    ]);
+    expect(found.find((row) => row.customer.id === '3')).toBeUndefined();
+  });
+
   it('treats non-digit phones as equal, matching the old loop', () => {
     const customers = [
       { id: '1', phone: 'call me' },
