@@ -28,6 +28,7 @@ import com.strobingn.wildlifefieldops.util.BusinessProfile
 import com.strobingn.wildlifefieldops.util.BusinessProfileStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -335,6 +336,8 @@ class SettingsViewModel @Inject constructor(
             }
             _syncMessage.value = result.message
             refreshBacklog()
+        } catch (t: CancellationException) {
+            throw t
         } catch (t: Throwable) {
             android.util.Log.e("SettingsViewModel", "Sync UI crash prevented", t)
             _syncMessage.value = "Sync error: ${t.message ?: t.javaClass.simpleName}"

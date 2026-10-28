@@ -44,6 +44,7 @@ import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
 import com.strobingn.wildlifefieldops.BuildConfig
 import com.strobingn.wildlifefieldops.data.repository.syncFailureDetail
+import com.strobingn.wildlifefieldops.data.repository.syncLooksFailed
 import com.strobingn.wildlifefieldops.data.remote.SharedTextIntake
 import com.strobingn.wildlifefieldops.data.remote.SharedText
 import com.strobingn.wildlifefieldops.data.remote.TextImportEntry
@@ -599,7 +600,11 @@ internal fun rememberSyncSnapshot(viewModel: SettingsViewModel = hiltViewModel()
     val isSyncing by viewModel.isSyncing.collectAsState()
     LaunchedEffect(lastAt) { viewModel.refreshBacklog() }
     val pending = backlog?.pendingTotal ?: 0
-    val failed = backlog?.hasFailures == true || lastOk == false
+    val failed = syncLooksFailed(
+        hasBacklogFailures = backlog?.hasFailures == true,
+        lastOk = lastOk,
+        lastMessage = lastMessage
+    )
     return syncSnapshot(
         isSyncing = isSyncing,
         failed = failed,

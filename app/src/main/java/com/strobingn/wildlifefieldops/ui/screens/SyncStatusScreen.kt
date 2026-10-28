@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.data.repository.SyncBacklogSnapshot
+import com.strobingn.wildlifefieldops.data.repository.syncLooksFailed
 import com.strobingn.wildlifefieldops.ui.theme.FieldShapes
 import com.strobingn.wildlifefieldops.ui.viewmodel.SettingsViewModel
 import java.text.SimpleDateFormat
@@ -56,7 +57,12 @@ data class SyncStatusUi(
     val syncMessage: String? = null,
     val connection: String = ""
 ) {
-    val failed: Boolean get() = backlog?.hasFailures == true || lastAttemptOk == false
+    val failed: Boolean
+        get() = syncLooksFailed(
+            hasBacklogFailures = backlog?.hasFailures == true,
+            lastOk = lastAttemptOk,
+            lastMessage = lastMessage
+        )
     val pending: Int get() = backlog?.pendingTotal ?: 0
     val headline: String
         get() = when {

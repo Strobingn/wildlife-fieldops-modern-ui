@@ -1,5 +1,6 @@
 package com.strobingn.wildlifefieldops.data.repository
 
+import com.strobingn.wildlifefieldops.data.remote.PhotoSyncQueue
 import com.strobingn.wildlifefieldops.data.local.CustomerDao
 import com.strobingn.wildlifefieldops.data.local.FieldObservationDao
 import com.strobingn.wildlifefieldops.data.local.InspectionDao
@@ -11,10 +12,23 @@ import javax.inject.Singleton
 
 /** Prefer the on-device backlog line; otherwise the failure clause from the last sync. */
 fun syncFailureDetail(backlogLine: String?, lastOk: Boolean?, lastMessage: String?): String? {
-    if (!backlogLine.isNullOrBlank()) return backlogLine
+    if (!backlogLine.isNullOrBlank() && !PhotoSyncQueue.isFalseCancellationMessage(backlogLine)) {
+        return backlogLine
+    }
     if (lastOk != false || lastMessage.isNullOrBlank()) return null
+    if (PhotoSyncQueue.isFalseCancellationMessage(lastMessage)) return null
     val idx = lastMessage.indexOf("Failed (")
     return if (idx >= 0) lastMessage.substring(idx) else lastMessage
+}
+
+/**
+ * A stored "Job was cancelled" line is an interrupted upload. It does not keep
+ * the Jobs tab on the red failure banner while those photos are still pending.
+ */
+fun syncLooksFailed(hasBacklogFailures: Boolean, lastOk: Boolean?, lastMessage: String?): Boolean {
+    if (hasBacklogFailures) return true
+    if (lastOk != false) return false
+    return !PhotoSyncQueue.isFalseCancellationMessage(lastMessage)
 }
 
 data class SyncBacklogSnapshot(
@@ -62,7 +76,10 @@ class SyncBacklogRepository @Inject constructor(
         // Internal rows (Ops ledger, non-UUID ids) never upload, so they are not backlog.
         val unsyncedJobs = jobDao.getUnsynced()
         val failedJobs = JobUploadQueue.failed(unsyncedJobs)
-        val failedPhotos = photoDao.getUnuploaded().filter { !it.uploadError.isNullOrBlank() }
+        val failedPhotos = photoDao.getUnuploaded().filter {
+            val error = it.uploadError
+            !error.isNullOrBlank() && !PhotoSyncQueue.isFalseCancellationMessage(error)
+        }
         val failedObservations = fieldObservationDao.getUnsynced().filter { !it.syncError.isNullOrBlank() }
         val failedEvents = observationEventDao.getUnsynced().filter { !it.syncError.isNullOrBlank() }
         val recent = buildList {

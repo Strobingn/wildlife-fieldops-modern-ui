@@ -27,10 +27,24 @@ interface PhotoDao {
     @Query("SELECT * FROM photos WHERE inspectionId = :inspectionId ORDER BY takenAt DESC")
     suspend fun getByInspectionOnce(inspectionId: String): List<Photo>
 
-    @Query("SELECT * FROM photos WHERE isUploaded = 0")
+    /**
+     * Still needs an upload. `kept-local:` rows stay on the phone (cancelled or
+     * deleted job) and are not pending, so they cannot fail the next sync.
+     */
+    @Query(
+        """
+        SELECT * FROM photos WHERE isUploaded = 0
+        AND (uploadError IS NULL OR uploadError NOT LIKE 'kept-local:%')
+        """
+    )
     suspend fun getUnuploaded(): List<Photo>
 
-    @Query("SELECT COUNT(*) FROM photos WHERE isUploaded = 0")
+    @Query(
+        """
+        SELECT COUNT(*) FROM photos WHERE isUploaded = 0
+        AND (uploadError IS NULL OR uploadError NOT LIKE 'kept-local:%')
+        """
+    )
     suspend fun countUnuploaded(): Int
 
     @Query("UPDATE photos SET isUploaded = 1, uploadError = NULL, remoteUrl = :remoteUrl WHERE id = :id")
