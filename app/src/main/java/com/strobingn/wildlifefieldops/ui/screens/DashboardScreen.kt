@@ -119,10 +119,15 @@ fun DashboardScreen(
     val syncVm: SettingsViewModel = hiltViewModel()
     val backlog by syncVm.backlog.collectAsState()
     val lastOk by syncVm.lastSyncOk.collectAsState()
+    val lastMessage by syncVm.lastSyncMessage.collectAsState()
     val isSyncing by syncVm.isSyncing.collectAsState()
     LaunchedEffect(Unit) { syncVm.refreshBacklog() }
     val pendingSync = backlog?.pendingTotal ?: 0
-    val syncFailed = backlog?.hasFailures == true || lastOk == false
+    val syncFailed = com.strobingn.wildlifefieldops.data.repository.syncLooksFailed(
+        hasBacklogFailures = backlog?.hasFailures == true,
+        lastOk = lastOk,
+        lastMessage = lastMessage
+    )
     val syncLabel = when {
         isSyncing -> "Syncing…"
         syncFailed -> "Sync failed"

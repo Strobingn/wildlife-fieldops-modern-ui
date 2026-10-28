@@ -17,6 +17,7 @@ import com.strobingn.wildlifefieldops.data.observation.ObservationEventSyncQueue
 import com.strobingn.wildlifefieldops.data.observation.ObservationPhotoUploader
 import com.strobingn.wildlifefieldops.data.remote.JobPhotoUploader
 import com.strobingn.wildlifefieldops.data.remote.LiveSyncPayloads
+import com.strobingn.wildlifefieldops.data.remote.PhotoSyncQueue
 import com.strobingn.wildlifefieldops.data.remote.RemoteCustomerDto
 import com.strobingn.wildlifefieldops.data.remote.RemoteJobDto
 import com.strobingn.wildlifefieldops.data.remote.RemoteObservationEventDto
@@ -33,6 +34,7 @@ import com.strobingn.wildlifefieldops.sync.work.LocalEditSignal
 import com.strobingn.wildlifefieldops.sync.work.SyncWriteGate
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -76,6 +78,10 @@ class SyncRepository @Inject constructor(
 
     override suspend fun syncAll(): SyncResult = withContext(Dispatchers.IO) {
         val result = try {
+            // Drop a sticky "Job was cancelled" banner before this pass. That
+            // sentence is a cancelled coroutine, not a cancelled wildlife job.
+            runCatching { syncStatusStore.forgetInterruptedCancellation() }
+                .onFailure { android.util.Log.w("SyncRepository", "Could not clear interrupted sync banner", it) }
             val pendingBefore = countPending()
             val synced = syncWriteGate.marking { doSync() }
             // Pull/ACK writes are drained inside the gate. A row created during
@@ -84,6 +90,8 @@ class SyncRepository @Inject constructor(
                 localEdits.notifyLocalChange()
             }
             synced
+        } catch (t: CancellationException) {
+            throw t
         } catch (t: Throwable) {
             android.util.Log.e("SyncRepository", "Sync crashed", t)
             SyncResult(
@@ -163,6 +171,7 @@ class SyncRepository @Inject constructor(
                 is SyncItemOutcome.Failed -> failures += SyncItemFailure(
                     "customer", customer.id, customer.fullName, outcome.reason
                 )
+                SyncItemOutcome.Interrupted -> Unit
             }
         }
 
@@ -182,6 +191,7 @@ class SyncRepository @Inject constructor(
                     android.util.Log.e("SyncRepository", "Job push failed ${job.id}: ${outcome.reason}")
                     failures += SyncItemFailure("job", job.id, job.title.ifBlank { job.customerName }, outcome.reason)
                 }
+                SyncItemOutcome.Interrupted -> Unit
             }
         }
 
@@ -205,6 +215,7 @@ class SyncRepository @Inject constructor(
                 is SyncItemOutcome.Failed -> failures += SyncItemFailure(
                     "inspection", insp.id, insp.customerName.ifBlank { insp.id }, outcome.reason
                 )
+                SyncItemOutcome.Interrupted -> Unit
             }
         }
 
@@ -212,6 +223,7 @@ class SyncRepository @Inject constructor(
             val remoteCustomers = client.from("customers").select().decodeList<RemoteCustomerDto>()
             pulledCustomers = mergeCustomers(remoteCustomers)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             android.util.Log.w("SyncRepository", "Customer pull failed", e)
             failures += SyncItemFailure("customer", "*", "pull", SyncErrorFormatter.reason(e))
         }
@@ -220,11 +232,30 @@ class SyncRepository @Inject constructor(
             val remoteJobs = client.from("jobs").select().decodeList<RemoteJobDto>()
             pulledJobs = mergeJobs(remoteJobs)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             android.util.Log.w("SyncRepository", "Job pull failed", e)
             failures += SyncItemFailure("job", "*", "pull", SyncErrorFormatter.reason(e))
         }
 
-        photoDao.getUnuploaded().forEach { photo ->
+        val pendingPhotos = photoDao.getUnuploaded()
+        pendingPhotos.forEach { photo ->
+            if (PhotoSyncQueue.isFalseCancellationMessage(photo.uploadError)) {
+                photoDao.markUploadError(photo.id, null)
+            }
+        }
+        pendingPhotos.forEach { photo ->
+            val jobId = photo.jobId?.takeIf { it.isNotBlank() }
+            val deleted = jobId != null && jobId in deletedJobIds
+            val status = jobId?.let { jobDao.getById(it)?.status }
+            if (PhotoSyncQueue.action(status, deleted) == PhotoSyncQueue.Action.SKIP_KEEP_LOCAL) {
+                // File and row stay. The photo is no longer a pending upload.
+                photoDao.markUploadError(photo.id, PhotoSyncQueue.KEPT_LOCAL_REASON)
+                android.util.Log.i(
+                    "SyncRepository",
+                    "Keeping photo ${photo.id} on device; job ${jobId ?: "?"} is cancelled or deleted"
+                )
+                return@forEach
+            }
             val outcome = itemRunner.run(
                 markSynced = { /* ACK inside the block after a description-stable write */ },
                 markError = { photoDao.markUploadError(photo.id, it) }
@@ -236,6 +267,7 @@ class SyncRepository @Inject constructor(
                         LiveSyncPayloads.photo(latest, uploaded.storagePath, uploaded.publicUrl)
                     )
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     android.util.Log.w("SyncRepository", "photos row failed for ${photo.id}", e)
                     throw e
                 }
@@ -268,6 +300,11 @@ class SyncRepository @Inject constructor(
                         outcome.reason
                     )
                 }
+                SyncItemOutcome.Interrupted ->
+                    android.util.Log.i(
+                        "SyncRepository",
+                        "Photo ${photo.id} upload interrupted; leaving it queued"
+                    )
             }
         }
 
@@ -307,6 +344,7 @@ class SyncRepository @Inject constructor(
                 is SyncItemOutcome.Failed -> failures += SyncItemFailure(
                     "observation", observation.id, observation.notes.take(40), outcome.reason
                 )
+                SyncItemOutcome.Interrupted -> Unit
             }
         }
 
@@ -340,6 +378,7 @@ class SyncRepository @Inject constructor(
                 is SyncItemOutcome.Failed -> failures += SyncItemFailure(
                     "event", record.eventId, record.entityId, outcome.reason
                 )
+                SyncItemOutcome.Interrupted -> Unit
             }
         }
 
@@ -382,6 +421,7 @@ class SyncRepository @Inject constructor(
         try {
             client.from("observation_events").insert(dto)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             if (SyncErrorFormatter.isDuplicate(e)) {
                 android.util.Log.i(
                     "SyncRepository",
@@ -410,6 +450,7 @@ class SyncRepository @Inject constructor(
                     }
                     deletedRecordDao.markSynced(tombstone.id, entityType)
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     val reason = SyncErrorFormatter.reason(e)
                     android.util.Log.w(
                         "SyncRepository",
@@ -420,6 +461,7 @@ class SyncRepository @Inject constructor(
                 }
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             android.util.Log.e("SyncRepository", "Deletion push failed for $entityType", e)
             failures += SyncItemFailure(entityType, "*", "deletions", SyncErrorFormatter.reason(e))
         }

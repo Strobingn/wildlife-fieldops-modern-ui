@@ -32,6 +32,7 @@ import com.strobingn.wildlifefieldops.ai.fieldops.OperatorWins
 import com.strobingn.wildlifefieldops.ai.fieldops.PhotoAutoTags
 import com.strobingn.wildlifefieldops.data.model.Photo
 import com.strobingn.wildlifefieldops.data.model.PhotoCategory
+import com.strobingn.wildlifefieldops.data.remote.PhotoSyncQueue
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.PhotosViewModel
@@ -453,7 +454,8 @@ private fun PhotoGridItem(photo: Photo, onDelete: () -> Unit, onClick: () -> Uni
             }
 
             // Info overlay
-            if (photo.description.isNotBlank() || !photo.uploadError.isNullOrBlank()) {
+            val uploadLabel = PhotoSyncQueue.galleryUploadLabel(photo.uploadError)
+            if (photo.description.isNotBlank() || uploadLabel != null) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -469,10 +471,14 @@ private fun PhotoGridItem(photo: Photo, onDelete: () -> Unit, onClick: () -> Uni
                             fontWeight = FontWeight.Medium,
                             maxLines = 1
                         )
-                        if (!photo.uploadError.isNullOrBlank()) {
+                        if (uploadLabel != null) {
                             Text(
-                                "Sync failed: ${photo.uploadError}",
-                                color = ErrorRed,
+                                uploadLabel,
+                                color = if (PhotoSyncQueue.isKeptLocal(photo.uploadError)) {
+                                    androidx.compose.ui.graphics.Color.White
+                                } else {
+                                    ErrorRed
+                                },
                                 style = MaterialTheme.typography.labelSmall,
                                 maxLines = 2
                             )

@@ -2,6 +2,7 @@ package com.strobingn.wildlifefieldops.data.repository
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import com.strobingn.wildlifefieldops.data.remote.PhotoSyncQueue
 import com.strobingn.wildlifefieldops.ui.viewmodel.LAST_SYNC_AT
 import com.strobingn.wildlifefieldops.ui.viewmodel.LAST_SYNC_ERROR
 import com.strobingn.wildlifefieldops.ui.viewmodel.LAST_SYNC_ERROR_AT
@@ -18,6 +19,25 @@ import javax.inject.Singleton
 class SyncStatusStore @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    /**
+     * The previous pass stored a coroutine cancellation as a hard failure.
+     * Clear that banner so the photo backlog can upload. Real errors stay.
+     */
+    suspend fun forgetInterruptedCancellation() {
+        context.settingsDataStore.edit { prefs ->
+            if (PhotoSyncQueue.isFalseCancellationMessage(prefs[LAST_SYNC_ERROR])) {
+                prefs.remove(LAST_SYNC_ERROR)
+                prefs.remove(LAST_SYNC_ERROR_AT)
+            }
+            val message = prefs[LAST_SYNC_MESSAGE]
+            if (prefs[LAST_SYNC_OK] == false && PhotoSyncQueue.isFalseCancellationMessage(message)) {
+                prefs[LAST_SYNC_OK] = true
+                prefs[LAST_SYNC_MESSAGE] =
+                    "Photo upload was interrupted and will retry. The job was not cancelled."
+            }
+        }
+    }
+
     suspend fun record(result: SyncResult) {
         val now = System.currentTimeMillis()
         context.settingsDataStore.edit { prefs ->
