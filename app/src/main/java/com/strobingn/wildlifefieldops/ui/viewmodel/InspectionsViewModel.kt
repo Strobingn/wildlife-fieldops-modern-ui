@@ -34,6 +34,7 @@ import com.strobingn.wildlifefieldops.data.remote.AiService
 import com.strobingn.wildlifefieldops.data.remote.InspectionReportContext
 import com.strobingn.wildlifefieldops.data.remote.InspectionReportDraft
 import com.strobingn.wildlifefieldops.data.repository.SyncRepository
+import com.strobingn.wildlifefieldops.pricing.EstimateInspectionPhotos
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -189,6 +190,25 @@ class InspectionsViewModel @Inject constructor(
 
     fun photosForInspection(inspectionId: String): Flow<List<Photo>> =
         photoDao.getByInspection(inspectionId)
+
+    suspend fun inspectionPhotoIds(jobId: String, extraInspectionId: String = ""): List<String> {
+        val inspectionIds = EstimateInspectionPhotos.inspectionIds(
+            jobInspectionIds = if (jobId.isBlank()) emptyList() else inspectionDao.getByJobOnce(jobId).map { it.id },
+            extraInspectionId = extraInspectionId
+        )
+        if (inspectionIds.isEmpty()) return emptyList()
+        val photos = inspectionIds.flatMap { photoDao.getByInspectionOnce(it) }
+        return EstimateInspectionPhotos.idsBelongingToInspections(inspectionIds, photos)
+    }
+
+    suspend fun photosByIds(ids: List<String>): List<Photo> {
+        if (ids.isEmpty()) return emptyList()
+        return EstimateInspectionPhotos.ordered(ids, photoDao.getByIds(ids))
+    }
+
+    suspend fun insertPhoto(photo: Photo) {
+        photoDao.insert(photo)
+    }
 
     fun addInspectionPhoto(photo: Photo) = viewModelScope.launch {
         photoDao.insert(photo)
@@ -427,6 +447,7 @@ class InspectionsViewModel @Inject constructor(
     fun prepareJobForEstimate(
         jobId: String,
         reportText: String,
+        inspectionId: String = "",
         onReady: (String) -> Unit
     ) {
         if (jobId.isBlank()) {
@@ -457,12 +478,24 @@ class InspectionsViewModel @Inject constructor(
             } else {
                 job.description
             }
+            val photoIds = inspectionPhotoIds(jobId, inspectionId)
+            val attached = EstimateInspectionPhotos.merge(
+                attachedIds = job.pricing.estimatePhotoIds,
+                removedIds = job.pricing.estimatePhotosRemoved,
+                incomingIds = photoIds
+            )
             jobDao.insert(
-                job.copy(
-                    notes = notes.trim(),
-                    description = description,
-                    updatedAt = System.currentTimeMillis(),
-                    isSynced = false
+                com.strobingn.wildlifefieldops.ai.fieldops.JobFieldOpsCodec.mergeForSave(
+                    job.copy(
+                        notes = notes.trim(),
+                        description = description,
+                        pricing = job.pricing.copy(
+                            estimatePhotoIds = attached.attachedIds,
+                            estimatePhotosRemoved = attached.removedIds
+                        ),
+                        updatedAt = System.currentTimeMillis(),
+                        isSynced = false
+                    )
                 )
             )
             _estimatePrepLoading.value = false

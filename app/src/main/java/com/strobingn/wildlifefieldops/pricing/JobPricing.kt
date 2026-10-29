@@ -89,6 +89,15 @@ data class JobPricing(
     /** Exclusion / repair openings. Seal-up lines are copied into [photoLineItems]. */
     val exclusionPoints: List<ExclusionPointRecord> = emptyList(),
     /**
+     * Photo rows shown on this estimate and printed on the estimate PDF.
+     * Opening the estimate from a linked inspection fills this with that
+     * inspection's photos. Sir can add or remove ids here without deleting
+     * the inspection's copy.
+     */
+    val estimatePhotoIds: List<String> = emptyList(),
+    /** Inspection photos removed from this estimate. A later open does not put them back. */
+    val estimatePhotosRemoved: List<String> = emptyList(),
+    /**
      * Fine pipeline status (Lead, Trapping, …). The live `jobs.status` column
      * only accepts a coarse set, so this rides in pricing jsonb and wins on pull.
      */

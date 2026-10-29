@@ -51,7 +51,8 @@ import java.io.File
 @Composable
 fun JobBatch5Section(
     job: Job,
-    searchVm: SearchFieldOpsViewModel
+    searchVm: SearchFieldOpsViewModel,
+    inspectionIds: List<String> = emptyList()
 ) {
     val photos by searchVm.photos.collectAsState()
     val jobPhotos = photos.filter { it.jobId == job.id }
@@ -216,7 +217,13 @@ fun JobBatch5Section(
                             technicianSignatureBase64 = techSig.pngBase64,
                             technicianSignerName = techSig.name,
                             technicianSignedAtMillis = techSig.signedAt.takeIf { it > 0L },
-                            technicianSignatureCleared = techSig.cleared
+                            technicianSignatureCleared = techSig.cleared,
+                            photoPaths = com.strobingn.wildlifefieldops.pricing.EstimateInspectionPhotos.printablePaths(
+                                com.strobingn.wildlifefieldops.pricing.EstimateInspectionPhotos.inspectionReportPhotos(
+                                    inspectionIds,
+                                    photos
+                                )
+                            )
                         )
                         searchVm.saveShareReport(job.id, path)
                         WildlifeWhispererInspectionReportPdf.share(context, path)
