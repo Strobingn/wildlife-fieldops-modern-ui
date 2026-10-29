@@ -805,7 +805,8 @@ fun InspectionFormScreen(
                                 onClick = {
                                     viewModel.prepareJobForEstimate(
                                         jobId = linkedJobId,
-                                        reportText = buildReportBlob()
+                                        reportText = buildReportBlob(),
+                                        inspectionId = photoOwnerId
                                     ) { jobId -> onNavigateToEstimate(jobId) }
                                 },
                                 enabled = !estimatePrepLoading && buildReportBlob().isNotBlank(),

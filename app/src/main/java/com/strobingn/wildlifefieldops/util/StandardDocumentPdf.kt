@@ -36,7 +36,8 @@ object StandardDocumentPdf {
         cache: Boolean = false,
         qr: Bitmap? = null,
         customerSignature: Bitmap? = null,
-        companySignature: Bitmap? = null
+        companySignature: Bitmap? = null,
+        attachedPhotoPaths: List<String> = emptyList()
     ): String {
         val layout = document.layout()
         val logo = BusinessProfileStore.loadDocumentLogo(context, document.profile)
@@ -53,6 +54,9 @@ object StandardDocumentPdf {
                 if (bitmap != null) drawTagged(pdfPage.canvas, page, tag, bitmap)
             }
             pdf.finishPage(pdfPage)
+        }
+        if (attachedPhotoPaths.isNotEmpty()) {
+            EstimatePhotoPdf.append(pdf, attachedPhotoPaths, layout.pages.size + 1)
         }
         val dir = if (cache) {
             context.cacheDir

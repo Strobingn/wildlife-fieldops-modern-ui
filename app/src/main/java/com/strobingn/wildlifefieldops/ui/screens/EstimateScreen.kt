@@ -43,6 +43,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -52,6 +53,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.strobingn.wildlifefieldops.ai.fieldops.EstimateLineSuggester
 import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
+import com.strobingn.wildlifefieldops.data.model.Photo
+import com.strobingn.wildlifefieldops.data.model.PhotoCategory
+import com.strobingn.wildlifefieldops.pricing.EstimateInspectionPhotos
 import com.strobingn.wildlifefieldops.pricing.JobPricing
 import com.strobingn.wildlifefieldops.pricing.effectiveTotal
 import com.strobingn.wildlifefieldops.ui.components.AiRuntimeBadge
@@ -70,12 +74,14 @@ import com.strobingn.wildlifefieldops.ui.theme.TextPrimary
 import com.strobingn.wildlifefieldops.ui.theme.TextSecondary
 import com.strobingn.wildlifefieldops.ui.theme.TextTertiary
 import com.strobingn.wildlifefieldops.ui.viewmodel.CountyTaxState
+import com.strobingn.wildlifefieldops.ui.viewmodel.InspectionsViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.InvoiceViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobAiViewModel
 import com.strobingn.wildlifefieldops.ui.viewmodel.JobsViewModel
 import com.strobingn.wildlifefieldops.util.ContractDocumentType
 import com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,7 +91,8 @@ fun EstimateScreen(
     onBack: () -> Unit,
     jobsViewModel: JobsViewModel = hiltViewModel(),
     jobAiViewModel: JobAiViewModel = hiltViewModel(),
-    invoiceViewModel: InvoiceViewModel = hiltViewModel()
+    invoiceViewModel: InvoiceViewModel = hiltViewModel(),
+    inspectionsViewModel: InspectionsViewModel = hiltViewModel()
 ) {
     val job by jobsViewModel.getJobById(jobId).collectAsState(initial = null)
     val draft by jobAiViewModel.estimateDraft.collectAsState()
@@ -110,6 +117,9 @@ fun EstimateScreen(
     var mileageRateText by remember { mutableStateOf("0.65") }
     var taxRateText by remember { mutableStateOf("8.125") }
     var discountPercentText by remember { mutableStateOf("0") }
+    var attachedPhotos by remember { mutableStateOf<List<Photo>>(emptyList()) }
+    var photoMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     fun applyPricing(next: JobPricing, markDirty: Boolean = true) {
         pricing = next
@@ -146,11 +156,32 @@ fun EstimateScreen(
     LaunchedEffect(job, hydrated) {
         val current = job ?: return@LaunchedEffect
         if (hydrated) return@LaunchedEffect
-        val loaded = PricingCalculator.pricingForEditor(current.pricing, current.estimatedValue)
+        val incoming = inspectionsViewModel.inspectionPhotoIds(current.id)
+        val attached = EstimateInspectionPhotos.merge(
+            attachedIds = current.pricing.estimatePhotoIds,
+            removedIds = current.pricing.estimatePhotosRemoved,
+            incomingIds = incoming
+        )
+        val persisted = current.pricing.copy(
+            estimatePhotoIds = attached.attachedIds,
+            estimatePhotosRemoved = attached.removedIds
+        )
+        if (persisted.estimatePhotoIds != current.pricing.estimatePhotoIds ||
+            persisted.estimatePhotosRemoved != current.pricing.estimatePhotosRemoved
+        ) {
+            jobsViewModel.saveEstimatePhotoIds(current.id, persisted.estimatePhotoIds, persisted.estimatePhotosRemoved)
+        }
+        val loaded = PricingCalculator.pricingForEditor(persisted, current.estimatedValue)
         pricing = loaded
+        attachedPhotos = inspectionsViewModel.photosByIds(loaded.estimatePhotoIds)
         syncInputTexts(loaded)
         hydrated = true
         invoiceViewModel.resolveCountyTax(current)
+    }
+
+    LaunchedEffect(pricing.estimatePhotoIds, hydrated) {
+        if (!hydrated) return@LaunchedEffect
+        attachedPhotos = inspectionsViewModel.photosByIds(pricing.estimatePhotoIds)
     }
 
     LaunchedEffect(draft, hydrated) {
@@ -241,6 +272,63 @@ fun EstimateScreen(
                         )
                     }
                 }
+            }
+            EstimatePhotoStrip(
+                photos = attachedPhotos,
+                onPhotoFiles = { files ->
+                    val current = job ?: return@EstimatePhotoStrip
+                    scope.launch {
+                        var next = pricing
+                        files.forEach { file ->
+                            val photo = Photo(
+                                filePath = androidx.core.content.FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.provider",
+                                    file
+                                ).toString(),
+                                localPath = file.absolutePath,
+                                jobId = current.id,
+                                customerId = current.customerId.ifBlank { null },
+                                category = PhotoCategory.JOB_SITE,
+                                takenAt = System.currentTimeMillis(),
+                                fileSize = file.length()
+                            )
+                            inspectionsViewModel.insertPhoto(photo)
+                            val merged = EstimateInspectionPhotos.add(
+                                next.estimatePhotoIds,
+                                next.estimatePhotosRemoved,
+                                photo.id
+                            )
+                            next = next.copy(
+                                estimatePhotoIds = merged.attachedIds,
+                                estimatePhotosRemoved = merged.removedIds
+                            )
+                        }
+                        applyPricing(next)
+                    }
+                },
+                onRemove = { photo ->
+                    val merged = EstimateInspectionPhotos.remove(
+                        pricing.estimatePhotoIds,
+                        pricing.estimatePhotosRemoved,
+                        photo.id
+                    )
+                    applyPricing(
+                        pricing.copy(
+                            estimatePhotoIds = merged.attachedIds,
+                            estimatePhotosRemoved = merged.removedIds
+                        )
+                    )
+                    if (photo.inspectionId.isNullOrBlank()) {
+                        inspectionsViewModel.removeInspectionPhoto(photo)
+                    }
+                },
+                onCopyFailed = { missed ->
+                    photoMessage = "Could not read $missed photo(s)."
+                }
+            )
+            if (!photoMessage.isNullOrBlank()) {
+                Text(photoMessage!!, color = com.strobingn.wildlifefieldops.ui.theme.ErrorRed)
             }
             Button(
                 onClick = { job?.let { jobAiViewModel.draftEstimate(it) } },
@@ -548,8 +636,8 @@ fun EstimateScreen(
                 }
                 Button(
                     onClick = {
-                        jobsViewModel.saveJobPricing(j.id, pricing)
-                        val items = buildEstimateLineItems(pricing, result)
+                        val snapshot = pricing
+                        val items = buildEstimateLineItems(snapshot, result)
                         val signature = com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules
                             .find(pricing, com.strobingn.wildlifefieldops.ai.fieldops.SignatureRules.ESTIMATE)
                         val estimateTech = com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.resolve(
@@ -557,26 +645,31 @@ fun EstimateScreen(
                             com.strobingn.wildlifefieldops.ai.fieldops.TechSignatureRules.ESTIMATE,
                             com.strobingn.wildlifefieldops.util.TechnicianSignatureStore.load(context)
                         )
-                        pdfPath = WildlifeWhispererContractPdf.generate(
-                            context = context,
-                            documentType = ContractDocumentType.ESTIMATE,
-                            job = j.copy(estimatedValue = result.total.effective, pricing = pricing),
-                            lineItems = items,
-                            subtotal = result.subtotal.effective,
-                            taxRate = pricing.taxRatePercent,
-                            taxAmount = result.taxAmount.effective,
-                            discountAmount = result.discountAmount.effective,
-                            total = result.total.effective,
-                            notes = listOf(pricing.notes, pricing.rationale).filter { it.isNotBlank() }.joinToString("\n"),
-                            customerSignature = com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(signature?.pngBase64.orEmpty()),
-                            customerSignerName = signature?.signerName.orEmpty(),
-                            customerSignedAtMillis = signature?.signedAt,
-                            technicianSignature = com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(estimateTech.pngBase64),
-                            technicianSignerName = estimateTech.name,
-                            technicianSignedAtMillis = estimateTech.signedAt.takeIf { it > 0L },
-                            technicianSignatureCleared = estimateTech.cleared
-                        )
-                        showPdfShare = true
+                        scope.launch {
+                            jobsViewModel.saveJobPricing(j.id, snapshot)
+                            val photos = inspectionsViewModel.photosByIds(snapshot.estimatePhotoIds)
+                            pdfPath = WildlifeWhispererContractPdf.generate(
+                                context = context,
+                                documentType = ContractDocumentType.ESTIMATE,
+                                job = j.copy(estimatedValue = result.total.effective, pricing = snapshot),
+                                lineItems = items,
+                                subtotal = result.subtotal.effective,
+                                taxRate = snapshot.taxRatePercent,
+                                taxAmount = result.taxAmount.effective,
+                                discountAmount = result.discountAmount.effective,
+                                total = result.total.effective,
+                                notes = listOf(snapshot.notes, snapshot.rationale).filter { it.isNotBlank() }.joinToString("\n"),
+                                customerSignature = com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(signature?.pngBase64.orEmpty()),
+                                customerSignerName = signature?.signerName.orEmpty(),
+                                customerSignedAtMillis = signature?.signedAt,
+                                technicianSignature = com.strobingn.wildlifefieldops.util.SignatureInk.decodePng(estimateTech.pngBase64),
+                                technicianSignerName = estimateTech.name,
+                                technicianSignedAtMillis = estimateTech.signedAt.takeIf { it > 0L },
+                                technicianSignatureCleared = estimateTech.cleared,
+                                photoPaths = EstimateInspectionPhotos.printablePaths(photos)
+                            )
+                            showPdfShare = true
+                        }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary),
