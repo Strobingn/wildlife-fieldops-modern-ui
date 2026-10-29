@@ -63,6 +63,39 @@ class EstimateInspectionPhotosTest {
         }
     }
 
+    @Test
+    fun inspectionReportKeepsPhotosTheEstimateOptedOut() {
+        val photos = listOf(
+            photo("a", "insp", takenAt = 1),
+            photo("b", "insp", takenAt = 2)
+        )
+        val report = EstimateInspectionPhotos.inspectionReportPhotos(listOf("insp"), photos).map { it.id }
+        assertEquals(listOf("a", "b"), report)
+        val estimate = EstimateInspectionPhotos.merge(
+            attachedIds = emptyList(),
+            removedIds = listOf("a"),
+            incomingIds = listOf("a", "b")
+        )
+        assertEquals(listOf("b"), estimate.attachedIds)
+    }
+
+    @Test
+    fun insertedPhotosMergeIntoTheCurrentWorksheet() {
+        val edited = JobPricing(
+            laborHours = 4.0,
+            laborRate = 185.0,
+            totalOverride = 900.0,
+            estimatePhotoIds = listOf("kept"),
+            estimatePhotosRemoved = listOf("opt-out")
+        )
+        val merged = EstimateInspectionPhotos.withInsertedPhotos(edited, listOf("new-1"))
+        assertEquals(4.0, merged.laborHours, 0.0)
+        assertEquals(185.0, merged.laborRate, 0.0)
+        assertEquals(900.0, merged.totalOverride)
+        assertEquals(listOf("kept", "new-1"), merged.estimatePhotoIds)
+        assertEquals(listOf("opt-out"), merged.estimatePhotosRemoved)
+    }
+
     private fun photo(id: String, inspectionId: String, takenAt: Long) = Photo(
         id = id,
         inspectionId = inspectionId,

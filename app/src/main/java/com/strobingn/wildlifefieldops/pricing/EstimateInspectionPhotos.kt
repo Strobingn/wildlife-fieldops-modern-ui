@@ -70,6 +70,30 @@ object EstimateInspectionPhotos {
         return attachedIds.mapNotNull { byId[it] }
     }
 
+    /**
+     * Every still on the inspection, including ones Sir removed from the estimate.
+     * Estimate removal is an opt-out on the estimate only.
+     */
+    fun inspectionReportPhotos(inspectionIds: Collection<String>, photos: List<Photo>): List<Photo> =
+        ordered(idsBelongingToInspections(inspectionIds, photos), photos)
+
+    /**
+     * Photo ids inserted while the worksheet was on screen. Merges into the
+     * pricing state at the end of the insert, so labor edits and removals that
+     * landed during the insert stay put.
+     */
+    fun withInsertedPhotos(current: JobPricing, insertedIds: List<String>): JobPricing {
+        val merged = insertedIds.fold(
+            EstimatePhotoAttachment(current.estimatePhotoIds, current.estimatePhotosRemoved)
+        ) { acc, id ->
+            add(acc.attachedIds, acc.removedIds, id)
+        }
+        return current.copy(
+            estimatePhotoIds = merged.attachedIds,
+            estimatePhotosRemoved = merged.removedIds
+        )
+    }
+
     /** Local files the estimate PDF can embed. Derived previews stay off the customer copy. */
     fun printablePaths(photos: List<Photo>): List<String> =
         photos.mapNotNull { photo ->

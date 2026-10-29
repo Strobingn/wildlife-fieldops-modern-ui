@@ -853,7 +853,9 @@ fun InspectionFormScreen(
                                             weather = weatherConditions,
                                             followUpRequired = followUpRequired
                                         ),
-                                        qr = qr
+                                        qr = qr,
+                                        photoPaths = com.strobingn.wildlifefieldops.pricing.EstimateInspectionPhotos
+                                            .printablePaths(inspectionPhotos)
                                     )
                                     if (qrJobId.isNotBlank()) searchVm.saveShareReport(qrJobId, path)
                                     WildlifeWhispererInspectionReportPdf.share(context, path)

@@ -126,6 +126,15 @@ fun EstimateScreen(
         if (markDirty) dirty = true
     }
 
+    /** Photo ids only. A blank job keeps its stored quote and does not pick up starter labor. */
+    fun applyPhotoIds(attachedIds: List<String>, removedIds: List<String>) {
+        pricing = pricing.copy(
+            estimatePhotoIds = attachedIds,
+            estimatePhotosRemoved = removedIds
+        )
+        jobsViewModel.saveEstimatePhotoIds(jobId, attachedIds, removedIds)
+    }
+
     fun syncInputTexts(p: JobPricing) {
         laborHoursText = formatNum(p.laborHours)
         laborRateText = formatNum(p.laborRate)
@@ -278,8 +287,7 @@ fun EstimateScreen(
                 onPhotoFiles = { files ->
                     val current = job ?: return@EstimatePhotoStrip
                     scope.launch {
-                        var next = pricing
-                        files.forEach { file ->
+                        val inserted = files.map { file ->
                             val photo = Photo(
                                 filePath = androidx.core.content.FileProvider.getUriForFile(
                                     context,
@@ -294,17 +302,10 @@ fun EstimateScreen(
                                 fileSize = file.length()
                             )
                             inspectionsViewModel.insertPhoto(photo)
-                            val merged = EstimateInspectionPhotos.add(
-                                next.estimatePhotoIds,
-                                next.estimatePhotosRemoved,
-                                photo.id
-                            )
-                            next = next.copy(
-                                estimatePhotoIds = merged.attachedIds,
-                                estimatePhotosRemoved = merged.removedIds
-                            )
+                            photo.id
                         }
-                        applyPricing(next)
+                        val merged = EstimateInspectionPhotos.withInsertedPhotos(pricing, inserted)
+                        applyPhotoIds(merged.estimatePhotoIds, merged.estimatePhotosRemoved)
                     }
                 },
                 onRemove = { photo ->
@@ -313,12 +314,7 @@ fun EstimateScreen(
                         pricing.estimatePhotosRemoved,
                         photo.id
                     )
-                    applyPricing(
-                        pricing.copy(
-                            estimatePhotoIds = merged.attachedIds,
-                            estimatePhotosRemoved = merged.removedIds
-                        )
-                    )
+                    applyPhotoIds(merged.attachedIds, merged.removedIds)
                     if (photo.inspectionId.isNullOrBlank()) {
                         inspectionsViewModel.removeInspectionPhoto(photo)
                     }
