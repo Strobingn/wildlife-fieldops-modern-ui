@@ -126,6 +126,13 @@ fun EstimateScreen(
         if (markDirty) dirty = true
     }
 
+    // Photo membership is stored on its own. A blank worksheet's starter labor
+    // stays in memory until the operator edits the quote.
+    fun persistEstimatePhotos(next: JobPricing) {
+        applyPricing(next, markDirty = false)
+        jobsViewModel.saveEstimatePhotoIds(jobId, next.estimatePhotoIds, next.estimatePhotosRemoved)
+    }
+
     fun syncInputTexts(p: JobPricing) {
         laborHoursText = formatNum(p.laborHours)
         laborRateText = formatNum(p.laborRate)
@@ -304,7 +311,7 @@ fun EstimateScreen(
                                 estimatePhotosRemoved = merged.removedIds
                             )
                         }
-                        applyPricing(next)
+                        persistEstimatePhotos(next)
                     }
                 },
                 onRemove = { photo ->
@@ -313,7 +320,7 @@ fun EstimateScreen(
                         pricing.estimatePhotosRemoved,
                         photo.id
                     )
-                    applyPricing(
+                    persistEstimatePhotos(
                         pricing.copy(
                             estimatePhotoIds = merged.attachedIds,
                             estimatePhotosRemoved = merged.removedIds
