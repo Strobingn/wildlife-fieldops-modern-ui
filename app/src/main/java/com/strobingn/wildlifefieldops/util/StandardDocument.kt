@@ -105,7 +105,12 @@ data class BodyBlock(
 data class TotalLine(
     val label: String,
     val amount: String,
-    val bold: Boolean = false
+    val bold: Boolean = false,
+    val color: String = "ink",
+    /** 0 uses the totals default (9.5, or 10.5 when [bold]). */
+    val size: Float = 0f,
+    /** One phrase, right-aligned on its own row. Used for the deposit notice. */
+    val singleLine: Boolean = false
 )
 
 data class SignatureSlot(
@@ -617,10 +622,36 @@ object StandardDocumentLayout {
             if (lines.isEmpty()) return
             val labelX = contentRight - 200f
             lines.forEach { line ->
+                if (line.singleLine) {
+                    val size = if (line.size > 0f) line.size else 11.5f
+                    ensure(size + 6f)
+                    y += if (compact) 1f else 2f
+                    ops += DrawOp(
+                        "text",
+                        line.label,
+                        contentRight - 2f,
+                        y,
+                        size = size,
+                        bold = line.bold,
+                        align = "right",
+                        color = line.color
+                    )
+                    y += if (compact) size + 3f else size + 5f
+                    return@forEach
+                }
                 ensure(16f)
-                val size = if (line.bold) 10.5f else 9.5f
-                ops += DrawOp("text", line.label, labelX, y, size = size, bold = line.bold)
-                ops += DrawOp("text", line.amount, contentRight - 2f, y, size = size, bold = line.bold, align = "right")
+                val size = if (line.size > 0f) line.size else if (line.bold) 10.5f else 9.5f
+                ops += DrawOp("text", line.label, labelX, y, size = size, bold = line.bold, color = line.color)
+                ops += DrawOp(
+                    "text",
+                    line.amount,
+                    contentRight - 2f,
+                    y,
+                    size = size,
+                    bold = line.bold,
+                    align = "right",
+                    color = line.color
+                )
                 y += if (line.bold) if (compact) 13f else 15f else if (compact) 12f else 13f
             }
             y += if (compact) 4f else 6f

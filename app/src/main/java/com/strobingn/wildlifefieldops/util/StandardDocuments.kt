@@ -8,6 +8,7 @@ import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.pricing.ExclusionPointRecord
 import com.strobingn.wildlifefieldops.pricing.JobPaymentRecord
+import com.strobingn.wildlifefieldops.pricing.DepositDue
 import com.strobingn.wildlifefieldops.pricing.Money
 import com.strobingn.wildlifefieldops.pricing.PaymentMethod
 import com.strobingn.wildlifefieldops.pricing.effectiveTotal
@@ -151,6 +152,18 @@ object StandardDocuments {
             Money.formatUsd(packet.taxAmount)
         )
         totals += TotalLine("Grand-Total:", Money.formatUsd(packet.total), bold = true)
+        if (kind == DocumentKind.ESTIMATE || kind == DocumentKind.INVOICE) {
+            DepositDue.notice(packet.total)?.let { phrase ->
+                totals += TotalLine(
+                    label = phrase,
+                    amount = "",
+                    bold = true,
+                    color = DepositDue.COLOR,
+                    size = DepositDue.TEXT_SIZE,
+                    singleLine = true
+                )
+            }
+        }
         if (invoiceFields) {
             totals += TotalLine("Amount Paid:", Money.formatUsd(paid))
             val balance = packet.balanceDue ?: (packet.total - paid)

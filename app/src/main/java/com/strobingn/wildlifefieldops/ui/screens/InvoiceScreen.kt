@@ -44,6 +44,7 @@ import com.strobingn.wildlifefieldops.pricing.PricingCalculator
 import com.strobingn.wildlifefieldops.pricing.calculatedTotal
 import com.strobingn.wildlifefieldops.pricing.effectiveTotal
 import com.strobingn.wildlifefieldops.ui.components.CompactOverridableAmount
+import com.strobingn.wildlifefieldops.ui.components.DepositDueNotice
 import com.strobingn.wildlifefieldops.ui.components.OverridableAmountField
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.CountyTaxState
@@ -415,6 +416,7 @@ fun InvoiceScreen(
                         },
                         emphasized = true
                     )
+                    DepositDueNotice(priced.total.effective)
                     val recorded = job?.pricing?.payments.orEmpty()
                     val balance = com.strobingn.wildlifefieldops.ai.fieldops.PaymentLedger.balanceDue(
                         priced.total.effective,
