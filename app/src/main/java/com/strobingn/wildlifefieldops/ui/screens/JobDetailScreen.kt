@@ -705,7 +705,11 @@ fun JobDetailScreen(
 
                 JobBatch4Section(job = currentJob, customerVm = customerFieldOpsViewModel)
 
-                JobBatch5Section(job = currentJob, searchVm = searchFieldOpsViewModel)
+                JobBatch5Section(
+                    job = currentJob,
+                    searchVm = searchFieldOpsViewModel,
+                    inspectionIds = JobInspectionLink.linkedTo(currentJob.id, allInspections).map { it.id }
+                )
 
                 JobBatch2Section(
                     job = currentJob,

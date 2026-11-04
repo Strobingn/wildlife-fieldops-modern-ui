@@ -19,7 +19,8 @@ object WildlifeWhispererInspectionReportPdf {
         technicianSignatureBase64: String = "",
         technicianSignerName: String = "",
         technicianSignedAtMillis: Long? = null,
-        technicianSignatureCleared: Boolean = false
+        technicianSignatureCleared: Boolean = false,
+        photoPaths: List<String> = emptyList()
     ): String {
         val job = com.strobingn.wildlifefieldops.data.model.Job(
             customerId = fields.customerId,
@@ -55,7 +56,8 @@ object WildlifeWhispererInspectionReportPdf {
             context = context,
             document = StandardDocuments.build(DocumentKind.INSPECTION, packet),
             fileName = "inspection_${safe}_${System.currentTimeMillis()}.pdf",
-            qr = qr
+            qr = qr,
+            attachedPhotoPaths = photoPaths
         )
     }
 
