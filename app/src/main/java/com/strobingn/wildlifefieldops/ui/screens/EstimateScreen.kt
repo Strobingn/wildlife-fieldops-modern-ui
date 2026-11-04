@@ -71,6 +71,7 @@ import com.strobingn.wildlifefieldops.ui.components.AiRuntimeBadge
 import com.strobingn.wildlifefieldops.pricing.Money
 import com.strobingn.wildlifefieldops.pricing.PricingCalculator
 import com.strobingn.wildlifefieldops.ui.components.DecimalField
+import com.strobingn.wildlifefieldops.ui.components.DepositDueNotice
 import com.strobingn.wildlifefieldops.ui.components.OverridableAmountField
 import com.strobingn.wildlifefieldops.ui.theme.AccentPurple
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundCard
@@ -770,6 +771,7 @@ fun EstimateScreen(
                         onReset = { applyPricing(PricingCalculator.resetTotal(pricing)) },
                         emphasized = true
                     )
+                    DepositDueNotice(result.total.effective)
                 }
             }
             job?.let { j ->

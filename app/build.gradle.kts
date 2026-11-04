@@ -21,7 +21,7 @@ android {
         targetSdk = 35
         // Local/dev installs keep this hand-set code. GitHub Actions overrides with
         // 1_000_000 + GITHUB_RUN_NUMBER so branch APKs never VERSION_DOWNGRADE (48/49/50+).
-        versionCode = 76
+        versionCode = 77
         versionName = "2.9.14-detection-feedback"
         buildConfigField("String", "UPDATE_RELEASE_TAG", "\"debug-latest\"")
         buildConfigField("String", "UPDATE_CHANNEL", "\"main\"")
