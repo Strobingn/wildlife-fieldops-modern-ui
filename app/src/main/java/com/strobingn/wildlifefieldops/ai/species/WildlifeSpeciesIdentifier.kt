@@ -12,6 +12,7 @@ import com.strobingn.wildlifefieldops.data.remote.AiEdgeGateway
 import com.strobingn.wildlifefieldops.data.remote.AiEdgeProtocol
 import com.strobingn.wildlifefieldops.data.remote.DetectionExampleWire
 import com.strobingn.wildlifefieldops.data.remote.EdgeChatResult
+import com.strobingn.wildlifefieldops.data.remote.ReferenceLibraryMatch
 import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -72,11 +73,46 @@ class WildlifeSpeciesIdentifier @Inject constructor(
             connectTimeoutMs = 12_000,
             readTimeoutMs = 22_000,
         )
-        val text = when (result) {
-            is EdgeChatResult.Ok -> if (result.vision) result.text else return null
+        val ok = when (result) {
+            is EdgeChatResult.Ok -> if (result.vision) result else return null
             is EdgeChatResult.Err -> return null
         }
-        return CloudSpeciesIdParser.parse(text)?.toSuggestion("grok")
+        val parsed = CloudSpeciesIdParser.parse(ok.text)?.toSuggestion("grok")
+        val withLibrary = attachReference(parsed, ok.referenceMatch)
+        if (withLibrary != null) return withLibrary
+        return unsureWithReference(ok.referenceMatch)
+    }
+
+    private fun attachReference(
+        suggestion: SpeciesSuggestion?,
+        match: ReferenceLibraryMatch?,
+    ): SpeciesSuggestion? {
+        if (suggestion == null) return null
+        if (match == null || match.similarPhotos <= 0 || match.species.isBlank()) return suggestion
+        return suggestion.copy(
+            referenceSpecies = match.species.trim(),
+            referencePhotoCount = match.similarPhotos,
+        )
+    }
+
+    /**
+     * The library hit is still worth showing when the species JSON does not parse.
+     * The picker and the typed field stay available.
+     */
+    private fun unsureWithReference(match: ReferenceLibraryMatch?): SpeciesSuggestion? {
+        if (match == null || match.similarPhotos <= 0 || match.species.isBlank()) return null
+        val name = match.species.trim()
+        return SpeciesSuggestion(
+            primaryLabel = WildlifeSpeciesCatalog.UNSURE,
+            confidence = 0.3f,
+            alternatives = emptyList(),
+            safety = SpeciesSafetyNotes.forLabel(name),
+            backendTag = "grok",
+            labelDistribution = mapOf(WildlifeSpeciesCatalog.UNSURE to 0.3f),
+            confident = false,
+            referenceSpecies = name,
+            referencePhotoCount = match.similarPhotos,
+        )
     }
 
     companion object {

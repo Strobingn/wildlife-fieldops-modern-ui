@@ -197,11 +197,31 @@ class WildlifeSpeciesIdTest {
     }
 
     @Test
+    fun cloudJson_easternCottontail_staysOnTheFieldList() {
+        val decision = CloudSpeciesIdParser.parse(
+            """{"species":"Eastern cottontail","confidence":0.8,"alternates":[],"evidence_notes":"White tail, brown coat"}"""
+        )!!
+        assertEquals("Eastern cottontail", decision.species)
+        assertTrue(decision.confident)
+    }
+
+    @Test
+    fun referenceLibraryLine_namesTheSpeciesAndCount() {
+        assertEquals(
+            "Matched to reference library: Raccoon (4 similar photos)",
+            ReferenceLibraryLine.format(" Raccoon ", 4),
+        )
+        assertNull(ReferenceLibraryLine.format("", 4))
+        assertNull(ReferenceLibraryLine.format("Raccoon", 0))
+    }
+
+    @Test
     fun promptListsFieldSpeciesAndDogRule() {
         val prompt = WildlifeSpeciesCatalog.visionSystemPrompt()
         assertTrue(prompt.contains("Raccoon"))
         assertTrue(prompt.contains("Canada goose"))
         assertTrue(prompt.contains("Hornets"))
+        assertTrue(prompt.contains("Eastern cottontail"))
         assertTrue(prompt.contains("Do not call a raccoon a dog"))
         assertTrue(prompt.contains("evidence_notes"))
         assertFalse(prompt.contains("XAI_API_KEY"))

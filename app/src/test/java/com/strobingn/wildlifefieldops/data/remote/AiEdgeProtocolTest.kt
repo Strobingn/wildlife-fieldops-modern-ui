@@ -110,6 +110,21 @@ class AiEdgeProtocolTest {
     }
 
     @Test
+    fun parseReadsReferenceLibraryMatchAndIgnoresAnEmptyLibrary() {
+        val matched = AiEdgeProtocol.parse(
+            200,
+            """{"ok":true,"provider":"xai","vision":true,"text":"{\"species\":\"Raccoon\"}","referenceMatch":{"species":"Raccoon","similarPhotos":4}}"""
+        ) as EdgeChatResult.Ok
+        assertEquals("Raccoon", matched.referenceMatch?.species)
+        assertEquals(4, matched.referenceMatch?.similarPhotos)
+        val empty = AiEdgeProtocol.parse(
+            200,
+            """{"ok":true,"provider":"xai","vision":true,"text":"{\"species\":\"Raccoon\"}"}"""
+        ) as EdgeChatResult.Ok
+        assertEquals(null, empty.referenceMatch)
+    }
+
+    @Test
     fun parseMarksVisionWhenTheFunctionSawThePhoto() {
         val parsed = AiEdgeProtocol.parse(
             200,
