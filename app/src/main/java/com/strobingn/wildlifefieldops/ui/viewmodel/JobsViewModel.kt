@@ -375,6 +375,30 @@ class JobsViewModel @Inject constructor(
         onSaved()
     }
 
+    /**
+     * Attach or detach estimate photos without recomputing the quote.
+     * Opening an estimate must not turn a blank worksheet into starter labor.
+     */
+    fun saveEstimatePhotoIds(jobId: String, attachedIds: List<String>, removedIds: List<String>) = viewModelScope.launch {
+        val existing = jobDao.getById(jobId) ?: return@launch
+        val pricing = existing.pricing.copy(
+            estimatePhotoIds = attachedIds,
+            estimatePhotosRemoved = removedIds
+        )
+        if (pricing.estimatePhotoIds == existing.pricing.estimatePhotoIds &&
+            pricing.estimatePhotosRemoved == existing.pricing.estimatePhotosRemoved
+        ) return@launch
+        jobDao.insert(
+            JobFieldOpsCodec.mergeForSave(
+                existing.copy(
+                    pricing = pricing,
+                    updatedAt = System.currentTimeMillis(),
+                    isSynced = false
+                )
+            )
+        )
+    }
+
     fun saveJobPricing(jobId: String, pricing: JobPricing) = viewModelScope.launch {
         val existing = jobDao.getById(jobId) ?: return@launch
         val quote = PricingCalculator.compute(pricing)

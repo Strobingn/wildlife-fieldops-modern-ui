@@ -45,7 +45,8 @@ object WildlifeWhispererContractPdf {
         payments: List<JobPaymentRecord> = emptyList(),
         customerPhone: String = "",
         customerEmail: String = "",
-        profile: BusinessProfile? = null
+        profile: BusinessProfile? = null,
+        photoPaths: List<String> = emptyList()
     ): String {
         val kind = when (documentType) {
             ContractDocumentType.ESTIMATE -> DocumentKind.ESTIMATE
@@ -89,7 +90,8 @@ object WildlifeWhispererContractPdf {
             document = StandardDocuments.build(kind, packet),
             fileName = fileName,
             customerSignature = customerSignature,
-            companySignature = technicianSignature.takeUnless { technicianSignatureCleared }
+            companySignature = technicianSignature.takeUnless { technicianSignatureCleared },
+            attachedPhotoPaths = photoPaths
         )
     }
 
