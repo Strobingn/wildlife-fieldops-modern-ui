@@ -2,13 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { expectedLoad, PHOTOS_PER_SPECIES, TARGETS } from "./catalog.mjs";
 import { createRateLimiter, licenseOk, mediumPhotoUrl, photoFromObservation } from "./inat.mjs";
-import { correctLabel, fieldLabelFor, isOwnerCorrection } from "./labels.mjs";
+import { insertedRow } from "./insert-result.mjs";
+import { candidateLine, correctLabel, fieldLabelFor, promotionPlan } from "./labels.mjs";
+import { readFileSync } from "node:fs";
 import {
+  REFERENCE_LOOKUP_TIMEOUT_MS,
   consensusMatch,
   embedInput,
   formatReferenceGrounding,
   formatUsDate,
   parseEmbeddingVector,
+  runWithinTimeout,
   EMBEDDING_DIMENSIONS,
 } from "../../supabase/functions/ai-assistant/reference-library.ts";
 
@@ -81,15 +85,62 @@ test("nearest neighbors become a reference line only inside the similar distance
   assert.equal(consensusMatch([{ common_name: "Bat", distance: 0.8 }]), null);
 });
 
-test("only the owner's verified label is promotable", () => {
+test("promotion lists photos and writes only reviewed ids", () => {
   assert.equal(correctLabel({ verdict: "YES", model_label: "Raccoon", corrected_label: "" }), "Raccoon");
   assert.equal(correctLabel({ verdict: "NO", model_label: "Dog", corrected_label: "Raccoon" }), "Raccoon");
   assert.equal(correctLabel({ verdict: "PARTLY", corrected_label: "Soffit" }), "Soffit");
   assert.equal(correctLabel({ verdict: "NO", model_label: "Dog", corrected_label: "" }), "");
   assert.equal(correctLabel({ verdict: "UNLABELED", model_label: "Raccoon" }), "");
-  assert.equal(isOwnerCorrection({ user_id: "abc", verdict: "YES", model_label: "Raccoon" }, "abc"), true);
-  assert.equal(isOwnerCorrection({ user_id: "other", verdict: "YES", model_label: "Raccoon" }, "abc"), false);
-  assert.equal(isOwnerCorrection({ user_id: "", verdict: "YES", model_label: "Raccoon" }, "abc"), false);
   assert.equal(fieldLabelFor("Striped skunk"), "Skunk");
   assert.equal(fieldLabelFor("Eastern cottontail"), "Eastern cottontail");
+
+  const rows = [
+    { id: "keep", user_id: "phone-a", verdict: "YES", model_label: "Raccoon", photo_storage_path: "detection/keep.jpg" },
+    { id: "other", user_id: "phone-a", verdict: "NO", model_label: "Dog", corrected_label: "Skunk", photo_storage_path: "detection/other.jpg" },
+    { id: "blank", user_id: "phone-a", verdict: "UNLABELED", model_label: "Raccoon", photo_storage_path: "detection/blank.jpg" },
+    { id: "spoofed", user_id: "phone-a", verdict: "YES", model_label: "Coyote", photo_storage_path: "../secret.jpg" },
+  ];
+  const dry = promotionPlan({ rows, ids: "", apply: false });
+  assert.equal(dry.mode, "dry-run");
+  assert.deepEqual(dry.promote, []);
+  assert.deepEqual(dry.list.map((row) => row.id), ["keep", "other", "spoofed"]);
+  const line = candidateLine(rows[0], "https://example.supabase.co");
+  assert.match(line, /id=keep/);
+  assert.match(line, /photo=https:\/\/example\.supabase\.co\/storage\/v1\/object\/public\/observation-photos\/detection\/keep\.jpg/);
+  assert.match(candidateLine(rows[3], "https://example.supabase.co"), /photo=\(none\)/);
+
+  const preview = promotionPlan({ rows, ids: "keep, missing", apply: false });
+  assert.deepEqual(preview.promote, []);
+  assert.deepEqual(preview.list.map((row) => row.id), ["keep"]);
+  assert.deepEqual(preview.unknown, ["missing"]);
+
+  const refused = promotionPlan({ rows, ids: "", apply: true });
+  assert.equal(refused.mode, "refused");
+  assert.deepEqual(refused.promote, []);
+
+  const chosen = promotionPlan({ rows, ids: "other", apply: true });
+  assert.equal(chosen.mode, "apply");
+  assert.deepEqual(chosen.promote.map((row) => row.id), ["other"]);
+  assert.equal(chosen.promote[0].user_id, "phone-a");
+});
+
+test("duplicate library rows are not counted as inserts", () => {
+  assert.equal(insertedRow(201, [{ id: "new" }]), true);
+  assert.equal(insertedRow(201, []), false);
+  assert.equal(insertedRow(409, [{ id: "old" }]), false);
+  assert.equal(insertedRow(201, { id: "new" }), true);
+  assert.equal(insertedRow(201, {}), false);
+});
+
+test("reference lookup stops at about 4 seconds and detection can continue", async () => {
+  assert.equal(REFERENCE_LOOKUP_TIMEOUT_MS, 4000);
+  const started = Date.now();
+  const missed = await runWithinTimeout(() => new Promise(() => {}), 30);
+  assert.equal(missed, null);
+  assert.ok(Date.now() - started < 500);
+  assert.equal(await runWithinTimeout(async () => "ready", 50), "ready");
+  const source = readFileSync(new URL("../../supabase/functions/ai-assistant/index.ts", import.meta.url), "utf8");
+  assert.equal(source.match(/data:image\\\/\(jpeg\|jpg\|png\|webp\)/g).length, 1);
+  assert.match(source, /runWithinTimeout/);
+  assert.match(source, /REFERENCE_LOOKUP_TIMEOUT_MS/);
 });

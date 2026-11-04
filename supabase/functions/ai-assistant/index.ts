@@ -9,13 +9,17 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   DEFAULT_EMBEDDING_MODEL,
   EMBEDDING_DIMENSIONS,
+  REFERENCE_LOOKUP_TIMEOUT_MS,
   REFERENCE_MARKER,
   RETRIEVAL_PROMPT,
   embedInput,
   formatReferenceGrounding,
   parseEmbeddingVector,
+  runWithinTimeout,
   type ReferenceNeighbor,
 } from "./reference-library.ts";
+
+const IMAGE_DATA_URL = /^data:image\/(jpeg|jpg|png|webp);base64,[a-z0-9+/=\r\n]+$/i;
 
 type AiMode =
   | "field_plan"
@@ -211,6 +215,7 @@ async function chatCompletion(
   temperature: number,
   maxTokens: number,
   jsonMode: boolean,
+  signal?: AbortSignal,
 ): Promise<string> {
   const body: Record<string, unknown> = {
     model: selected.model,
@@ -226,6 +231,7 @@ async function chatCompletion(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
+    signal,
   });
   const raw = await response.text();
   if (!response.ok) {
@@ -299,7 +305,7 @@ function appendFewShot(
     return shown.length > 0 && !existing.includes(`Correct label: "${shown}"`);
   });
   if (fresh.length === 0) return messages;
-  const thumbPattern = /^data:image\/(jpeg|jpg|png|webp);base64,[a-z0-9+/=\r\n]+$/i;
+  const thumbPattern = IMAGE_DATA_URL;
   let budget = 120_000;
   let used = 0;
   const parts: Array<Record<string, unknown>> = [
@@ -336,6 +342,7 @@ function serviceRoleClient() {
 async function describeForRetrieval(
   selected: Provider,
   image: string,
+  signal?: AbortSignal,
 ): Promise<string | null> {
   try {
     const text = await chatCompletion(
@@ -350,6 +357,7 @@ async function describeForRetrieval(
       0,
       180,
       false,
+      signal,
     );
     const cleaned = oneLine(text).slice(0, 1200);
     return cleaned.length > 0 ? cleaned : null;
@@ -359,7 +367,7 @@ async function describeForRetrieval(
   }
 }
 
-async function embedQuery(text: string): Promise<number[] | null> {
+async function embedQuery(text: string, signal?: AbortSignal): Promise<number[] | null> {
   const credentials = embeddingCredentials();
   if (!credentials) return null;
   try {
@@ -375,6 +383,7 @@ async function embedQuery(text: string): Promise<number[] | null> {
         dimensions: EMBEDDING_DIMENSIONS,
         encoding_format: "float",
       }),
+      signal,
     });
     const raw = await response.text();
     if (!response.ok) {
@@ -402,14 +411,15 @@ async function nearestReference(vector: number[]): Promise<ReferenceNeighbor[]> 
   return Array.isArray(data) ? data as ReferenceNeighbor[] : [];
 }
 
-async function referenceGrounding(selected: Provider, image: string): Promise<{
+async function referenceGrounding(selected: Provider, image: string, signal?: AbortSignal): Promise<{
   text: string;
   match: { species: string; similarPhotos: number } | null;
 }> {
   try {
-    const description = await describeForRetrieval(selected, image);
+    const description = await describeForRetrieval(selected, image, signal);
+    if (signal?.aborted) return { text: "", match: null };
     if (!description) return { text: "", match: null };
-    const vector = await embedQuery(description);
+    const vector = await embedQuery(description, signal);
     if (!vector) return { text: "", match: null };
     const rows = await nearestReference(vector);
     return formatReferenceGrounding(rows);
@@ -454,13 +464,14 @@ async function handleComplete(payload: AiRequest): Promise<Response> {
   }
   const image = String(payload.imageDataUrl ?? payload.imageUrl ?? "").trim();
   let outbound: Array<{ role: string; content: unknown }> = messages;
+  let photoAccepted = false;
   if (image) {
     if (image.length > 1_500_000) {
       return jsonResponse({ ok: false, error: "Photo is too large for species ID." }, 400);
     }
     // Data URLs only. A remote http(s) image would make the provider fetch an attacker-chosen URL.
-    const usable = /^data:image\/(jpeg|jpg|png|webp);base64,[a-z0-9+/=\r\n]+$/i.test(image);
-    if (!usable) {
+    photoAccepted = IMAGE_DATA_URL.test(image);
+    if (!photoAccepted) {
       return jsonResponse({ ok: false, error: "Species photo must be a JPEG, PNG, or WebP data URL." }, 400);
     }
     outbound = visionMessages(messages, image);
@@ -472,10 +483,15 @@ async function handleComplete(payload: AiRequest): Promise<Response> {
   }
   const selected = provider();
   let referenceMatch: { species: string; similarPhotos: number } | null = null;
-  if (image && /^data:image\/(jpeg|jpg|png|webp);base64,[a-z0-9+/=\r\n]+$/i.test(image)) {
-    const grounded = await referenceGrounding(selected, image);
-    referenceMatch = grounded.match;
-    outbound = appendReference(outbound, grounded.text);
+  if (photoAccepted) {
+    const grounded = await runWithinTimeout(
+      (signal) => referenceGrounding(selected, image, signal),
+      REFERENCE_LOOKUP_TIMEOUT_MS,
+    );
+    if (grounded) {
+      referenceMatch = grounded.match;
+      outbound = appendReference(outbound, grounded.text);
+    }
   }
   const requestedTokens = Number(payload.maxTokens ?? payload.max_tokens ?? 900);
   const maxTokens = Number.isFinite(requestedTokens) ? Math.min(2000, Math.max(1, Math.round(requestedTokens))) : 900;

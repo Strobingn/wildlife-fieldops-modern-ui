@@ -54,6 +54,9 @@ Wildlife reference library (private `wildlife-reference` bucket, `public.wildlif
 `match_wildlife_reference`): `20261104190000_wildlife_reference.sql`.
 Service role only. Load photos with `node scripts/seed-wildlife-reference.mjs`
 after this file is applied. Do not grant anon.
+Reviewed corrections are copied with
+`node scripts/promote-wildlife-corrections.mjs --apply --ids <id>,<id>`
+after a dry-run listing. `user_id` is not owner proof.
 
 Foreign-key indexes already applied on live `wildlife_app` as
 `add_missing_fk_indexes_20261005` (version `20261005133021`):

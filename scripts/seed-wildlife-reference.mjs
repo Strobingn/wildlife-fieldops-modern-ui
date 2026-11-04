@@ -22,6 +22,7 @@
  */
 
 import { expectedLoad, NORTHEAST_PLACE_IDS, PHOTOS_PER_SPECIES, SIGN_TYPES, SIGNS_PER_SPECIES, TARGETS } from "./wildlife-reference/catalog.mjs";
+import { insertedRow } from "./wildlife-reference/insert-result.mjs";
 import {
   coordinatesOf,
   createRateLimiter,
@@ -214,13 +215,23 @@ async function insertRow(config, row) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Prefer: "return=minimal,resolution=ignore-duplicates",
+      Prefer: "return=representation,resolution=ignore-duplicates",
     },
     body: JSON.stringify(row),
   });
-  if (!response.ok && response.status !== 409) {
-    const detail = await response.text();
-    throw new Error(`Insert failed (${response.status}): ${detail.slice(0, 240)}`);
+  const raw = await response.text();
+  if (!insertedRow(response.status, parseJsonBody(raw)) && response.status !== 409 && !response.ok) {
+    throw new Error(`Insert failed (${response.status}): ${raw.slice(0, 240)}`);
+  }
+  return insertedRow(response.status, parseJsonBody(raw));
+}
+
+function parseJsonBody(raw) {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
   }
 }
 
@@ -244,7 +255,7 @@ async function storePhoto({ config, xai, target, signType, observation, photo, s
   const storagePath = `inaturalist/${target.taxonId}/${signType}/${photo.photoId}.${extension}`;
   await uploadImage(config, storagePath, bytes, mime);
   const point = coordinatesOf(observation);
-  await insertRow(config, {
+  const inserted = await insertRow(config, {
     source: "inaturalist",
     source_photo_id: photo.photoId,
     species: target.scientific,
@@ -264,7 +275,7 @@ async function storePhoto({ config, xai, target, signType, observation, photo, s
     embedding: `[${embedding.join(",")}]`,
   });
   seen.add(photo.photoId);
-  return true;
+  return inserted;
 }
 
 async function fillTarget({ config, xai, target, signType, cap }) {
@@ -292,6 +303,8 @@ async function fillTarget({ config, xai, target, signType, cap }) {
         if (wrote) {
           stored += 1;
           console.log(`${target.commonName} ${signType} ${stored + Math.min(already, cap)}/${cap} photo ${photo.photoId} ${photo.license}`);
+        } else {
+          console.log(`${target.commonName} ${signType} photo ${photo.photoId} already in the library`);
         }
       } catch (error) {
         console.warn(`Skip ${target.commonName} photo ${photo.photoId}: ${error.message}`);

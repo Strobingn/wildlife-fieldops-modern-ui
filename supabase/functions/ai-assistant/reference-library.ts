@@ -5,6 +5,7 @@
 // Passage rows are stored by the seed script. Query rows are built here at detection time.
 
 export const EMBEDDING_DIMENSIONS = 768;
+export const REFERENCE_LOOKUP_TIMEOUT_MS = 4000;
 export const DEFAULT_EMBEDDING_MODEL = "grok-embedding-small";
 export const SIMILAR_DISTANCE = 0.55;
 export const PASS_DISTANCE = 0.7;
@@ -94,6 +95,37 @@ export function formatReferenceGrounding(rows: ReferenceNeighbor[]): {
     ...lines,
   ].join("\n");
   return { text, match: consensusMatch(usable) };
+}
+
+/**
+ * Bound the reference lookup. On timeout the caller continues species ID without the library.
+ * The signal aborts in-flight xAI calls so a slow describe does not keep running.
+ */
+export async function runWithinTimeout<T>(
+  start: (signal: AbortSignal) => Promise<T>,
+  ms = REFERENCE_LOOKUP_TIMEOUT_MS,
+): Promise<T | null> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error("reference lookup timed out"));
+      }, ms);
+      start(controller.signal).then(resolve, (error) => {
+        if (controller.signal.aborted) reject(new Error("reference lookup timed out"));
+        else reject(error);
+      });
+    });
+  } catch (error) {
+    if (controller.signal.aborted || (error instanceof Error && error.message === "reference lookup timed out")) {
+      return null;
+    }
+    throw error;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 export function parseEmbeddingVector(payload: unknown, dimensions = EMBEDDING_DIMENSIONS): number[] | null {
