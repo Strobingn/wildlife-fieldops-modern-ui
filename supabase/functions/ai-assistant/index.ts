@@ -266,43 +266,6 @@ function fewShotText(examples: DetectionExample[]): string {
   ].join("\n");
 }
 
-function mergeDetectionExamples(clientRows: DetectionExample[], stored: DetectionExample[]): DetectionExample[] {
-  const seen = new Set<string>();
-  const out: DetectionExample[] = [];
-  for (const row of [...clientRows, ...stored]) {
-    const key = `${row.verdict}|${row.modelLabel}|${row.label}|${row.description}`.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(row);
-    if (out.length >= 6) break;
-  }
-  return out;
-}
-
-async function loadStoredDetectionExamples(): Promise<DetectionExample[]> {
-  const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY");
-  if (!url || !key) return [];
-  try {
-    const client = createClient(url, key, { auth: { persistSession: false } });
-    const { data, error } = await client
-      .from("ai_detection_feedback")
-      .select("verdict,corrected_label,model_label,what_image_shows,notes")
-      .in("verdict", ["YES", "NO", "PARTLY"])
-      .order("created_at", { ascending: false })
-      .limit(6);
-    if (error || !data) return [];
-    return sanitizeDetectionExamples(data.map((row: Record<string, unknown>) => ({
-      label: row.corrected_label || row.model_label,
-      modelLabel: row.model_label,
-      description: row.what_image_shows || row.notes,
-      verdict: row.verdict,
-    })));
-  } catch {
-    return [];
-  }
-}
-
 function contentText(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
@@ -377,10 +340,9 @@ async function handleComplete(payload: AiRequest): Promise<Response> {
       return jsonResponse({ ok: false, error: "Species photo must be a JPEG, PNG, or WebP data URL." }, 400);
     }
     outbound = visionMessages(messages, image);
-    const examples = mergeDetectionExamples(
-      sanitizeDetectionExamples(payload.detectionExamples),
-      await loadStoredDetectionExamples(),
-    );
+    // Examples come only from this request. The feedback table is world-insertable
+    // with the anon key, so a server read would let one device bias every other device.
+    const examples = sanitizeDetectionExamples(payload.detectionExamples);
     outbound = appendFewShot(outbound, examples);
   }
   const selected = provider();
@@ -442,10 +404,7 @@ Deno.serve(async (request: Request) => {
       };
 
     const storedExamples = payload.imageUrl
-      ? mergeDetectionExamples(
-        sanitizeDetectionExamples(payload.detectionExamples),
-        await loadStoredDetectionExamples(),
-      )
+      ? sanitizeDetectionExamples(payload.detectionExamples)
       : [];
     const system = [
       "You are Wildlife FieldOps AI for a professional nuisance-wildlife company.",
