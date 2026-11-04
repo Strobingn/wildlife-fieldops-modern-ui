@@ -748,6 +748,10 @@ export function calculateOptimalRoute(jobs, startGPS) {
       const item = parsed[i];
       if (item.visited) continue;
 
+      // Non-finite coordinates make every distance NaN, and NaN < Infinity is
+      // false, so keep the first remaining stop as the nearest-neighbor fallback.
+      if (nearestIdx < 0) nearestIdx = i;
+
       const dLat = item.latRad - currentLatRad;
       const dLng = item.lngRad - currentLngRad;
       const sinDLat = Math.sin(dLat / 2);
