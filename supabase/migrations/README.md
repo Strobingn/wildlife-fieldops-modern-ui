@@ -50,6 +50,11 @@ Job pricing overrides keep the same SQL and now use a unique version:
 `20261001110000_job_pricing_overrides.sql` (previously shared `20260930120000`
 with the photo backlog file). The photo file keeps `20260930120000`.
 
+Wildlife reference library (private `wildlife-reference` bucket, `public.wildlife_reference`,
+`match_wildlife_reference`): `20261104190000_wildlife_reference.sql`.
+Service role only. Load photos with `node scripts/seed-wildlife-reference.mjs`
+after this file is applied. Do not grant anon.
+
 Foreign-key indexes already applied on live `wildlife_app` as
 `add_missing_fk_indexes_20261005` (version `20261005133021`):
 `20261005133021_add_missing_fk_indexes_20261005.sql`.

@@ -24,6 +24,10 @@ data class SpeciesSuggestion(
     val evidenceNotes: String = "",
     /** False when the label is "Unsure - pick species" or the score is weak. */
     val confident: Boolean = confidence >= 0.55f,
+    /** Common name from the server reference library. Empty when nothing matched. */
+    val referenceSpecies: String = "",
+    /** How many library photos agreed with [referenceSpecies]. */
+    val referencePhotoCount: Int = 0,
 ) {
     val confidencePercent: Int get() = (confidence.coerceIn(0f, 1f) * 100f).toInt()
 }

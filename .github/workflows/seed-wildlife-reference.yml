@@ -1,0 +1,37 @@
+name: Seed wildlife reference library
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Count iNaturalist matches only. Does not upload or embed.
+        type: boolean
+        default: false
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Seed reference library
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "${DRY_RUN}" = "true" ]; then
+            node scripts/seed-wildlife-reference.mjs --dry-run
+            exit 0
+          fi
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY}" ] || [ -z "${XAI_API_KEY}" ]; then
+            echo "Full seed needs SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and XAI_API_KEY repository secrets."
+            exit 1
+          fi
+          node scripts/seed-wildlife-reference.mjs

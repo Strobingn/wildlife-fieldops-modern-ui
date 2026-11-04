@@ -2,9 +2,20 @@
 // Wildlife FieldOps AI. The xAI key is a Supabase secret (XAI_API_KEY), never a client secret.
 // Deployed behavior (structured modes, optional Agent Framework, ai_runs) stays.
 // Android chat/estimate/report calls use action "complete" and receive raw text.
+// Deploy with verify_jwt enabled (Supabase default). Do not pass --no-verify-jwt.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  DEFAULT_EMBEDDING_MODEL,
+  EMBEDDING_DIMENSIONS,
+  REFERENCE_MARKER,
+  RETRIEVAL_PROMPT,
+  embedInput,
+  formatReferenceGrounding,
+  parseEmbeddingVector,
+  type ReferenceNeighbor,
+} from "./reference-library.ts";
 
 type AiMode =
   | "field_plan"
@@ -305,6 +316,119 @@ function appendFewShot(
   return [...messages, { role: "user", content }];
 }
 
+function embeddingCredentials(): { key: string; baseUrl: string; model: string } | null {
+  const key = Deno.env.get("XAI_API_KEY") || Deno.env.get("GROK_API_KEY") || Deno.env.get("LLM_API_KEY");
+  if (!key) return null;
+  return {
+    key,
+    baseUrl: (Deno.env.get("XAI_BASE_URL") || "https://api.x.ai/v1").replace(/\/$/, ""),
+    model: (Deno.env.get("XAI_EMBEDDING_MODEL") || DEFAULT_EMBEDDING_MODEL).trim() || DEFAULT_EMBEDDING_MODEL,
+  };
+}
+
+function serviceRoleClient() {
+  const url = Deno.env.get("SUPABASE_URL")?.trim();
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
+  if (!url || !key) return null;
+  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
+async function describeForRetrieval(
+  selected: Provider,
+  image: string,
+): Promise<string | null> {
+  try {
+    const text = await chatCompletion(
+      selected,
+      [{
+        role: "user",
+        content: [
+          { type: "text", text: RETRIEVAL_PROMPT },
+          { type: "image_url", image_url: { url: image } },
+        ],
+      }],
+      0,
+      180,
+      false,
+    );
+    const cleaned = oneLine(text).slice(0, 1200);
+    return cleaned.length > 0 ? cleaned : null;
+  } catch (error) {
+    console.warn("reference describe failed:", publicError(error));
+    return null;
+  }
+}
+
+async function embedQuery(text: string): Promise<number[] | null> {
+  const credentials = embeddingCredentials();
+  if (!credentials) return null;
+  try {
+    const response = await fetch(`${credentials.baseUrl}/embeddings`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${credentials.key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: credentials.model,
+        input: embedInput("query", text),
+        dimensions: EMBEDDING_DIMENSIONS,
+        encoding_format: "float",
+      }),
+    });
+    const raw = await response.text();
+    if (!response.ok) {
+      console.warn("reference embed failed:", publicError(new Error(`HTTP ${response.status}: ${raw.slice(0, 300)}`)));
+      return null;
+    }
+    return parseEmbeddingVector(JSON.parse(raw), EMBEDDING_DIMENSIONS);
+  } catch (error) {
+    console.warn("reference embed failed:", publicError(error));
+    return null;
+  }
+}
+
+async function nearestReference(vector: number[]): Promise<ReferenceNeighbor[]> {
+  const client = serviceRoleClient();
+  if (!client) return [];
+  const { data, error } = await client.rpc("match_wildlife_reference", {
+    query_embedding: `[${vector.join(",")}]`,
+    match_count: 5,
+  });
+  if (error) {
+    console.warn("reference lookup failed:", publicError(new Error(error.message)));
+    return [];
+  }
+  return Array.isArray(data) ? data as ReferenceNeighbor[] : [];
+}
+
+async function referenceGrounding(selected: Provider, image: string): Promise<{
+  text: string;
+  match: { species: string; similarPhotos: number } | null;
+}> {
+  try {
+    const description = await describeForRetrieval(selected, image);
+    if (!description) return { text: "", match: null };
+    const vector = await embedQuery(description);
+    if (!vector) return { text: "", match: null };
+    const rows = await nearestReference(vector);
+    return formatReferenceGrounding(rows);
+  } catch (error) {
+    console.warn("reference grounding skipped:", publicError(error));
+    return { text: "", match: null };
+  }
+}
+
+function appendReference(
+  messages: Array<{ role: string; content: unknown }>,
+  text: string,
+): Array<{ role: string; content: unknown }> {
+  if (!text || messages.some((message) => contentText(message.content).includes(REFERENCE_MARKER))) {
+    return messages;
+  }
+  return [...messages, { role: "user", content: text }];
+}
+
 function visionMessages(
   messages: Array<{ role: string; content: string }>,
   image: string,
@@ -340,12 +464,19 @@ async function handleComplete(payload: AiRequest): Promise<Response> {
       return jsonResponse({ ok: false, error: "Species photo must be a JPEG, PNG, or WebP data URL." }, 400);
     }
     outbound = visionMessages(messages, image);
-    // Examples come only from this request. The feedback table is world-insertable
-    // with the anon key, so a server read would let one device bias every other device.
+    // On-device corrections come only from this request. The feedback table is
+    // world-insertable with the anon key, so a server read would let one device
+    // bias every other device. The reference library is a separate curated table.
     const examples = sanitizeDetectionExamples(payload.detectionExamples);
     outbound = appendFewShot(outbound, examples);
   }
   const selected = provider();
+  let referenceMatch: { species: string; similarPhotos: number } | null = null;
+  if (image && /^data:image\/(jpeg|jpg|png|webp);base64,[a-z0-9+/=\r\n]+$/i.test(image)) {
+    const grounded = await referenceGrounding(selected, image);
+    referenceMatch = grounded.match;
+    outbound = appendReference(outbound, grounded.text);
+  }
   const requestedTokens = Number(payload.maxTokens ?? payload.max_tokens ?? 900);
   const maxTokens = Number.isFinite(requestedTokens) ? Math.min(2000, Math.max(1, Math.round(requestedTokens))) : 900;
   const requestedTemperature = Number(payload.temperature ?? 0.2);
@@ -360,6 +491,7 @@ async function handleComplete(payload: AiRequest): Promise<Response> {
     model: selected.model,
     text,
     vision: image.length > 0,
+    ...(referenceMatch ? { referenceMatch } : {}),
   });
 }
 

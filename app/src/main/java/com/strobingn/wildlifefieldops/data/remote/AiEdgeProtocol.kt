@@ -71,13 +71,27 @@ object AiEdgeProtocol {
         if (ok == true && !text.isNullOrEmpty()) {
             val provider = root["provider"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: "xai"
             val vision = (root["vision"] as? JsonPrimitive)?.booleanOrNull == true
-            return EdgeChatResult.Ok(text, provider, vision)
+            return EdgeChatResult.Ok(text, provider, vision, referenceMatch(root))
         }
         if (!error.isNullOrEmpty()) return EdgeChatResult.Err(error.take(500))
         if (httpCode !in 200..299) return EdgeChatResult.Err("AI error HTTP $httpCode")
         return EdgeChatResult.Err("Empty AI response.")
     }
+
+    private fun referenceMatch(root: kotlinx.serialization.json.JsonObject): ReferenceLibraryMatch? {
+        val match = root["referenceMatch"] ?: return null
+        val objectMatch = runCatching { match.jsonObject }.getOrNull() ?: return null
+        val species = objectMatch["species"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+        val count = objectMatch["similarPhotos"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
+        if (species.isEmpty() || count <= 0) return null
+        return ReferenceLibraryMatch(species, count)
+    }
 }
+
+data class ReferenceLibraryMatch(
+    val species: String,
+    val similarPhotos: Int,
+)
 
 data class DetectionExampleWire(
     val label: String,
@@ -88,6 +102,11 @@ data class DetectionExampleWire(
 )
 
 sealed class EdgeChatResult {
-    data class Ok(val text: String, val provider: String, val vision: Boolean = false) : EdgeChatResult()
+    data class Ok(
+        val text: String,
+        val provider: String,
+        val vision: Boolean = false,
+        val referenceMatch: ReferenceLibraryMatch? = null,
+    ) : EdgeChatResult()
     data class Err(val message: String) : EdgeChatResult()
 }
