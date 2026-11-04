@@ -57,17 +57,23 @@ import java.util.*
 fun InvoiceScreen(
     jobId: String,
     onBack: () -> Unit,
+    onOpenSettings: () -> Unit = {},
     jobsViewModel: JobsViewModel = hiltViewModel(),
-    invoiceViewModel: InvoiceViewModel = hiltViewModel()
+    invoiceViewModel: InvoiceViewModel = hiltViewModel(),
+    workspaceViewModel: com.strobingn.wildlifefieldops.ui.viewmodel.JobWorkspaceViewModel = hiltViewModel()
 ) {
     val job by jobsViewModel.getJobById(jobId).collectAsState(initial = null)
+    val customerDraft by workspaceViewModel.draft.collectAsState()
     val context = LocalContext.current
     val countyTaxState by invoiceViewModel.countyTaxState.collectAsState()
     val existingInvoices by invoiceViewModel.getInvoicesByJob(jobId).collectAsState(initial = null)
 
     // Trigger county lookup once the job is loaded.
     LaunchedEffect(job?.id) {
-        job?.let { invoiceViewModel.resolveCountyTax(it) }
+        job?.let {
+            invoiceViewModel.resolveCountyTax(it)
+            workspaceViewModel.loadForJob(it)
+        }
     }
 
     var lineItems by remember { mutableStateOf<List<InvoiceLineItem>>(emptyList()) }
@@ -444,6 +450,23 @@ fun InvoiceScreen(
                     }
                 }
             }
+
+            val savedInvoice = existingInvoices.orEmpty().maxByOrNull { it.updatedAt }
+            GoogleReviewSection(
+                jobId = jobId,
+                offer = com.strobingn.wildlifefieldops.review.GoogleReviewRequest.shouldOffer(
+                    invoiceTotal = priced.total.effective,
+                    payments = job?.pricing?.payments.orEmpty(),
+                    invoiceStatuses = existingInvoices.orEmpty().map { it.status.name }
+                ),
+                customerName = customerDraft.name.ifBlank { job?.customerName.orEmpty() }
+                    .ifBlank { savedInvoice?.customerName.orEmpty() },
+                phone = customerDraft.phone,
+                email = customerDraft.email.ifBlank { savedInvoice?.customerEmail.orEmpty() },
+                prompt = false,
+                onPromptDismissed = {},
+                onOpenSettings = onOpenSettings
+            )
 
             // Signature Section: customer and technician side by side, always shown.
             val techSaved = remember { com.strobingn.wildlifefieldops.util.TechnicianSignatureStore.load(context) }

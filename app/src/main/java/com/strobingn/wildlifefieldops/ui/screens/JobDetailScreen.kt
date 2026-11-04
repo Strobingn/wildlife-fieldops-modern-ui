@@ -26,7 +26,9 @@ import com.strobingn.wildlifefieldops.data.inspection.JobInspectionLink
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.data.model.JobPriority
 import com.strobingn.wildlifefieldops.data.model.JobStatus
+import com.strobingn.wildlifefieldops.ai.fieldops.PaymentLedger
 import com.strobingn.wildlifefieldops.pricing.isManual
+import com.strobingn.wildlifefieldops.review.GoogleReviewRequest
 import com.strobingn.wildlifefieldops.ui.components.*
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.components.WeatherBanner
@@ -53,6 +55,7 @@ fun JobDetailScreen(
     onNavigateToTodayRoute: () -> Unit = {},
     onNavigateToPhotos: () -> Unit = {},
     onBack: () -> Unit,
+    onOpenSettings: () -> Unit = {},
     viewModel: JobsViewModel = hiltViewModel(),
     workspaceViewModel: JobWorkspaceViewModel = hiltViewModel(),
     jobAiViewModel: JobAiViewModel = hiltViewModel(),
@@ -80,6 +83,7 @@ fun JobDetailScreen(
     val allJobs by viewModel.jobs.collectAsState()
 
     var showStatusDialog by remember { mutableStateOf(false) }
+    var reviewPrompt by remember(job?.id) { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var speciesText by remember { mutableStateOf("") }
     var legalNotesText by remember { mutableStateOf("") }
@@ -369,7 +373,26 @@ fun JobDetailScreen(
                 TextButton(onClick = onNavigateToTodayRoute) {
                     Text("Today's route", color = PrimaryGreen)
                 }
-                JobPaymentsCard(job = currentJob, onSave = { viewModel.saveJobExtras(currentJob.id, it) })
+                JobPaymentsCard(
+                    job = currentJob,
+                    onSave = { viewModel.saveJobExtras(currentJob.id, it) },
+                    onBecameFullyPaid = { reviewPrompt = true }
+                )
+                GoogleReviewSection(
+                    jobId = currentJob.id,
+                    offer = GoogleReviewRequest.shouldOffer(
+                        invoiceTotal = PaymentLedger.invoiceTotal(currentJob),
+                        payments = currentJob.pricing.payments,
+                        invoiceStatuses = currentJob.pricing.invoiceRecords.map { it.status } +
+                            if (currentJob.status == JobStatus.PAID) listOf("PAID") else emptyList()
+                    ),
+                    customerName = customerDraft.name.ifBlank { currentJob.customerName },
+                    phone = customerDraft.phone,
+                    email = customerDraft.email,
+                    prompt = reviewPrompt,
+                    onPromptDismissed = { reviewPrompt = false },
+                    onOpenSettings = onOpenSettings
+                )
                 JobSignatureCard(
                     job = currentJob,
                     customerName = customerDraft.name.ifBlank { currentJob.customerName },
