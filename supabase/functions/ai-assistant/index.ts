@@ -38,6 +38,7 @@ type AiRequest = {
   temperature?: number;
   jsonMode?: boolean;
   json_mode?: boolean;
+  imageDataUrl?: string;
 };
 
 type Provider = { name: string; key: string; baseUrl: string; model: string };
@@ -215,10 +216,40 @@ async function chatCompletion(
   return content;
 }
 
+function visionMessages(
+  messages: Array<{ role: string; content: string }>,
+  image: string,
+): Array<{ role: string; content: unknown }> {
+  let attached = false;
+  return messages.map((message) => {
+    if (attached || message.role !== "user") return message;
+    attached = true;
+    return {
+      role: "user",
+      content: [
+        { type: "text", text: message.content },
+        { type: "image_url", image_url: { url: image } },
+      ],
+    };
+  });
+}
+
 async function handleComplete(payload: AiRequest): Promise<Response> {
   const messages = completeMessages(payload);
   if (!messages) {
     return jsonResponse({ ok: false, error: "Send system, user, or messages." }, 400);
+  }
+  const image = String(payload.imageDataUrl ?? payload.imageUrl ?? "").trim();
+  let outbound: Array<{ role: string; content: unknown }> = messages;
+  if (image) {
+    if (image.length > 1_500_000) {
+      return jsonResponse({ ok: false, error: "Photo is too large for species ID." }, 400);
+    }
+    const usable = image.startsWith("data:image/") || image.startsWith("https://") || image.startsWith("http://");
+    if (!usable) {
+      return jsonResponse({ ok: false, error: "Species photo must be an image data URL." }, 400);
+    }
+    outbound = visionMessages(messages, image);
   }
   const selected = provider();
   const requestedTokens = Number(payload.maxTokens ?? payload.max_tokens ?? 900);
@@ -228,12 +259,13 @@ async function handleComplete(payload: AiRequest): Promise<Response> {
     ? Math.min(1, Math.max(0, requestedTemperature))
     : 0.2;
   const jsonMode = payload.jsonMode === true || payload.json_mode === true;
-  const text = await chatCompletion(selected, messages, temperature, maxTokens, jsonMode);
+  const text = await chatCompletion(selected, outbound, temperature, maxTokens, jsonMode);
   return jsonResponse({
     ok: true,
     provider: selected.name,
     model: selected.model,
     text,
+    vision: image.length > 0,
   });
 }
 

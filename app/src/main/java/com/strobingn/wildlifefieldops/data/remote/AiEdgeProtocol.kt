@@ -23,7 +23,8 @@ object AiEdgeProtocol {
         user: String,
         maxTokens: Int,
         temperature: Double,
-        jsonMode: Boolean
+        jsonMode: Boolean,
+        imageDataUrl: String? = null,
     ): String = buildJsonObject {
         put("action", ACTION_COMPLETE)
         put("system", system.take(8_000))
@@ -31,7 +32,13 @@ object AiEdgeProtocol {
         put("maxTokens", maxTokens.coerceIn(1, 2_000))
         put("temperature", temperature.coerceIn(0.0, 1.0))
         put("jsonMode", jsonMode)
+        val image = imageDataUrl?.trim().orEmpty()
+        if (image.startsWith("data:image/") && image.length <= MAX_IMAGE_CHARS) {
+            put("imageDataUrl", image)
+        }
     }.toString()
+
+    const val MAX_IMAGE_CHARS = 1_500_000
 
     fun parse(httpCode: Int, body: String): EdgeChatResult {
         val root = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull()
@@ -40,7 +47,8 @@ object AiEdgeProtocol {
         val error = root?.get("error")?.jsonPrimitive?.contentOrNull?.trim()
         if (ok == true && !text.isNullOrEmpty()) {
             val provider = root["provider"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: "xai"
-            return EdgeChatResult.Ok(text, provider)
+            val vision = (root["vision"] as? JsonPrimitive)?.booleanOrNull == true
+            return EdgeChatResult.Ok(text, provider, vision)
         }
         if (!error.isNullOrEmpty()) return EdgeChatResult.Err(error.take(500))
         if (httpCode !in 200..299) return EdgeChatResult.Err("AI error HTTP $httpCode")
@@ -49,6 +57,6 @@ object AiEdgeProtocol {
 }
 
 sealed class EdgeChatResult {
-    data class Ok(val text: String, val provider: String) : EdgeChatResult()
+    data class Ok(val text: String, val provider: String, val vision: Boolean = false) : EdgeChatResult()
     data class Err(val message: String) : EdgeChatResult()
 }

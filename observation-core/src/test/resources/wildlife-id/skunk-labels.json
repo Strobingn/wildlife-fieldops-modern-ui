@@ -1,0 +1,8 @@
+{
+  "image": "skunk.jpg",
+  "labels": [
+    {"text": "Skunk", "confidence": 0.42},
+    {"text": "Mammal", "confidence": 0.70},
+    {"text": "Dog", "confidence": 0.61}
+  ]
+}

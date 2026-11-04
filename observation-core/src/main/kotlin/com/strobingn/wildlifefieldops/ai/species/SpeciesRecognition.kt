@@ -21,6 +21,9 @@ data class SpeciesSuggestion(
     val safety: SpeciesSafetyNotes.SafetyCard,
     val backendTag: String,
     val labelDistribution: Map<String, Float>,
+    val evidenceNotes: String = "",
+    /** False when the label is "Unsure - pick species" or the score is weak. */
+    val confident: Boolean = confidence >= 0.55f,
 ) {
     val confidencePercent: Int get() = (confidence.coerceIn(0f, 1f) * 100f).toInt()
 }

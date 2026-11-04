@@ -1,0 +1,9 @@
+{
+  "image": "raccoon.jpg",
+  "note": "ML Kit default image labeler has no raccoon class. Dog plus coarse mammal tags is the failure the field reported.",
+  "labels": [
+    {"text": "Dog", "confidence": 0.86},
+    {"text": "Mammal", "confidence": 0.74},
+    {"text": "Carnivore", "confidence": 0.66}
+  ]
+}

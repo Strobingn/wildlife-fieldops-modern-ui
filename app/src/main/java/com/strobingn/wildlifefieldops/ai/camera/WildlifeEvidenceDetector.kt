@@ -2,6 +2,9 @@ package com.strobingn.wildlifefieldops.ai.camera
 
 import com.google.mlkit.vision.label.ImageLabel
 import com.google.mlkit.vision.objects.DetectedObject
+import com.strobingn.wildlifefieldops.ai.species.GenericLabelSpeciesMapper
+import com.strobingn.wildlifefieldops.ai.species.LabelScore
+import com.strobingn.wildlifefieldops.ai.species.WildlifeSpeciesCatalog
 import kotlin.math.max
 
 /**
@@ -263,14 +266,14 @@ object WildlifeEvidenceDetector {
         adjusted: List<WildlifeEvidenceHit>,
         raw: List<String>
     ): WildlifeEvidenceResult {
-        fun top(kind: WildlifeEvidenceHit.Kind) =
+        fun top(kind: WildlifeEvidenceHit.Kind, limit: Int = 4) =
             adjusted.filter { it.kind == kind }
                 .groupBy { it.label }
                 .map { (_, hits) -> hits.maxBy { it.score } }
                 .sortedByDescending { it.score }
-                .take(4)
+                .take(limit)
 
-        val species = top(WildlifeEvidenceHit.Kind.SPECIES)
+        val species = applySpeciesGuard(top(WildlifeEvidenceHit.Kind.SPECIES, limit = 12), raw)
         val entries = top(WildlifeEvidenceHit.Kind.ENTRY)
         val damage = top(WildlifeEvidenceHit.Kind.DAMAGE)
         val activity = top(WildlifeEvidenceHit.Kind.ACTIVITY)
@@ -302,6 +305,51 @@ object WildlifeEvidenceDetector {
             topSummary = summary,
             rawLabels = raw.distinct().take(16)
         )
+    }
+
+    /**
+     * ML Kit's default labeler emits Dog for many furry mammals and has no raccoon class.
+     * Model-sourced species hits are remapped onto the field list. Typed notes (source "text") stay.
+     */
+    private fun applySpeciesGuard(
+        speciesHits: List<WildlifeEvidenceHit>,
+        raw: List<String>,
+    ): List<WildlifeEvidenceHit> {
+        val textHits = speciesHits.filter { it.source == "text" }
+        val modelHits = speciesHits.filter { it.source != "text" }
+        if (modelHits.isEmpty()) return speciesHits.take(4)
+        val inputs = buildList {
+            modelHits.forEach { add(LabelScore(it.label, it.score)) }
+            raw.forEach { add(LabelScore(it, 0.5f)) }
+        }
+        val decision = GenericLabelSpeciesMapper.map(inputs)
+        val guarded = when {
+            decision == null -> {
+                val dropDog = GenericLabelSpeciesMapper.blocksConfidentDog(raw + modelHits.map { it.label })
+                if (dropDog) modelHits.filterNot { it.label.equals("dog", ignoreCase = true) } else modelHits
+            }
+            decision.isUnsure -> listOf(
+                WildlifeEvidenceHit(
+                    WildlifeEvidenceHit.Kind.SPECIES,
+                    WildlifeSpeciesCatalog.UNSURE,
+                    decision.confidence.coerceAtMost(0.4f),
+                    "wildlife-id",
+                )
+            )
+            else -> listOf(
+                WildlifeEvidenceHit(
+                    WildlifeEvidenceHit.Kind.SPECIES,
+                    decision.displayLabel,
+                    decision.confidence,
+                    "wildlife-id",
+                )
+            )
+        }
+        return (guarded + textHits)
+            .groupBy { it.label.lowercase() }
+            .map { (_, hits) -> hits.maxBy { it.score } }
+            .sortedByDescending { it.score }
+            .take(4)
     }
 
     private fun matchLexicon(

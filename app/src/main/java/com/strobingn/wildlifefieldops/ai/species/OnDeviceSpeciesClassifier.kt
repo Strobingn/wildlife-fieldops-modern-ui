@@ -17,28 +17,40 @@ import java.io.File
 object OnDeviceSpeciesClassifier {
 
     fun suggestFromAnalysis(analysis: AiAnalysisResult): SpeciesSuggestion? {
-        val hits = analysis.speciesScores.ifEmpty {
-            analysis.species.associateWith { analysis.confidence.coerceIn(0.2f, 1f) }
+        val labels = buildList {
+            analysis.speciesScores.forEach { (name, score) -> add(LabelScore(name, score)) }
+            analysis.rawVisionLabels.forEach { (name, score) -> add(LabelScore(name, score)) }
+            if (analysis.speciesScores.isEmpty() && analysis.rawVisionLabels.isEmpty()) {
+                analysis.species.forEach { name ->
+                    add(LabelScore(name, analysis.confidence.coerceIn(0.2f, 1f)))
+                }
+            }
         }
         val backend = when {
             analysis.source.contains("tflite", ignoreCase = true) -> "tflite"
-            analysis.source.contains("offline", ignoreCase = true) -> "mlkit"
+            analysis.source.contains("grok", ignoreCase = true) -> "grok"
             else -> "mlkit"
         }
-        return SpeciesRecognition.suggest(hits, backendTag = backend)
+        val decision = GenericLabelSpeciesMapper.map(labels) ?: return null
+        return decision.toSuggestion(backend)
     }
 
     fun suggestFromEvidence(
         evidence: WildlifeEvidenceResult,
         customHits: List<WildlifeEvidenceHit> = emptyList(),
     ): SpeciesSuggestion? {
-        val hits = evidence.species.associate { it.label to it.score }
+        val labels = buildList {
+            evidence.species.forEach { add(LabelScore(it.label, it.score)) }
+            evidence.rawLabels.forEach { add(LabelScore(it, 0.5f)) }
+            customHits.forEach { add(LabelScore(it.label, it.score)) }
+        }
         val backend = when {
             customHits.any { it.source == "tflite" } -> "tflite"
             evidence.species.any { it.source == "tflite" } -> "tflite"
             else -> "mlkit"
         }
-        return SpeciesRecognition.suggest(hits, backendTag = backend)
+        val decision = GenericLabelSpeciesMapper.map(labels) ?: return null
+        return decision.toSuggestion(backend)
     }
 
     suspend fun classifyStill(context: Context, imageUri: Uri): Pair<AiAnalysisResult, SpeciesSuggestion?> {

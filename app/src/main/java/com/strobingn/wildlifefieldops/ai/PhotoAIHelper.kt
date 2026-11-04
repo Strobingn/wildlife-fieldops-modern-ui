@@ -56,6 +56,8 @@ data class AiAnalysisResult(
     val vlmEligible: Boolean = true,
     val authoritativeFrameHash: String = "",
     val frameAuthorityLabel: String = "",
+    /** Original ML Kit / object-detector texts before the wildlife lexicon. */
+    val rawVisionLabels: List<Pair<String, Float>> = emptyList(),
 ) {
     val serviceType: String get() = suggestedServiceType
     val priority: String get() = suggestedPriority
@@ -117,6 +119,12 @@ object PhotoAIHelper {
                 }
             }
             val evidence = WildlifeEvidenceDetector.detect(labels, objects, customHits = custom)
+            val rawVisionLabels = buildList {
+                labels.forEach { add(it.text to it.confidence) }
+                objects.forEach { detected ->
+                    detected.labels.forEach { add(it.text to it.confidence) }
+                }
+            }
             val objectNames = objects.mapNotNull { it.labels.firstOrNull()?.text?.lowercase() }.distinct()
             val species = evidence.species.map { it.label }.distinct()
             val speciesScores = evidence.species
@@ -198,6 +206,7 @@ object PhotoAIHelper {
                 vlmEligible = contract?.vlmEligible ?: true,
                 authoritativeFrameHash = frameHash,
                 frameAuthorityLabel = PhotoEvidence.frameLabel(authority),
+                rawVisionLabels = rawVisionLabels,
             )
         } catch (e: Throwable) {
             val durationMs = SystemClock.elapsedRealtime() - startedAt

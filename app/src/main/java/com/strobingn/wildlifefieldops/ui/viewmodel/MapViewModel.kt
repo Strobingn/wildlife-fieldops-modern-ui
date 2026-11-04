@@ -12,6 +12,8 @@ import com.google.android.gms.maps.model.TileProvider
 import com.strobingn.wildlifefieldops.ai.species.OnDeviceSpeciesClassifier
 import com.strobingn.wildlifefieldops.ai.species.SpeciesRecognition
 import com.strobingn.wildlifefieldops.ai.species.SpeciesSuggestion
+import com.strobingn.wildlifefieldops.ai.species.WildlifeSpeciesCatalog
+import com.strobingn.wildlifefieldops.ai.species.WildlifeSpeciesIdentifier
 import com.strobingn.wildlifefieldops.data.local.CachedCamera
 import com.strobingn.wildlifefieldops.data.local.CachedMapMarker
 import com.strobingn.wildlifefieldops.data.local.CachedMapRegion
@@ -78,6 +80,7 @@ class MapViewModel @Inject constructor(
     private val mapOfflineCache: MapOfflineCache,
     private val mapTileCache: MapTileCache,
     private val observationEventStore: ObservationEventStore,
+    private val wildlifeSpeciesIdentifier: WildlifeSpeciesIdentifier,
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -355,15 +358,19 @@ class MapViewModel @Inject constructor(
             )
             try {
                 val suggestion = withContext(Dispatchers.IO) {
-                    OnDeviceSpeciesClassifier.classifyStill(appContext, photoUri).second
+                    wildlifeSpeciesIdentifier.identifyStill(appContext, photoUri)
                 }
+                val prefill = suggestion
+                    ?.takeIf { it.confident && it.primaryLabel != WildlifeSpeciesCatalog.UNSURE }
+                    ?.primaryLabel
+                    .orEmpty()
                 _speciesId.value = SpeciesIdUiState(
                     analyzing = false,
                     suggestion = suggestion,
-                    technicianLabel = suggestion?.primaryLabel.orEmpty(),
+                    technicianLabel = prefill,
                     photoUri = photoUri.toString(),
                     error = if (suggestion == null) {
-                        "No on-device species ID. Type a label and confirm if you can identify it."
+                        "No species suggestion. Pick or type one, then confirm."
                     } else {
                         null
                     }
@@ -388,8 +395,8 @@ class MapViewModel @Inject constructor(
 
     fun confirmPendingSpecies() {
         val label = _speciesId.value.technicianLabel.trim()
-        if (label.isEmpty()) {
-            _speciesId.value = _speciesId.value.copy(error = "Enter or confirm a species before treating the ID as operational.")
+        if (label.isEmpty() || label == WildlifeSpeciesCatalog.UNSURE) {
+            _speciesId.value = _speciesId.value.copy(error = "Pick or type a species before treating the ID as operational.")
             return
         }
         _speciesId.value = _speciesId.value.copy(
