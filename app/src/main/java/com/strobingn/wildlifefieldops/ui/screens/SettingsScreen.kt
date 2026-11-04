@@ -32,6 +32,7 @@ import com.strobingn.wildlifefieldops.util.WildlifeWhispererBrand
 fun SettingsScreen(
     onBack: () -> Unit,
     focusBackup: Boolean = false,
+    focusReview: Boolean = false,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val themePreference by viewModel.themePreference.collectAsState(initial = ThemePreference.SYSTEM)
@@ -87,9 +88,15 @@ fun SettingsScreen(
 
     val scrollState = rememberScrollState()
     var backupTop by remember { mutableIntStateOf(0) }
+    var reviewTop by remember { mutableIntStateOf(0) }
     LaunchedEffect(focusBackup, backupTop) {
         if (focusBackup && backupTop > 0) {
             scrollState.scrollTo(backupTop.coerceAtMost(scrollState.maxValue))
+        }
+    }
+    LaunchedEffect(focusReview, reviewTop) {
+        if (focusReview && reviewTop > 0) {
+            scrollState.scrollTo(reviewTop.coerceAtMost(scrollState.maxValue))
         }
     }
 
@@ -192,6 +199,13 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
             BusinessInfoSettingsBlock(viewModel)
+
+            Spacer(modifier = Modifier.height(8.dp))
+            GoogleReviewSettingsBlock(
+                modifier = Modifier.onGloballyPositioned {
+                    reviewTop = it.positionInParent().y.toInt()
+                }
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
             TechSignatureSettingsSection()

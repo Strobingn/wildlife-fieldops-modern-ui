@@ -209,6 +209,11 @@ private fun AppNavHost(
     val startRoute = remember {
         if (TextShareInbox.peek() != null) Screen.JobForm.createRoute() else Screen.Dashboard.route
     }
+    fun openReviewSettings() {
+        navController.navigate(Screen.Settings.route) { launchSingleTop = true }
+        navController.getBackStackEntry(Screen.Settings.route)
+            .savedStateHandle["settingsFocus"] = "review"
+    }
     NavHost(navController = navController, startDestination = startRoute, modifier = modifier) {
         composable(Screen.Dashboard.route) {
             DashboardScreen(
@@ -276,7 +281,8 @@ private fun AppNavHost(
                 onNavigateToJob = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) },
                 onNavigateToTodayRoute = { navController.navigate(Screen.TodayRoute.route) },
                 onNavigateToPhotos = { navController.navigate(Screen.PhotoGallery.route) },
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onOpenSettings = { openReviewSettings() }
             )
         }
         composable(route = Screen.JobForm.route, arguments = listOf(navArgument("jobId") { type = NavType.StringType })) { backStackEntry ->
@@ -433,7 +439,8 @@ private fun AppNavHost(
         composable(Screen.InvoiceList.route) {
             InvoiceListScreen(
                 onBack = { navController.popBackStack() },
-                onOpenJob = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) }
+                onOpenJob = { id -> navController.navigate(Screen.JobDetail.createRoute(id)) },
+                onOpenSettings = { openReviewSettings() }
             )
         }
         composable(Screen.WarrantyList.route) {
@@ -449,7 +456,11 @@ private fun AppNavHost(
             CountyReportScreen(onBack = { navController.popBackStack() })
         }
         composable(route = Screen.Invoice.route, arguments = listOf(navArgument("jobId") { type = NavType.StringType })) { backStackEntry ->
-            InvoiceScreen(jobId = backStackEntry.arguments?.getString("jobId") ?: "", onBack = { navController.popBackStack() })
+            InvoiceScreen(
+                jobId = backStackEntry.arguments?.getString("jobId") ?: "",
+                onBack = { navController.popBackStack() },
+                onOpenSettings = { openReviewSettings() }
+            )
         }
         composable(Screen.PhotoGallery.route) {
             PhotoGalleryScreen(onBack = { navController.popBackStack() }, viewModel = hiltViewModel())
@@ -509,7 +520,8 @@ private fun AppNavHost(
             val focus by entry.savedStateHandle.getStateFlow("settingsFocus", "").collectAsState()
             SettingsScreen(
                 onBack = { navController.popBackStack() },
-                focusBackup = focus == "backup"
+                focusBackup = focus == "backup",
+                focusReview = focus == "review"
             )
         }
         composable(Screen.AIAssistant.route) {

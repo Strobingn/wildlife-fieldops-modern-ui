@@ -72,6 +72,7 @@ import com.strobingn.wildlifefieldops.pricing.JobPaymentRecord
 import com.strobingn.wildlifefieldops.pricing.JobPricing
 import com.strobingn.wildlifefieldops.pricing.Money
 import com.strobingn.wildlifefieldops.pricing.PaymentMethod
+import com.strobingn.wildlifefieldops.review.GoogleReviewRequest
 import com.strobingn.wildlifefieldops.pricing.isManual
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundCard
 import com.strobingn.wildlifefieldops.ui.theme.BorderDark
@@ -218,7 +219,11 @@ private fun HistoryLine(row: CustomerHistoryRow, onOpen: (String) -> Unit) {
 }
 
 @Composable
-fun JobPaymentsCard(job: Job, onSave: (JobPricing) -> Unit) {
+fun JobPaymentsCard(
+    job: Job,
+    onSave: (JobPricing) -> Unit,
+    onBecameFullyPaid: () -> Unit = {}
+) {
     val context = LocalContext.current
     val total = PaymentLedger.invoiceTotal(job)
     var method by remember(job.id) { mutableStateOf(PaymentMethod.CASH) }
@@ -307,7 +312,12 @@ fun JobPaymentsCard(job: Job, onSave: (JobPricing) -> Unit) {
                     paidAt = PaymentLedger.parseDay(dateText),
                     note = note
                 )
-                onSave(PaymentLedger.apply(job.pricing, PaymentLedger.upsert(job.pricing.payments, row)))
+                val before = job.pricing.payments
+                val after = PaymentLedger.upsert(before, row)
+                onSave(PaymentLedger.apply(job.pricing, after))
+                if (GoogleReviewRequest.becameFullyPaid(total, before, after)) {
+                    onBecameFullyPaid()
+                }
                 amountText = ""
                 checkNumber = ""
                 note = ""

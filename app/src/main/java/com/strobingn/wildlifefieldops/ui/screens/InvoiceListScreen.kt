@@ -61,6 +61,7 @@ import java.util.Locale
 fun InvoiceListScreen(
     onBack: () -> Unit,
     onOpenJob: (String) -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     viewModel: MoneyFieldOpsViewModel = hiltViewModel()
 ) {
     val invoices by viewModel.invoices.collectAsState()
@@ -68,6 +69,7 @@ fun InvoiceListScreen(
     val jobs by viewModel.jobs.collectAsState()
     val context = LocalContext.current
     var overdueOnly by remember { mutableStateOf(true) }
+    var reviewPrompt by remember { mutableStateOf<Invoice?>(null) }
     val list = if (overdueOnly) overdue else invoices
 
     Scaffold(
@@ -101,7 +103,11 @@ fun InvoiceListScreen(
                 InvoiceReminderCard(
                     invoice = invoice,
                     onSent = { viewModel.markInvoice(invoice, InvoiceStatus.SENT) },
-                    onPaid = { viewModel.markInvoice(invoice, InvoiceStatus.PAID) },
+                    onPaid = {
+                        val alreadyPaid = invoice.status == InvoiceStatus.PAID
+                        viewModel.markInvoice(invoice, InvoiceStatus.PAID)
+                        if (!alreadyPaid) reviewPrompt = invoice
+                    },
                     onOpenJob = { if (invoice.jobId.isNotBlank()) onOpenJob(invoice.jobId) },
                     onSms = { subject, body ->
                         val job = jobs.find { it.id == invoice.jobId }
@@ -129,6 +135,19 @@ fun InvoiceListScreen(
                 )
             }
         }
+    }
+    reviewPrompt?.let { invoice ->
+        GoogleReviewSection(
+            jobId = invoice.jobId,
+            offer = true,
+            customerName = invoice.customerName,
+            phone = "",
+            email = invoice.customerEmail,
+            prompt = true,
+            showCard = false,
+            onPromptDismissed = { reviewPrompt = null },
+            onOpenSettings = onOpenSettings
+        )
     }
 }
 
