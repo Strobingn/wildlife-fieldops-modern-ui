@@ -39,7 +39,19 @@ type AiRequest = {
   jsonMode?: boolean;
   json_mode?: boolean;
   imageDataUrl?: string;
+  /** Optional. Older app builds omit this. Vision still runs. */
+  detectionExamples?: unknown;
 };
+
+type DetectionExample = {
+  label: string;
+  description: string;
+  verdict: string;
+  modelLabel: string;
+  thumbnailDataUrl: string;
+};
+
+const FEW_SHOT_MARKER = "Confirmed field corrections:";
 
 type Provider = { name: string; key: string; baseUrl: string; model: string };
 
@@ -216,6 +228,103 @@ async function chatCompletion(
   return content;
 }
 
+function sanitizeDetectionExamples(raw: unknown): DetectionExample[] {
+  if (!Array.isArray(raw)) return [];
+  const out: DetectionExample[] = [];
+  for (const item of raw.slice(0, 6)) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const label = safeString(row.label ?? row.correctedLabel ?? row.corrected_label, 80).trim();
+    const description = safeString(row.description ?? row.whatImageShows ?? row.what_image_shows ?? row.notes, 240).trim();
+    const verdict = safeString(row.verdict, 20).trim();
+    const modelLabel = safeString(row.modelLabel ?? row.model_label, 80).trim();
+    const thumbnailDataUrl = safeString(row.thumbnailDataUrl ?? row.thumbnail_data_url, 40_000).trim();
+    if (!label && !description && !modelLabel) continue;
+    out.push({ label, description, verdict, modelLabel, thumbnailDataUrl });
+  }
+  return out;
+}
+
+function fewShotText(examples: DetectionExample[]): string {
+  const lines = examples.map((example) => {
+    const shown = example.label || example.modelLabel || "unlabeled";
+    const model = example.modelLabel ? `Model said "${example.modelLabel}". ` : "";
+    const verdict = example.verdict ? `Verdict ${example.verdict}. ` : "";
+    const desc = example.description ? ` Shows: ${example.description}.` : "";
+    return `- ${model}${verdict}Correct label: "${shown}".${desc}`;
+  });
+  return [
+    FEW_SHOT_MARKER,
+    "A wildlife technician confirmed or corrected these photo findings. When the new photo is similar, prefer the correct label.",
+    "Entry points include gap, vent, soffit, roof return, chimney, gable vent, and foundation crack.",
+    "If the correction is an entry point, keep species on the allowed list and name the entry in evidence_notes.",
+    ...lines,
+  ].join("\n");
+}
+
+function mergeDetectionExamples(clientRows: DetectionExample[], stored: DetectionExample[]): DetectionExample[] {
+  const seen = new Set<string>();
+  const out: DetectionExample[] = [];
+  for (const row of [...clientRows, ...stored]) {
+    const key = `${row.verdict}|${row.modelLabel}|${row.label}|${row.description}`.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+    if (out.length >= 6) break;
+  }
+  return out;
+}
+
+async function loadStoredDetectionExamples(): Promise<DetectionExample[]> {
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY");
+  if (!url || !key) return [];
+  try {
+    const client = createClient(url, key, { auth: { persistSession: false } });
+    const { data, error } = await client
+      .from("ai_detection_feedback")
+      .select("verdict,corrected_label,model_label,what_image_shows,notes")
+      .in("verdict", ["YES", "NO", "PARTLY"])
+      .order("created_at", { ascending: false })
+      .limit(6);
+    if (error || !data) return [];
+    return sanitizeDetectionExamples(data.map((row: Record<string, unknown>) => ({
+      label: row.corrected_label || row.model_label,
+      modelLabel: row.model_label,
+      description: row.what_image_shows || row.notes,
+      verdict: row.verdict,
+    })));
+  } catch {
+    return [];
+  }
+}
+
+function appendFewShot(
+  messages: Array<{ role: string; content: unknown }>,
+  examples: DetectionExample[],
+): Array<{ role: string; content: unknown }> {
+  if (examples.length === 0) return messages;
+  const already = messages.some((message) =>
+    message.role === "system" && typeof message.content === "string" && message.content.includes(FEW_SHOT_MARKER)
+  );
+  const withText = already ? messages : [{ role: "system", content: fewShotText(examples) }, ...messages];
+  const thumbPattern = /^data:image\/(jpeg|jpg|png|webp);base64,[a-z0-9+/=\r\n]+$/i;
+  let budget = 120_000;
+  let used = 0;
+  const parts: Array<Record<string, unknown>> = [
+    { type: "text", text: "Example photos from confirmed corrections. Use them only as similar cases." },
+  ];
+  for (const example of examples) {
+    const url = example.thumbnailDataUrl;
+    if (used >= 2 || !url || url.length > 40_000 || url.length > budget || !thumbPattern.test(url)) continue;
+    used += 1;
+    budget -= url.length;
+    parts.push({ type: "image_url", image_url: { url } });
+  }
+  if (parts.length === 1) return withText;
+  return [...withText, { role: "user", content: parts }];
+}
+
 function visionMessages(
   messages: Array<{ role: string; content: string }>,
   image: string,
@@ -251,6 +360,11 @@ async function handleComplete(payload: AiRequest): Promise<Response> {
       return jsonResponse({ ok: false, error: "Species photo must be a JPEG, PNG, or WebP data URL." }, 400);
     }
     outbound = visionMessages(messages, image);
+    const examples = mergeDetectionExamples(
+      sanitizeDetectionExamples(payload.detectionExamples),
+      await loadStoredDetectionExamples(),
+    );
+    outbound = appendFewShot(outbound, examples);
   }
   const selected = provider();
   const requestedTokens = Number(payload.maxTokens ?? payload.max_tokens ?? 900);
@@ -310,6 +424,13 @@ Deno.serve(async (request: Request) => {
         businessContext: payload.businessContext ?? "",
       };
 
+    const storedExamples = payload.imageUrl
+      ? mergeDetectionExamples(
+        sanitizeDetectionExamples(payload.detectionExamples),
+        await loadStoredDetectionExamples(),
+      )
+      : [];
+    const fewShot = storedExamples.length > 0 ? "\n" + fewShotText(storedExamples) : "";
     const system = [
       "You are Wildlife FieldOps AI for a professional nuisance-wildlife company.",
       "Return only valid JSON.",
@@ -318,7 +439,8 @@ Deno.serve(async (request: Request) => {
       "For compliance, identify what must be verified against the cited agency source.",
       "For estimates, calculate transparent line items and explain assumptions.",
       "For business queries, answer only from the supplied database context.",
-    ].join("\n");
+      fewShot,
+    ].filter((line) => line.length > 0).join("\n");
 
     const textPrompt = JSON.stringify({
       mode,

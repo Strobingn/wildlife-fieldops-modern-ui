@@ -91,6 +91,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
     object SyncStatus : Screen("sync_status", "Sync status", Icons.Default.Sync)
     object AiAccuracy : Screen("ai_accuracy", "AI accuracy", Icons.Default.FactCheck)
+    object DetectionDataset : Screen("detection_dataset", "Detection dataset", Icons.Default.Description)
     object AIAssistant : Screen("ai_assistant", "AI Assistant", Icons.Default.Psychology)
     object AIOperations : Screen("ai_operations", "AI Operations", Icons.Default.AutoAwesome)
     object Expense : Screen("expenses", "Expenses", Icons.Default.Receipt)

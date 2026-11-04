@@ -2,7 +2,9 @@ package com.strobingn.wildlifefieldops.data.remote
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -25,6 +27,7 @@ object AiEdgeProtocol {
         temperature: Double,
         jsonMode: Boolean,
         imageDataUrl: String? = null,
+        detectionExamples: List<DetectionExampleWire> = emptyList(),
     ): String = buildJsonObject {
         put("action", ACTION_COMPLETE)
         put("system", system.take(8_000))
@@ -35,6 +38,26 @@ object AiEdgeProtocol {
         val image = imageDataUrl?.trim().orEmpty()
         if (image.startsWith("data:image/") && image.length <= MAX_IMAGE_CHARS) {
             put("imageDataUrl", image)
+        }
+        // Omitted when empty so older edge functions see the same complete payload.
+        val examples = detectionExamples.take(6).filter {
+            it.label.isNotBlank() || it.description.isNotBlank()
+        }
+        if (examples.isNotEmpty()) {
+            put("detectionExamples", buildJsonArray {
+                examples.forEach { example ->
+                    add(buildJsonObject {
+                        put("label", example.label.take(80))
+                        put("description", example.description.take(240))
+                        put("verdict", example.verdict.take(20))
+                        put("modelLabel", example.modelLabel.take(80))
+                        val thumb = example.thumbnailDataUrl.trim()
+                        if (thumb.startsWith("data:image/") && thumb.length <= 40_000) {
+                            put("thumbnailDataUrl", thumb)
+                        }
+                    })
+                }
+            })
         }
     }.toString()
 
@@ -55,6 +78,14 @@ object AiEdgeProtocol {
         return EdgeChatResult.Err("Empty AI response.")
     }
 }
+
+data class DetectionExampleWire(
+    val label: String,
+    val description: String,
+    val verdict: String = "",
+    val modelLabel: String = "",
+    val thumbnailDataUrl: String = "",
+)
 
 sealed class EdgeChatResult {
     data class Ok(val text: String, val provider: String, val vision: Boolean = false) : EdgeChatResult()

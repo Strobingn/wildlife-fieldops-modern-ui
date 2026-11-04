@@ -1,6 +1,7 @@
 package com.strobingn.wildlifefieldops.data.remote
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
@@ -48,6 +49,52 @@ class AiEdgeProtocolTest {
         assertFalse(raw.contains("api.x.ai"))
         assertFalse(raw.contains("XAI_API_KEY"))
         assertFalse(body.containsKey("model"))
+    }
+
+    @Test
+    fun visionPayloadOmitsExamplesUntilSirHasCorrections() {
+        val raw = AiEdgeProtocol.requestJson(
+            system = "system",
+            user = "user",
+            maxTokens = 400,
+            temperature = 0.1,
+            jsonMode = true,
+            imageDataUrl = "data:image/jpeg;base64,aaaa",
+            detectionExamples = emptyList(),
+        )
+        val body = json.parseToJsonElement(raw).jsonObject
+        assertFalse(body.containsKey("detectionExamples"))
+        assertEquals("complete", body["action"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun visionPayloadCarriesFewShotExamplesAndDropsHugeThumbnails() {
+        val huge = "data:image/jpeg;base64," + "a".repeat(40_000)
+        val raw = AiEdgeProtocol.requestJson(
+            system = "system",
+            user = "identify",
+            maxTokens = 400,
+            temperature = 0.1,
+            jsonMode = true,
+            imageDataUrl = "data:image/jpeg;base64,bbbb",
+            detectionExamples = listOf(
+                DetectionExampleWire(
+                    label = "Soffit",
+                    description = "Open soffit gap",
+                    verdict = "NO",
+                    modelLabel = "Vent",
+                    thumbnailDataUrl = huge,
+                )
+            ),
+        )
+        val body = json.parseToJsonElement(raw).jsonObject
+        val example = body["detectionExamples"]!!.jsonArray.first().jsonObject
+        assertEquals("Soffit", example["label"]?.jsonPrimitive?.content)
+        assertEquals("Vent", example["modelLabel"]?.jsonPrimitive?.content)
+        assertEquals("NO", example["verdict"]?.jsonPrimitive?.content)
+        assertFalse(example.containsKey("thumbnailDataUrl"))
+        assertFalse(raw.contains("XAI_API_KEY"))
+        assertEquals("complete", body["action"]?.jsonPrimitive?.content)
     }
 
     @Test

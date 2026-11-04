@@ -44,6 +44,26 @@ class ObservationPhotoUploader @Inject constructor(
         return upload(client, path, bytes)
     }
 
+    suspend fun uploadDetectionExample(
+        client: SupabaseClient,
+        exampleId: String,
+        localPath: String
+    ): ObservationPhotoUpload {
+        require(!PhotoEvidence.isDerivedEvidencePath(localPath)) {
+            "Derived preview excluded from evidentiary export: $localPath"
+        }
+        val bytes = readBytes(localPath)
+            ?: error("Local detection photo missing: $localPath")
+        require(bytes.isNotEmpty()) { "Local detection photo is empty: $localPath" }
+        require(bytes.size <= ObservationPhotoPaths.MAX_BYTES) {
+            "Detection photo exceeds 50MB: $localPath"
+        }
+        val mime = ObservationPhotoPaths.mimeType(localPath)
+        require(ObservationPhotoPaths.isAllowedMime(mime)) { "Unsupported photo type: $mime" }
+        val path = ObservationPhotoPaths.detectionExamplePath(exampleId, localPath)
+        return upload(client, path, bytes)
+    }
+
     suspend fun uploadEventMedia(
         client: SupabaseClient,
         eventId: String,

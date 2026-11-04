@@ -6,8 +6,11 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
 import com.strobingn.wildlifefieldops.ai.AiAnalysisResult
+import com.strobingn.wildlifefieldops.ai.detection.DetectionFewShot
+import com.strobingn.wildlifefieldops.data.detection.DetectionFeedbackRepository
 import com.strobingn.wildlifefieldops.data.remote.AiEdgeGateway
 import com.strobingn.wildlifefieldops.data.remote.AiEdgeProtocol
+import com.strobingn.wildlifefieldops.data.remote.DetectionExampleWire
 import com.strobingn.wildlifefieldops.data.remote.EdgeChatResult
 import java.io.ByteArrayOutputStream
 import javax.inject.Inject
@@ -20,6 +23,7 @@ import javax.inject.Singleton
 @Singleton
 class WildlifeSpeciesIdentifier @Inject constructor(
     private val edge: AiEdgeGateway,
+    private val feedback: DetectionFeedbackRepository,
 ) {
     suspend fun identifyStill(context: Context, imageUri: Uri): SpeciesSuggestion? {
         val cloud = identifyCloud(context, imageUri)
@@ -38,16 +42,33 @@ class WildlifeSpeciesIdentifier @Inject constructor(
         return OnDeviceSpeciesClassifier.suggestFromAnalysis(analysis)
     }
 
-    private fun identifyCloud(context: Context, imageUri: Uri): SpeciesSuggestion? {
+    private suspend fun identifyCloud(context: Context, imageUri: Uri): SpeciesSuggestion? {
         if (!edge.isConfigured) return null
         val image = jpegDataUrl(context, imageUri) ?: return null
+        val examples = runCatching { feedback.fewShot() }.getOrDefault(emptyList())
+        val block = DetectionFewShot.promptBlock(examples)
+        val system = if (block.isBlank()) {
+            WildlifeSpeciesCatalog.visionSystemPrompt()
+        } else {
+            WildlifeSpeciesCatalog.visionSystemPrompt() + "\n" + block
+        }
+        val wires = DetectionFewShot.wire(examples).map {
+            DetectionExampleWire(
+                label = it.label,
+                description = it.description,
+                verdict = it.verdict,
+                modelLabel = it.modelLabel,
+                thumbnailDataUrl = it.thumbnailDataUrl,
+            )
+        }
         val result = edge.complete(
-            system = WildlifeSpeciesCatalog.visionSystemPrompt(),
+            system = system,
             user = WildlifeSpeciesCatalog.VISION_USER_PROMPT,
             maxTokens = 400,
             temperature = 0.1,
             jsonMode = true,
             imageDataUrl = image,
+            detectionExamples = wires,
             connectTimeoutMs = 12_000,
             readTimeoutMs = 22_000,
         )

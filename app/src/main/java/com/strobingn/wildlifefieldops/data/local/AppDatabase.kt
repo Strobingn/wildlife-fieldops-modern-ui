@@ -22,9 +22,10 @@ import com.strobingn.wildlifefieldops.data.model.*
         FieldObservation::class,
         VoiceObservation::class,
         ObservationEventRecord::class,
-        SyncOperationRecord::class
+        SyncOperationRecord::class,
+        AiDetectionFeedback::class
     ],
-    version = 16,
+    version = 17,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -45,9 +46,10 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun voiceObservationDao(): VoiceObservationDao
     abstract fun observationEventDao(): ObservationEventDao
     abstract fun syncOperationDao(): SyncOperationDao
+    abstract fun aiDetectionFeedbackDao(): AiDetectionFeedbackDao
 
     companion object {
-        const val VERSION = 16
+        const val VERSION = 17
         const val NAME = "wildlife_fieldops.db"
     }
 }

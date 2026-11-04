@@ -34,6 +34,7 @@ import com.strobingn.wildlifefieldops.data.model.Photo
 import com.strobingn.wildlifefieldops.data.model.PhotoCategory
 import com.strobingn.wildlifefieldops.data.remote.PhotoSyncQueue
 import com.strobingn.wildlifefieldops.ui.components.*
+import com.strobingn.wildlifefieldops.ui.components.DetectionFeedbackDialog
 import com.strobingn.wildlifefieldops.ui.theme.*
 import com.strobingn.wildlifefieldops.ui.viewmodel.PhotosViewModel
 import java.io.File
@@ -53,6 +54,12 @@ fun PhotoGalleryScreen(
     var selectedTab by remember { mutableStateOf(0) }
     var tagFilter by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<Photo?>(null) }
+    var feedbackPhoto by remember { mutableStateOf<Photo?>(null) }
+    var feedbackModel by remember { mutableStateOf("") }
+    var feedbackConfidence by remember { mutableStateOf(0.0) }
+    var feedbackLearned by remember { mutableStateOf("") }
+    var feedbackIsLearned by remember { mutableStateOf(false) }
+    var feedbackMessage by remember { mutableStateOf("") }
     val tabs = listOf("All" to null, "Inspections" to PhotoCategory.INSPECTION, "Jobs" to PhotoCategory.JOB_SITE,
         "Evidence" to PhotoCategory.EVIDENCE, "Docs" to PhotoCategory.DOCUMENT)
 
@@ -236,7 +243,33 @@ fun PhotoGalleryScreen(
                 val jobId = photo.jobId.orEmpty()
                 if (jobId.isNotBlank()) searchVm.deletePair(jobId, pairId)
             },
-            suggest = { searchVm.suggestTags(it) }
+            suggest = { searchVm.suggestTags(it) },
+            onWasThisRight = {
+                feedbackMessage = ""
+                feedbackPhoto = photo
+                viewModel.prepareSavedPhotoFeedback(photo) { label, confidence, learned, isLearned ->
+                    feedbackModel = label
+                    feedbackConfidence = confidence
+                    feedbackLearned = learned
+                    feedbackIsLearned = isLearned
+                }
+            }
+        )
+    }
+    feedbackPhoto?.let { photo ->
+        DetectionFeedbackDialog(
+            modelLabel = feedbackModel,
+            modelConfidence = feedbackConfidence,
+            learnedLabel = feedbackLearned,
+            learnedFromCorrections = feedbackIsLearned,
+            takenAtMillis = photo.takenAt,
+            savedMessage = feedbackMessage,
+            onSubmit = { draft ->
+                viewModel.saveDetectionFeedback(photo, draft, feedbackModel, feedbackConfidence) { message ->
+                    feedbackMessage = message
+                }
+            },
+            onDismiss = { feedbackPhoto = null },
         )
     }
 }
@@ -252,7 +285,8 @@ private fun PhotoTagDialog(
     onPair: (String, String, com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag) -> Unit,
     onUpdatePair: (com.strobingn.wildlifefieldops.ai.fieldops.PhotoPairRecord) -> Unit,
     onDeletePair: (String) -> Unit,
-    suggest: (String) -> com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag
+    suggest: (String) -> com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag,
+    onWasThisRight: () -> Unit = {},
 ) {
     val seed = existing ?: com.strobingn.wildlifefieldops.ai.fieldops.SyncedPhotoTag(photoId = photo.id)
     var species by remember { mutableStateOf(seed.species) }
@@ -356,6 +390,7 @@ private fun PhotoTagDialog(
                         )
                     }) { Text("Pair") }
                 }
+                TextButton(onClick = onWasThisRight) { Text("Was this right?") }
                 TextButton(onClick = onDismiss) { Text("Close") }
             }
         }

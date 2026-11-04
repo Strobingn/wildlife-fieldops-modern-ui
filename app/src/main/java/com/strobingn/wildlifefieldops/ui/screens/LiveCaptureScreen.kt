@@ -59,6 +59,7 @@ import com.strobingn.wildlifefieldops.ai.camera.ChecklistSession
 import com.strobingn.wildlifefieldops.ai.camera.LiveCameraAnalyzer
 import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.ai.species.WildlifeSpeciesCatalog
+import com.strobingn.wildlifefieldops.ui.components.DetectionFeedbackForm
 import com.strobingn.wildlifefieldops.ui.components.SpeciesIdentificationBlock
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundDark
 import com.strobingn.wildlifefieldops.ui.theme.OnPrimary
@@ -632,7 +633,8 @@ fun LiveCaptureScreen(
                             viewModel.clearArMeasurementKeepVoice()
                         },
                         onSpeciesLabelChange = { viewModel.setTechnicianSpeciesLabel(it) },
-                        onConfirmSpecies = { viewModel.confirmSpeciesId() }
+                        onConfirmSpecies = { viewModel.confirmSpeciesId() },
+                        onFeedback = { viewModel.submitDetectionFeedback(it) }
                     )
                 }
                 is SmartCaptureState.Error -> {
@@ -867,7 +869,8 @@ private fun SmartCaptureResultSheet(
     onDismiss: () -> Unit,
     onCaptureMore: () -> Unit = onDismiss,
     onSpeciesLabelChange: (String) -> Unit = {},
-    onConfirmSpecies: () -> Unit = {}
+    onConfirmSpecies: () -> Unit = {},
+    onFeedback: (com.strobingn.wildlifefieldops.ai.detection.FeedbackDraft) -> Unit = {},
 ) {
     val a = state.analysis
     ModalBottomSheet(
@@ -919,6 +922,9 @@ private fun SmartCaptureResultSheet(
             ResultRow("Damage", a.damageTypes.joinToString().ifBlank { "—" })
             ResultRow("Evidence", state.evidenceSummary.ifBlank { a.evidenceSummary }.ifBlank { "—" })
             ResultRow("Entry tags", a.entryTypes.joinToString().ifBlank { "—" })
+            if (state.learnedFromCorrections && state.learnedLabel.isNotBlank()) {
+                ResultRow("Learned label", state.learnedLabel)
+            }
             ResultRow("AR span", state.arMeasurementLabel.ifBlank { "—" })
             ResultRow("Trap/equipment", state.equipmentTags.joinToString().ifBlank { "—" })
             ResultRow("Repair scope", state.repairScopeLabel.ifBlank { "—" })
@@ -942,6 +948,16 @@ private fun SmartCaptureResultSheet(
                 state.customerSummary.ifBlank { "—" },
                 color = TextPrimary,
                 style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(Modifier.height(16.dp))
+            DetectionFeedbackForm(
+                modelLabel = state.modelLabel,
+                modelConfidence = state.modelConfidence,
+                learnedLabel = state.learnedLabel,
+                learnedFromCorrections = state.learnedFromCorrections,
+                takenAtMillis = state.photo.takenAt,
+                savedMessage = state.feedbackNote,
+                onSubmit = onFeedback,
             )
             Spacer(Modifier.height(16.dp))
             Text(
