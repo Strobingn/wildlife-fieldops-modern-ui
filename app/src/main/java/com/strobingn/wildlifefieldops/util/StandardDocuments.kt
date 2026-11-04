@@ -11,6 +11,7 @@ import com.strobingn.wildlifefieldops.pricing.JobPaymentRecord
 import com.strobingn.wildlifefieldops.pricing.Money
 import com.strobingn.wildlifefieldops.pricing.PaymentMethod
 import com.strobingn.wildlifefieldops.pricing.effectiveTotal
+import com.strobingn.wildlifefieldops.pricing.pricedAmountOrNull
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -518,13 +519,23 @@ object StandardDocuments {
     private fun lineTable(items: List<InvoiceLineItem>): DocTable = DocTable(
         columns = listOf("Description", "Qty", "Unit", "Rate", "Amount"),
         rows = items.map { item ->
-            listOf(
-                item.description,
-                trimNum(item.quantity),
-                item.unit,
-                Money.formatUsd(item.unitPrice),
-                Money.formatUsd(item.effectiveTotal())
-            )
+            if (item.priceOnly) {
+                listOf(
+                    item.description,
+                    "",
+                    "",
+                    "",
+                    item.pricedAmountOrNull()?.let { Money.formatUsd(it) } ?: DocumentText.EM_DASH
+                )
+            } else {
+                listOf(
+                    item.description,
+                    trimNum(item.quantity),
+                    item.unit,
+                    Money.formatUsd(item.unitPrice),
+                    Money.formatUsd(item.effectiveTotal())
+                )
+            }
         },
         weights = listOf(2.4f, 0.6f, 0.6f, 0.9f, 0.9f),
         aligns = listOf("left", "right", "left", "right", "right"),
@@ -613,11 +624,21 @@ object StandardDocuments {
         else String.format(Locale.US, "%.2f", value).trimEnd('0').trimEnd('.')
 
     /**
-     * Classic five fee rows. Labor and trap service (including hourly labor)
-     * go to [LABOR_FEE_LABEL]; unmatched lines roll into Other so their amounts
-     * are still on the page. The line-item table keeps every description.
+     * Classic five fee rows, then one row per custom item (name + price).
+     * Labor and trap service (including hourly labor) go to [LABOR_FEE_LABEL];
+     * unmatched standard lines roll into Other. Custom items stay on their own
+     * rows and never change the labor row. The line-item table keeps every description.
      */
     fun mapFeeRows(lineItems: List<InvoiceLineItem>): List<Pair<String, Double?>> {
+        val custom = lineItems.filter { it.priceOnly }
+        val standard = lineItems.filter { !it.priceOnly }
+        return mapStandardFeeRows(standard) + custom.map { item ->
+            val label = item.description.trim().ifBlank { "Custom item" }
+            label to item.pricedAmountOrNull()
+        }
+    }
+
+    private fun mapStandardFeeRows(lineItems: List<InvoiceLineItem>): List<Pair<String, Double?>> {
         if (lineItems.isEmpty()) {
             return listOf(
                 LABOR_FEE_LABEL to null,

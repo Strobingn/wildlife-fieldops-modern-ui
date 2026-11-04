@@ -61,7 +61,18 @@ data class InvoiceLineItem(
     val unitPrice: Double = 0.0,
     val total: Double = 0.0,
     /** When set, this line's amount is locked; qty/price still edit for reference. */
-    val totalOverride: Double? = null
+    val totalOverride: Double? = null,
+    /**
+     * Estimate custom item: one price, no quantity. The line total is [unitPrice].
+     * Qty stays blank on PDFs. Default false keeps older invoice rows unchanged.
+     */
+    val priceOnly: Boolean = false,
+    /** Custom item saved before a price was typed. Does not add $0.00 to the total. */
+    val priceMissing: Boolean = false
 ) {
-    fun calculateTotal(): Double = quantity * unitPrice
+    fun calculateTotal(): Double = if (priceOnly) {
+        if (priceMissing && totalOverride == null) 0.0 else unitPrice
+    } else {
+        quantity * unitPrice
+    }
 }

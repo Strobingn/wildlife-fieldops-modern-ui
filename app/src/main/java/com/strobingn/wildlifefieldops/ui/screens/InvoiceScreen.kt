@@ -828,22 +828,36 @@ private fun InvoiceLineItemRow(
             singleLine = true,
             textStyle = TextStyle(fontSize = 13.sp)
         )
+        if (item.priceOnly) {
+            Spacer(modifier = Modifier.weight(0.5f))
+        } else {
+            OutlinedTextField(
+                value = item.quantity.toString(),
+                onValueChange = {
+                    it.toDoubleOrNull()?.let { q -> onUpdate(item.copy(quantity = q)) }
+                },
+                colors = invoiceFieldColors(),
+                modifier = Modifier.weight(0.5f),
+                shape = RoundedCornerShape(8.dp),
+                singleLine = true,
+                textStyle = TextStyle(fontSize = 13.sp),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+            )
+        }
         OutlinedTextField(
-            value = item.quantity.toString(),
-            onValueChange = {
-                it.toDoubleOrNull()?.let { q -> onUpdate(item.copy(quantity = q)) }
-            },
-            colors = invoiceFieldColors(),
-            modifier = Modifier.weight(0.5f),
-            shape = RoundedCornerShape(8.dp),
-            singleLine = true,
-            textStyle = TextStyle(fontSize = 13.sp),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-        )
-        OutlinedTextField(
-            value = item.unitPrice.toString(),
-            onValueChange = {
-                it.toDoubleOrNull()?.let { p -> onUpdate(item.copy(unitPrice = p)) }
+            value = if (item.priceOnly && item.priceMissing) "" else item.unitPrice.toString(),
+            onValueChange = { raw ->
+                if (item.priceOnly) {
+                    val parsed = com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(raw)
+                    if (raw.isBlank()) {
+                        onUpdate(item.copy(unitPrice = 0.0, total = 0.0, priceMissing = true, totalOverride = null))
+                    } else if (parsed != null) {
+                        val price = Money.round(parsed)
+                        onUpdate(item.copy(unitPrice = price, total = price, priceMissing = false, totalOverride = null))
+                    }
+                } else {
+                    raw.toDoubleOrNull()?.let { p -> onUpdate(item.copy(unitPrice = p)) }
+                }
             },
             colors = invoiceFieldColors(),
             modifier = Modifier.weight(0.7f),

@@ -4,6 +4,8 @@ import com.strobingn.wildlifefieldops.BuildConfig
 import com.strobingn.wildlifefieldops.ai.local.LocalLlmEngine
 import com.strobingn.wildlifefieldops.ai.local.LocalLlmModelManager
 import com.strobingn.wildlifefieldops.data.model.Job
+import com.strobingn.wildlifefieldops.pricing.CustomEstimateItem
+import com.strobingn.wildlifefieldops.pricing.CustomEstimateItems
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -12,6 +14,14 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -29,7 +39,11 @@ data class EstimateDraft(
     val discountPercent: Double = 0.0,
     val rationale: String = "",
     val lineItemNotes: String = "",
-    val fromAi: Boolean = true
+    val fromAi: Boolean = true,
+    /** Extra services named in the notes. Price is null when the note did not state one. */
+    val customItems: List<CustomEstimateItem> = emptyList(),
+    /** Job, technician, and inspection notes the custom-item parser read. */
+    val noteText: String = ""
 )
 
 @Serializable
@@ -119,23 +133,33 @@ class AiService @Inject constructor(
         job: Job,
         drivingMiles: Double? = null,
         taxPercent: Double = 8.125,
-        distanceNote: String = ""
+        distanceNote: String = "",
+        extraNotes: String = ""
     ): EstimateDraft = withContext(Dispatchers.IO) {
+        val noteText = estimateNoteText(job, extraNotes)
         val system = """
 You are a wildlife removal estimator. Return ONLY valid JSON with:
-laborHours, laborRate, materialsCost, equipmentCost, permitCost, disposalCost, mileage, mileageRate, taxRate, discountPercent, rationale, lineItemNotes
+laborHours, laborRate, materialsCost, equipmentCost, permitCost, disposalCost, mileage, mileageRate, taxRate, discountPercent, rationale, lineItemNotes, customItems
+customItems is an array of objects {name, description, price}. Read the job description, job notes, and inspection notes. Each extra service the technician wrote (for example gutter cleaning, gutter guards) is one object. description is optional detail or "". price is the dollar amount written next to that service, or null if no amount is written. Never invent a price. Do not put labor, materials, mileage, permits, equipment, or disposal into customItems.
 Do NOT invent mileage or taxRate. Use the provided measured miles and tax percent exactly.
 """.trimIndent()
         val milesLine = if (drivingMiles != null)
             "MEASURED one-way driving miles shop to job: $drivingMiles. Put this exact number in mileage."
         else
             "Driving miles could not be measured. Set mileage to 0. Do not guess."
-        val user = buildJobContext(job) + "\n$milesLine\nRequired taxRate: $taxPercent\n$distanceNote\n\nProduce estimate JSON."
+        val user = buildJobContext(job, extraNotes) + "\n$milesLine\nRequired taxRate: $taxPercent\n$distanceNote\n\nProduce estimate JSON."
         if (isConfigured) {
-            when (val result = completeChat(system, user, maxTokens = 700, temperature = 0.25, jsonMode = true)) {
+            when (val result = completeChat(system, user, maxTokens = 900, temperature = 0.25, jsonMode = true)) {
                 is ChatResult.Ok -> {
                     val parsed = parseEstimateDraft(result.text)
-                    if (parsed != null) return@withContext applyMeasured(parsed.copy(fromAi = true), drivingMiles, taxPercent, distanceNote)
+                    if (parsed != null) {
+                        return@withContext applyMeasured(
+                            withCustomItems(parsed.copy(fromAi = true), noteText),
+                            drivingMiles,
+                            taxPercent,
+                            distanceNote
+                        )
+                    }
                 }
                 is ChatResult.Err -> android.util.Log.w("AiService", "Cloud estimate failed: ${result.message}")
             }
@@ -143,10 +167,20 @@ Do NOT invent mileage or taxRate. Use the provided measured miles and tax percen
         val local = generateLocal(system, user)
         if (local != null) {
             val parsed = parseEstimateDraft(local)
-            if (parsed != null) return@withContext applyMeasured(parsed.copy(fromAi = true), drivingMiles, taxPercent, distanceNote)
+            if (parsed != null) {
+                return@withContext applyMeasured(
+                    withCustomItems(parsed.copy(fromAi = true), noteText),
+                    drivingMiles,
+                    taxPercent,
+                    distanceNote
+                )
+            }
         }
         applyMeasured(
-            EstimateDraft(fromAi = false, rationale = "No generative model ready."),
+            withCustomItems(
+                EstimateDraft(fromAi = false, rationale = "No generative model ready."),
+                noteText
+            ),
             drivingMiles,
             taxPercent,
             distanceNote
@@ -294,7 +328,7 @@ Do not invent species or damage that the transcript does not support; mark uncer
         localUnavailableHint() + "\n\n" + buildJobContext(job).take(500)
     }
 
-    private fun buildJobContext(job: Job): String = buildString {
+    private fun buildJobContext(job: Job, extraNotes: String = ""): String = buildString {
         val missing = "(none)"
         appendLine("Job title: ${job.title.ifBlank { missing }}")
         appendLine("Service type: ${job.type}")
@@ -304,6 +338,22 @@ Do not invent species or damage that the transcript does not support; mark uncer
         appendLine("Address: ${job.address.ifBlank { missing }}")
         appendLine("Description: ${job.description.ifBlank { missing }}")
         appendLine("Notes: ${job.notes.ifBlank { missing }}")
+        if (extraNotes.isNotBlank()) {
+            appendLine("Inspection notes: $extraNotes")
+        }
+    }
+
+    private fun estimateNoteText(job: Job, extraNotes: String): String =
+        listOf(job.description, job.notes, extraNotes).filter { it.isNotBlank() }.joinToString("\n")
+
+    /** Model lines plus the local note parser, so a missing model still fills custom items. */
+    private fun withCustomItems(draft: EstimateDraft, noteText: String): EstimateDraft {
+        val items = CustomEstimateItems.resolve(
+            existing = emptyList(),
+            aiItems = draft.customItems,
+            noteText = noteText
+        )
+        return draft.copy(customItems = items, noteText = noteText)
     }
 
     private sealed class ChatResult {
@@ -378,9 +428,40 @@ Do not invent species or damage that the transcript does not support; mark uncer
         val start = cleaned.indexOf('{')
         val end = cleaned.lastIndexOf('}')
         if (start < 0 || end <= start) null
-        else json.decodeFromString(EstimateDraft.serializer(), cleaned.substring(start, end + 1))
+        else {
+            val obj = json.parseToJsonElement(cleaned.substring(start, end + 1)).jsonObject
+            val customItems = readCustomItems(obj)
+            val withoutItems = JsonObject(obj.filterKeys { it != "customItems" })
+            json.decodeFromJsonElement(EstimateDraft.serializer(), withoutItems)
+                .copy(customItems = customItems)
+        }
     } catch (e: Exception) {
         null
+    }
+
+    /** Accepts a number, "$250", "1,250.00", or null. A bad price does not drop the whole draft. */
+    private fun readCustomItems(obj: JsonObject): List<CustomEstimateItem> {
+        val array = runCatching { obj["customItems"]?.jsonArray }.getOrNull() ?: return emptyList()
+        return array.mapNotNull { element ->
+            val row = runCatching { element.jsonObject }.getOrNull() ?: return@mapNotNull null
+            val name = row["name"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+            if (name.isBlank()) return@mapNotNull null
+            val description = row["description"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+            CustomEstimateItem(
+                name = name,
+                description = description,
+                price = runCatching { readPrice(row["price"]) }.getOrNull()
+            )
+        }
+    }
+
+    private fun readPrice(element: JsonElement?): Double? {
+        val primitive = element?.jsonPrimitive ?: return null
+        if (primitive.contentOrNull == null || primitive.contentOrNull.equals("null", ignoreCase = true)) return null
+        primitive.doubleOrNull?.let { return if (it.isNaN() || it.isInfinite()) null else it }
+        val cleaned = primitive.contentOrNull.orEmpty().replace("$", "").replace(",", "").trim()
+        if (cleaned.isBlank()) return null
+        return cleaned.toDoubleOrNull()
     }
 
     private fun notConfiguredMessage(): String = buildString {
