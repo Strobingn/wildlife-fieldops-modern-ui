@@ -58,6 +58,8 @@ import com.strobingn.wildlifefieldops.ai.camera.CaptureSoakStats
 import com.strobingn.wildlifefieldops.ai.camera.ChecklistSession
 import com.strobingn.wildlifefieldops.ai.camera.LiveCameraAnalyzer
 import com.strobingn.wildlifefieldops.data.model.Job
+import com.strobingn.wildlifefieldops.ai.species.WildlifeSpeciesCatalog
+import com.strobingn.wildlifefieldops.ui.components.SpeciesIdentificationBlock
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundDark
 import com.strobingn.wildlifefieldops.ui.theme.OnPrimary
 import com.strobingn.wildlifefieldops.ui.theme.OverlayOnDark
@@ -944,7 +946,7 @@ private fun SmartCaptureResultSheet(
             Spacer(Modifier.height(16.dp))
             Text(
                 "Policy owned accept/checklist advance; AI merged voice + vision + AR into notes only. " +
-                    "On-device species ID is not operational until you confirm.",
+                    "Species ID is a suggestion until you confirm or tap a species.",
                 color = TextSecondary,
                 style = MaterialTheme.typography.bodySmall
             )
@@ -965,24 +967,12 @@ private fun LiveSpeciesConfirmBlock(
     onConfirmSpecies: () -> Unit
 ) {
     val suggestion = state.speciesSuggestion
-    Text("On-device species ID", color = TextSecondary, style = MaterialTheme.typography.labelLarge)
-    if (suggestion != null) {
-        Text(
-            "Suggested: ${suggestion.primaryLabel} · ${suggestion.confidencePercent}% (${suggestion.backendTag})",
-            color = TextPrimary,
-            fontWeight = FontWeight.Medium,
-            style = MaterialTheme.typography.bodyMedium
-        )
-        suggestion.safety.notes.take(3).forEach { note ->
-            Text("• $note", color = TextSecondary, style = MaterialTheme.typography.labelSmall)
-        }
-    } else {
-        Text(
-            "No on-device species suggestion. Type a label and confirm if you identified it.",
-            color = TextSecondary,
-            style = MaterialTheme.typography.bodySmall
-        )
-    }
+    SpeciesIdentificationBlock(
+        suggestion = suggestion,
+        selectedLabel = state.technicianSpeciesLabel,
+        onPick = onSpeciesLabelChange,
+        analyzing = false,
+    )
     Spacer(Modifier.height(6.dp))
     OutlinedTextField(
         value = state.technicianSpeciesLabel,
@@ -1008,7 +998,8 @@ private fun LiveSpeciesConfirmBlock(
         )
         Button(
             onClick = onConfirmSpecies,
-            enabled = state.technicianSpeciesLabel.isNotBlank() || suggestion != null,
+            enabled = state.technicianSpeciesLabel.isNotBlank() &&
+                state.technicianSpeciesLabel != WildlifeSpeciesCatalog.UNSURE,
             colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen, contentColor = OnPrimary)
         ) {
             Text(if (state.speciesConfirmed) "Confirmed" else "Confirm ID")

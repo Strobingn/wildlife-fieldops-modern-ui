@@ -20,6 +20,8 @@ import com.strobingn.wildlifefieldops.ai.camera.InspectionCaptureChecklist
 import com.strobingn.wildlifefieldops.ai.species.OnDeviceSpeciesClassifier
 import com.strobingn.wildlifefieldops.ai.species.SpeciesRecognition
 import com.strobingn.wildlifefieldops.ai.species.SpeciesSuggestion
+import com.strobingn.wildlifefieldops.ai.species.WildlifeSpeciesCatalog
+import com.strobingn.wildlifefieldops.ai.species.WildlifeSpeciesIdentifier
 import com.strobingn.wildlifefieldops.data.local.JobDao
 import com.strobingn.wildlifefieldops.data.local.PhotoDao
 import com.strobingn.wildlifefieldops.data.model.Job
@@ -85,7 +87,8 @@ class LiveCaptureViewModel @Inject constructor(
     private val hybridAI: HybridAIService,
     private val photoDao: PhotoDao,
     private val jobDao: JobDao,
-    private val observationEventStore: ObservationEventStore
+    private val observationEventStore: ObservationEventStore,
+    private val wildlifeSpeciesIdentifier: WildlifeSpeciesIdentifier,
 ) : ViewModel() {
 
     private val _smartCapture = MutableStateFlow<SmartCaptureState>(SmartCaptureState.Idle)
@@ -145,8 +148,13 @@ class LiveCaptureViewModel @Inject constructor(
 
     fun confirmSpeciesId() {
         val current = _smartCapture.value as? SmartCaptureState.Ready ?: return
-        val label = current.technicianSpeciesLabel.ifBlank { current.speciesSuggestion?.primaryLabel }.orEmpty().trim()
-        if (label.isEmpty()) return
+        val label = current.technicianSpeciesLabel.trim().ifBlank {
+            current.speciesSuggestion
+                ?.takeIf { it.confident && it.primaryLabel != WildlifeSpeciesCatalog.UNSURE }
+                ?.primaryLabel
+                .orEmpty()
+        }
+        if (label.isEmpty() || label == WildlifeSpeciesCatalog.UNSURE) return
         viewModelScope.launch {
             val inference = current.inferenceEventId?.let { id ->
                 val entityId = speciesEntityId(current.photo)
@@ -510,7 +518,9 @@ class LiveCaptureViewModel @Inject constructor(
                     completeActiveChecklistItem(enriched.id, reasonCode, frameId)
                 }
 
-                val suggestion = OnDeviceSpeciesClassifier.suggestFromAnalysis(analysis)
+                val suggestion = withContext(Dispatchers.IO) {
+                    wildlifeSpeciesIdentifier.identifyFromAnalysis(appContext, uri, analysis)
+                }
                 val inference = suggestion?.let { writeInference(enriched, it) }
 
                 _smartCapture.value = SmartCaptureState.Ready(
@@ -531,7 +541,10 @@ class LiveCaptureViewModel @Inject constructor(
                     repairScopeLabel = repairLabel,
                     repairScopeNotes = repairNotes,
                     speciesSuggestion = suggestion,
-                    technicianSpeciesLabel = suggestion?.primaryLabel.orEmpty(),
+                    technicianSpeciesLabel = suggestion
+                        ?.takeIf { it.confident && it.primaryLabel != WildlifeSpeciesCatalog.UNSURE }
+                        ?.primaryLabel
+                        .orEmpty(),
                     inferenceEventId = inference?.eventId
                 )
             } catch (t: Throwable) {

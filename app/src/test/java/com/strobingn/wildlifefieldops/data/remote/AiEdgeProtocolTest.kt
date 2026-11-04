@@ -33,6 +33,24 @@ class AiEdgeProtocolTest {
     }
 
     @Test
+    fun visionRequestCarriesImageDataUrlAndNoProviderSecret() {
+        val raw = AiEdgeProtocol.requestJson(
+            system = "system",
+            user = "user",
+            maxTokens = 400,
+            temperature = 0.1,
+            jsonMode = true,
+            imageDataUrl = "data:image/jpeg;base64,aaaa"
+        )
+        val body = json.parseToJsonElement(raw).jsonObject
+        assertEquals("data:image/jpeg;base64,aaaa", body["imageDataUrl"]?.jsonPrimitive?.content)
+        assertEquals("complete", body["action"]?.jsonPrimitive?.content)
+        assertFalse(raw.contains("api.x.ai"))
+        assertFalse(raw.contains("XAI_API_KEY"))
+        assertFalse(body.containsKey("model"))
+    }
+
+    @Test
     fun parseReadsAssistantText() {
         val parsed = AiEdgeProtocol.parse(
             200,
@@ -41,6 +59,16 @@ class AiEdgeProtocolTest {
         val ok = parsed as EdgeChatResult.Ok
         assertEquals("Check the soffit.", ok.text)
         assertEquals("xai", ok.provider)
+        assertFalse(ok.vision)
+    }
+
+    @Test
+    fun parseMarksVisionWhenTheFunctionSawThePhoto() {
+        val parsed = AiEdgeProtocol.parse(
+            200,
+            """{"ok":true,"provider":"xai","vision":true,"text":"{\"species\":\"Raccoon\"}"}"""
+        ) as EdgeChatResult.Ok
+        assertTrue(parsed.vision)
     }
 
     @Test

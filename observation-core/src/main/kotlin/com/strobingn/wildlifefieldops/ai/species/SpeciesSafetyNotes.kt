@@ -124,6 +124,12 @@ object SpeciesSafetyNotes {
             ),
             handlingRisk = SafetyCard.Risk.HIGH,
         ),
+        listOf("bee", "bees", "wasp", "wasps", "hornet", "hornets", "yellowjacket") to Entry(
+            notes = listOf(
+                "Stinging insects. Confirm bees vs wasps vs hornets before treatment, and look for people with sting allergies on site.",
+            ),
+            handlingRisk = SafetyCard.Risk.HIGH,
+        ),
         listOf("feral cat", "stray cat", "dog", "canine") to Entry(
             notes = listOf(
                 "Domestic or feral companion animal — check for ID / TNR partners before treating as wildlife.",

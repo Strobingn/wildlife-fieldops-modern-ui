@@ -2,6 +2,9 @@ package com.strobingn.wildlifefieldops.ai.camera
 
 import com.google.mlkit.vision.label.ImageLabel
 import com.google.mlkit.vision.objects.DetectedObject
+import com.strobingn.wildlifefieldops.ai.species.GenericLabelSpeciesMapper
+import com.strobingn.wildlifefieldops.ai.species.LabelScore
+import com.strobingn.wildlifefieldops.ai.species.WildlifeSpeciesCatalog
 import kotlin.math.max
 
 /**
@@ -176,12 +179,14 @@ object WildlifeEvidenceDetector {
         customHits: List<WildlifeEvidenceHit> = emptyList()
     ): WildlifeEvidenceResult {
         val raw = mutableListOf<String>()
+        val scoredRaw = mutableListOf<LabelScore>()
         val scored = mutableListOf<WildlifeEvidenceHit>()
 
         fun consider(text: String, confidence: Float, source: String) {
             val t = text.lowercase().trim()
             if (t.isEmpty()) return
             raw += t
+            scoredRaw += LabelScore(t, confidence)
             matchLexicon(speciesLexicon, t, confidence, source, WildlifeEvidenceHit.Kind.SPECIES)?.let { scored += it }
             matchLexicon(entryLexicon, t, confidence, source, WildlifeEvidenceHit.Kind.ENTRY)?.let { scored += it }
             matchLexicon(damageLexicon, t, confidence, source, WildlifeEvidenceHit.Kind.DAMAGE)?.let { scored += it }
@@ -210,7 +215,7 @@ object WildlifeEvidenceDetector {
             hit.copy(score = (hit.score + boost).coerceAtMost(1f))
         }
 
-        return fromHits(adjusted, raw)
+        return fromHits(adjusted, raw, scoredRaw)
     }
 
     /** Merge hits from multiple frames (walkthrough) into one ranked result. */
@@ -261,16 +266,21 @@ object WildlifeEvidenceDetector {
 
     private fun fromHits(
         adjusted: List<WildlifeEvidenceHit>,
-        raw: List<String>
+        raw: List<String>,
+        scoredRaw: List<LabelScore> = raw.map { LabelScore(it, 0.55f) },
     ): WildlifeEvidenceResult {
-        fun top(kind: WildlifeEvidenceHit.Kind) =
+        fun top(kind: WildlifeEvidenceHit.Kind, limit: Int = 4) =
             adjusted.filter { it.kind == kind }
                 .groupBy { it.label }
                 .map { (_, hits) -> hits.maxBy { it.score } }
                 .sortedByDescending { it.score }
-                .take(4)
+                .take(limit)
 
-        val species = top(WildlifeEvidenceHit.Kind.SPECIES)
+        val species = applySpeciesGuard(
+            top(WildlifeEvidenceHit.Kind.SPECIES, limit = 12),
+            raw,
+            scoredRaw,
+        )
         val entries = top(WildlifeEvidenceHit.Kind.ENTRY)
         val damage = top(WildlifeEvidenceHit.Kind.DAMAGE)
         val activity = top(WildlifeEvidenceHit.Kind.ACTIVITY)
@@ -302,6 +312,54 @@ object WildlifeEvidenceDetector {
             topSummary = summary,
             rawLabels = raw.distinct().take(16)
         )
+    }
+
+    /**
+     * ML Kit's default labeler emits Dog for many furry mammals and has no raccoon class.
+     * Model-sourced species hits are remapped onto the field list. Typed notes (source "text") stay.
+     */
+    private fun applySpeciesGuard(
+        speciesHits: List<WildlifeEvidenceHit>,
+        raw: List<String>,
+        scoredRaw: List<LabelScore>,
+    ): List<WildlifeEvidenceHit> {
+        val textHits = speciesHits.filter { it.source == "text" }
+        val modelHits = speciesHits.filter { it.source != "text" }
+        if (modelHits.isEmpty()) return speciesHits.take(4)
+        // Lexicon hits already say "gray squirrel" or "canada goose" for a bare
+        // "squirrel" or "goose" tag. Map the original text and TFLite labels only.
+        val inputs = buildList {
+            if (scoredRaw.isNotEmpty()) addAll(scoredRaw) else raw.forEach { add(LabelScore(it, 0.5f)) }
+            modelHits.filter { it.source == "tflite" }.forEach { add(LabelScore(it.label, it.score)) }
+        }
+        val decision = GenericLabelSpeciesMapper.map(inputs)
+        val guarded = when {
+            decision == null -> {
+                val dropDog = GenericLabelSpeciesMapper.blocksConfidentDog(raw + modelHits.map { it.label })
+                if (dropDog) modelHits.filterNot { it.label.equals("dog", ignoreCase = true) } else modelHits
+            }
+            decision.isUnsure -> listOf(
+                WildlifeEvidenceHit(
+                    WildlifeEvidenceHit.Kind.SPECIES,
+                    WildlifeSpeciesCatalog.UNSURE,
+                    decision.confidence.coerceAtMost(0.4f),
+                    "wildlife-id",
+                )
+            )
+            else -> listOf(
+                WildlifeEvidenceHit(
+                    WildlifeEvidenceHit.Kind.SPECIES,
+                    decision.displayLabel,
+                    decision.confidence,
+                    "wildlife-id",
+                )
+            )
+        }
+        return (guarded + textHits)
+            .groupBy { it.label.lowercase() }
+            .map { (_, hits) -> hits.maxBy { it.score } }
+            .sortedByDescending { it.score }
+            .take(4)
     }
 
     private fun matchLexicon(

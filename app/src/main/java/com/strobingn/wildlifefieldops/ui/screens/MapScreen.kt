@@ -32,6 +32,8 @@ import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.strobingn.wildlifefieldops.ai.species.WildlifeSpeciesCatalog
+import com.strobingn.wildlifefieldops.ui.components.SpeciesIdentificationBlock
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
@@ -896,33 +898,13 @@ internal fun SpeciesIdConfirmBlock(
     onConfirmSpecies: () -> Unit
 ) {
     val suggestion = speciesId.suggestion
-    if (speciesId.analyzing) {
-        Text(
-            "Identifying on device…",
-            color = TextSecondary,
-            style = MaterialTheme.typography.labelMedium
-        )
-        Spacer(Modifier.height(8.dp))
-    }
-    if (suggestion != null) {
-        Text(
-            "Suggested: ${suggestion.primaryLabel} · ${suggestion.confidencePercent}% (${suggestion.backendTag})",
-            color = TextPrimary,
-            fontWeight = FontWeight.Medium,
-            style = MaterialTheme.typography.bodyMedium
-        )
-        if (suggestion.alternatives.size > 1) {
-            Text(
-                "Also: ${suggestion.alternatives.drop(1).take(3).joinToString { "${it.label} ${(it.weight * 100).toInt()}%" }}",
-                color = TextSecondary,
-                style = MaterialTheme.typography.labelSmall
-            )
-        }
-        suggestion.safety.notes.take(3).forEach { note ->
-            Text("• $note", color = TextTertiary, style = MaterialTheme.typography.labelSmall)
-        }
-        Spacer(Modifier.height(6.dp))
-    }
+    SpeciesIdentificationBlock(
+        suggestion = suggestion,
+        selectedLabel = species,
+        onPick = onSpeciesChange,
+        analyzing = speciesId.analyzing,
+    )
+    Spacer(Modifier.height(6.dp))
     speciesId.error?.let {
         Text(it, color = ErrorRed, style = MaterialTheme.typography.labelSmall)
         Spacer(Modifier.height(4.dp))
@@ -957,7 +939,9 @@ internal fun SpeciesIdConfirmBlock(
         )
         Button(
             onClick = onConfirmSpecies,
-            enabled = species.isNotBlank() && !speciesId.analyzing,
+            enabled = species.isNotBlank() &&
+                species != WildlifeSpeciesCatalog.UNSURE &&
+                !speciesId.analyzing,
             colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen)
         ) {
             Text(if (speciesId.confirmed) "Confirmed" else "Confirm ID")

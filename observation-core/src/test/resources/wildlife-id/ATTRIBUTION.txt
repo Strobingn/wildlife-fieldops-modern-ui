@@ -1,0 +1,14 @@
+Raccoon in Central Park (35264).jpg by Rhododendrites, CC BY-SA 4.0.
+https://commons.wikimedia.org/wiki/File:Raccoon_in_Central_Park_(35264).jpg
+
+Striped Skunk.jpg by birdphotos.com, CC BY 3.0.
+https://commons.wikimedia.org/wiki/File:Striped_Skunk.jpg
+
+Sciurus carolinensis.jpg, public domain.
+https://commons.wikimedia.org/wiki/File:Sciurus_carolinensis.jpg
+
+Didelphis virginiana.jpg, CC BY-SA 3.0.
+https://commons.wikimedia.org/wiki/File:Didelphis_virginiana.jpg
+
+These fixtures are the photos a generic labeler misreads. The JSON sidecars are the
+labels under test. The unit tests do not call a network model.
