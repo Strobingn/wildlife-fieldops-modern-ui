@@ -130,11 +130,22 @@ class JobAiViewModel @Inject constructor(
                     )
                 }
             }
+            val inspections = inspectionDao.getByJobOnce(job.id)
+            val extraNotes = inspections.joinToString("\n") { inspection ->
+                listOf(
+                    inspection.findings,
+                    inspection.recommendations,
+                    inspection.notes,
+                    inspection.damageAssessment,
+                    inspection.entryPoints
+                ).filter { it.isNotBlank() }.joinToString("\n")
+            }
             val draft = aiService.draftEstimateFromJob(
                 job = job,
                 drivingMiles = miles,
                 taxPercent = tax,
-                distanceNote = noteForAi
+                distanceNote = noteForAi,
+                extraNotes = extraNotes
             )
             _estimateDraft.value = draft
             _estimateLoading.value = false

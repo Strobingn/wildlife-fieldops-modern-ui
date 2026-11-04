@@ -38,6 +38,12 @@ data class JobPricing(
     val rationale: String = "",
     /** Photo / AI suggested lines. Empty default keeps old worksheets valid. */
     val photoLineItems: List<InvoiceLineItem> = emptyList(),
+    /**
+     * Technician-named services (gutter cleaning, gutter guards, and similar).
+     * Each line is a name and a price — no quantity. Empty default keeps old worksheets valid.
+     * Stored in `jobs.pricing` jsonb so sync does not need a new column.
+     */
+    val customItems: List<CustomEstimateItem> = emptyList(),
     val confirmedSpecies: String = "",
     val legalNotes: String = "",
     val nextStep: String = "",
@@ -135,6 +141,7 @@ data class JobPricing(
             notes.isBlank() &&
             rationale.isBlank() &&
             photoLineItems.isEmpty() &&
+            customItems.isEmpty() &&
             !taxRateManual
 }
 
@@ -240,6 +247,9 @@ object PricingCalculator {
         val photoLines = pricing.photoLineItems.fold(0.0) { acc, item ->
             Money.plus(acc, item.effectiveTotal())
         }
+        val customLines = pricing.customItems.fold(0.0) { acc, item ->
+            Money.plus(acc, item.lineTotal())
+        }
 
         val subtotalCalc = Money.plus(
             labor.effective,
@@ -248,7 +258,8 @@ object PricingCalculator {
             permit.effective,
             disposal.effective,
             mileage.effective,
-            photoLines
+            photoLines,
+            customLines
         )
         val subtotal = MoneyField(subtotalCalc, pricing.subtotalOverride?.let { Money.round(it) })
 
@@ -379,12 +390,19 @@ fun JobPricing.isManual(key: String): Boolean = key in manualFields
 /** True when this pricing is more than a default empty object (money or field-ops). */
 fun JobPricing.hasSyncPayload(): Boolean = this != JobPricing()
 
-fun InvoiceLineItem.calculatedTotal(): Double = Money.times(quantity, unitPrice)
+fun InvoiceLineItem.calculatedTotal(): Double = when {
+    priceOnly -> if (priceMissing && totalOverride == null) 0.0 else Money.round(unitPrice)
+    else -> Money.times(quantity, unitPrice)
+}
 
 fun InvoiceLineItem.effectiveTotal(): Double {
     val locked = totalOverride
     return if (locked != null) Money.round(locked) else calculatedTotal()
 }
+
+/** Fee / line-item amount. A custom item still waiting on a price prints as a blank, not $0.00. */
+fun InvoiceLineItem.pricedAmountOrNull(): Double? =
+    if (priceOnly && priceMissing && totalOverride == null) null else effectiveTotal()
 
 /** Trap row that rides inside [JobPricing] for live `jobs.pricing` jsonb sync. */
 @Serializable

@@ -113,6 +113,9 @@ object EstimateInvoiceCarry {
         pricing.photoLineItems.forEach { item ->
             items += item.copy(id = UUID.randomUUID().toString(), total = item.effectiveTotal())
         }
+        pricing.customItems.forEach { item ->
+            if (item.name.isNotBlank()) items += item.toInvoiceLine()
+        }
         if (pricing.laborHours > 0 || result.laborTotal.effective > 0) {
             items += InvoiceLineItem(
                 description = "Labor / Trap Service",
