@@ -245,9 +245,15 @@ fun PhotoGalleryScreen(
             },
             suggest = { searchVm.suggestTags(it) },
             onWasThisRight = {
+                val requestedId = photo.id
                 feedbackMessage = ""
+                feedbackModel = ""
+                feedbackConfidence = 0.0
+                feedbackLearned = ""
+                feedbackIsLearned = false
                 feedbackPhoto = photo
                 viewModel.prepareSavedPhotoFeedback(photo) { label, confidence, learned, isLearned ->
+                    if (feedbackPhoto?.id != requestedId) return@prepareSavedPhotoFeedback
                     feedbackModel = label
                     feedbackConfidence = confidence
                     feedbackLearned = learned

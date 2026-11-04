@@ -66,6 +66,42 @@ class DetectionFeedbackTest {
     }
 
     @Test
+    fun yesKeepsTheLearnedLabelWhenSirDoesNotPickAnotherType() {
+        val built = DetectionFeedbackPolicy.feedbackRecord(
+            id = "fb-learned",
+            userId = "sir",
+            jobId = "",
+            photoId = "photo-3",
+            photoLocalPath = "/data/photos/c.jpg",
+            photoStoragePath = "",
+            modelLabel = "Raccoon",
+            modelConfidence = 0.8,
+            draft = FeedbackDraft(verdict = "YES", shownLabel = "Soffit"),
+            embedding = "",
+            createdAt = 11L,
+        ) as FeedbackBuild.Ok
+        assertEquals("Soffit", built.record.correctedLabel)
+    }
+
+    @Test
+    fun aTypedTypeOverridesTheLearnedLabel() {
+        val built = DetectionFeedbackPolicy.feedbackRecord(
+            id = "fb-override",
+            userId = "sir",
+            jobId = "",
+            photoId = "photo-4",
+            photoLocalPath = "/data/photos/d.jpg",
+            photoStoragePath = "",
+            modelLabel = "Raccoon",
+            modelConfidence = 0.8,
+            draft = FeedbackDraft(verdict = "YES", pickerLabel = "Chimney", shownLabel = "Soffit"),
+            embedding = "",
+            createdAt = 12L,
+        ) as FeedbackBuild.Ok
+        assertEquals("Chimney", built.record.correctedLabel)
+    }
+
+    @Test
     fun unlabeledExampleKeepsTheModelOutput() {
         val row = DetectionFeedbackPolicy.unlabeledRecord(
             id = "ex-1",

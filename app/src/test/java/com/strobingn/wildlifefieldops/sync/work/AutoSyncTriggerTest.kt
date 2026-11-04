@@ -94,6 +94,7 @@ class AutoSyncTriggerTest {
                 "photos",
                 "field_observations",
                 "observation_events",
+                "ai_detection_feedback",
                 "deleted_records"
             ),
             AutoSyncTrigger.WATCHED_TABLES.toSet()

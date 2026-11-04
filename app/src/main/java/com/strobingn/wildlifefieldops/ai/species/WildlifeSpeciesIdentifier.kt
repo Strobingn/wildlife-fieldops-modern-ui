@@ -47,10 +47,10 @@ class WildlifeSpeciesIdentifier @Inject constructor(
         val image = jpegDataUrl(context, imageUri) ?: return null
         val examples = runCatching { feedback.fewShot() }.getOrDefault(emptyList())
         val block = DetectionFewShot.promptBlock(examples)
-        val system = if (block.isBlank()) {
-            WildlifeSpeciesCatalog.visionSystemPrompt()
+        val userPrompt = if (block.isBlank()) {
+            WildlifeSpeciesCatalog.VISION_USER_PROMPT
         } else {
-            WildlifeSpeciesCatalog.visionSystemPrompt() + "\n" + block
+            WildlifeSpeciesCatalog.VISION_USER_PROMPT + "\n" + block
         }
         val wires = DetectionFewShot.wire(examples).map {
             DetectionExampleWire(
@@ -62,8 +62,8 @@ class WildlifeSpeciesIdentifier @Inject constructor(
             )
         }
         val result = edge.complete(
-            system = system,
-            user = WildlifeSpeciesCatalog.VISION_USER_PROMPT,
+            system = WildlifeSpeciesCatalog.visionSystemPrompt(),
+            user = userPrompt,
             maxTokens = 400,
             temperature = 0.1,
             jsonMode = true,

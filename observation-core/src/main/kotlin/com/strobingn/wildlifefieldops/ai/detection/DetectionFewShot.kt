@@ -20,6 +20,9 @@ object DetectionFewShot {
 
     private val dataUrl = Regex("""^data:image/(jpeg|jpg|png|webp);base64,[a-z0-9+/=\r\n]+$""", RegexOption.IGNORE_CASE)
 
+    fun oneLine(raw: String): String =
+        raw.replace(Regex("[\\r\\n]+"), " ").replace(Regex("\\s+"), " ").trim()
+
     fun fromRecords(records: List<StoredDetectionExample>): List<FewShotExample> =
         records.mapNotNull { record ->
             if (record.verdict !in DetectionLabels.REVIEWED) return@mapNotNull null
@@ -40,10 +43,12 @@ object DetectionFewShot {
     fun promptBlock(examples: List<FewShotExample>): String {
         if (examples.isEmpty()) return ""
         val lines = examples.take(MAX_EXAMPLES).map { example ->
-            val shown = example.label.ifBlank { "unlabeled" }
-            val model = example.modelLabel.takeIf { it.isNotBlank() }?.let { "Model said \"$it\". " }.orEmpty()
-            val verdict = example.verdict.takeIf { it.isNotBlank() }?.let { "Verdict $it. " }.orEmpty()
-            val desc = example.description.takeIf { it.isNotBlank() }?.let { " Shows: $it." }.orEmpty()
+            val shown = oneLine(example.label).ifBlank { "unlabeled" }
+            val modelName = oneLine(example.modelLabel)
+            val model = modelName.takeIf { it.isNotBlank() }?.let { "Model said \"$it\". " }.orEmpty()
+            val verdict = oneLine(example.verdict).takeIf { it.isNotBlank() }?.let { "Verdict $it. " }.orEmpty()
+            val description = oneLine(example.description)
+            val desc = description.takeIf { it.isNotBlank() }?.let { " Shows: $it." }.orEmpty()
             "- $model$verdict" + "Correct label: \"$shown\".$desc"
         }
         return buildString {

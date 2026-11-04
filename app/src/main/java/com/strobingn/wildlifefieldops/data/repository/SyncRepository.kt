@@ -387,13 +387,25 @@ class SyncRepository @Inject constructor(
         }
 
         aiDetectionFeedbackDao.getUnsynced().forEach { row ->
+            val feedbackJobId = row.jobId.takeIf { it.isNotBlank() }
+            val feedbackJobDeleted = feedbackJobId != null && feedbackJobId in deletedJobIds
+            val feedbackJobStatus = feedbackJobId?.let { jobDao.getById(it)?.status }
+            val keepFeedbackPhotoLocal = PhotoSyncQueue.action(
+                feedbackJobStatus,
+                feedbackJobDeleted,
+            ) == PhotoSyncQueue.Action.SKIP_KEEP_LOCAL
             val outcome = itemRunner.run(
                 markSynced = { aiDetectionFeedbackDao.markSynced(row.id) },
                 markError = { aiDetectionFeedbackDao.markSyncError(row.id, it) }
             ) {
                 var storagePath = row.photoStoragePath
                 val localPhoto = row.photoLocalPath.trim()
-                if (storagePath.isBlank()) {
+                if (keepFeedbackPhotoLocal) {
+                    android.util.Log.i(
+                        "SyncRepository",
+                        "Keeping detection photo ${row.id} on device; job ${feedbackJobId ?: "?"} is cancelled or deleted"
+                    )
+                } else if (storagePath.isBlank()) {
                     when (LocalMediaSync.plan(localPhoto, observationPhotoUploader.readBytes(localPhoto) != null)) {
                         LocalMediaSync.Plan.UPLOAD -> {
                             val uploaded = observationPhotoUploader.uploadDetectionExample(

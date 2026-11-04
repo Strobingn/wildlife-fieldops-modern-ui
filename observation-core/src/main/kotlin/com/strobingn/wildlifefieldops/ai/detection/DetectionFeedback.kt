@@ -33,6 +33,8 @@ data class FeedbackDraft(
     val pickerLabel: String = "",
     val freeTextLabel: String = "",
     val notes: String = "",
+    /** Label already shown from correction memory. Yes keeps it when Sir does not pick another type. */
+    val shownLabel: String = "",
 )
 
 data class ModelOutput(
@@ -96,8 +98,10 @@ object DetectionFeedbackPolicy {
         if (reason.isNotEmpty()) return FeedbackBuild.Rejected(reason)
         val verdict = draft.verdict.trim().uppercase()
         val typed = resolvedLabel(draft)
+        val learned = draft.shownLabel.trim()
         val corrected = when {
             typed.isNotBlank() -> typed
+            verdict == DetectionLabels.VERDICT_YES && learned.isNotBlank() -> learned
             verdict == DetectionLabels.VERDICT_YES -> modelLabel.trim()
             else -> draft.whatImageShows.trim()
         }

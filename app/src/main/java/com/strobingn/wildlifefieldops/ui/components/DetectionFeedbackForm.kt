@@ -20,6 +20,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -59,12 +60,19 @@ fun DetectionFeedbackForm(
     var picker by rememberSaveable { mutableStateOf("") }
     var freeType by rememberSaveable { mutableStateOf("") }
     var notes by rememberSaveable { mutableStateOf("") }
+    val learnedShown = learnedFromCorrections && learnedLabel.isNotBlank()
+    LaunchedEffect(learnedShown, learnedLabel) {
+        if (learnedShown && picker.isBlank() && freeType.isBlank()) {
+            picker = learnedLabel
+        }
+    }
     val draft = FeedbackDraft(
         verdict = verdict,
         whatImageShows = what,
         pickerLabel = picker,
         freeTextLabel = freeType,
         notes = notes,
+        shownLabel = if (learnedShown) learnedLabel else "",
     )
     val problem = if (verdict.isBlank()) null else DetectionFeedbackPolicy.validate(draft)
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -228,16 +228,20 @@ async function chatCompletion(
   return content;
 }
 
+function oneLine(value: string): string {
+  return value.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
 function sanitizeDetectionExamples(raw: unknown): DetectionExample[] {
   if (!Array.isArray(raw)) return [];
   const out: DetectionExample[] = [];
   for (const item of raw.slice(0, 6)) {
     if (!item || typeof item !== "object") continue;
     const row = item as Record<string, unknown>;
-    const label = safeString(row.label ?? row.correctedLabel ?? row.corrected_label, 80).trim();
-    const description = safeString(row.description ?? row.whatImageShows ?? row.what_image_shows ?? row.notes, 240).trim();
-    const verdict = safeString(row.verdict, 20).trim();
-    const modelLabel = safeString(row.modelLabel ?? row.model_label, 80).trim();
+    const label = oneLine(safeString(row.label ?? row.correctedLabel ?? row.corrected_label, 80));
+    const description = oneLine(safeString(row.description ?? row.whatImageShows ?? row.what_image_shows ?? row.notes, 240));
+    const verdict = oneLine(safeString(row.verdict, 20));
+    const modelLabel = oneLine(safeString(row.modelLabel ?? row.model_label, 80));
     const thumbnailDataUrl = safeString(row.thumbnailDataUrl ?? row.thumbnail_data_url, 40_000).trim();
     if (!label && !description && !modelLabel) continue;
     out.push({ label, description, verdict, modelLabel, thumbnailDataUrl });
@@ -299,30 +303,43 @@ async function loadStoredDetectionExamples(): Promise<DetectionExample[]> {
   }
 }
 
+function contentText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.map((part) => {
+    if (part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string") {
+      return (part as { text: string }).text;
+    }
+    return "";
+  }).join("\n");
+}
+
 function appendFewShot(
   messages: Array<{ role: string; content: unknown }>,
   examples: DetectionExample[],
 ): Array<{ role: string; content: unknown }> {
   if (examples.length === 0) return messages;
-  const already = messages.some((message) =>
-    message.role === "system" && typeof message.content === "string" && message.content.includes(FEW_SHOT_MARKER)
-  );
-  const withText = already ? messages : [{ role: "system", content: fewShotText(examples) }, ...messages];
+  const existing = messages.map((message) => contentText(message.content)).join("\n");
+  const fresh = examples.filter((example) => {
+    const shown = example.label || example.modelLabel;
+    return shown.length > 0 && !existing.includes(`Correct label: "${shown}"`);
+  });
+  if (fresh.length === 0) return messages;
   const thumbPattern = /^data:image\/(jpeg|jpg|png|webp);base64,[a-z0-9+/=\r\n]+$/i;
   let budget = 120_000;
   let used = 0;
   const parts: Array<Record<string, unknown>> = [
-    { type: "text", text: "Example photos from confirmed corrections. Use them only as similar cases." },
+    { type: "text", text: fewShotText(fresh) },
   ];
-  for (const example of examples) {
+  for (const example of fresh) {
     const url = example.thumbnailDataUrl;
     if (used >= 2 || !url || url.length > 40_000 || url.length > budget || !thumbPattern.test(url)) continue;
     used += 1;
     budget -= url.length;
     parts.push({ type: "image_url", image_url: { url } });
   }
-  if (parts.length === 1) return withText;
-  return [...withText, { role: "user", content: parts }];
+  const content = parts.length === 1 ? fewShotText(fresh) : parts;
+  return [...messages, { role: "user", content }];
 }
 
 function visionMessages(
@@ -430,7 +447,6 @@ Deno.serve(async (request: Request) => {
         await loadStoredDetectionExamples(),
       )
       : [];
-    const fewShot = storedExamples.length > 0 ? "\n" + fewShotText(storedExamples) : "";
     const system = [
       "You are Wildlife FieldOps AI for a professional nuisance-wildlife company.",
       "Return only valid JSON.",
@@ -439,10 +455,10 @@ Deno.serve(async (request: Request) => {
       "For compliance, identify what must be verified against the cited agency source.",
       "For estimates, calculate transparent line items and explain assumptions.",
       "For business queries, answer only from the supplied database context.",
-      fewShot,
-    ].filter((line) => line.length > 0).join("\n");
+    ].join("\n");
 
-    const textPrompt = JSON.stringify({
+    const correctionNote = storedExamples.length > 0 ? "\n" + fewShotText(storedExamples) : "";
+    const textPrompt = correctionNote + JSON.stringify({
       mode,
       context,
       requiredShape: {
