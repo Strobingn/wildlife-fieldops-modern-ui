@@ -14,12 +14,15 @@ object DataVersionGate {
     /**
      * 2 = technician signatures + payments ledger in pricing (2.9.x).
      * 3 = precise trap GPS (accuracy, sample count, captured-at) on trapRecords.
-     * Jobs without a precise spot stay at 2 so older builds keep uploading them.
-     * A saved precise spot is stamped [TRAP_GPS]; older builds then pause uploads
-     * so they cannot drop fields they do not know.
+     * 4 = custom estimate items and price-only invoice lines inside pricing jsonb.
+     * Jobs without those fields stay at 2 or 3 so older builds keep uploading them.
+     * A saved precise spot is stamped [TRAP_GPS]. A custom charge is stamped
+     * [CUSTOM_ITEMS]. Older builds then pause uploads so they cannot drop fields
+     * they do not know.
      */
     const val TRAP_GPS = 3
-    const val CURRENT = 3
+    const val CUSTOM_ITEMS = 4
+    const val CURRENT = CUSTOM_ITEMS
     const val MESSAGE = "Please update FieldOps. Your changes are saved on this phone and will upload after the update."
 
     private val _blocked = MutableStateFlow(false)

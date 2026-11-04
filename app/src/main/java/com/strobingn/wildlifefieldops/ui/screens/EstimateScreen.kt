@@ -3,6 +3,8 @@ package com.strobingn.wildlifefieldops.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.PictureAsPdf
@@ -26,6 +29,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -55,19 +60,23 @@ import com.strobingn.wildlifefieldops.ai.fieldops.EstimateLineSuggester
 import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
 import com.strobingn.wildlifefieldops.data.model.Photo
 import com.strobingn.wildlifefieldops.data.model.PhotoCategory
+import com.strobingn.wildlifefieldops.pricing.CustomEstimateItem
+import com.strobingn.wildlifefieldops.pricing.CustomEstimateItems
+import com.strobingn.wildlifefieldops.pricing.CustomItemCatalog
 import com.strobingn.wildlifefieldops.pricing.EstimateInspectionPhotos
 import com.strobingn.wildlifefieldops.pricing.JobPricing
+import com.strobingn.wildlifefieldops.pricing.RememberedCustomItem
 import com.strobingn.wildlifefieldops.pricing.effectiveTotal
 import com.strobingn.wildlifefieldops.ui.components.AiRuntimeBadge
 import com.strobingn.wildlifefieldops.pricing.Money
 import com.strobingn.wildlifefieldops.pricing.PricingCalculator
 import com.strobingn.wildlifefieldops.ui.components.DecimalField
 import com.strobingn.wildlifefieldops.ui.components.OverridableAmountField
-import com.strobingn.wildlifefieldops.ui.theme.AccentBlue
 import com.strobingn.wildlifefieldops.ui.theme.AccentPurple
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundCard
 import com.strobingn.wildlifefieldops.ui.theme.BackgroundDark
 import com.strobingn.wildlifefieldops.ui.theme.BorderDark
+import com.strobingn.wildlifefieldops.ui.theme.ErrorRed
 import com.strobingn.wildlifefieldops.ui.theme.OnPrimary
 import com.strobingn.wildlifefieldops.ui.theme.PrimaryGreen
 import com.strobingn.wildlifefieldops.ui.theme.TextPrimary
@@ -82,8 +91,9 @@ import com.strobingn.wildlifefieldops.util.ContractDocumentType
 import com.strobingn.wildlifefieldops.util.WildlifeWhispererContractPdf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.UUID
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EstimateScreen(
     jobId: String,
@@ -119,7 +129,10 @@ fun EstimateScreen(
     var discountPercentText by remember { mutableStateOf("0") }
     var attachedPhotos by remember { mutableStateOf<List<Photo>>(emptyList()) }
     var photoMessage by remember { mutableStateOf<String?>(null) }
+    var rememberedItems by remember { mutableStateOf<List<RememberedCustomItem>>(emptyList()) }
+    var customPriceText by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     fun applyPricing(next: JobPricing, markDirty: Boolean = true) {
         pricing = next
@@ -196,6 +209,14 @@ fun EstimateScreen(
     LaunchedEffect(draft, hydrated) {
         val d = draft ?: return@LaunchedEffect
         if (!hydrated) return@LaunchedEffect
+        val remembered = CustomItemCatalog.load(context)
+        rememberedItems = remembered
+        val customItems = CustomEstimateItems.resolve(
+            existing = pricing.customItems,
+            aiItems = d.customItems,
+            noteText = d.noteText,
+            remembered = remembered
+        )
         val filled = PricingCalculator.applyAiInputs(
             current = pricing,
             laborHours = d.laborHours,
@@ -210,6 +231,16 @@ fun EstimateScreen(
             discountPercent = d.discountPercent,
             rationale = d.rationale,
             notes = d.lineItemNotes
+        ).copy(customItems = customItems)
+        customPriceText = customPriceText + customItems.associate { item ->
+            item.id to (item.price?.let { formatNum(it) }.orEmpty())
+        }
+        val already = pricing.customItems.map { CustomEstimateItems.normalizeName(it.name) }.toSet()
+        CustomItemCatalog.remember(
+            context,
+            customItems.filter { item ->
+                item.price != null && CustomEstimateItems.normalizeName(item.name) !in already
+            }
         )
         applyPricing(filled)
         syncInputTexts(filled)
@@ -225,6 +256,10 @@ fun EstimateScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        rememberedItems = CustomItemCatalog.load(context)
+    }
+
     LaunchedEffect(pricing, dirty, hydrated) {
         if (!hydrated || !dirty) return@LaunchedEffect
         delay(500)
@@ -232,7 +267,6 @@ fun EstimateScreen(
     }
 
     val result = PricingCalculator.compute(pricing)
-    val context = LocalContext.current
     var pdfPath by remember { mutableStateOf("") }
     var showPdfShare by remember { mutableStateOf(false) }
 
@@ -464,6 +498,135 @@ fun EstimateScreen(
                         }) {
                             Text("Remove line", color = TextSecondary)
                         }
+                }
+            }
+            EstimateSection("Custom items") {
+                Text(
+                    "Type any service, such as gutter cleaning or gutter guards, and your price. The line total is the price.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextTertiary
+                )
+                val picks = rememberedItems.filter { remembered ->
+                    pricing.customItems.none { CustomEstimateItems.normalizeName(it.name) == CustomEstimateItems.normalizeName(remembered.name) }
+                }
+                if (picks.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Saved items", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        picks.forEach { remembered ->
+                            FilterChip(
+                                selected = false,
+                                onClick = {
+                                    val added = CustomEstimateItems.admit(
+                                        existing = pricing.customItems,
+                                        incoming = listOf(
+                                            CustomEstimateItem(
+                                                name = remembered.name,
+                                                price = remembered.price
+                                            )
+                                        )
+                                    )
+                                    customPriceText = customPriceText + added.associate { item ->
+                                        item.id to (item.price?.let { formatNum(it) }.orEmpty())
+                                    }
+                                    applyPricing(pricing.copy(customItems = added))
+                                },
+                                label = {
+                                    Text("${remembered.name} · ${Money.formatUsd(remembered.price)}")
+                                }
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                if (pricing.customItems.isEmpty()) {
+                    Text(
+                        "No custom items yet. Add one, or tap a saved name to prefill its last price.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
+                pricing.customItems.forEachIndexed { index, item ->
+                    OutlinedTextField(
+                        value = item.name,
+                        onValueChange = { text ->
+                            applyPricing(pricing.copy(customItems = pricing.customItems.replaceAt(index) {
+                                item.copy(name = text)
+                            }))
+                        },
+                        label = { Text("Service name") },
+                        colors = com.strobingn.wildlifefieldops.ui.components.pricingFieldColors(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { focus ->
+                                if (focus.isFocused) return@onFocusChanged
+                                val current = pricing.customItems.getOrNull(index) ?: return@onFocusChanged
+                                if (current.name.isNotBlank() && current.price != null) {
+                                    CustomItemCatalog.remember(context, listOf(current))
+                                    rememberedItems = CustomItemCatalog.load(context)
+                                }
+                            },
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = item.description,
+                        onValueChange = { text ->
+                            applyPricing(pricing.copy(customItems = pricing.customItems.replaceAt(index) {
+                                item.copy(description = text)
+                            }))
+                        },
+                        label = { Text("Description (optional)") },
+                        colors = com.strobingn.wildlifefieldops.ui.components.pricingFieldColors(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    DecimalField(
+                        label = "Price",
+                        value = customPriceText[item.id] ?: item.price?.let { formatNum(it) }.orEmpty(),
+                        onChange = { raw ->
+                            customPriceText = customPriceText + (item.id to raw)
+                            val price = if (raw.isBlank()) null
+                            else com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(raw)?.let { Money.round(it) }
+                            val updated = item.copy(price = price)
+                            applyPricing(pricing.copy(customItems = pricing.customItems.replaceAt(index) { updated }))
+                            if (updated.name.isNotBlank() && updated.price != null) {
+                                CustomItemCatalog.remember(context, listOf(updated))
+                                rememberedItems = CustomItemCatalog.load(context)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    val priceMissing = item.price == null && item.name.isNotBlank()
+                    Text(
+                        when {
+                            item.price != null -> "Line total ${Money.formatUsd(item.price)}"
+                            priceMissing -> "Needs a price"
+                            else -> "Line total —"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (priceMissing) ErrorRed else TextTertiary,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    TextButton(onClick = {
+                        customPriceText = customPriceText - item.id
+                        applyPricing(pricing.copy(customItems = pricing.customItems.filterIndexed { i, _ -> i != index }))
+                    }) {
+                        Text("Remove item", color = TextSecondary)
+                    }
+                }
+                OutlinedButton(
+                    onClick = {
+                        val added = CustomEstimateItem(id = UUID.randomUUID().toString())
+                        customPriceText = customPriceText + (added.id to "")
+                        applyPricing(pricing.copy(customItems = pricing.customItems + added))
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGreen)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Add item")
                 }
             }
             if (pricing.rationale.isNotBlank()) {
@@ -719,6 +882,9 @@ internal fun buildEstimateLineItems(
     pricing: JobPricing,
     result: com.strobingn.wildlifefieldops.pricing.JobPricingResult
 ): List<InvoiceLineItem> = com.strobingn.wildlifefieldops.pricing.EstimateInvoiceCarry.lineItems(pricing, result)
+
+private fun <T> List<T>.replaceAt(index: Int, block: () -> T): List<T> =
+    toMutableList().also { it[index] = block() }
 
 private fun formatNum(value: Double): String {
     return if (value == value.toLong().toDouble()) value.toLong().toString()

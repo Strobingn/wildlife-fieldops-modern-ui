@@ -5,6 +5,7 @@ import com.strobingn.wildlifefieldops.data.model.Job
 import com.strobingn.wildlifefieldops.pricing.JobPricing
 import com.strobingn.wildlifefieldops.pricing.SyncedTrapRecord
 import com.strobingn.wildlifefieldops.pricing.isManual
+import com.strobingn.wildlifefieldops.pricing.stampCustomItemVersion
 
 /**
  * Field-ops extras live on [Job] columns (Room query/UI) and inside
@@ -52,7 +53,7 @@ object JobFieldOpsCodec {
             followUpKind = extras.followUpKind,
             followUpDueAt = extras.followUpDueAt,
             followUpNotes = extras.followUpNotes,
-            pricing = embed(job.pricing, extras)
+            pricing = embed(job.pricing, extras).stampCustomItemVersion()
         )
     }
 

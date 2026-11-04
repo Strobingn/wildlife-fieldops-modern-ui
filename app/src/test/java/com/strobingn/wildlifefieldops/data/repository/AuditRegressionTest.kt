@@ -29,7 +29,8 @@ class AuditRegressionTest {
         // Jobs without a precise trap spot stay at 2 so older builds keep uploading them.
         assertEquals(2, PricingJson.decode("""{"laborHours":2.0}""").dataVersion)
         assertEquals(2, JobPricing().dataVersion)
-        assertEquals(DataVersionGate.TRAP_GPS, DataVersionGate.CURRENT)
+        assertEquals(DataVersionGate.CUSTOM_ITEMS, DataVersionGate.CURRENT)
+        assertTrue(DataVersionGate.CURRENT > DataVersionGate.TRAP_GPS)
         assertFalse(DataVersionGate.isNewer(JobPricing().dataVersion))
     }
 
