@@ -18,11 +18,12 @@ data class CustomEstimateItem(
 ) {
     fun lineTotal(): Double = price?.let { Money.round(it) } ?: 0.0
 
-    fun needsPrice(): Boolean = price == null
+    fun needsPrice(): Boolean = price == null && name.isNotBlank()
 
     fun toInvoiceLine(): InvoiceLineItem {
+        val title = name.trim().ifBlank { "Custom item" }
         val label = buildString {
-            append(name.trim())
+            append(title)
             if (description.isNotBlank()) {
                 append(" — ")
                 append(description.trim())
@@ -59,6 +60,14 @@ object CustomEstimateItems {
     private val WORKSHEET_NAMES = setOf(
         "labor", "materials", "material", "mileage", "miles", "tax", "discount",
         "hours", "hour", "equipment", "permit", "permits", "disposal", "subtotal", "total"
+    )
+
+    /** Money words that are not a service. "Customer paid $100 deposit" is not a charge. */
+    val NON_SERVICE_NAMES = setOf(
+        "paid", "payment", "payments", "deposit", "deposits", "balance", "balances",
+        "cash", "check", "checks", "card", "credit", "refund", "refunded", "received",
+        "collected", "owe", "owed", "owing", "due", "tip", "tips", "venmo", "zelle",
+        "invoice", "invoiced", "receipt"
     )
 
     fun normalizeName(name: String): String =
@@ -101,7 +110,7 @@ object CustomEstimateItems {
         incoming.forEach { raw ->
             val name = raw.name.trim().replace(Regex("\\s+"), " ")
             val key = normalizeName(name)
-            if (key.isBlank() || key in WORKSHEET_NAMES) return@forEach
+            if (key.isBlank() || key in WORKSHEET_NAMES || key in NON_SERVICE_NAMES) return@forEach
             val rememberedPrice = rememberedByName[key]?.price?.let { Money.round(it) }
             val price = raw.price?.let { Money.round(it) } ?: rememberedPrice
             val index = result.indexOfFirst { normalizeName(it.name) == key }
@@ -140,7 +149,7 @@ object CustomItemNoteParser {
         "wants", "want", "need", "needs", "include", "including", "also", "about", "asked",
         "last", "year", "our", "we", "they", "he", "she", "it", "be", "been", "do", "did",
         "done", "add", "into", "onto", "per", "by", "as", "if", "but", "not"
-    )
+    ) + CustomEstimateItems.NON_SERVICE_NAMES
 
     private val dollarToken = Regex("""\$\s*((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?)""")
     private val leadIn = Regex(
@@ -241,7 +250,8 @@ object CustomItemNoteParser {
         text = text.replace(Regex("\\s+"), " ")
         text = text.replace(leadIn, "").trim()
         if (text.length < 2 || !text.any { it.isLetter() }) return null
-        if (CustomEstimateItems.normalizeName(text) in worksheetNames()) return null
+        val key = CustomEstimateItems.normalizeName(text)
+        if (key in worksheetNames() || key in CustomEstimateItems.NON_SERVICE_NAMES) return null
         return text
     }
 

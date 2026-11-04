@@ -50,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -234,6 +235,13 @@ fun EstimateScreen(
         customPriceText = customPriceText + customItems.associate { item ->
             item.id to (item.price?.let { formatNum(it) }.orEmpty())
         }
+        val already = pricing.customItems.map { CustomEstimateItems.normalizeName(it.name) }.toSet()
+        CustomItemCatalog.remember(
+            context,
+            customItems.filter { item ->
+                item.price != null && CustomEstimateItems.normalizeName(item.name) !in already
+            }
+        )
         applyPricing(filled)
         syncInputTexts(filled)
     }
@@ -246,12 +254,6 @@ fun EstimateScreen(
             applyPricing(next)
             taxRateText = formatNum(next.taxRatePercent)
         }
-    }
-
-    LaunchedEffect(pricing.customItems, hydrated) {
-        if (!hydrated) return@LaunchedEffect
-        CustomItemCatalog.remember(context, pricing.customItems)
-        rememberedItems = CustomItemCatalog.load(context)
     }
 
     LaunchedEffect(Unit) {
@@ -554,7 +556,16 @@ fun EstimateScreen(
                         },
                         label = { Text("Service name") },
                         colors = com.strobingn.wildlifefieldops.ui.components.pricingFieldColors(),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { focus ->
+                                if (focus.isFocused) return@onFocusChanged
+                                val current = pricing.customItems.getOrNull(index) ?: return@onFocusChanged
+                                if (current.name.isNotBlank() && current.price != null) {
+                                    CustomItemCatalog.remember(context, listOf(current))
+                                    rememberedItems = CustomItemCatalog.load(context)
+                                }
+                            },
                         singleLine = true
                     )
                     Spacer(modifier = Modifier.height(6.dp))
@@ -577,9 +588,12 @@ fun EstimateScreen(
                             customPriceText = customPriceText + (item.id to raw)
                             val price = if (raw.isBlank()) null
                             else com.strobingn.wildlifefieldops.pricing.MoneyInput.parse(raw)?.let { Money.round(it) }
-                            applyPricing(pricing.copy(customItems = pricing.customItems.replaceAt(index) {
-                                item.copy(price = price)
-                            }))
+                            val updated = item.copy(price = price)
+                            applyPricing(pricing.copy(customItems = pricing.customItems.replaceAt(index) { updated }))
+                            if (updated.name.isNotBlank() && updated.price != null) {
+                                CustomItemCatalog.remember(context, listOf(updated))
+                                rememberedItems = CustomItemCatalog.load(context)
+                            }
                         },
                         modifier = Modifier.fillMaxWidth()
                     )

@@ -1,12 +1,16 @@
 package com.strobingn.wildlifefieldops.pricing
 
+import com.strobingn.wildlifefieldops.ai.fieldops.JobFieldOpsCodec
+import com.strobingn.wildlifefieldops.data.model.Invoice
 import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
 import com.strobingn.wildlifefieldops.data.model.Job
+import com.strobingn.wildlifefieldops.data.repository.DataVersionGate
 import com.strobingn.wildlifefieldops.util.DocumentKind
 import com.strobingn.wildlifefieldops.util.DocumentText
 import com.strobingn.wildlifefieldops.util.StandardDocuments
 import com.strobingn.wildlifefieldops.util.StandardJobPacket
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -212,5 +216,93 @@ class CustomEstimateItemsTest {
         assertEquals("aluminum", decoded.customItems.single().description)
         assertEquals(400.0, decoded.customItems.single().price)
         assertTrue(!decoded.isEmptyWorksheet())
+    }
+
+    @Test
+    fun paymentStatementsAreNotChargedAndNamedServicesStillAre() {
+        val notes = "Customer paid $100 deposit. gutter cleaning $250, gutter guards 400"
+        assertEquals(
+            listOf("gutter cleaning", "gutter guards"),
+            CustomItemNoteParser.parse(notes).map { it.name }
+        )
+        val resolved = CustomEstimateItems.resolve(
+            existing = emptyList(),
+            aiItems = listOf(CustomEstimateItem(name = "paid", price = 100.0)),
+            noteText = notes
+        )
+        assertTrue(resolved.none { CustomEstimateItems.normalizeName(it.name) == "paid" })
+        assertEquals(listOf(250.0, 400.0), resolved.map { it.price })
+    }
+
+    @Test
+    fun pricedRowWithNoNameStaysInTheTotalTaxAndInvoice() {
+        val pricing = JobPricing(
+            laborHours = 0.0,
+            laborRate = 0.0,
+            taxRatePercent = 8.875,
+            customItems = listOf(
+                CustomEstimateItem(id = "pending", price = 250.0),
+                CustomEstimateItem(id = "empty")
+            )
+        )
+        val result = PricingCalculator.compute(pricing)
+        assertEquals(250.0, result.subtotal.effective, 0.0)
+        assertEquals(22.19, result.taxAmount.effective, 0.0)
+        assertEquals(272.19, result.total.effective, 0.0)
+        val lines = EstimateInvoiceCarry.lineItems(pricing, result)
+        assertEquals(listOf("Custom item"), lines.map { it.description })
+        assertTrue(lines.single().priceOnly)
+        assertEquals(250.0, lines.single().effectiveTotal(), 0.0)
+        assertEquals(listOf("Custom item", "$250.00"), StandardDocuments.feeTableRows(lines).last())
+        val invoiced = PricingCalculator.computeInvoice(
+            InvoicePricingInputs(lineItems = lines, taxRatePercent = 8.875, discountPercent = 0.0)
+        )
+        assertEquals(272.19, invoiced.total.effective, 0.0)
+    }
+
+    @Test
+    fun zeroPriceAndMissingPriceAreDifferentInvoiceContent() {
+        val missing = InvoiceLineItem(
+            description = "Gutter guards",
+            quantity = 0.0,
+            unit = "",
+            unitPrice = 0.0,
+            total = 0.0,
+            priceOnly = true,
+            priceMissing = true
+        )
+        val zero = missing.copy(priceMissing = false)
+        assertFalse(
+            EstimateInvoiceCarry.sameMoneyContent(
+                Invoice(lineItems = listOf(missing), manuallyEdited = true),
+                Invoice(lineItems = listOf(zero), manuallyEdited = true)
+            )
+        )
+    }
+
+    @Test
+    fun savingCustomChargesStampsAVersionOlderBuildsWillNotOverwrite() {
+        val plain = JobFieldOpsCodec.mergeForSave(Job(pricing = JobPricing(laborHours = 2.0)))
+        assertEquals(2, plain.pricing.dataVersion)
+        val priced = JobFieldOpsCodec.mergeForSave(
+            Job(pricing = JobPricing(customItems = listOf(CustomEstimateItem(name = "Gutter cleaning", price = 250.0))))
+        )
+        assertEquals(DataVersionGate.CUSTOM_ITEMS, priced.pricing.dataVersion)
+        assertTrue(DataVersionGate.isNewer(priced.pricing.dataVersion, appVersion = DataVersionGate.TRAP_GPS))
+        assertFalse(DataVersionGate.isNewer(priced.pricing.dataVersion))
+        val onInvoice = JobFieldOpsCodec.mergeForSave(
+            Job(
+                pricing = JobPricing(
+                    invoiceRecords = listOf(
+                        SyncedInvoiceRecord(
+                            lineItems = listOf(
+                                InvoiceLineItem(description = "Gutter cleaning", priceOnly = true, priceMissing = true)
+                            )
+                        )
+                    )
+                )
+            )
+        )
+        assertEquals(DataVersionGate.CUSTOM_ITEMS, onInvoice.pricing.dataVersion)
     }
 }

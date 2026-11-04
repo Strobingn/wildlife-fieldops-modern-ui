@@ -114,7 +114,7 @@ object EstimateInvoiceCarry {
             items += item.copy(id = UUID.randomUUID().toString(), total = item.effectiveTotal())
         }
         pricing.customItems.forEach { item ->
-            if (item.name.isNotBlank()) items += item.toInvoiceLine()
+            if (item.name.isNotBlank() || item.price != null) items += item.toInvoiceLine()
         }
         if (pricing.laborHours > 0 || result.laborTotal.effective > 0) {
             items += InvoiceLineItem(
@@ -321,7 +321,9 @@ object EstimateInvoiceCarry {
         item.unit.trim().lowercase(Locale.US),
         String.format(Locale.US, "%.4f", item.quantity),
         String.format(Locale.US, "%.4f", item.unitPrice),
-        item.totalOverride?.let { String.format(Locale.US, "%.4f", it) }.orEmpty()
+        item.totalOverride?.let { String.format(Locale.US, "%.4f", it) }.orEmpty(),
+        item.priceOnly.toString(),
+        item.priceMissing.toString()
     ).joinToString("|")
 
     private fun remoteHasBody(remote: SyncedInvoiceRecord): Boolean =

@@ -1,6 +1,7 @@
 package com.strobingn.wildlifefieldops.pricing
 
 import com.strobingn.wildlifefieldops.data.model.InvoiceLineItem
+import com.strobingn.wildlifefieldops.data.repository.DataVersionGate
 import kotlinx.serialization.Serializable
 
 /**
@@ -381,6 +382,21 @@ object PricingCalculator {
     fun resetTaxAmount(p: JobPricing) = p.copy(taxAmountOverride = null)
     fun resetTotal(p: JobPricing) = p.copy(totalOverride = null)
 }
+
+/**
+ * Raises [JobPricing.dataVersion] when this worksheet holds custom charges or
+ * price-only invoice lines. Jobs without those fields keep their current version
+ * so older builds can still upload them. Older builds pause once they see
+ * [DataVersionGate.CUSTOM_ITEMS] and cannot strip the new money fields.
+ */
+fun JobPricing.stampCustomItemVersion(): JobPricing {
+    if (!carriesCustomItemFields()) return this
+    return copy(dataVersion = maxOf(dataVersion, DataVersionGate.CUSTOM_ITEMS))
+}
+
+fun JobPricing.carriesCustomItemFields(): Boolean =
+    customItems.any { it.name.isNotBlank() || it.price != null } ||
+        invoiceRecords.any { record -> record.lineItems.any { it.priceOnly || it.priceMissing } }
 
 fun JobPricing.markManual(vararg keys: String): JobPricing =
     copy(manualFields = manualFields + keys.filter { it.isNotBlank() })
