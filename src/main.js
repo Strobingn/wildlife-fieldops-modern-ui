@@ -31,6 +31,7 @@ import {
   debounce, throttle, groupBy, sortBy,
   searchJobs, filterJobs, calculateEstimate, mergeArrays,
   formatDateShort, buildJobRelationCounts, jobCompletenessScore, pageDataChanged,
+  haversine, calculateOptimalRoute,
 } from './utils.js';
 import {
   SPECIES, SERVICES, SPECIES_ICONS, SPECIES_HINTS,
@@ -2737,57 +2738,6 @@ function handleConvertInspection(inspection) {
 
   showToast(`Converted inspection for ${inspection.customer_name} to a job`, 'success');
   navigateTo('job-detail', { selectedJobId: job.id });
-}
-
-// ── Route Optimizer Helpers ──────────────────────
-
-/**
- * Calculate the great-circle distance between two lat/lng points (Haversine formula).
- * @param {number} lat1
- * @param {number} lng1
- * @param {number} lat2
- * @param {number} lng2
- * @returns {number} Distance in miles
- */
-function haversine(lat1, lng1, lat2, lng2) {
-  const R = 3959; // Earth radius in miles
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-/**
- * Calculate optimal route using nearest-neighbor algorithm.
- * @param {Array} jobs - Jobs with GPS coordinates
- * @param {{lat:number,lng:number}|null} startGPS - Starting position
- * @returns {Array<{job:object, distance:number}>}
- */
-function calculateOptimalRoute(jobs, startGPS) {
-  if (!jobs.length) return [];
-  const unvisited = [...jobs];
-  const route = [];
-  let currentLat = startGPS?.lat || parseFloat(unvisited[0].latitude || unvisited[0].lat);
-  let currentLng = startGPS?.lng || parseFloat(unvisited[0].longitude || unvisited[0].lng);
-
-  while (unvisited.length > 0) {
-    let nearestIdx = 0;
-    let nearestDist = Infinity;
-    unvisited.forEach((job, idx) => {
-      const jLat = parseFloat(job.latitude || job.lat);
-      const jLng = parseFloat(job.longitude || job.lng);
-      const dist = haversine(currentLat, currentLng, jLat, jLng);
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearestIdx = idx;
-      }
-    });
-    const nearest = unvisited.splice(nearestIdx, 1)[0];
-    route.push({ job: nearest, distance: nearestDist === Infinity ? 0 : nearestDist });
-    currentLat = parseFloat(nearest.latitude || nearest.lat);
-    currentLng = parseFloat(nearest.longitude || nearest.lng);
-  }
-  return route;
 }
 
 // ── Expense Handlers ─────────────────────────────
