@@ -179,12 +179,14 @@ object WildlifeEvidenceDetector {
         customHits: List<WildlifeEvidenceHit> = emptyList()
     ): WildlifeEvidenceResult {
         val raw = mutableListOf<String>()
+        val scoredRaw = mutableListOf<LabelScore>()
         val scored = mutableListOf<WildlifeEvidenceHit>()
 
         fun consider(text: String, confidence: Float, source: String) {
             val t = text.lowercase().trim()
             if (t.isEmpty()) return
             raw += t
+            scoredRaw += LabelScore(t, confidence)
             matchLexicon(speciesLexicon, t, confidence, source, WildlifeEvidenceHit.Kind.SPECIES)?.let { scored += it }
             matchLexicon(entryLexicon, t, confidence, source, WildlifeEvidenceHit.Kind.ENTRY)?.let { scored += it }
             matchLexicon(damageLexicon, t, confidence, source, WildlifeEvidenceHit.Kind.DAMAGE)?.let { scored += it }
@@ -213,7 +215,7 @@ object WildlifeEvidenceDetector {
             hit.copy(score = (hit.score + boost).coerceAtMost(1f))
         }
 
-        return fromHits(adjusted, raw)
+        return fromHits(adjusted, raw, scoredRaw)
     }
 
     /** Merge hits from multiple frames (walkthrough) into one ranked result. */
@@ -264,7 +266,8 @@ object WildlifeEvidenceDetector {
 
     private fun fromHits(
         adjusted: List<WildlifeEvidenceHit>,
-        raw: List<String>
+        raw: List<String>,
+        scoredRaw: List<LabelScore> = raw.map { LabelScore(it, 0.55f) },
     ): WildlifeEvidenceResult {
         fun top(kind: WildlifeEvidenceHit.Kind, limit: Int = 4) =
             adjusted.filter { it.kind == kind }
@@ -273,7 +276,11 @@ object WildlifeEvidenceDetector {
                 .sortedByDescending { it.score }
                 .take(limit)
 
-        val species = applySpeciesGuard(top(WildlifeEvidenceHit.Kind.SPECIES, limit = 12), raw)
+        val species = applySpeciesGuard(
+            top(WildlifeEvidenceHit.Kind.SPECIES, limit = 12),
+            raw,
+            scoredRaw,
+        )
         val entries = top(WildlifeEvidenceHit.Kind.ENTRY)
         val damage = top(WildlifeEvidenceHit.Kind.DAMAGE)
         val activity = top(WildlifeEvidenceHit.Kind.ACTIVITY)
@@ -314,13 +321,16 @@ object WildlifeEvidenceDetector {
     private fun applySpeciesGuard(
         speciesHits: List<WildlifeEvidenceHit>,
         raw: List<String>,
+        scoredRaw: List<LabelScore>,
     ): List<WildlifeEvidenceHit> {
         val textHits = speciesHits.filter { it.source == "text" }
         val modelHits = speciesHits.filter { it.source != "text" }
         if (modelHits.isEmpty()) return speciesHits.take(4)
+        // Lexicon hits already say "gray squirrel" or "canada goose" for a bare
+        // "squirrel" or "goose" tag. Map the original text and TFLite labels only.
         val inputs = buildList {
-            modelHits.forEach { add(LabelScore(it.label, it.score)) }
-            raw.forEach { add(LabelScore(it, 0.5f)) }
+            if (scoredRaw.isNotEmpty()) addAll(scoredRaw) else raw.forEach { add(LabelScore(it, 0.5f)) }
+            modelHits.filter { it.source == "tflite" }.forEach { add(LabelScore(it.label, it.score)) }
         }
         val decision = GenericLabelSpeciesMapper.map(inputs)
         val guarded = when {

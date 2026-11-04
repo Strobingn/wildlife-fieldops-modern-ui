@@ -18,9 +18,11 @@ object OnDeviceSpeciesClassifier {
 
     fun suggestFromAnalysis(analysis: AiAnalysisResult): SpeciesSuggestion? {
         val labels = buildList {
-            analysis.speciesScores.forEach { (name, score) -> add(LabelScore(name, score)) }
             analysis.rawVisionLabels.forEach { (name, score) -> add(LabelScore(name, score)) }
-            if (analysis.speciesScores.isEmpty() && analysis.rawVisionLabels.isEmpty()) {
+            // Decision labels (including a TFLite species). A lexicon rewrite such as
+            // "gray squirrel" is dropped when the raw text is only "squirrel".
+            analysis.speciesScores.forEach { (name, score) -> add(LabelScore(name, score)) }
+            if (isEmpty()) {
                 analysis.species.forEach { name ->
                     add(LabelScore(name, analysis.confidence.coerceIn(0.2f, 1f)))
                 }
@@ -40,9 +42,9 @@ object OnDeviceSpeciesClassifier {
         customHits: List<WildlifeEvidenceHit> = emptyList(),
     ): SpeciesSuggestion? {
         val labels = buildList {
-            evidence.species.forEach { add(LabelScore(it.label, it.score)) }
             evidence.rawLabels.forEach { add(LabelScore(it, 0.5f)) }
-            customHits.forEach { add(LabelScore(it.label, it.score)) }
+            evidence.species.forEach { add(LabelScore(it.label, it.score)) }
+            customHits.filter { it.source == "tflite" }.forEach { add(LabelScore(it.label, it.score)) }
         }
         val backend = when {
             customHits.any { it.source == "tflite" } -> "tflite"

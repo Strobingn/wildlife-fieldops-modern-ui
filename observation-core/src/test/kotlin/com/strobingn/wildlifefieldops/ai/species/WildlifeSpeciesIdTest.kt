@@ -133,6 +133,46 @@ class WildlifeSpeciesIdTest {
         assertEquals("grok", suggestion.backendTag)
         assertTrue(suggestion.confident)
         assertEquals(91, suggestion.confidencePercent)
+        assertEquals(0.06f, suggestion.alternatives.first { it.label == "Opossum" }.weight, 0.001f)
+        assertEquals(0.02f, suggestion.alternatives.first { it.label == "Skunk" }.weight, 0.001f)
+    }
+
+    @Test
+    fun lexiconRewrite_bareSquirrel_isNotConfidentGraySquirrel() {
+        val decision = GenericLabelSpeciesMapper.map(
+            listOf(
+                LabelScore("squirrel", 0.82f),
+                LabelScore("gray squirrel", 0.82f),
+            )
+        )!!
+        assertEquals(WildlifeSpeciesCatalog.UNSURE, decision.displayLabel)
+        assertFalse(decision.confident)
+        assertNotEquals("Gray squirrel", decision.species)
+        assertTrue(decision.alternates.any { it.species == "Gray squirrel" })
+    }
+
+    @Test
+    fun lexiconRewrite_bareGoose_isNotConfidentCanadaGoose() {
+        val decision = GenericLabelSpeciesMapper.map(
+            listOf(
+                LabelScore("goose", 0.77f),
+                LabelScore("canada goose", 0.77f),
+            )
+        )!!
+        assertEquals(WildlifeSpeciesCatalog.UNSURE, decision.displayLabel)
+        assertFalse(decision.confident)
+        assertNotEquals("Canada goose", decision.species)
+        assertTrue(decision.alternates.any { it.species == "Canada goose" })
+    }
+
+    @Test
+    fun specificSquirrelAndCanadaGoose_staySpecific() {
+        val gray = GenericLabelSpeciesMapper.map(listOf(LabelScore("eastern gray squirrel", 0.8f)))!!
+        assertEquals("Gray squirrel", gray.species)
+        assertTrue(gray.confident)
+        val goose = GenericLabelSpeciesMapper.map(listOf(LabelScore("Canada goose", 0.8f)))!!
+        assertEquals("Canada goose", goose.species)
+        assertTrue(goose.confident)
     }
 
     @Test

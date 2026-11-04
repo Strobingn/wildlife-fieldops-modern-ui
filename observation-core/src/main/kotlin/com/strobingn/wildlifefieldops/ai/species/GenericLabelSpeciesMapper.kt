@@ -73,6 +73,29 @@ object GenericLabelSpeciesMapper {
             }
         }
 
+        // The evidence lexicon rewrites "squirrel" → "gray squirrel" and "goose" → "canada goose"
+        // before this mapper runs. A bare token plus that rewrite is still generic.
+        var sawGenericGoose = false
+        var genericGoose = 0f
+        if (hasExact(labels, "squirrel", "squirrels") && !hasIndependentSquirrel(labels)) {
+            listOf(
+                WildlifeSpeciesCatalog.GRAY_SQUIRREL.display,
+                WildlifeSpeciesCatalog.RED_SQUIRREL.display,
+                WildlifeSpeciesCatalog.FLYING_SQUIRREL.display,
+            ).forEach {
+                explicit.remove(it)
+                explicitSpecific.remove(it)
+            }
+            sawGenericSquirrel = true
+            genericSquirrel = maxOf(genericSquirrel, scoreOf(labels, "squirrel", "squirrels"))
+        }
+        if (hasExact(labels, "goose", "geese") && !hasIndependentCanadaGoose(labels)) {
+            explicit.remove(WildlifeSpeciesCatalog.CANADA_GOOSE.display)
+            explicitSpecific.remove(WildlifeSpeciesCatalog.CANADA_GOOSE.display)
+            sawGenericGoose = true
+            genericGoose = scoreOf(labels, "goose", "geese")
+        }
+
         // Bare "Dog", or Dog plus mammal/fur/carnivore, is not a pet-dog ID.
         // This labeler has no raccoon class and uses Dog as the furry-mammal sink.
         // A breed or pet cue without those ambiguity tags can still be Dog.
@@ -104,6 +127,13 @@ object GenericLabelSpeciesMapper {
             )
         }
 
+        if (sawGenericGoose) {
+            return unsure(
+                confidence = genericGoose,
+                alternates = listOf(WildlifeSpeciesCatalog.CANADA_GOOSE.display),
+                notes = "The labeler only said goose. Confirm it is a Canada goose before using that species.",
+            )
+        }
         if (sawGenericSquirrel) {
             return unsure(
                 confidence = genericSquirrel,
@@ -221,4 +251,32 @@ object GenericLabelSpeciesMapper {
 
     private fun isFoodFalseDog(text: String): Boolean =
         text.contains("hot dog") || text.contains("hotdog") || text.contains("corn dog")
+
+    private fun hasExact(labels: List<LabelScore>, vararg tokens: String): Boolean =
+        labels.any { WildlifeSpeciesCatalog.normalize(it.text) in tokens }
+
+    private fun scoreOf(labels: List<LabelScore>, vararg tokens: String): Float =
+        labels.filter { WildlifeSpeciesCatalog.normalize(it.text) in tokens }
+            .maxOfOrNull { it.confidence.coerceIn(0f, 1f) } ?: 0f
+
+    private fun hasIndependentSquirrel(labels: List<LabelScore>): Boolean {
+        val rewritten = setOf("gray squirrel", "grey squirrel")
+        val specific = listOf(
+            "gray squirrel", "grey squirrel", "eastern gray squirrel", "eastern grey squirrel",
+            "sciurus carolinensis", "red squirrel", "pine squirrel", "tamiasciurus",
+            "american red squirrel", "flying squirrel", "glaucomys",
+        )
+        return labels.any { label ->
+            val text = WildlifeSpeciesCatalog.normalize(label.text)
+            text !in rewritten && specific.any { WildlifeSpeciesCatalog.containsAlias(text, it) }
+        }
+    }
+
+    private fun hasIndependentCanadaGoose(labels: List<LabelScore>): Boolean {
+        val specific = listOf("canada goose", "canadian goose", "branta canadensis")
+        return labels.any { label ->
+            val text = WildlifeSpeciesCatalog.normalize(label.text)
+            text != "canada goose" && specific.any { WildlifeSpeciesCatalog.containsAlias(text, it) }
+        }
+    }
 }

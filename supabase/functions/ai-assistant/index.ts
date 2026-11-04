@@ -245,9 +245,10 @@ async function handleComplete(payload: AiRequest): Promise<Response> {
     if (image.length > 1_500_000) {
       return jsonResponse({ ok: false, error: "Photo is too large for species ID." }, 400);
     }
-    const usable = image.startsWith("data:image/") || image.startsWith("https://") || image.startsWith("http://");
+    // Data URLs only. A remote http(s) image would make the provider fetch an attacker-chosen URL.
+    const usable = /^data:image\/(jpeg|jpg|png|webp);base64,[a-z0-9+/=\r\n]+$/i.test(image);
     if (!usable) {
-      return jsonResponse({ ok: false, error: "Species photo must be an image data URL." }, 400);
+      return jsonResponse({ ok: false, error: "Species photo must be a JPEG, PNG, or WebP data URL." }, 400);
     }
     outbound = visionMessages(messages, image);
   }
