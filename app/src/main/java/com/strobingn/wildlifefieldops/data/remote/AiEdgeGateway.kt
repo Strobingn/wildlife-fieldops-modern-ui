@@ -23,6 +23,7 @@ class AiEdgeGateway @Inject constructor(
         temperature: Double,
         jsonMode: Boolean = false,
         imageDataUrl: String? = null,
+        detectionExamples: List<DetectionExampleWire> = emptyList(),
         connectTimeoutMs: Int = 30_000,
         readTimeoutMs: Int = 90_000,
     ): EdgeChatResult {
@@ -30,7 +31,9 @@ class AiEdgeGateway @Inject constructor(
             return EdgeChatResult.Err("Cloud AI needs Supabase configured in this build. On-device and manual entry still work.")
         }
         val endpoint = URL(supabase.edgeFunctionUrl("ai-assistant"))
-        val payload = AiEdgeProtocol.requestJson(system, user, maxTokens, temperature, jsonMode, imageDataUrl)
+        val payload = AiEdgeProtocol.requestJson(
+            system, user, maxTokens, temperature, jsonMode, imageDataUrl, detectionExamples
+        )
         val connection = (endpoint.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = connectTimeoutMs.coerceIn(1_000, 30_000)

@@ -20,8 +20,13 @@ import com.strobingn.wildlifefieldops.ai.camera.InspectionCaptureChecklist
 import com.strobingn.wildlifefieldops.ai.species.OnDeviceSpeciesClassifier
 import com.strobingn.wildlifefieldops.ai.species.SpeciesRecognition
 import com.strobingn.wildlifefieldops.ai.species.SpeciesSuggestion
+import com.strobingn.wildlifefieldops.ai.detection.DetectionCorrectionMemory
+import com.strobingn.wildlifefieldops.ai.detection.DetectionFeedbackPolicy
+import com.strobingn.wildlifefieldops.ai.detection.FeedbackDraft
+import com.strobingn.wildlifefieldops.ai.detection.FrameAverageHashEncoder
 import com.strobingn.wildlifefieldops.ai.species.WildlifeSpeciesCatalog
 import com.strobingn.wildlifefieldops.ai.species.WildlifeSpeciesIdentifier
+import com.strobingn.wildlifefieldops.data.detection.DetectionFeedbackRepository
 import com.strobingn.wildlifefieldops.data.local.JobDao
 import com.strobingn.wildlifefieldops.data.local.PhotoDao
 import com.strobingn.wildlifefieldops.data.model.Job
@@ -76,7 +81,12 @@ sealed class SmartCaptureState {
         val speciesConfirmed: Boolean = false,
         val operationalSpecies: String? = null,
         val technicianSpeciesLabel: String = "",
-        val inferenceEventId: String? = null
+        val inferenceEventId: String? = null,
+        val modelLabel: String = "",
+        val modelConfidence: Double = 0.0,
+        val learnedLabel: String = "",
+        val learnedFromCorrections: Boolean = false,
+        val feedbackNote: String = "",
     ) : SmartCaptureState()
     data class Error(val message: String) : SmartCaptureState()
 }
@@ -89,6 +99,7 @@ class LiveCaptureViewModel @Inject constructor(
     private val jobDao: JobDao,
     private val observationEventStore: ObservationEventStore,
     private val wildlifeSpeciesIdentifier: WildlifeSpeciesIdentifier,
+    private val detectionFeedback: DetectionFeedbackRepository,
 ) : ViewModel() {
 
     private val _smartCapture = MutableStateFlow<SmartCaptureState>(SmartCaptureState.Idle)
@@ -144,6 +155,30 @@ class LiveCaptureViewModel @Inject constructor(
             speciesConfirmed = false,
             operationalSpecies = null
         )
+    }
+
+    fun submitDetectionFeedback(draft: FeedbackDraft) {
+        val current = _smartCapture.value as? SmartCaptureState.Ready ?: return
+        viewModelScope.launch {
+            val message = try {
+                detectionFeedback.saveFeedback(
+                    draft = draft,
+                    jobId = current.photo.jobId.orEmpty(),
+                    photoId = current.photo.id,
+                    photoLocalPath = current.photo.localPath.ifBlank { current.photo.filePath },
+                    photoStoragePath = "",
+                    modelLabel = current.modelLabel,
+                    modelConfidence = current.modelConfidence,
+                )
+            } catch (t: Throwable) {
+                Log.w(TAG, "detection feedback save failed", t)
+                t.message ?: "Could not save feedback on this phone."
+            }
+            val latest = _smartCapture.value as? SmartCaptureState.Ready ?: return@launch
+            if (latest.photo.id == current.photo.id) {
+                _smartCapture.value = latest.copy(feedbackNote = message)
+            }
+        }
     }
 
     fun confirmSpeciesId() {
@@ -391,6 +426,7 @@ class LiveCaptureViewModel @Inject constructor(
         val repairNotes = repair?.stampedNotes.orEmpty()
 
         viewModelScope.launch {
+            var captured: Photo? = null
             try {
                 _smartCapture.value = SmartCaptureState.Capturing
                 val (uri, file) = takeStill(imageCapture, executor)
@@ -423,6 +459,7 @@ class LiveCaptureViewModel @Inject constructor(
                     longitude = job?.longitude
                 )
                 photoDao.insert(photo)
+                captured = photo
 
                 _smartCapture.value = SmartCaptureState.Analyzing
                 val analysis = withContext(Dispatchers.IO) {
@@ -522,6 +559,38 @@ class LiveCaptureViewModel @Inject constructor(
                     wildlifeSpeciesIdentifier.identifyFromAnalysis(appContext, uri, analysis)
                 }
                 val inference = suggestion?.let { writeInference(enriched, it) }
+                val usableSuggestion = suggestion?.takeIf {
+                    it.primaryLabel.isNotBlank() &&
+                        it.primaryLabel != WildlifeSpeciesCatalog.UNSURE &&
+                        !it.primaryLabel.equals("Unknown", ignoreCase = true)
+                }
+                val model = DetectionFeedbackPolicy.primaryOutput(
+                    entryTypes = analysis.entryTypes.ifEmpty { evidenceEntries },
+                    species = analysis.species.ifEmpty { evidenceSpecies },
+                    speciesScores = analysis.speciesScores,
+                    confidence = analysis.confidence,
+                    suggestionLabel = usableSuggestion?.primaryLabel,
+                    suggestionConfidence = usableSuggestion?.confidence,
+                )
+                val embedding = withContext(Dispatchers.IO) {
+                    FrameAverageHashEncoder.fromFile(enriched.localPath.ifBlank { file.absolutePath })
+                }
+                val preference = runCatching {
+                    DetectionCorrectionMemory.prefer(model.label, embedding, detectionFeedback.corrections())
+                }.getOrNull()
+                runCatching {
+                    detectionFeedback.recordUnlabeled(
+                        photoId = enriched.id,
+                        jobId = enriched.jobId.orEmpty(),
+                        photoLocalPath = enriched.localPath.ifBlank { file.absolutePath },
+                        modelLabel = model.label,
+                        modelConfidence = model.confidence,
+                    )
+                }.onFailure { Log.w(TAG, "unlabeled detection example failed", it) }
+                val learnedLabel = preference?.label.orEmpty()
+                val learned = preference?.learned == true && learnedLabel.isNotBlank()
+                val speciesFromLearning = learned &&
+                    WildlifeSpeciesCatalog.pickerLabels.any { it.equals(learnedLabel, ignoreCase = true) }
 
                 _smartCapture.value = SmartCaptureState.Ready(
                     photo = enriched,
@@ -541,14 +610,32 @@ class LiveCaptureViewModel @Inject constructor(
                     repairScopeLabel = repairLabel,
                     repairScopeNotes = repairNotes,
                     speciesSuggestion = suggestion,
-                    technicianSpeciesLabel = suggestion
-                        ?.takeIf { it.confident && it.primaryLabel != WildlifeSpeciesCatalog.UNSURE }
-                        ?.primaryLabel
-                        .orEmpty(),
-                    inferenceEventId = inference?.eventId
+                    technicianSpeciesLabel = when {
+                        speciesFromLearning -> learnedLabel
+                        else -> suggestion
+                            ?.takeIf { it.confident && it.primaryLabel != WildlifeSpeciesCatalog.UNSURE }
+                            ?.primaryLabel
+                            .orEmpty()
+                    },
+                    inferenceEventId = inference?.eventId,
+                    modelLabel = model.label,
+                    modelConfidence = model.confidence,
+                    learnedLabel = if (learned) learnedLabel else "",
+                    learnedFromCorrections = learned,
                 )
             } catch (t: Throwable) {
                 Log.e(TAG, "smartCapture failed", t)
+                captured?.let { photo ->
+                    runCatching {
+                        detectionFeedback.recordUnlabeled(
+                            photoId = photo.id,
+                            jobId = photo.jobId.orEmpty(),
+                            photoLocalPath = photo.localPath.ifBlank { photo.filePath },
+                            modelLabel = "",
+                            modelConfidence = 0.0,
+                        )
+                    }
+                }
                 _smartCapture.value = SmartCaptureState.Error(t.message ?: "Smart capture failed")
             }
         }

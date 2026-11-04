@@ -75,6 +75,9 @@ object ObservationPhotoPaths {
     fun eventPath(eventId: String, localPath: String): String =
         "events/${sanitizeSegment(eventId)}/${sanitizeSegment(eventId)}.${extension(localPath)}"
 
+    fun detectionExamplePath(exampleId: String, localPath: String): String =
+        "detection/${sanitizeSegment(exampleId)}.${extension(localPath)}"
+
     fun mimeType(localPath: String): String = when (extension(localPath)) {
         "png" -> "image/png"
         "webp" -> "image/webp"

@@ -502,6 +502,9 @@ private fun AppNavHost(
         composable(Screen.AiAccuracy.route) {
             AiAccuracyScreen(onBack = { navController.popBackStack() })
         }
+        composable(Screen.DetectionDataset.route) {
+            DetectionDatasetScreen(onBack = { navController.popBackStack() })
+        }
         composable(Screen.Settings.route) { entry ->
             val focus by entry.savedStateHandle.getStateFlow("settingsFocus", "").collectAsState()
             SettingsScreen(

@@ -232,7 +232,38 @@ object Migrations {
         }
     }
 
-    /** Ordered 3→16. Restored backups may be older than VERSION 16; Room must migrate, never wipe. */
+    /**
+     * MIGRATION_16_17 adds local AI detection examples and Sir's corrections.
+     * Existing photos, jobs, and events are left in place.
+     */
+    val MIGRATION_16_17 = object : Migration(16, 17) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS ai_detection_feedback (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    userId TEXT NOT NULL,
+                    jobId TEXT NOT NULL,
+                    photoId TEXT NOT NULL,
+                    photoLocalPath TEXT NOT NULL,
+                    photoStoragePath TEXT NOT NULL,
+                    modelLabel TEXT NOT NULL,
+                    modelConfidence REAL NOT NULL,
+                    verdict TEXT NOT NULL,
+                    correctedLabel TEXT NOT NULL,
+                    whatImageShows TEXT NOT NULL,
+                    notes TEXT NOT NULL,
+                    embedding TEXT NOT NULL,
+                    createdAt INTEGER NOT NULL,
+                    isSynced INTEGER NOT NULL,
+                    syncError TEXT
+                )
+                """.trimIndent()
+            )
+        }
+    }
+
+    /** Ordered 3→17. Restored backups may be older than VERSION 17; Room must migrate, never wipe. */
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_3_4,
         MIGRATION_4_5,
@@ -247,5 +278,6 @@ object Migrations {
         MIGRATION_13_14,
         MIGRATION_14_15,
         MIGRATION_15_16,
+        MIGRATION_16_17,
     )
 }

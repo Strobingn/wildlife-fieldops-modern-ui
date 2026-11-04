@@ -82,4 +82,7 @@ object AppModule {
 
     @Provides
     fun provideSyncOperationDao(database: AppDatabase) = database.syncOperationDao()
+
+    @Provides
+    fun provideAiDetectionFeedbackDao(database: AppDatabase) = database.aiDetectionFeedbackDao()
 }

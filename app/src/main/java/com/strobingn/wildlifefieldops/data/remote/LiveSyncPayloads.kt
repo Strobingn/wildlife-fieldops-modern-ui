@@ -199,6 +199,26 @@ object LiveSyncPayloads {
         tag = photo.category.name.lowercase()
     )
 
+    fun detectionFeedback(
+        row: com.strobingn.wildlifefieldops.data.model.AiDetectionFeedback,
+        photoStoragePath: String,
+    ): LiveDetectionFeedbackUpsert = LiveDetectionFeedbackUpsert(
+        id = row.id,
+        userId = row.userId,
+        jobId = row.jobId,
+        photoId = row.photoId,
+        photoLocalPath = row.photoLocalPath,
+        photoStoragePath = photoStoragePath.ifBlank { row.photoStoragePath },
+        modelLabel = row.modelLabel,
+        modelConfidence = row.modelConfidence,
+        verdict = row.verdict,
+        correctedLabel = row.correctedLabel,
+        whatImageShows = row.whatImageShows,
+        notes = row.notes,
+        embedding = row.embedding,
+        createdAt = Instant.ofEpochMilli(row.createdAt).toString(),
+    )
+
     fun jobPhotoLink(
         photo: Photo,
         storagePath: String,
@@ -316,6 +336,24 @@ data class LivePhotoUpsert(
     @SerialName("image_url") val imageUrl: String? = null,
     @SerialName("storage_path") val storagePath: String? = null,
     val tag: String? = null
+)
+
+@Serializable
+data class LiveDetectionFeedbackUpsert(
+    val id: String,
+    @SerialName("user_id") val userId: String,
+    @SerialName("job_id") val jobId: String,
+    @SerialName("photo_id") val photoId: String,
+    @SerialName("photo_local_path") val photoLocalPath: String,
+    @SerialName("photo_storage_path") val photoStoragePath: String,
+    @SerialName("model_label") val modelLabel: String,
+    @SerialName("model_confidence") val modelConfidence: Double,
+    val verdict: String,
+    @SerialName("corrected_label") val correctedLabel: String,
+    @SerialName("what_image_shows") val whatImageShows: String,
+    val notes: String,
+    val embedding: String,
+    @SerialName("created_at") val createdAt: String,
 )
 
 @Serializable

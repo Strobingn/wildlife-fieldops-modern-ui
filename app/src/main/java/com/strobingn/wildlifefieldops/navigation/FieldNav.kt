@@ -70,6 +70,7 @@ object FieldNav {
         dest(Screen.AIOperations, "AI", "AI command center"),
         dest(Screen.AIAssistant, "AI", "Ask the assistant"),
         dest(Screen.AiAccuracy, "AI", "Which filled fields you change most"),
+        dest(Screen.DetectionDataset, "AI", "Export labeled detection photos for a later model"),
         dest(
             Screen.Settings,
             "App",
@@ -120,7 +121,8 @@ object FieldNav {
         Screen.Estimate,
         Screen.More,
         Screen.SyncStatus,
-        Screen.AiAccuracy
+        Screen.AiAccuracy,
+        Screen.DetectionDataset,
     )
 
     /**
@@ -203,6 +205,7 @@ object FieldNav {
         Screen.Estimate -> "Jobs → a job → Estimate"
         Screen.SyncStatus -> "More → Sync status"
         Screen.AiAccuracy -> "More → AI accuracy"
+        Screen.DetectionDataset -> "More → Detection dataset"
         else -> error("No path for ${screen.route}")
     }
 

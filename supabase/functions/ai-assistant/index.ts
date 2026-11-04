@@ -39,7 +39,19 @@ type AiRequest = {
   jsonMode?: boolean;
   json_mode?: boolean;
   imageDataUrl?: string;
+  /** Optional. Older app builds omit this. Vision still runs. */
+  detectionExamples?: unknown;
 };
+
+type DetectionExample = {
+  label: string;
+  description: string;
+  verdict: string;
+  modelLabel: string;
+  thumbnailDataUrl: string;
+};
+
+const FEW_SHOT_MARKER = "Confirmed field corrections:";
 
 type Provider = { name: string; key: string; baseUrl: string; model: string };
 
@@ -216,6 +228,83 @@ async function chatCompletion(
   return content;
 }
 
+function oneLine(value: string): string {
+  return value.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function sanitizeDetectionExamples(raw: unknown): DetectionExample[] {
+  if (!Array.isArray(raw)) return [];
+  const out: DetectionExample[] = [];
+  for (const item of raw.slice(0, 6)) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const label = oneLine(safeString(row.label ?? row.correctedLabel ?? row.corrected_label, 80));
+    const description = oneLine(safeString(row.description ?? row.whatImageShows ?? row.what_image_shows ?? row.notes, 240));
+    const verdict = oneLine(safeString(row.verdict, 20));
+    const modelLabel = oneLine(safeString(row.modelLabel ?? row.model_label, 80));
+    const thumbnailDataUrl = safeString(row.thumbnailDataUrl ?? row.thumbnail_data_url, 40_000).trim();
+    if (!label && !description && !modelLabel) continue;
+    out.push({ label, description, verdict, modelLabel, thumbnailDataUrl });
+  }
+  return out;
+}
+
+function fewShotText(examples: DetectionExample[]): string {
+  const lines = examples.map((example) => {
+    const shown = example.label || example.modelLabel || "unlabeled";
+    const model = example.modelLabel ? `Model said "${example.modelLabel}". ` : "";
+    const verdict = example.verdict ? `Verdict ${example.verdict}. ` : "";
+    const desc = example.description ? ` Shows: ${example.description}.` : "";
+    return `- ${model}${verdict}Correct label: "${shown}".${desc}`;
+  });
+  return [
+    FEW_SHOT_MARKER,
+    "A wildlife technician confirmed or corrected these photo findings. When the new photo is similar, prefer the correct label.",
+    "Entry points include gap, vent, soffit, roof return, chimney, gable vent, and foundation crack.",
+    "If the correction is an entry point, keep species on the allowed list and name the entry in evidence_notes.",
+    ...lines,
+  ].join("\n");
+}
+
+function contentText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.map((part) => {
+    if (part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string") {
+      return (part as { text: string }).text;
+    }
+    return "";
+  }).join("\n");
+}
+
+function appendFewShot(
+  messages: Array<{ role: string; content: unknown }>,
+  examples: DetectionExample[],
+): Array<{ role: string; content: unknown }> {
+  if (examples.length === 0) return messages;
+  const existing = messages.map((message) => contentText(message.content)).join("\n");
+  const fresh = examples.filter((example) => {
+    const shown = example.label || example.modelLabel;
+    return shown.length > 0 && !existing.includes(`Correct label: "${shown}"`);
+  });
+  if (fresh.length === 0) return messages;
+  const thumbPattern = /^data:image\/(jpeg|jpg|png|webp);base64,[a-z0-9+/=\r\n]+$/i;
+  let budget = 120_000;
+  let used = 0;
+  const parts: Array<Record<string, unknown>> = [
+    { type: "text", text: fewShotText(fresh) },
+  ];
+  for (const example of fresh) {
+    const url = example.thumbnailDataUrl;
+    if (used >= 2 || !url || url.length > 40_000 || url.length > budget || !thumbPattern.test(url)) continue;
+    used += 1;
+    budget -= url.length;
+    parts.push({ type: "image_url", image_url: { url } });
+  }
+  const content = parts.length === 1 ? fewShotText(fresh) : parts;
+  return [...messages, { role: "user", content }];
+}
+
 function visionMessages(
   messages: Array<{ role: string; content: string }>,
   image: string,
@@ -251,6 +340,10 @@ async function handleComplete(payload: AiRequest): Promise<Response> {
       return jsonResponse({ ok: false, error: "Species photo must be a JPEG, PNG, or WebP data URL." }, 400);
     }
     outbound = visionMessages(messages, image);
+    // Examples come only from this request. The feedback table is world-insertable
+    // with the anon key, so a server read would let one device bias every other device.
+    const examples = sanitizeDetectionExamples(payload.detectionExamples);
+    outbound = appendFewShot(outbound, examples);
   }
   const selected = provider();
   const requestedTokens = Number(payload.maxTokens ?? payload.max_tokens ?? 900);
@@ -310,6 +403,9 @@ Deno.serve(async (request: Request) => {
         businessContext: payload.businessContext ?? "",
       };
 
+    const storedExamples = payload.imageUrl
+      ? sanitizeDetectionExamples(payload.detectionExamples)
+      : [];
     const system = [
       "You are Wildlife FieldOps AI for a professional nuisance-wildlife company.",
       "Return only valid JSON.",
@@ -320,7 +416,8 @@ Deno.serve(async (request: Request) => {
       "For business queries, answer only from the supplied database context.",
     ].join("\n");
 
-    const textPrompt = JSON.stringify({
+    const correctionNote = storedExamples.length > 0 ? "\n" + fewShotText(storedExamples) : "";
+    const textPrompt = correctionNote + JSON.stringify({
       mode,
       context,
       requiredShape: {

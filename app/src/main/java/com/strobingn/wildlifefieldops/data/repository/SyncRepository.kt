@@ -1,5 +1,6 @@
 package com.strobingn.wildlifefieldops.data.repository
 
+import com.strobingn.wildlifefieldops.data.local.AiDetectionFeedbackDao
 import com.strobingn.wildlifefieldops.data.local.CustomerDao
 import com.strobingn.wildlifefieldops.data.local.DeletedRecordDao
 import com.strobingn.wildlifefieldops.data.local.FieldObservationDao
@@ -48,6 +49,7 @@ data class SyncResult(
     val pushedInspections: Int = 0,
     val pushedObservations: Int = 0,
     val pushedEvents: Int = 0,
+    val pushedFeedback: Int = 0,
     val uploadedPhotos: Int = 0,
     val pulledJobs: Int = 0,
     val pulledCustomers: Int = 0,
@@ -64,6 +66,7 @@ class SyncRepository @Inject constructor(
     private val fieldObservationDao: FieldObservationDao,
     private val observationEventDao: ObservationEventDao,
     private val photoDao: PhotoDao,
+    private val aiDetectionFeedbackDao: AiDetectionFeedbackDao,
     private val observationPhotoUploader: ObservationPhotoUploader,
     private val jobPhotoUploader: JobPhotoUploader,
     private val deletedRecordDao: DeletedRecordDao,
@@ -140,6 +143,7 @@ class SyncRepository @Inject constructor(
         var pushedInspections = 0
         var pushedObservations = 0
         var pushedEvents = 0
+        var pushedFeedback = 0
         var uploadedPhotos = 0
         var pulledJobs = 0
         var pulledCustomers = 0
@@ -382,10 +386,60 @@ class SyncRepository @Inject constructor(
             }
         }
 
+        aiDetectionFeedbackDao.getUnsynced().forEach { row ->
+            val feedbackJobId = row.jobId.takeIf { it.isNotBlank() }
+            val feedbackJobDeleted = feedbackJobId != null && feedbackJobId in deletedJobIds
+            val feedbackJobStatus = feedbackJobId?.let { jobDao.getById(it)?.status }
+            val keepFeedbackPhotoLocal = PhotoSyncQueue.action(
+                feedbackJobStatus,
+                feedbackJobDeleted,
+            ) == PhotoSyncQueue.Action.SKIP_KEEP_LOCAL
+            val outcome = itemRunner.run(
+                markSynced = { aiDetectionFeedbackDao.markSynced(row.id) },
+                markError = { aiDetectionFeedbackDao.markSyncError(row.id, it) }
+            ) {
+                var storagePath = row.photoStoragePath
+                val localPhoto = row.photoLocalPath.trim()
+                if (keepFeedbackPhotoLocal) {
+                    android.util.Log.i(
+                        "SyncRepository",
+                        "Keeping detection photo ${row.id} on device; job ${feedbackJobId ?: "?"} is cancelled or deleted"
+                    )
+                } else if (storagePath.isBlank()) {
+                    when (LocalMediaSync.plan(localPhoto, observationPhotoUploader.readBytes(localPhoto) != null)) {
+                        LocalMediaSync.Plan.UPLOAD -> {
+                            val uploaded = observationPhotoUploader.uploadDetectionExample(
+                                client = client,
+                                exampleId = row.id,
+                                localPath = localPhoto
+                            )
+                            storagePath = uploaded.storagePath
+                            aiDetectionFeedbackDao.setStoragePath(row.id, storagePath)
+                            uploadedPhotos += 1
+                        }
+                        LocalMediaSync.Plan.MISSING ->
+                            error("Local detection photo missing: $localPhoto")
+                        LocalMediaSync.Plan.ABSENT -> Unit
+                    }
+                }
+                insertDetectionFeedbackIgnoreDuplicate(
+                    client,
+                    LiveSyncPayloads.detectionFeedback(row, storagePath)
+                )
+            }
+            when (outcome) {
+                is SyncItemOutcome.Ok -> pushedFeedback += 1
+                is SyncItemOutcome.Failed -> failures += SyncItemFailure(
+                    "feedback", row.id, row.modelLabel.ifBlank { row.verdict }, outcome.reason
+                )
+                SyncItemOutcome.Interrupted -> Unit
+            }
+        }
+
         val pendingRemaining = countPending()
 
         val base = "Synced. Pushed: $pushedJobs jobs, $pushedCustomers customers, $pushedInspections inspections, " +
-            "$pushedObservations observations, $pushedEvents events, $uploadedPhotos photos. " +
+            "$pushedObservations observations, $pushedEvents events, $pushedFeedback feedback, $uploadedPhotos photos. " +
             "Pulled: $pulledJobs jobs, $pulledCustomers customers. Still pending locally: $pendingRemaining."
         val failureText = if (failures.isEmpty()) {
             ""
@@ -406,12 +460,32 @@ class SyncRepository @Inject constructor(
             pushedInspections = pushedInspections,
             pushedObservations = pushedObservations,
             pushedEvents = pushedEvents,
+            pushedFeedback = pushedFeedback,
             uploadedPhotos = uploadedPhotos,
             pulledJobs = pulledJobs,
             pulledCustomers = pulledCustomers,
             failedItems = failures,
             pendingRemaining = pendingRemaining
         )
+    }
+
+    private suspend fun insertDetectionFeedbackIgnoreDuplicate(
+        client: SupabaseClient,
+        dto: com.strobingn.wildlifefieldops.data.remote.LiveDetectionFeedbackUpsert
+    ) {
+        try {
+            client.from("ai_detection_feedback").insert(dto)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            if (SyncErrorFormatter.isDuplicate(e)) {
+                android.util.Log.i(
+                    "SyncRepository",
+                    "Detection feedback ${dto.id} already on server; treating as synced"
+                )
+            } else {
+                throw e
+            }
+        }
     }
 
     private suspend fun insertObservationEventIgnoreDuplicate(
@@ -513,5 +587,6 @@ class SyncRepository @Inject constructor(
             inspectionDao.countUnsynced() +
             fieldObservationDao.countUnsynced() +
             observationEventDao.countUnsynced() +
-            photoDao.countUnuploaded()
+            photoDao.countUnuploaded() +
+            aiDetectionFeedbackDao.countUnsynced()
 }
