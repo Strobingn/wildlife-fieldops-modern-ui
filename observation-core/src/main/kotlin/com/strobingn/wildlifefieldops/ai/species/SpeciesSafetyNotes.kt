@@ -112,6 +112,12 @@ object SpeciesSafetyNotes {
             ),
             handlingRisk = SafetyCard.Risk.HIGH,
         ),
+        listOf("cottontail", "eastern cottontail", "rabbit", "sylvilagus") to Entry(
+            notes = listOf(
+                "Usually a yard or garden complaint. Confirm it is a cottontail before trapping, and check for kits in the nest.",
+            ),
+            handlingRisk = SafetyCard.Risk.LOW,
+        ),
         listOf("fox", "red fox", "gray fox", "coyote", "black bear", "bear", "deer") to Entry(
             notes = listOf(
                 "Large-mammal / rabies-vector encounter. Keep distance, secure pets, and follow DEC handling rules.",

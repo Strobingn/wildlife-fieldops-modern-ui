@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.strobingn.wildlifefieldops.ai.species.ReferenceLibraryLine
 import com.strobingn.wildlifefieldops.ai.species.SpeciesSuggestion
 import com.strobingn.wildlifefieldops.ai.species.WildlifeSpeciesCatalog
 import com.strobingn.wildlifefieldops.ui.theme.OnPrimary
@@ -50,6 +51,17 @@ fun SpeciesIdentificationBlock(
                 fontWeight = FontWeight.Medium,
                 style = MaterialTheme.typography.bodyMedium,
             )
+            val libraryLine = ReferenceLibraryLine.format(
+                suggestion.referenceSpecies,
+                suggestion.referencePhotoCount,
+            )
+            if (libraryLine != null) {
+                Text(
+                    libraryLine,
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             val alternates = suggestion.alternatives
                 .map { it.label }
                 .filter { !it.equals(suggestion.primaryLabel, ignoreCase = true) }

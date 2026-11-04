@@ -52,6 +52,10 @@ object WildlifeSpeciesCatalog {
     val FOX = species("Fox", "fox", "red fox", "gray fox", "grey fox")
     val COYOTE = species("Coyote", "coyote", "coyotes")
     val DEER = species("Deer", "deer", "white-tailed deer", "white tailed deer", "whitetail", "whitetail deer")
+    val COTTONTAIL = species(
+        "Eastern cottontail",
+        "eastern cottontail", "cottontail", "sylvilagus floridanus", "rabbit", "bunny",
+    )
     val SNAKE = species("Snake", "snake", "snakes", "serpent", "garter snake", "rattlesnake")
     val BEES = species("Bees", "bee", "bees", "honeybee", "honey bee", "bumblebee", "bumble bee")
     val WASPS = species("Wasps", "wasp", "wasps", "yellowjacket", "yellow jacket", "yellow-jacket")
@@ -72,7 +76,7 @@ object WildlifeSpeciesCatalog {
         GRAY_SQUIRREL, RED_SQUIRREL, FLYING_SQUIRREL,
         GROUNDHOG, CHIPMUNK, RAT, MOUSE, BAT,
         PIGEON, SPARROW, STARLING, CANADA_GOOSE,
-        FERAL_CAT, FOX, COYOTE, DEER, SNAKE,
+        FERAL_CAT, FOX, COYOTE, DEER, COTTONTAIL, SNAKE,
         BEES, WASPS, HORNETS, DOG,
     )
 
@@ -86,6 +90,7 @@ Return JSON only, with no markdown, in exactly this shape:
 {"species":"","confidence":0.0,"alternates":[{"species":"","confidence":0.0}],"evidence_notes":""}
 species must be exactly one of: ${pickerLabels.joinToString(", ")}, Unknown.
 Groundhog and woodchuck are Groundhog. Gray, red, and flying squirrels are different species.
+Eastern cottontail is the rabbit on this list.
 Bees, Wasps, and Hornets are different species. Dog means a pet dog, not a raccoon, fox, coyote, skunk, or opossum.
 Raccoons have a black mask and a ringed tail. Do not call a raccoon a dog.
 If you cannot tell, use Unknown and put the closest list entries in alternates.
