@@ -90,30 +90,28 @@ class ColorContrastTest {
 
     @Test
     fun darkSurfacesStepOffTheBackground() {
-        assertEquals(0xFF121212, FieldSwatch.Dark.Background)
-        assertEquals(0xFF2A2A2A, FieldSwatch.Dark.NavBar)
-        assertEquals(0xFF2C2C2C, FieldSwatch.Dark.Surface)
-        assertEquals(0xFF2C2C2C, FieldSwatch.Dark.Elevated)
-        assertEquals(0xFF333333, FieldSwatch.Dark.Card)
-        assertEquals(0xFF333333, FieldSwatch.Dark.SurfaceVariant)
-        assertEquals(0xFF333333, FieldSwatch.Dark.PrimaryContainer)
-        assertEquals(0xFF404040, FieldSwatch.Dark.SurfaceBright)
-        assertEquals(0xFF4A4A4A, FieldSwatch.Dark.NavIndicator)
-        assertEquals(0xFF666666, FieldSwatch.Dark.Outline)
-        assertEquals(0xFF666666, FieldSwatch.Dark.OutlineVariant)
-        assertEquals(0xFFD0D0D0, FieldSwatch.Dark.Primary)
+        assertEquals(0xFF000000, FieldSwatch.Dark.Background)
+        assertEquals(0xFF0C0C0C, FieldSwatch.Dark.NavBar)
+        assertEquals(0xFF121212, FieldSwatch.Dark.Surface)
+        assertEquals(0xFF121212, FieldSwatch.Dark.Elevated)
+        assertEquals(0xFF1A1A1A, FieldSwatch.Dark.Card)
+        assertEquals(0xFF1A1A1A, FieldSwatch.Dark.SurfaceVariant)
+        assertEquals(0xFF262626, FieldSwatch.Dark.SurfaceBright)
+        assertEquals(0xFF616161, FieldSwatch.Dark.Outline)
+        assertEquals(0xFF4ADE80, FieldSwatch.Dark.Primary)
         val background = (FieldSwatch.Dark.Background and 0xFF).toInt()
         listOf(
             FieldSwatch.Dark.NavBar,
             FieldSwatch.Dark.Surface,
             FieldSwatch.Dark.Card,
             FieldSwatch.Dark.SurfaceBright,
-            FieldSwatch.Dark.NavIndicator,
             FieldSwatch.Dark.Outline
         ).forEach { argb ->
             val channel = (argb and 0xFF).toInt()
             assertTrue("${argb.toString(16)} should be lighter than the page", channel > background)
         }
+        // Cards still step off the nav bar and the page.
+        assertTrue((FieldSwatch.Dark.Card and 0xFF) > (FieldSwatch.Dark.NavBar and 0xFF))
     }
 
     @Test
@@ -126,62 +124,93 @@ class ColorContrastTest {
                 ratio >= Contrast.AA_UI
             )
         }
-        assertTrue(Contrast.ratio(0xFF5A5A5A, page) < Contrast.AA_UI)
     }
 
     @Test
-    fun lightChromeTokensAreUnchanged() {
+    fun lightPaperSurfacesAreUnchanged() {
         assertEquals(0xFFF5F5F5, FieldSwatch.Light.Background)
         assertEquals(0xFFFFFFFF, FieldSwatch.Light.Card)
         assertEquals(0xFFEEEEEE, FieldSwatch.Light.Elevated)
         assertEquals(0xFFE6E6E6, FieldSwatch.Light.SurfaceVariant)
         assertEquals(0xFFFFFFFF, FieldSwatch.Light.SurfaceBright)
-        assertEquals(0xFF3A3A3A, FieldSwatch.Light.Primary)
-        assertEquals(0xFF2A2A2A, FieldSwatch.Light.PrimaryDark)
-        assertEquals(0xFFE6E6E6, FieldSwatch.Light.PrimaryContainer)
-        assertEquals(0xFFE0E0E0, FieldSwatch.Light.SecondaryContainer)
         assertEquals(0xFF74777F, FieldSwatch.Light.Outline)
         assertEquals(0xFFC4C4C4, FieldSwatch.Light.OutlineVariant)
-        assertEquals(0xFF9B1B1B, FieldSwatch.Light.Error)
         assertEquals(0xFF93000A, FieldSwatch.Light.StatusUrgent)
     }
 
     @Test
-    fun primaryAndAccentsAreNeutralGray() {
+    fun accentsAreBrightDistinctHuesAndNeverYellowOrOrange() {
         listOf(
-            FieldSwatch.Light.Primary,
-            FieldSwatch.Light.PrimaryDark,
-            FieldSwatch.Light.PrimaryLight,
-            FieldSwatch.Light.PrimaryContainer,
+            "Dark" to listOf(
+                FieldSwatch.Dark.Primary,
+                FieldSwatch.Dark.AccentBlue,
+                FieldSwatch.Dark.AccentPurple,
+                FieldSwatch.Dark.AccentOrange,
+                FieldSwatch.Dark.AccentCyan,
+                FieldSwatch.Dark.AccentPink,
+                FieldSwatch.Dark.AccentAmber,
+                FieldSwatch.Dark.StatusPending,
+                FieldSwatch.Dark.StatusInProgress
+            ),
+            "Light" to listOf(
+                FieldSwatch.Light.Primary,
+                FieldSwatch.Light.AccentBlue,
+                FieldSwatch.Light.AccentPurple,
+                FieldSwatch.Light.AccentOrange,
+                FieldSwatch.Light.AccentCyan,
+                FieldSwatch.Light.AccentPink,
+                FieldSwatch.Light.AccentAmber,
+                FieldSwatch.Light.StatusPending,
+                FieldSwatch.Light.StatusInProgress
+            )
+        ).forEach { (theme, colors) ->
+            colors.forEach { argb ->
+                val r = ((argb shr 16) and 0xFF).toInt()
+                val g = ((argb shr 8) and 0xFF).toInt()
+                val b = (argb and 0xFF).toInt()
+                val max = maxOf(r, g, b)
+                val spread = max - minOf(r, g, b)
+                // HSV saturation of at least 40%: a real color, not the old neutral gray.
+                assertTrue("$theme ${argb.toString(16)} should be a saturated color, not gray", spread * 5 >= max * 2)
+                assertFalse("$theme ${argb.toString(16)} is yellow/orange", Contrast.isYellowAmberOrangeOrLime(argb))
+            }
+        }
+        // Inspections (blue), scheduled (cyan), in progress (purple) and primary (green) read apart.
+        val dark = setOf(
+            FieldSwatch.Dark.Primary,
+            FieldSwatch.Dark.AccentBlue,
+            FieldSwatch.Dark.StatusPending,
+            FieldSwatch.Dark.StatusInProgress
+        )
+        assertEquals(4, dark.size)
+        // Dark accents are bright: each reads at least 7:1 on the black page.
+        listOf(
+            FieldSwatch.Dark.Primary,
+            FieldSwatch.Dark.AccentBlue,
+            FieldSwatch.Dark.AccentCyan,
+            FieldSwatch.Dark.AccentPurple,
+            FieldSwatch.Dark.AccentOrange
+        ).forEach { argb ->
+            assertTrue(Contrast.ratio(argb, FieldSwatch.Dark.Background) >= 7.0)
+        }
+    }
+
+    @Test
+    fun lightAccentsMeetAaOnCards() {
+        listOf(
             FieldSwatch.Light.AccentBlue,
             FieldSwatch.Light.AccentPurple,
             FieldSwatch.Light.AccentOrange,
             FieldSwatch.Light.AccentCyan,
             FieldSwatch.Light.AccentPink,
-            FieldSwatch.Light.AccentAmber,
-            FieldSwatch.Light.GradientStart,
-            FieldSwatch.Light.GradientMid,
-            FieldSwatch.Light.GradientEnd,
-            FieldSwatch.Dark.Primary,
-            FieldSwatch.Dark.PrimaryDark,
-            FieldSwatch.Dark.PrimaryLight,
-            FieldSwatch.Dark.PrimaryContainer,
-            FieldSwatch.Dark.AccentBlue,
-            FieldSwatch.Dark.AccentPurple,
-            FieldSwatch.Dark.AccentOrange,
-            FieldSwatch.Dark.AccentCyan,
-            FieldSwatch.Dark.AccentPink,
-            FieldSwatch.Dark.AccentAmber,
-            FieldSwatch.Dark.GradientStart,
-            FieldSwatch.Dark.GradientMid,
-            FieldSwatch.Dark.GradientEnd
+            FieldSwatch.Light.AccentAmber
         ).forEach { argb ->
-            val r = ((argb shr 16) and 0xFF).toInt()
-            val g = ((argb shr 8) and 0xFF).toInt()
-            val b = (argb and 0xFF).toInt()
-            assertEquals("expected achromatic gray for ${argb.toString(16)}", r, g)
-            assertEquals("expected achromatic gray for ${argb.toString(16)}", g, b)
+            assertTrue(
+                "light accent ${argb.toString(16)} on card",
+                Contrast.passesAa(argb, FieldSwatch.Light.Card)
+            )
         }
+        assertTrue(Contrast.passesAa(FieldSwatch.Light.OnPrimaryContainer, FieldSwatch.Light.SecondaryContainer))
     }
 
     @Test

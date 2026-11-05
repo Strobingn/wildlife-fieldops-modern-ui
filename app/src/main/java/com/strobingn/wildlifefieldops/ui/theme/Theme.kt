@@ -22,7 +22,7 @@ internal val DarkColorScheme = darkColorScheme(
     onPrimaryContainer = Color(FieldSwatch.Dark.OnPrimaryContainer),
     secondary = Color(FieldSwatch.Dark.PrimaryLight),
     onSecondary = Color(FieldSwatch.Dark.OnPrimary),
-    // Light gray Dictate fill and selected filter chips. The nav pill is NavIndicator,
+    // Green Dictate fill and selected filter chips. The nav pill is NavIndicator,
     // because this token has to stay light enough for near-black labels.
     secondaryContainer = Color(FieldSwatch.Dark.PrimaryDark),
     onSecondaryContainer = Color(FieldSwatch.Dark.OnPrimary),
@@ -50,7 +50,7 @@ internal val DarkColorScheme = darkColorScheme(
     outline = Color(FieldSwatch.Dark.Outline),
     outlineVariant = Color(FieldSwatch.Dark.OutlineVariant),
     scrim = Color(FieldSwatch.Dark.Scrim),
-    inverseSurface = Color(0xFFE5E5E5),
+    inverseSurface = Color(0xFFF5F5F5),
     inverseOnSurface = Color(0xFF111111),
     inversePrimary = Color(FieldSwatch.Light.Primary)
 )
@@ -108,7 +108,7 @@ fun WildlifeFieldOpsTheme(
     content: @Composable () -> Unit
 ) {
     ThemeMode.isDark = darkTheme
-    // Dynamic Material You off — greyscale chrome with a gray primary in both schemes.
+    // Dynamic Material You off — FieldOps palette (black + bright accents) in both schemes.
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
     val view = LocalView.current

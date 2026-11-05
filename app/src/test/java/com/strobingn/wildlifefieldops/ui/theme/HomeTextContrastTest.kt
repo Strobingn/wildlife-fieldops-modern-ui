@@ -51,8 +51,8 @@ class HomeTextContrastTest {
     fun urgentTokensAreRedNotTheOldYellow() {
         assertNotEquals(0xFFFFCC80, FieldSwatch.Dark.StatusUrgent)
         assertNotEquals(0xFF9A3412, FieldSwatch.Light.StatusUrgent)
-        assertEquals(0xFF3A3A3A, FieldSwatch.Light.Primary)
-        assertEquals(0xFFD0D0D0, FieldSwatch.Dark.Primary)
+        assertEquals(0xFF166534, FieldSwatch.Light.Primary)
+        assertEquals(0xFF4ADE80, FieldSwatch.Dark.Primary)
         assertFalse(Contrast.isYellowAmberOrangeOrLime(FieldSwatch.Light.AccentOrange))
         assertFalse(Contrast.isYellowAmberOrangeOrLime(FieldSwatch.Dark.AccentOrange))
         assertFalse(Contrast.isYellowAmberOrangeOrLime(FieldSwatch.Light.Success))
