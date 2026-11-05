@@ -51,4 +51,24 @@ describe('detectDuplicateCustomers', () => {
     expect(detectDuplicateCustomers(null)).toEqual([]);
     expect(detectDuplicateCustomers([])).toEqual([]);
   });
+
+  it('runs efficiently on 1000 customers (performance benchmark)', () => {
+    const count = 1000;
+    const streetTypes = ['St', 'Ave', 'Blvd', 'Rd', 'Ln', 'Dr', 'Way', 'Ct'];
+    const towns = ['Kingston', 'New Paltz', 'Poughkeepsie', 'Woodstock', 'Saugerties', 'Rhinebeck'];
+    const customers = Array.from({ length: count }, (_, i) => ({
+      id: `cust_${i}`,
+      phone: i % 5 === 0 ? `(845) 555-${String(i % 50).padStart(4, '0')}` : `(845) 555-${String(i).padStart(4, '0')}`,
+      email: i % 7 === 0 ? `user_${i % 40}@example.com` : `user_${i}@example.com`,
+      address: `${100 + i} ${streetTypes[i % streetTypes.length]} ${towns[i % towns.length]}`,
+    }));
+
+    const start = performance.now();
+    const duplicates = detectDuplicateCustomers(customers);
+    const duration = performance.now() - start;
+
+    expect(duplicates.length).toBeGreaterThan(0);
+    // 1000 customers indexed and matched in under 100ms
+    expect(duration).toBeLessThan(100);
+  });
 });
