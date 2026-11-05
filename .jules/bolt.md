@@ -5,3 +5,7 @@
 ## 2025-05-18 - Algorithmic Optimization of Collection Merging in Data Sync
 **Learning:** `mergeArrays` previously used `findIndex` inside a loop over incoming server items, causing O(N * M) runtime complexity (~107ms for 2000 items). Using a `Map` of key -> index turns this into O(N + M) runtime complexity (~3.4ms for 2000 items), achieving a 30x (~97%) performance improvement during offline sync.
 **Action:** Always pre-build key-to-index `Map` lookups when merging or joining collections instead of performing repeated `findIndex` calls inside array loops.
+
+## 2025-05-18 - Pre-Indexed Lookups for Pairwise Duplicate Detection
+**Learning:** Pairwise customer duplicate scans (`detectDuplicateCustomers`) executed redundant equality comparisons and lookups inside nested loops. Pre-indexing phone and email fields into `Map<string, Set<number>>` lookups enables $O(1)$ set membership checks for phone and email duplicates without altering string similarity algorithms or risk of false negatives.
+**Action:** Pre-index exact-match attributes using `Map` lookups before running pairwise comparison loops over collections.

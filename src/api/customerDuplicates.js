@@ -45,21 +45,56 @@ export function detectDuplicateCustomers(customers) {
     normAddress: c?.address ? normalizeAddress(c.address) : null,
   }));
 
+  // Performance optimization: Pre-build Map indices for phone and email lookups
+  // to avoid redundant string comparisons in inner loops.
+  const phoneMap = new Map();
+  const emailMap = new Map();
+
+  for (let i = 0; i < prepared.length; i++) {
+    const p = prepared[i];
+    if (p.normPhone !== null) {
+      let set = phoneMap.get(p.normPhone);
+      if (!set) {
+        set = new Set();
+        phoneMap.set(p.normPhone, set);
+      }
+      set.add(i);
+    }
+    if (p.normEmail !== null) {
+      let set = emailMap.get(p.normEmail);
+      if (!set) {
+        set = new Set();
+        emailMap.set(p.normEmail, set);
+      }
+      set.add(i);
+    }
+  }
+
   const duplicates = [];
   for (let i = 0; i < prepared.length; i++) {
     const c = prepared[i];
     const potentials = [];
+
+    const samePhones = c.normPhone !== null ? phoneMap.get(c.normPhone) : null;
+    const sameEmails = c.normEmail !== null ? emailMap.get(c.normEmail) : null;
+
     for (let j = 0; j < prepared.length; j++) {
       if (i === j) continue;
       const other = prepared[j];
-      if (c.normPhone !== null && other.normPhone !== null && c.normPhone === other.normPhone) {
+
+      // 1. Same phone check
+      if (samePhones && samePhones.has(j)) {
         potentials.push({ customer: other.raw, reason: 'Same phone' });
         continue;
       }
-      if (c.normEmail !== null && other.normEmail !== null && c.normEmail === other.normEmail) {
+
+      // 2. Same email check
+      if (sameEmails && sameEmails.has(j)) {
         potentials.push({ customer: other.raw, reason: 'Same email' });
         continue;
       }
+
+      // 3. Similar address check using normalizedAddressSimilarity
       if (
         c.normAddress !== null &&
         other.normAddress !== null &&
@@ -68,6 +103,7 @@ export function detectDuplicateCustomers(customers) {
         potentials.push({ customer: other.raw, reason: 'Similar address' });
       }
     }
+
     if (potentials.length > 0) {
       duplicates.push({ customer: c.raw, potentialDuplicates: potentials });
     }
