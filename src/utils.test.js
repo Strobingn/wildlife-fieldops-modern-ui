@@ -7,6 +7,8 @@ import {
   buildJobRelationCounts,
   jobCompletenessScore,
   pageDataChanged,
+  haversine,
+  calculateOptimalRoute,
 } from './utils.js';
 
 describe('mergeArrays', () => {
@@ -145,5 +147,65 @@ describe('pageDataChanged', () => {
     expect(pageDataChanged(null, base)).toBe(true);
     expect(pageDataChanged(base, { ...base, jobs: ['b'] })).toBe(true);
     expect(pageDataChanged(base, { ...base, searchQuery: 'bat' })).toBe(true);
+  });
+});
+
+describe('haversine', () => {
+  it('returns 0 distance for the same coordinates', () => {
+    expect(haversine(40.7128, -74.006, 40.7128, -74.006)).toBe(0);
+  });
+
+  it('calculates approximate distance between known points', () => {
+    // NYC (40.7128, -74.0060) to Philadelphia (39.9526, -75.1652) is ~80.5 miles
+    const dist = haversine(40.7128, -74.006, 39.9526, -75.1652);
+    expect(dist).toBeGreaterThan(79);
+    expect(dist).toBeLessThan(82);
+  });
+});
+
+describe('calculateOptimalRoute', () => {
+  it('returns empty array when given empty or invalid input', () => {
+    expect(calculateOptimalRoute(null)).toEqual([]);
+    expect(calculateOptimalRoute([])).toEqual([]);
+    expect(calculateOptimalRoute(undefined)).toEqual([]);
+  });
+
+  it('handles a single job without startGPS', () => {
+    const jobs = [{ id: '1', lat: 40.7128, lng: -74.006 }];
+    const route = calculateOptimalRoute(jobs);
+    expect(route).toHaveLength(1);
+    expect(route[0].job.id).toBe('1');
+    expect(route[0].distance).toBe(0);
+  });
+
+  it('orders jobs by nearest-neighbor distance correctly', () => {
+    // Start at (0, 0)
+    // Job A is at (0, 1) (~69 miles)
+    // Job B is at (0, 3) (~207 miles)
+    // Job C is at (0, 2) (~138 miles)
+    const jobs = [
+      { id: 'B', lat: 0, lng: 3 },
+      { id: 'A', lat: 0, lng: 1 },
+      { id: 'C', lat: 0, lng: 2 },
+    ];
+    const route = calculateOptimalRoute(jobs, { lat: 0, lng: 0 });
+
+    expect(route).toHaveLength(3);
+    // Nearest to start is A, then nearest to A is C, then nearest to C is B
+    expect(route.map((r) => r.job.id)).toEqual(['A', 'C', 'B']);
+    expect(route[0].distance).toBeGreaterThan(0);
+    expect(route[1].distance).toBeGreaterThan(0);
+    expect(route[2].distance).toBeGreaterThan(0);
+  });
+
+  it('handles latitude/longitude and lat/lng as string numbers', () => {
+    const jobs = [
+      { id: '1', latitude: '40.7128', longitude: '-74.0060' },
+      { id: '2', lat: '40.7200', lng: '-74.0100' },
+    ];
+    const route = calculateOptimalRoute(jobs, { lat: 40.7128, lng: -74.006 });
+    expect(route).toHaveLength(2);
+    expect(route[0].job.id).toBe('1');
+    expect(route[1].job.id).toBe('2');
   });
 });
