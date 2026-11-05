@@ -79,11 +79,16 @@ object CountyReportAggregator {
             LocatedJob(fact = fact, county = resolveCounty(fact.latitude, fact.longitude))
         }
 
-        val countyKeys = (locatedObs.map { it.county.key } + locatedJobs.map { it.county.key }).toSet()
+        // Pre-group located observations and jobs by county key once to optimize
+        // county bucket creation from O(K * (N + M)) down to O(N + M).
+        val obsByCounty = locatedObs.groupBy { it.county.key }
+        val jobsByCounty = locatedJobs.groupBy { it.county.key }
+
+        val countyKeys = (obsByCounty.keys + jobsByCounty.keys)
 
         val buckets = countyKeys.map { key ->
-            val countyObs = locatedObs.filter { it.county.key == key }.sortedBy { it.fact.id }
-            val countyJobs = locatedJobs.filter { it.county.key == key }.sortedBy { it.fact.id }
+            val countyObs = obsByCounty[key]?.sortedBy { it.fact.id } ?: emptyList()
+            val countyJobs = jobsByCounty[key]?.sortedBy { it.fact.id } ?: emptyList()
             val ref = (countyObs.firstOrNull()?.county ?: countyJobs.first().county)
 
             val speciesBreakdown = countyObs
