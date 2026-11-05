@@ -51,4 +51,33 @@ describe('detectDuplicateCustomers', () => {
     expect(detectDuplicateCustomers(null)).toEqual([]);
     expect(detectDuplicateCustomers([])).toEqual([]);
   });
+
+  it('correctly handles multiple symmetric pairwise duplicates and maintains ordering', () => {
+    const customers = [
+      { id: '1', phone: '555-0001', email: 'shared@test.com' },
+      { id: '2', phone: '555-0001', email: 'other@test.com' },
+      { id: '3', phone: '555-9999', email: 'shared@test.com' },
+    ];
+    const found = detectDuplicateCustomers(customers);
+    expect(found).toHaveLength(3);
+
+    // Customer 1 matches 2 by phone, and 3 by email
+    expect(found[0].customer.id).toBe('1');
+    expect(found[0].potentialDuplicates).toEqual([
+      { customer: customers[1], reason: 'Same phone' },
+      { customer: customers[2], reason: 'Same email' },
+    ]);
+
+    // Customer 2 matches 1 by phone
+    expect(found[1].customer.id).toBe('2');
+    expect(found[1].potentialDuplicates).toEqual([
+      { customer: customers[0], reason: 'Same phone' },
+    ]);
+
+    // Customer 3 matches 1 by email
+    expect(found[2].customer.id).toBe('3');
+    expect(found[2].potentialDuplicates).toEqual([
+      { customer: customers[0], reason: 'Same email' },
+    ]);
+  });
 });
