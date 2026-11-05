@@ -17,22 +17,36 @@ data class BusinessProfile(
     /** Empty uses the built-in circular Wildlife Whisperer logo. */
     val logoPath: String = "",
     /** Owner/operator from Settings (technician name, else NWCO operator). Fills a blank Tech line. */
-    val ownerName: String = ""
+    val ownerName: String = "",
+    /** Zelle recipient (email or phone). Blank leaves the Zelle line off every document. */
+    val zelle: String = ""
 ) {
-    fun headerLines(): List<String> {
-        val lines = mutableListOf<String>()
+    /** Plain letterhead text, without the Zelle payment line. */
+    fun headerLines(): List<String> = headerRows(includeZelle = false).map { it.text }
+
+    /**
+     * Letterhead rows in print order. With [includeZelle], the Zelle line sits
+     * directly under the phone · email line and is marked [HeaderRowStyle.ZELLE]
+     * so the layout prints it larger and bold.
+     */
+    fun headerRows(includeZelle: Boolean): List<HeaderRow> {
+        val rows = mutableListOf<HeaderRow>()
         val company = name.trim()
-        if (company.isNotBlank()) lines += company.uppercase(Locale.US)
+        if (company.isNotBlank()) rows += HeaderRow(company.uppercase(Locale.US), HeaderRowStyle.NAME)
         val street = address.trim()
-        if (street.isNotBlank()) lines += street
+        if (street.isNotBlank()) rows += HeaderRow(street, HeaderRowStyle.DETAIL)
         val contact = listOf(phone.trim(), email.trim()).filter { it.isNotBlank() }.joinToString(" · ")
-        if (contact.isNotBlank()) lines += contact
+        if (contact.isNotBlank()) rows += HeaderRow(contact, HeaderRowStyle.DETAIL)
+        if (includeZelle) zelleLine()?.let { rows += HeaderRow(it, HeaderRowStyle.ZELLE) }
         val site = website.trim()
-        if (site.isNotBlank()) lines += site
+        if (site.isNotBlank()) rows += HeaderRow(site, HeaderRowStyle.DETAIL)
         val license = licenseNumber.trim()
-        if (license.isNotBlank()) lines += "NYS DEC NWCO # $license"
-        return lines
+        if (license.isNotBlank()) rows += HeaderRow("NYS DEC NWCO # $license", HeaderRowStyle.DETAIL)
+        return rows
     }
+
+    /** "Zelle: <recipient>", or null when no Zelle recipient is set. */
+    fun zelleLine(): String? = zelle.trim().takeIf { it.isNotBlank() }?.let { "Zelle: $it" }
 
     fun footerLine(): String = listOf(
         name.trim().uppercase(Locale.US),
@@ -50,10 +64,15 @@ data class BusinessProfile(
             address = WildlifeWhispererIdentity.ADDRESS,
             website = WildlifeWhispererIdentity.WEBSITE,
             licenseNumber = "",
-            logoPath = ""
+            logoPath = "",
+            zelle = WildlifeWhispererIdentity.ZELLE
         )
     }
 }
+
+enum class HeaderRowStyle { NAME, DETAIL, ZELLE }
+
+data class HeaderRow(val text: String, val style: HeaderRowStyle)
 
 object BusinessProfileResolve {
     const val KEY_NAME = "company_name"
@@ -65,6 +84,7 @@ object BusinessProfileResolve {
     const val KEY_LOGO = "business_logo_path"
     const val KEY_TECHNICIAN = "technician_name"
     const val KEY_NWCO_NAME = "nwco_operator_name"
+    const val KEY_ZELLE = "business_zelle"
 
     /**
      * [present] contains only keys that were actually saved.
@@ -82,7 +102,8 @@ object BusinessProfileResolve {
             licenseNumber = value(KEY_LICENSE, ""),
             logoPath = value(KEY_LOGO, ""),
             ownerName = present[KEY_TECHNICIAN].orEmpty().trim()
-                .ifBlank { present[KEY_NWCO_NAME].orEmpty().trim() }
+                .ifBlank { present[KEY_NWCO_NAME].orEmpty().trim() },
+            zelle = value(KEY_ZELLE, WildlifeWhispererIdentity.ZELLE)
         )
     }
 }

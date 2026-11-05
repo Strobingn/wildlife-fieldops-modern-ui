@@ -183,6 +183,12 @@ object StandardDocumentLayout {
     /** Kinds whose logo, header and title band never shrink. */
     val FIXED_HEADER = setOf(DocumentKind.ESTIMATE, DocumentKind.INVOICE, DocumentKind.CONTRACT)
 
+    /** Kinds that print the bold Zelle payment line under the email. */
+    val ZELLE_KINDS = setOf(DocumentKind.ESTIMATE, DocumentKind.INSPECTION, DocumentKind.INVOICE)
+
+    /** Zelle line text size: larger than the 9pt contact line, bold, in ink. */
+    const val ZELLE_TEXT = 12f
+
     fun layout(doc: StandardDocument): LayoutResult = Engine(doc).run()
 
     private class Engine(private val doc: StandardDocument) {
@@ -283,11 +289,16 @@ object StandardDocumentLayout {
             var rightY = y + if (compactHeader) 16f else 18f
             val textLeft = margin + logo + 14f
             val headerRight = (stampLeft() - 8f).coerceAtLeast(textLeft + 80f)
-            val lines = doc.profile.headerLines()
-            lines.forEachIndexed { index, line ->
-                val nameLine = index == 0
-                val size = if (nameLine) 13f else 9f
-                val wrapped = wrap(line, size, nameLine, headerRight - textLeft)
+            val rows = doc.profile.headerRows(includeZelle = doc.kind in ZELLE_KINDS)
+            rows.forEach { row ->
+                val size = when (row.style) {
+                    HeaderRowStyle.NAME -> 13f
+                    HeaderRowStyle.ZELLE -> ZELLE_TEXT
+                    HeaderRowStyle.DETAIL -> 9f
+                }
+                val bold = row.style != HeaderRowStyle.DETAIL
+                if (row.style == HeaderRowStyle.ZELLE) rightY += 3f
+                val wrapped = wrap(row.text, size, bold, headerRight - textLeft)
                 wrapped.forEach { piece ->
                     ops += DrawOp(
                         kind = "text",
@@ -295,10 +306,14 @@ object StandardDocumentLayout {
                         x = textLeft,
                         y = rightY,
                         size = size,
-                        bold = nameLine,
-                        color = if (nameLine) "ink" else "muted"
+                        bold = bold,
+                        color = if (row.style == HeaderRowStyle.DETAIL) "muted" else "ink"
                     )
-                    rightY += if (nameLine) if (compactHeader) 13f else 15f else if (compactHeader) 11f else 12f
+                    rightY += when (row.style) {
+                        HeaderRowStyle.NAME -> if (compactHeader) 13f else 15f
+                        HeaderRowStyle.ZELLE -> if (compactHeader) 14f else 15f
+                        HeaderRowStyle.DETAIL -> if (compactHeader) 11f else 12f
+                    }
                 }
             }
             y = maxOf(y + logo + if (compactHeader) 6f else 10f, rightY + 6f, stampBottom + 6f)

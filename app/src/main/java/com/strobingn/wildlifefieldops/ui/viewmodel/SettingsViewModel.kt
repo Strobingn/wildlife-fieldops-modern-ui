@@ -25,6 +25,7 @@ import com.strobingn.wildlifefieldops.sync.work.FieldOpsSyncScheduler
 import com.strobingn.wildlifefieldops.sync.work.WorkManagerSyncCanaryFlag
 import com.strobingn.wildlifefieldops.ui.theme.ThemePreference
 import com.strobingn.wildlifefieldops.util.BusinessProfile
+import com.strobingn.wildlifefieldops.util.BusinessProfileResolve
 import com.strobingn.wildlifefieldops.util.BusinessProfileStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -61,6 +62,7 @@ class SettingsViewModel @Inject constructor(
                     "name" -> prefs[COMPANY_NAME] = value
                     "phone" -> prefs[BUSINESS_PHONE] = value
                     "email" -> prefs[BUSINESS_EMAIL] = value
+                    "zelle" -> prefs[BUSINESS_ZELLE] = value
                     "address" -> prefs[COMPANY_ADDRESS] = value
                     "website" -> prefs[BUSINESS_WEBSITE] = value
                 }
@@ -96,6 +98,7 @@ class SettingsViewModel @Inject constructor(
         val NWCO_PHONE = stringPreferencesKey("nwco_phone")
         val BUSINESS_PHONE = stringPreferencesKey("business_phone")
         val BUSINESS_EMAIL = stringPreferencesKey("business_email")
+        val BUSINESS_ZELLE = stringPreferencesKey(BusinessProfileResolve.KEY_ZELLE)
         val BUSINESS_WEBSITE = stringPreferencesKey("business_website")
         val BUSINESS_LOGO = stringPreferencesKey("business_logo_path")
     }
@@ -276,6 +279,8 @@ class SettingsViewModel @Inject constructor(
     fun setBusinessPhone(value: String) = businessWrites.schedule("phone", value)
 
     fun setBusinessEmail(value: String) = businessWrites.schedule("email", value)
+
+    fun setBusinessZelle(value: String) = businessWrites.schedule("zelle", value)
 
     fun setBusinessWebsite(value: String) = businessWrites.schedule("website", value)
 
@@ -477,6 +482,7 @@ class SettingsViewModel @Inject constructor(
             put("nwco_phone", prefs[NWCO_PHONE] ?: "")
             if (prefs.contains(BUSINESS_PHONE)) put("business_phone", prefs[BUSINESS_PHONE].orEmpty())
             if (prefs.contains(BUSINESS_EMAIL)) put("business_email", prefs[BUSINESS_EMAIL].orEmpty())
+            if (prefs.contains(BUSINESS_ZELLE)) put(BusinessProfileResolve.KEY_ZELLE, prefs[BUSINESS_ZELLE].orEmpty())
             if (prefs.contains(BUSINESS_WEBSITE)) put("business_website", prefs[BUSINESS_WEBSITE].orEmpty())
             if (prefs.contains(BUSINESS_LOGO)) put("business_logo_path", prefs[BUSINESS_LOGO].orEmpty())
         }
@@ -503,6 +509,7 @@ class SettingsViewModel @Inject constructor(
             settings["nwco_phone"]?.let { prefs[NWCO_PHONE] = it }
             settings["business_phone"]?.let { prefs[BUSINESS_PHONE] = it }
             settings["business_email"]?.let { prefs[BUSINESS_EMAIL] = it }
+            settings[BusinessProfileResolve.KEY_ZELLE]?.let { prefs[BUSINESS_ZELLE] = it }
             settings["business_website"]?.let { prefs[BUSINESS_WEBSITE] = it }
             settings["business_logo_path"]?.let { prefs[BUSINESS_LOGO] = it }
         }

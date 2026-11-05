@@ -11,6 +11,8 @@ object WildlifeWhispererIdentity {
     const val ADDRESS = "210 Willow Avenue, Cornwall, New York 12518"
     const val PHONE = "(845) 751-8448"
     const val EMAIL = "austin@wildlifewhispererllc.com"
+    /** Zelle recipient printed in bold under the email on estimates, inspection reports, and invoices. */
+    const val ZELLE = "Austin@Wildlifewhispererllc.com"
     const val TAGLINE = "Nuisance Wildlife Control · Cornwall, NY"
     const val WEBSITE = ""
 }

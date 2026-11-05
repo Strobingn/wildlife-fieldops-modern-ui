@@ -21,6 +21,7 @@ object BusinessProfileStore {
     private val logoKey = stringPreferencesKey(BusinessProfileResolve.KEY_LOGO)
     private val technicianKey = stringPreferencesKey(BusinessProfileResolve.KEY_TECHNICIAN)
     private val nwcoNameKey = stringPreferencesKey(BusinessProfileResolve.KEY_NWCO_NAME)
+    private val zelleKey = stringPreferencesKey(BusinessProfileResolve.KEY_ZELLE)
 
     fun load(context: Context): BusinessProfile = runBlocking {
         read(context.settingsDataStore.data.first())
@@ -40,6 +41,7 @@ object BusinessProfileStore {
             take(logoKey)
             take(technicianKey)
             take(nwcoNameKey)
+            take(zelleKey)
         }
         return BusinessProfileResolve.fromStored(present)
     }

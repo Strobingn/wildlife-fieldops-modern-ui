@@ -40,7 +40,7 @@ import com.strobingn.wildlifefieldops.ui.theme.TextSecondary
 import com.strobingn.wildlifefieldops.ui.viewmodel.SettingsViewModel
 
 /**
- * The only place business name, phone, email, address, website, NWCO license,
+ * The only place business name, phone, email, Zelle, address, website, NWCO license,
  * and logo are edited for customer documents.
  */
 @Composable
@@ -104,6 +104,13 @@ fun BusinessInfoSettingsBlock(viewModel: SettingsViewModel) {
                     label = "Email",
                     keyboardType = KeyboardType.Email,
                     onCommit = viewModel::setBusinessEmail
+                )
+                SettingPlainField(
+                    storedValue = profile.zelle,
+                    label = "Zelle",
+                    keyboardType = KeyboardType.Email,
+                    onCommit = viewModel::setBusinessZelle,
+                    supportingText = "Prints large and bold under your email on estimates, inspection reports, and invoices. Clear to leave it off."
                 )
                 SettingPlainField(
                     storedValue = profile.address,
