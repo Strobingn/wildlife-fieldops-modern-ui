@@ -15,14 +15,13 @@ private fun pick(dark: Long, light: Long): Color =
 
 private fun swatch(argb: Long): Color = Color(argb)
 
-// Field-ops chrome is greyscale. Legacy name PrimaryGreen kept for source
-// compatibility — values are neutral gray (dark gray in light, light gray in dark).
+// Bright green primary (deep green in light theme). The PrimaryGreen name fits again.
 val PrimaryGreen: Color get() = pick(FieldSwatch.Dark.Primary, FieldSwatch.Light.Primary)
 val PrimaryGreenDark: Color get() = pick(FieldSwatch.Dark.PrimaryDark, FieldSwatch.Light.PrimaryDark)
 val PrimaryGreenLight: Color get() = pick(FieldSwatch.Dark.PrimaryLight, FieldSwatch.Light.PrimaryLight)
 val PrimaryContainer: Color get() = pick(FieldSwatch.Dark.PrimaryContainer, FieldSwatch.Light.PrimaryContainer)
 val OnPrimaryContainer: Color get() = pick(FieldSwatch.Dark.OnPrimaryContainer, FieldSwatch.Light.OnPrimaryContainer)
-/** Text/icons on primary fills — white on dark gray (light theme), near-black on light gray (dark theme). */
+/** Text/icons on primary fills — white on deep green (light theme), near-black on bright green (dark theme). */
 val OnPrimary: Color get() = pick(FieldSwatch.Dark.OnPrimary, FieldSwatch.Light.OnPrimary)
 
 val BackgroundDark: Color get() = pick(FieldSwatch.Dark.Background, FieldSwatch.Light.Background)
