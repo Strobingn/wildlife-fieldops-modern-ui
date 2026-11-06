@@ -7,6 +7,8 @@ import {
   buildJobRelationCounts,
   jobCompletenessScore,
   pageDataChanged,
+  haversine,
+  calculateOptimalRoute
 } from './utils.js';
 
 describe('mergeArrays', () => {
@@ -120,7 +122,7 @@ describe('buildJobRelationCounts', () => {
       visits: [{ jobId: 'a' }, { job_id: 'a' }, { jobId: 'b' }],
       repairs: [{ job_id: 'b' }],
       photos: [{ jobId: 'a' }, { job_id: '' }],
-      signatures: [{ jobId: 'a' }],
+      signatures: [{ jobId: 'a' }]
     };
     const counts = buildJobRelationCounts(state);
     expect(counts.visitCounts.get('a')).toBe(2);
@@ -135,15 +137,90 @@ describe('buildJobRelationCounts', () => {
 });
 
 describe('pageDataChanged', () => {
-  const base = { page: 'jobs', jobs: ['a'], drawerOpen: false, toast: null, loading: false, syncStatus: 'idle', isOnline: true, lastSyncAt: null };
+  const base = {
+    page: 'jobs',
+    jobs: ['a'],
+    drawerOpen: false,
+    toast: null,
+    loading: false,
+    syncStatus: 'idle',
+    isOnline: true,
+    lastSyncAt: null
+  };
 
   it('ignores shell-only updates', () => {
-    expect(pageDataChanged(base, { ...base, drawerOpen: true, toast: { message: 'hi' }, loading: true, syncStatus: 'syncing', isOnline: false, lastSyncAt: 'now' })).toBe(false);
+    expect(
+      pageDataChanged(base, {
+        ...base,
+        drawerOpen: true,
+        toast: { message: 'hi' },
+        loading: true,
+        syncStatus: 'syncing',
+        isOnline: false,
+        lastSyncAt: 'now'
+      })
+    ).toBe(false);
   });
 
   it('notices page data and a missing previous snapshot', () => {
     expect(pageDataChanged(null, base)).toBe(true);
     expect(pageDataChanged(base, { ...base, jobs: ['b'] })).toBe(true);
     expect(pageDataChanged(base, { ...base, searchQuery: 'bat' })).toBe(true);
+  });
+});
+
+describe('haversine and calculateOptimalRoute', () => {
+  it('calculates great-circle distance accurately between two coordinates', () => {
+    // Distance between New York City (40.7128, -74.0060) and Philadelphia (39.9526, -75.1652) is ~80.5 miles
+    const dist = haversine(40.7128, -74.006, 39.9526, -75.1652);
+    expect(dist).toBeGreaterThan(80);
+    expect(dist).toBeLessThan(82);
+  });
+
+  it('returns empty array when jobs array is empty or null', () => {
+    expect(calculateOptimalRoute(null, null)).toEqual([]);
+    expect(calculateOptimalRoute([], null)).toEqual([]);
+  });
+
+  it('handles a single job without startGPS and with startGPS', () => {
+    const single = [{ id: 'job-1', latitude: '40.7128', longitude: '-74.0060' }];
+    const withoutStart = calculateOptimalRoute(single, null);
+    expect(withoutStart).toHaveLength(1);
+    expect(withoutStart[0].job.id).toBe('job-1');
+    expect(withoutStart[0].distance).toBe(0);
+
+    const withStart = calculateOptimalRoute(single, { lat: 40.7, lng: -74.0 });
+    expect(withStart).toHaveLength(1);
+    expect(withStart[0].job.id).toBe('job-1');
+    expect(withStart[0].distance).toBeGreaterThan(0.8);
+    expect(withStart[0].distance).toBeLessThan(1.2);
+  });
+
+  it('calculates nearest-neighbor route ordering across multiple jobs', () => {
+    // 3 stops along a line: Point A (40.0, -74.0), Point B (40.1, -74.0), Point C (40.5, -74.0)
+    const jobs = [
+      { id: 'C', latitude: '40.5', longitude: '-74.0' },
+      { id: 'A', latitude: '40.0', longitude: '-74.0' },
+      { id: 'B', latitude: '40.1', longitude: '-74.0' }
+    ];
+    // Starting near A: route should visit A -> B -> C
+    const route = calculateOptimalRoute(jobs, { lat: 39.99, lng: -74.0 });
+    expect(route.map(r => r.job.id)).toEqual(['A', 'B', 'C']);
+    expect(route[0].distance).toBeGreaterThan(0);
+    expect(route[1].distance).toBeGreaterThan(0);
+    expect(route[2].distance).toBeGreaterThan(0);
+  });
+
+  it('supports alternative coordinate properties lat and lng', () => {
+    const jobs = [
+      { id: '1', lat: '40.7128', lng: '-74.0060' },
+      { id: '2', lat: '40.7500', lng: '-73.9800' }
+    ];
+    const route = calculateOptimalRoute(jobs, null);
+    expect(route).toHaveLength(2);
+    expect(route[0].job.id).toBe('1');
+    expect(route[0].distance).toBe(0);
+    expect(route[1].job.id).toBe('2');
+    expect(route[1].distance).toBeGreaterThan(2);
   });
 });
