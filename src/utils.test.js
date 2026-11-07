@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  E,
   mergeArrays,
   filterJobs,
   money,
@@ -8,6 +9,26 @@ import {
   jobCompletenessScore,
   pageDataChanged,
 } from './utils.js';
+
+describe('E (HTML escaping)', () => {
+  it('escapes special characters correctly', () => {
+    expect(E('<script>alert("XSS")</script>')).toBe('&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;');
+    expect(E("Tom & Jerry's")).toBe('Tom &amp; Jerry&#39;s');
+  });
+
+  it('leaves clean strings without special characters untouched', () => {
+    expect(E('Raccoon removal in attic')).toBe('Raccoon removal in attic');
+    expect(E('12345')).toBe('12345');
+  });
+
+  it('handles null, undefined, empty string, and numbers gracefully', () => {
+    expect(E(null)).toBe('');
+    expect(E(undefined)).toBe('');
+    expect(E('')).toBe('');
+    expect(E(42)).toBe('42');
+    expect(E(0)).toBe('0');
+  });
+});
 
 describe('mergeArrays', () => {
   it('returns copy of local array if server array is invalid or empty', () => {
