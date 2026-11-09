@@ -7,6 +7,7 @@ import {
   buildJobRelationCounts,
   jobCompletenessScore,
   pageDataChanged,
+  E,
 } from './utils.js';
 
 describe('mergeArrays', () => {
@@ -80,6 +81,36 @@ describe('filterJobs', () => {
 
   it('handles non-array inputs gracefully', () => {
     expect(filterJobs(null, { status: 'active' })).toEqual([]);
+  });
+});
+
+describe('E (HTML escaping)', () => {
+  it('returns clean strings unchanged', () => {
+    expect(E('Wildlife Whisperer LLC')).toBe('Wildlife Whisperer LLC');
+    expect(E('123 Main Street, Suite 400')).toBe('123 Main Street, Suite 400');
+    expect(E('Raccoon')).toBe('Raccoon');
+  });
+
+  it('escapes &, <, >, ", and \'', () => {
+    expect(E('&')).toBe('&amp;');
+    expect(E('<')).toBe('&lt;');
+    expect(E('>')).toBe('&gt;');
+    expect(E('"')).toBe('&quot;');
+    expect(E("'")).toBe('&#39;');
+    expect(E('<script>alert("XSS & danger")</script>')).toBe(
+      '&lt;script&gt;alert(&quot;XSS &amp; danger&quot;)&lt;/script&gt;'
+    );
+    expect(E("John's \"Fast\" Attic & Roof <repairs>")).toBe(
+      'John&#39;s &quot;Fast&quot; Attic &amp; Roof &lt;repairs&gt;'
+    );
+  });
+
+  it('handles empty string, null, undefined, and non-string values safely', () => {
+    expect(E('')).toBe('');
+    expect(E(null)).toBe('');
+    expect(E(undefined)).toBe('');
+    expect(E(12345)).toBe('12345');
+    expect(E(0)).toBe('0');
   });
 });
 
