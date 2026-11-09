@@ -45,31 +45,41 @@ export function detectDuplicateCustomers(customers) {
     normAddress: c?.address ? normalizeAddress(c.address) : null,
   }));
 
-  const duplicates = [];
-  for (let i = 0; i < prepared.length; i++) {
+  const n = prepared.length;
+  // Performance optimization: Exploit pairwise symmetry.
+  // Equality of phone, email, and normalizedAddressSimilarity are symmetric relations.
+  // Evaluating each unique pair (i, j) with j > i and recording the match symmetrically
+  // reduces pairwise comparisons from N*(N-1) down to N*(N-1)/2 (~50% fewer checks, ~2x speedup).
+  const potentialsList = Array.from({ length: n }, () => []);
+
+  for (let i = 0; i < n; i++) {
     const c = prepared[i];
-    const potentials = [];
-    for (let j = 0; j < prepared.length; j++) {
-      if (i === j) continue;
+    for (let j = i + 1; j < n; j++) {
       const other = prepared[j];
+      let reason = null;
       if (c.normPhone !== null && other.normPhone !== null && c.normPhone === other.normPhone) {
-        potentials.push({ customer: other.raw, reason: 'Same phone' });
-        continue;
-      }
-      if (c.normEmail !== null && other.normEmail !== null && c.normEmail === other.normEmail) {
-        potentials.push({ customer: other.raw, reason: 'Same email' });
-        continue;
-      }
-      if (
+        reason = 'Same phone';
+      } else if (c.normEmail !== null && other.normEmail !== null && c.normEmail === other.normEmail) {
+        reason = 'Same email';
+      } else if (
         c.normAddress !== null &&
         other.normAddress !== null &&
         normalizedAddressSimilarity(c.normAddress, other.normAddress) > 0.8
       ) {
-        potentials.push({ customer: other.raw, reason: 'Similar address' });
+        reason = 'Similar address';
+      }
+
+      if (reason !== null) {
+        potentialsList[i].push({ customer: other.raw, reason });
+        potentialsList[j].push({ customer: c.raw, reason });
       }
     }
-    if (potentials.length > 0) {
-      duplicates.push({ customer: c.raw, potentialDuplicates: potentials });
+  }
+
+  const duplicates = [];
+  for (let i = 0; i < n; i++) {
+    if (potentialsList[i].length > 0) {
+      duplicates.push({ customer: prepared[i].raw, potentialDuplicates: potentialsList[i] });
     }
   }
   return duplicates;
